@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": false
+  },
+  "include": ["**/*.ts", "_generated/**/*.ts"],
+  "exclude": ["node_modules"]
+}
