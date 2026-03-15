@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --slot-h: 1.35em;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #060B18;
+  color: #F5F0E8;
+  font-family: "DM Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.circle-ring {
+  border-radius: 50%;
+  border: 1px solid rgba(245, 240, 232, 0.07);
+  position: absolute;
+  pointer-events: none;
+}
+
+.slot-container {
+  display: inline-block;
+  height: var(--slot-h);
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.slot-words {
+  display: flex;
+  flex-direction: column;
+  animation: slotRoll 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.slot-words span {
+  height: var(--slot-h);
+  display: block;
+  line-height: var(--slot-h);
+}
