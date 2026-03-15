@@ -4,7 +4,7 @@ import { httpAction } from "convex/server";
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInProfile } from "./linkedin/oauth";
 
 // Reference to internal mutation by its module path (used until _generated/ exists)
-const upsertUserMutation = makeFunctionReference<"mutation">("linkedin/auth:upsertUser");
+const upsertUserMutation = makeFunctionReference<"internalMutation">("linkedin/auth:upsertUser");
 
 const http = httpRouter();
 
