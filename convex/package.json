@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@convex-dev/stripe": "^0.1.4",
     "convex": "^1.17.0",
     "stripe": "^20.4.1"
   },

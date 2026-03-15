@@ -1,8 +1,14 @@
 // convex/stripe.ts
-import { internalMutation, httpAction, makeFunctionReference } from "convex/server";
+// Uses @convex-dev/stripe component for all Stripe interactions.
+// Manual stripe.ts code (webhook handler, updateSubscription, cancelSubscription, markPastDue)
+// has been replaced by the component's built-in handling + callback hooks.
+
+import { internalMutation } from "convex/server";
 import { v } from "convex/values";
 
-// Map Stripe price IDs to tiers — filled from env vars at runtime
+// These internal mutations are called from webhook callbacks registered in http.ts
+// to keep our users table in sync with Stripe subscription state.
+
 function getTierFromPriceId(priceId: string): "starter" | "growth" | "pro" {
   const map: Record<string, "starter" | "growth" | "pro"> = {
     [process.env.STRIPE_STARTER_PRICE_ID ?? ""]: "starter",
@@ -12,8 +18,8 @@ function getTierFromPriceId(priceId: string): "starter" | "growth" | "pro" {
   return map[priceId] ?? "starter";
 }
 
-// Called when a subscription is created or updated
-export const updateSubscription = internalMutation({
+/** Sync user tier and subscription status after Stripe subscription changes */
+export const syncUserSubscription = internalMutation({
   args: {
     stripeCustomerId: v.string(),
     stripeSubscriptionId: v.string(),
@@ -26,7 +32,10 @@ export const updateSubscription = internalMutation({
       .query("users")
       .withIndex("by_stripe_customer", (q) => q.eq("stripeCustomerId", args.stripeCustomerId))
       .first();
-    if (!user) throw new Error(`No user for Stripe customer ${args.stripeCustomerId}`);
+    if (!user) {
+      console.warn(`syncUserSubscription: no user for Stripe customer ${args.stripeCustomerId}`);
+      return;
+    }
 
     await ctx.db.patch(user._id, {
       tier: args.tier,
@@ -34,7 +43,7 @@ export const updateSubscription = internalMutation({
       trialEndsAt: undefined,
     });
 
-    // If newly active, un-hide the user's posts
+    // Un-hide posts when subscription becomes active
     if (args.status === "active") {
       const posts = await ctx.db
         .query("posts")
@@ -44,7 +53,7 @@ export const updateSubscription = internalMutation({
       await Promise.all(posts.map((p) => ctx.db.patch(p._id, { hidden: false })));
     }
 
-    // Upsert subscription record
+    // Upsert our own subscriptions table
     const existing = await ctx.db
       .query("subscriptions")
       .withIndex("by_stripe_id", (q) => q.eq("stripeSubscriptionId", args.stripeSubscriptionId))
@@ -67,8 +76,8 @@ export const updateSubscription = internalMutation({
   },
 });
 
-// Called when a subscription is deleted/canceled
-export const cancelSubscription = internalMutation({
+/** Downgrade user to starter on subscription cancellation */
+export const cancelUserSubscription = internalMutation({
   args: { stripeSubscriptionId: v.string() },
   handler: async (ctx, { stripeSubscriptionId }) => {
     const sub = await ctx.db
@@ -81,7 +90,7 @@ export const cancelSubscription = internalMutation({
   },
 });
 
-// Called when a payment fails — only marks past_due, preserves tier
+/** Mark user as past_due WITHOUT changing tier */
 export const markPastDue = internalMutation({
   args: {
     stripeCustomerId: v.string(),
@@ -92,76 +101,14 @@ export const markPastDue = internalMutation({
       .query("users")
       .withIndex("by_stripe_customer", (q) => q.eq("stripeCustomerId", stripeCustomerId))
       .first();
-    if (!user) return; // Graceful — user may not exist yet
-
-    // Only update status — preserve existing tier
+    if (!user) return;
     await ctx.db.patch(user._id, { subscriptionStatus: "past_due" });
-
-    // Update subscription record status
     const sub = await ctx.db
       .query("subscriptions")
       .withIndex("by_stripe_id", (q) => q.eq("stripeSubscriptionId", stripeSubscriptionId))
       .first();
-    if (sub) {
-      await ctx.db.patch(sub._id, { status: "past_due" });
-    }
+    if (sub) await ctx.db.patch(sub._id, { status: "past_due" });
   },
 });
 
-// HTTP action for Stripe webhook — registered in http.ts
-export const stripeWebhookHandler = httpAction(async (ctx, req) => {
-  const body = await req.text();
-  const sig = req.headers.get("stripe-signature");
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-
-  if (!sig) {
-    return new Response("Missing stripe-signature header", { status: 400 });
-  }
-
-  let event: any;
-  try {
-    const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-04-10" });
-    event = await stripe.webhooks.constructEventAsync(body, sig, webhookSecret);
-  } catch (err: any) {
-    return new Response(`Webhook verification failed: ${err.message}`, { status: 400 });
-  }
-
-  const updateSubFn = makeFunctionReference<"internalMutation">("stripe:updateSubscription");
-  const cancelSubFn = makeFunctionReference<"internalMutation">("stripe:cancelSubscription");
-
-  switch (event.type) {
-    case "customer.subscription.created":
-    case "customer.subscription.updated": {
-      const sub = event.data.object;
-      const priceId = sub.items?.data?.[0]?.price?.id ?? "";
-      const tier = getTierFromPriceId(priceId);
-      await ctx.runMutation(updateSubFn, {
-        stripeCustomerId: sub.customer as string,
-        stripeSubscriptionId: sub.id as string,
-        tier,
-        status: sub.status as string,
-        currentPeriodEnd: (sub.current_period_end as number) * 1000,
-      });
-      break;
-    }
-    case "customer.subscription.deleted": {
-      const sub = event.data.object;
-      await ctx.runMutation(cancelSubFn, { stripeSubscriptionId: sub.id as string });
-      break;
-    }
-    case "invoice.payment_failed": {
-      const invoice = event.data.object;
-      if (invoice.subscription) {
-        const markPastDueFn = makeFunctionReference<"internalMutation">("stripe:markPastDue");
-        await ctx.runMutation(markPastDueFn, {
-          stripeCustomerId: invoice.customer as string,
-          stripeSubscriptionId: invoice.subscription as string,
-        });
-      }
-      break;
-    }
-  }
-
-  return new Response("ok", { status: 200 });
-});
+export { getTierFromPriceId };
