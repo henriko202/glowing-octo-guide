@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useQuery } from "convex/react";
+import { api } from "./convex";
 import LoginPage from "./pages/LoginPage";
 import FeedPage from "./pages/FeedPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -11,14 +12,8 @@ function PlaceholderPage({ name }: { name: string }) {
   return <div style={{ padding: 32 }}>{name} — coming soon</div>;
 }
 
-// Convex query reference — will be properly typed once 'npx convex dev' runs
-// For now, use a dynamic import pattern
-const API_PLACEHOLDER = { users: { getMe: "users:getMe" as any } };
-
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  // Will use api.users.getMe once _generated/ exists
-  // For now this is a structural placeholder
-  const me = useQuery(API_PLACEHOLDER.users.getMe);
+  const me = useQuery(api.users.getMe);
   if (me === undefined) return <div style={{ padding: 32 }}>Loading...</div>;
   if (me === null) return <Navigate to="/login" replace />;
   return <>{children}</>;

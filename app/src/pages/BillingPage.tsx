@@ -6,22 +6,22 @@ const PLANS = [
     id: "starter",
     name: "Starter",
     price: "$5/mo",
+    priceId: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID as string | undefined,
     features: ["Basic feed", "3-day free trial", "Manual comments & reactions"],
-    envKey: "VITE_STRIPE_STARTER_PRICE_ID",
   },
   {
     id: "growth",
     name: "Growth",
     price: "$15/mo",
+    priceId: import.meta.env.VITE_STRIPE_GROWTH_PRICE_ID as string | undefined,
     features: ["Industry + country feed filter", "Auto-set from LinkedIn profile", "Posts visible to all"],
-    envKey: "VITE_STRIPE_GROWTH_PRICE_ID",
   },
   {
     id: "pro",
     name: "Pro",
     price: "$50/mo",
+    priceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID as string | undefined,
     features: ["Custom industry & country filters", "Control post visibility", "3 featured posts/month"],
-    envKey: "VITE_STRIPE_PRO_PRICE_ID",
   },
 ];
 
@@ -49,7 +49,7 @@ export default function BillingPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
         {PLANS.map((plan) => {
           const isCurrent = me?.tier === plan.id;
-          const priceId = (import.meta.env as any)[plan.envKey] as string;
+          const priceId = plan.priceId;
           return (
             <div
               key={plan.id}
