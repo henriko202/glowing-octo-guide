@@ -55,5 +55,11 @@ export async function fetchLinkedInProfile(accessToken: string): Promise<{
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
-  return res.json() as Promise<any>;
+  return res.json() as Promise<{
+    id: string;
+    localizedFirstName: string;
+    localizedLastName: string;
+    headline?: string;
+    profilePicture?: { "displayImage~": { elements: Array<{ identifiers: Array<{ identifier: string }> }> } };
+  }>;
 }

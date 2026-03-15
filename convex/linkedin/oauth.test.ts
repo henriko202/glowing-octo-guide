@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildAuthUrl } from "./oauth";
 
 describe("buildAuthUrl", () => {
-  it("generates a valid LinkedIn OAuth URL with all required scopes", () => {
+  it("generates a valid LinkedIn OAuth URL", () => {
     // Set env vars for the test
     process.env.LINKEDIN_CLIENT_ID = "test-client-id";
     process.env.LINKEDIN_REDIRECT_URI = "http://localhost:5173/auth/callback";
