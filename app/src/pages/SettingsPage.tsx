@@ -1,5 +1,6 @@
 import { useQuery } from "convex/react";
 import { useTranslation } from "react-i18next";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../convex";
 
 /** Safe user profile as returned by the getMe query (no token fields) */
@@ -20,7 +21,7 @@ interface MeProfile {
 
 export default function SettingsPage() {
   const { t } = useTranslation();
-  const userId = sessionStorage.getItem("convexUserId") ?? undefined;
+  const userId = (sessionStorage.getItem("convexUserId") ?? undefined) as Id<"users"> | undefined;
   const me = useQuery(api.users.getMe, { userId }) as MeProfile | null | undefined;
 
   if (!me) {

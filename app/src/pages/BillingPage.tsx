@@ -1,5 +1,6 @@
 import { useQuery, useAction } from "convex/react";
 import { useTranslation } from "react-i18next";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../convex";
 
 const PLAN_IDS = ["starter", "growth", "pro"] as const;
@@ -18,7 +19,7 @@ const PLAN_PRICES: Record<string, string> = {
 
 export default function BillingPage() {
   const { t } = useTranslation();
-  const userId = sessionStorage.getItem("convexUserId") ?? undefined;
+  const userId = (sessionStorage.getItem("convexUserId") ?? undefined) as Id<"users"> | undefined;
   const me = useQuery(api.users.getMe, { userId });
   const createCheckout = useAction(api.billing.createCheckoutSession);
 

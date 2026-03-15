@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useQuery } from "convex/react";
+import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "./convex";
 import LoginPage from "./pages/LoginPage";
 import FeedPage from "./pages/FeedPage";
@@ -13,7 +14,7 @@ function PlaceholderPage({ name }: { name: string }) {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const userId = sessionStorage.getItem("convexUserId") ?? undefined;
+  const userId = (sessionStorage.getItem("convexUserId") ?? undefined) as Id<"users"> | undefined;
   const me = useQuery(api.users.getMe, { userId });
   if (me === undefined) return <div style={{ padding: 32 }}>Loading...</div>;
   if (me === null) return <Navigate to="/login" replace />;

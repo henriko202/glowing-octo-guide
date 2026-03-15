@@ -8,8 +8,6 @@
  * @module
  */
 
-import type * as _test___mocks___convex_server from "../_test/__mocks__/convex_server.js";
-import type * as _test___mocks___convex_server_generics from "../_test/__mocks__/convex_server_generics.js";
 import type * as billing from "../billing.js";
 import type * as convexTypes from "../convexTypes.js";
 import type * as feed from "../feed.js";
@@ -31,8 +29,6 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  "_test/__mocks__/convex_server": typeof _test___mocks___convex_server;
-  "_test/__mocks__/convex_server_generics": typeof _test___mocks___convex_server_generics;
   billing: typeof billing;
   convexTypes: typeof convexTypes;
   feed: typeof feed;

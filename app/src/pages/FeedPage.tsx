@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { useTranslation } from "react-i18next";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../convex";
 import PostCard, { type PostWithAuthor } from "../components/PostCard";
 import CommentBox from "../components/CommentBox";
@@ -9,7 +10,7 @@ export default function FeedPage() {
   const { t } = useTranslation();
   const feed = useQuery(api.feed.getFeed, {});
   const react = useAction(api.interactions.reactToPost);
-  const [commentingOn, setCommentingOn] = useState<string | null>(null);
+  const [commentingOn, setCommentingOn] = useState<Id<"posts"> | null>(null);
 
   if (!feed) {
     return (
@@ -28,16 +29,16 @@ export default function FeedPage() {
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {(feed.posts as PostWithAuthor[]).map((post) => (
-          <div key={post._id as string}>
+        {(feed.posts as unknown as PostWithAuthor[]).map((post) => (
+          <div key={post._id}>
             <PostCard
               post={post}
               onComment={(id) => setCommentingOn(id === commentingOn ? null : id)}
-              onReact={(id) => react({ postId: id as unknown as string, reactionType: "LIKE" })}
+              onReact={(id) => react({ postId: id, reactionType: "LIKE" })}
             />
-            {commentingOn === (post._id as string) && (
+            {commentingOn === post._id && (
               <CommentBox
-                postId={post._id as string}
+                postId={post._id}
                 onClose={() => setCommentingOn(null)}
               />
             )}

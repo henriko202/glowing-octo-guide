@@ -1,10 +1,8 @@
 import { useTranslation } from "react-i18next";
-
-// Type stub until _generated/ exists
-type PostId = string & { __tableName: "posts" };
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export type PostWithAuthor = {
-  _id: PostId;
+  _id: Id<"posts">;
   content: string;
   publishedAt: number;
   likeCount: number;
@@ -24,8 +22,8 @@ export default function PostCard({
   onReact,
 }: {
   post: PostWithAuthor;
-  onComment: (postId: PostId) => void;
-  onReact: (postId: PostId) => void;
+  onComment: (postId: Id<"posts">) => void;
+  onReact: (postId: Id<"posts">) => void;
 }) {
   const { t } = useTranslation();
 

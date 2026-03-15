@@ -3,11 +3,13 @@ import { useAction } from "convex/react";
 import { useTranslation } from "react-i18next";
 import { api } from "../convex";
 
+import type { Id } from "../../../convex/_generated/dataModel";
+
 export default function CommentBox({
   postId,
   onClose,
 }: {
-  postId: string;
+  postId: Id<"posts">;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -22,7 +24,7 @@ export default function CommentBox({
     setSubmitting(true);
     setError(null);
     try {
-      await comment({ postId: postId as unknown as string, commentText: text.trim() });
+      await comment({ postId, commentText: text.trim() });
       setText("");
       onClose();
     } catch (err: unknown) {
