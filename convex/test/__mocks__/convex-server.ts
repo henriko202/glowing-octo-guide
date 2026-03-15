@@ -2,6 +2,17 @@
 // Only stubs the symbols used in source files; actual Convex runtime behaviour
 // is not needed for unit tests that exercise plain handler functions.
 
+// Schema builder stubs — pure structural helpers, no Convex runtime needed
+export function defineTable(_fields: any) {
+  const tableStub: any = { _fields };
+  tableStub.index = (_name: string, _fields: string[]) => tableStub;
+  return tableStub;
+}
+
+export function defineSchema(tables: Record<string, any>) {
+  return { tables };
+}
+
 export function internalMutation(_def: any) {
   return _def;
 }

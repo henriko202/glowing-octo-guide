@@ -66,7 +66,7 @@ export const syncUserConnections = internalAction({
 
       const data = await res.json() as { elements?: any[] };
       const ids = parseConnectionIds(data);
-      allIds = [...allIds, ...ids];
+      allIds.push(...ids);
       if (ids.length < count) break;
       start += count;
     }

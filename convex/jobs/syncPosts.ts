@@ -33,6 +33,7 @@ export const upsertPost = internalMutation({
       await ctx.db.patch(existing._id, {
         likeCount: args.likeCount,
         commentCount: args.commentCount,
+        hidden: args.hidden,
       });
     } else {
       await ctx.db.insert("posts", {
