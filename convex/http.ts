@@ -2,6 +2,7 @@
 import { httpRouter, makeFunctionReference } from "convex/server";
 import { httpAction } from "convex/server";
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInProfile } from "./linkedin/oauth";
+import { stripeWebhookHandler } from "./stripe";
 
 // Reference to internal mutation by its module path (used until _generated/ exists)
 const upsertUserMutation = makeFunctionReference<"internalMutation">("linkedin/auth:upsertUser");
@@ -72,6 +73,12 @@ http.route({
       });
     }
   }),
+});
+
+http.route({
+  path: "/webhooks/stripe",
+  method: "POST",
+  handler: stripeWebhookHandler,
 });
 
 export default http;
