@@ -61,8 +61,10 @@ function postSortScore(
 export const getFeed = query({
   args: {
     limit: v.optional(v.number()),
+    filterIndustries: v.optional(v.array(v.string())),
+    filterCountries: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { limit = 20 }) => {
+  handler: async (ctx, { limit = 20, filterIndustries, filterCountries }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { posts: [], hasMore: false };
 
@@ -76,6 +78,8 @@ export const getFeed = query({
       tier: viewer.tier,
       industry: viewer.industry,
       country: viewer.country,
+      filterIndustries,
+      filterCountries,
     });
 
     // Fetch all visible posts sorted by publishedAt desc
@@ -99,22 +103,26 @@ export const getFeed = query({
     // Apply viewer-side industry filter (Growth/Pro)
     if (filter.applyIndustry && filter.industries.length > 0) {
       // Need author industries — fetch unique authors
-      const authorIds = [...new Set(allPosts.map((p) => p.authorId.toString()))];
-      const authors = await Promise.all(authorIds.map((id) => ctx.db.get(id as any)));
-      const authorMap = new Map(authors.filter(Boolean).map((a) => [a!._id.toString(), a!]));
+      const authorIdStrings = [...new Set(allPosts.map((p) => p.authorId as unknown as string))];
+      const authorIdMap = new Map(allPosts.map((p) => [p.authorId as unknown as string, p.authorId]));
+      const uniqueAuthorIds = authorIdStrings.map((s) => authorIdMap.get(s)!);
+      const authors = await Promise.all(uniqueAuthorIds.map((id) => ctx.db.get(id)));
+      const authorMap = new Map(authors.filter(Boolean).map((a) => [a!._id as unknown as string, a!]));
       allPosts = allPosts.filter((post) => {
-        const author = authorMap.get(post.authorId.toString());
+        const author = authorMap.get(post.authorId as unknown as string);
         return author?.industry && filter.industries.includes(author.industry);
       });
     }
 
     // Apply viewer-side country filter (Pro)
     if (filter.applyCountry && filter.countries.length > 0) {
-      const authorIds = [...new Set(allPosts.map((p) => p.authorId.toString()))];
-      const authors = await Promise.all(authorIds.map((id) => ctx.db.get(id as any)));
-      const authorMap = new Map(authors.filter(Boolean).map((a) => [a!._id.toString(), a!]));
+      const authorIdStrings = [...new Set(allPosts.map((p) => p.authorId as unknown as string))];
+      const authorIdMap = new Map(allPosts.map((p) => [p.authorId as unknown as string, p.authorId]));
+      const uniqueAuthorIds = authorIdStrings.map((s) => authorIdMap.get(s)!);
+      const authors = await Promise.all(uniqueAuthorIds.map((id) => ctx.db.get(id)));
+      const authorMap = new Map(authors.filter(Boolean).map((a) => [a!._id as unknown as string, a!]));
       allPosts = allPosts.filter((post) => {
-        const author = authorMap.get(post.authorId.toString());
+        const author = authorMap.get(post.authorId as unknown as string);
         return author?.country && filter.countries.includes(author.country);
       });
     }
@@ -127,9 +135,11 @@ export const getFeed = query({
     const mutualLinkedinIds = new Set(connCache?.connectionLinkedinIds ?? []);
 
     // Load all unique authors for sort scoring
-    const allAuthorIds = [...new Set(allPosts.map((p) => p.authorId.toString()))];
-    const allAuthors = await Promise.all(allAuthorIds.map((id) => ctx.db.get(id as any)));
-    const allAuthorMap = new Map(allAuthors.filter(Boolean).map((a) => [a!._id.toString(), a!]));
+    const allAuthorIdStrings = [...new Set(allPosts.map((p) => p.authorId as unknown as string))];
+    const allAuthorIdMap = new Map(allPosts.map((p) => [p.authorId as unknown as string, p.authorId]));
+    const uniqueAllAuthorIds = allAuthorIdStrings.map((s) => allAuthorIdMap.get(s)!);
+    const allAuthors = await Promise.all(uniqueAllAuthorIds.map((id) => ctx.db.get(id)));
+    const allAuthorMap = new Map(allAuthors.filter(Boolean).map((a) => [a!._id as unknown as string, a!]));
 
     // Sort: featured first (by featuredAt desc) → score (mutual/industry/country) → publishedAt desc
     const featured = allPosts
@@ -139,8 +149,8 @@ export const getFeed = query({
     const regular = allPosts
       .filter((p) => !p.isFeatured)
       .sort((a, b) => {
-        const aAuthor = allAuthorMap.get(a.authorId.toString()) ?? null;
-        const bAuthor = allAuthorMap.get(b.authorId.toString()) ?? null;
+        const aAuthor = allAuthorMap.get(a.authorId as unknown as string) ?? null;
+        const bAuthor = allAuthorMap.get(b.authorId as unknown as string) ?? null;
         const scoreDiff =
           postSortScore(bAuthor, viewer, mutualLinkedinIds) -
           postSortScore(aAuthor, viewer, mutualLinkedinIds);
@@ -155,7 +165,7 @@ export const getFeed = query({
     // Enrich with author info (safe — no tokens returned)
     const enriched = await Promise.all(
       paginated.map(async (post) => {
-        const author = allAuthorMap.get(post.authorId.toString());
+        const author = allAuthorMap.get(post.authorId as unknown as string);
         if (!author) return { ...post, author: null };
         const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, ...safeAuthor } = author as any;
         return { ...post, author: safeAuthor };
