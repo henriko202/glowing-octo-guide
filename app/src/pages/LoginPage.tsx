@@ -1,41 +1,20 @@
-const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE_URL as string | undefined;
-const AUTH_URL = `${CONVEX_SITE_URL ?? "http://localhost:3210"}/auth/linkedin`;
+import { useTranslation } from "react-i18next";
 
-export default function LoginPage() {
+const CONVEX_URL = import.meta.env.VITE_CONVEX_URL as string;
+const AUTH_URL = `${CONVEX_URL}/auth/linkedin`;
+
+export default function LoginPage(): JSX.Element {
+  const { t } = useTranslation();
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#f8fafc",
-        fontFamily: "system-ui, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: 400, width: "100%", padding: 32, textAlign: "center" }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>
-          Link Into The SSI
-        </h1>
-        <p style={{ color: "#64748b", marginBottom: 32, fontSize: 15 }}>
-          Grow your LinkedIn SSI by engaging with your community.
-        </p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 text-center">
+        <h1 className="text-3xl font-bold text-gray-900">{t("login.title")}</h1>
+        <p className="text-gray-500">{t("login.tagline")}</p>
         <a
           href={AUTH_URL}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "12px 24px",
-            background: "#0077B5",
-            color: "#fff",
-            borderRadius: 8,
-            fontWeight: 600,
-            textDecoration: "none",
-            fontSize: 15,
-          }}
+          className="inline-flex items-center gap-2 px-6 py-3 bg-[#0077B5] text-white rounded-lg font-medium hover:bg-[#005885] transition-colors"
         >
-          Sign in with LinkedIn
+          {t("login.signInButton")}
         </a>
       </div>
     </div>

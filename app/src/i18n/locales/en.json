@@ -1,0 +1,73 @@
+{
+  "nav": {
+    "feed": "Feed",
+    "settings": "Settings",
+    "billing": "Billing",
+    "signOut": "Sign out"
+  },
+  "login": {
+    "title": "Link Into The SSI",
+    "tagline": "Grow your LinkedIn SSI by engaging with your community.",
+    "signInButton": "Sign in with LinkedIn"
+  },
+  "feed": {
+    "title": "Your Feed",
+    "loading": "Loading feed...",
+    "empty": "No posts yet. Invite colleagues to join Link Into The SSI!",
+    "featured": "★ Featured",
+    "like": "Like",
+    "comment": "Comment"
+  },
+  "comment": {
+    "placeholder": "Write a comment... (AI suggestions coming soon)",
+    "cancel": "Cancel",
+    "submit": "Post to LinkedIn",
+    "submitting": "Posting..."
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": "Your Profile",
+    "industry": "Industry",
+    "country": "Country",
+    "notSet": "Not set",
+    "profileNote": "Profile data is synced automatically from LinkedIn.",
+    "visibility": "Who can see your posts",
+    "visibilityNote": "Restrict which industries and countries can see your posts in the feed. Leave empty to show to all users.",
+    "visibilityComingSoon": "Coming in next task",
+    "upgradePrompt": "Upgrade to Pro to control who sees your posts."
+  },
+  "billing": {
+    "title": "Subscription",
+    "currentPlan": "Current plan",
+    "trial": "(trial)",
+    "upgrade": "Upgrade to {{plan}}",
+    "currentPlanLabel": "Current plan",
+    "contact": "Contact us",
+    "enterprise": "Need more? Contact us for custom enterprise plans.",
+    "plans": {
+      "starter": {
+        "name": "Starter",
+        "description": "Get started and start engaging",
+        "cta": "Start free trial"
+      },
+      "growth": {
+        "name": "Growth",
+        "description": "Targeted feed for faster results",
+        "cta": "Get Growth"
+      },
+      "pro": {
+        "name": "Pro",
+        "description": "Maximum visibility and control",
+        "cta": "Get Pro"
+      },
+      "contact": {
+        "name": "Enterprise",
+        "description": "Tailored for teams and agencies",
+        "cta": "Contact us"
+      }
+    }
+  },
+  "auth": {
+    "loading": "Loading..."
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "nav": {
+    "feed": "Feed",
+    "settings": "Configurações",
+    "billing": "Assinatura",
+    "signOut": "Sair"
+  },
+  "login": {
+    "title": "Link Into The SSI",
+    "tagline": "Aumente o seu SSI no LinkedIn interagindo com a sua comunidade.",
+    "signInButton": "Entrar com LinkedIn"
+  },
+  "feed": {
+    "title": "O Seu Feed",
+    "loading": "A carregar feed...",
+    "empty": "Ainda não há publicações. Convide colegas a aderir ao Link Into The SSI!",
+    "featured": "★ Destacado",
+    "like": "Gostar",
+    "comment": "Comentar"
+  },
+  "comment": {
+    "placeholder": "Escreva um comentário... (sugestões de IA em breve)",
+    "cancel": "Cancelar",
+    "submit": "Publicar no LinkedIn",
+    "submitting": "A publicar..."
+  },
+  "settings": {
+    "title": "Configurações",
+    "profile": "O Seu Perfil",
+    "industry": "Setor",
+    "country": "País",
+    "notSet": "Não definido",
+    "profileNote": "Os dados do perfil são sincronizados automaticamente com o LinkedIn.",
+    "visibility": "Quem pode ver as suas publicações",
+    "visibilityNote": "Restrinja quais os setores e países que podem ver as suas publicações no feed. Deixe vazio para mostrar a todos os utilizadores.",
+    "visibilityComingSoon": "Disponível em breve",
+    "upgradePrompt": "Faça upgrade para Pro para controlar quem vê as suas publicações."
+  },
+  "billing": {
+    "title": "Assinatura",
+    "currentPlan": "Plano atual",
+    "trial": "(período de teste)",
+    "upgrade": "Upgrade para {{plan}}",
+    "currentPlanLabel": "Plano atual",
+    "contact": "Contacte-nos",
+    "enterprise": "Precisa de mais? Contacte-nos para planos empresariais personalizados.",
+    "plans": {
+      "starter": {
+        "name": "Starter",
+        "description": "Comece e interaja",
+        "cta": "Iniciar período de teste"
+      },
+      "growth": {
+        "name": "Growth",
+        "description": "Feed direcionado para resultados mais rápidos",
+        "cta": "Obter Growth"
+      },
+      "pro": {
+        "name": "Pro",
+        "description": "Visibilidade máxima e controlo total",
+        "cta": "Obter Pro"
+      },
+      "contact": {
+        "name": "Empresa",
+        "description": "Personalizado para equipas e agências",
+        "cta": "Contacte-nos"
+      }
+    }
+  },
+  "auth": {
+    "loading": "A carregar..."
+  }
+}

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 // Type stub until _generated/ exists
 type PostId = string & { __tableName: "posts" };
 
@@ -25,6 +27,8 @@ export default function PostCard({
   onComment: (postId: PostId) => void;
   onReact: (postId: PostId) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div
       style={{
@@ -47,7 +51,7 @@ export default function PostCard({
             marginBottom: 8,
           }}
         >
-          ★ Featured
+          {t("feed.featured")}
         </span>
       )}
 
@@ -106,7 +110,7 @@ export default function PostCard({
             gap: 4,
           }}
         >
-          👍 {post.likeCount}
+          👍 {post.likeCount} {t("feed.like")}
         </button>
         <button
           onClick={() => onComment(post._id)}
@@ -121,7 +125,7 @@ export default function PostCard({
             gap: 4,
           }}
         >
-          💬 {post.commentCount}
+          💬 {post.commentCount} {t("feed.comment")}
         </button>
       </div>
     </div>

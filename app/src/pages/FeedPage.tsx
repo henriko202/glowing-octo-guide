@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
+import { useTranslation } from "react-i18next";
 import { api } from "../convex";
 import PostCard, { type PostWithAuthor } from "../components/PostCard";
 import CommentBox from "../components/CommentBox";
 
 export default function FeedPage() {
+  const { t } = useTranslation();
   const feed = useQuery(api.feed.getFeed, {});
   const react = useAction(api.interactions.reactToPost);
   const [commentingOn, setCommentingOn] = useState<string | null>(null);
@@ -12,17 +14,17 @@ export default function FeedPage() {
   if (!feed) {
     return (
       <div style={{ padding: 32, textAlign: "center", color: "#64748b", fontFamily: "system-ui, sans-serif" }}>
-        Loading feed...
+        {t("feed.loading")}
       </div>
     );
   }
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 16px", fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", marginBottom: 24 }}>Your Feed</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", marginBottom: 24 }}>{t("feed.title")}</h1>
       {feed.posts.length === 0 && (
         <p style={{ textAlign: "center", color: "#64748b", padding: "32px 0" }}>
-          No posts yet. Invite colleagues to join Link Into The SSI!
+          {t("feed.empty")}
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

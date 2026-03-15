@@ -1,31 +1,23 @@
 import { useQuery, useAction } from "convex/react";
+import { useTranslation } from "react-i18next";
 import { api } from "../convex";
 
-const PLANS = [
-  {
-    id: "starter",
-    name: "Starter",
-    price: "$5/mo",
-    priceId: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID as string | undefined,
-    features: ["Basic feed", "3-day free trial", "Manual comments & reactions"],
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    price: "$15/mo",
-    priceId: import.meta.env.VITE_STRIPE_GROWTH_PRICE_ID as string | undefined,
-    features: ["Industry + country feed filter", "Auto-set from LinkedIn profile", "Posts visible to all"],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$50/mo",
-    priceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID as string | undefined,
-    features: ["Custom industry & country filters", "Control post visibility", "3 featured posts/month"],
-  },
-];
+const PLAN_IDS = ["starter", "growth", "pro"] as const;
+
+const PLAN_PRICE_IDS: Record<string, string | undefined> = {
+  starter: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID as string | undefined,
+  growth: import.meta.env.VITE_STRIPE_GROWTH_PRICE_ID as string | undefined,
+  pro: import.meta.env.VITE_STRIPE_PRO_PRICE_ID as string | undefined,
+};
+
+const PLAN_PRICES: Record<string, string> = {
+  starter: "$5/mo",
+  growth: "$15/mo",
+  pro: "$50/mo",
+};
 
 export default function BillingPage() {
+  const { t } = useTranslation();
   const me = useQuery(api.users.getMe);
   const createCheckout = useAction(api.billing.createCheckoutSession);
 
@@ -40,19 +32,19 @@ export default function BillingPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 16px", fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>Subscription</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>{t("billing.title")}</h1>
       <p style={{ color: "#64748b", fontSize: 14, marginBottom: 24 }}>
-        Current plan: <strong style={{ textTransform: "capitalize" }}>{me?.tier ?? "..."}</strong>
-        {me?.subscriptionStatus === "trialing" && " (trial)"}
+        {t("billing.currentPlan")}: <strong style={{ textTransform: "capitalize" }}>{me?.tier ?? "..."}</strong>
+        {me?.subscriptionStatus === "trialing" && ` ${t("billing.trial")}`}
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-        {PLANS.map((plan) => {
-          const isCurrent = me?.tier === plan.id;
-          const priceId = plan.priceId;
+        {PLAN_IDS.map((planId) => {
+          const isCurrent = me?.tier === planId;
+          const priceId = PLAN_PRICE_IDS[planId];
           return (
             <div
-              key={plan.id}
+              key={planId}
               style={{
                 border: isCurrent ? "2px solid #2563eb" : "1px solid #e2e8f0",
                 borderRadius: 12,
@@ -60,13 +52,19 @@ export default function BillingPage() {
                 background: isCurrent ? "#eff6ff" : "#fff",
               }}
             >
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginTop: 0 }}>{plan.name}</h2>
-              <p style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", margin: "8px 0 16px" }}>{plan.price}</p>
-              <ul style={{ padding: "0 0 0 16px", color: "#64748b", fontSize: 13, marginBottom: 20 }}>
-                {plan.features.map((f) => <li key={f} style={{ marginBottom: 4 }}>{f}</li>)}
-              </ul>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginTop: 0 }}>
+                {t(`billing.plans.${planId}.name`)}
+              </h2>
+              <p style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", margin: "8px 0 8px" }}>
+                {PLAN_PRICES[planId]}
+              </p>
+              <p style={{ color: "#64748b", fontSize: 13, marginBottom: 16 }}>
+                {t(`billing.plans.${planId}.description`)}
+              </p>
               {isCurrent ? (
-                <p style={{ color: "#2563eb", fontWeight: 600, fontSize: 13, textAlign: "center" }}>Current plan</p>
+                <p style={{ color: "#2563eb", fontWeight: 600, fontSize: 13, textAlign: "center" }}>
+                  {t("billing.currentPlanLabel")}
+                </p>
               ) : (
                 <button
                   onClick={() => priceId && handleUpgrade(priceId)}
@@ -84,7 +82,7 @@ export default function BillingPage() {
                     opacity: priceId ? 1 : 0.6,
                   }}
                 >
-                  Upgrade to {plan.name}
+                  {t(`billing.plans.${planId}.cta`)}
                 </button>
               )}
             </div>
@@ -93,13 +91,13 @@ export default function BillingPage() {
 
         {/* Enterprise / Contact */}
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 20, background: "#fff" }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginTop: 0 }}>Enterprise</h2>
-          <p style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", margin: "8px 0 16px" }}>Custom</p>
-          <ul style={{ padding: "0 0 0 16px", color: "#64748b", fontSize: 13, marginBottom: 20 }}>
-            <li>Everything in Pro</li>
-            <li>More featured slots</li>
-            <li>Custom onboarding</li>
-          </ul>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginTop: 0 }}>
+            {t("billing.plans.contact.name")}
+          </h2>
+          <p style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", margin: "8px 0 8px" }}>Custom</p>
+          <p style={{ color: "#64748b", fontSize: 13, marginBottom: 16 }}>
+            {t("billing.plans.contact.description")}
+          </p>
           <a
             href="mailto:hello@linkintothessi.com"
             style={{
@@ -114,10 +112,11 @@ export default function BillingPage() {
               textDecoration: "none",
             }}
           >
-            Contact us
+            {t("billing.plans.contact.cta")}
           </a>
         </div>
       </div>
+      <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 24 }}>{t("billing.enterprise")}</p>
     </div>
   );
 }

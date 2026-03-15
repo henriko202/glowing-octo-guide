@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAction } from "convex/react";
+import { useTranslation } from "react-i18next";
 import { api } from "../convex";
 
 export default function CommentBox({
@@ -9,6 +10,7 @@ export default function CommentBox({
   postId: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export default function CommentBox({
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Write a comment... (AI suggestions coming soon)"
+        placeholder={t("comment.placeholder")}
         style={{
           width: "100%",
           border: "1px solid #e2e8f0",
@@ -53,7 +55,7 @@ export default function CommentBox({
       {error && <p style={{ color: "#ef4444", fontSize: 12, margin: "4px 0" }}>{error}</p>}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
         <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 13 }}>
-          Cancel
+          {t("comment.cancel")}
         </button>
         <button
           type="submit"
@@ -69,7 +71,7 @@ export default function CommentBox({
             cursor: submitting || !text.trim() ? "not-allowed" : "pointer",
           }}
         >
-          {submitting ? "Posting..." : "Post to LinkedIn"}
+          {submitting ? t("comment.submitting") : t("comment.submit")}
         </button>
       </div>
     </form>
