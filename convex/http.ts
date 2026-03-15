@@ -1,9 +1,10 @@
 // convex/http.ts
-// NOTE: httpRouter and httpAction are from "convex/server" — no _generated imports needed.
-import { httpRouter } from "convex/server";
+import { httpRouter, makeFunctionReference } from "convex/server";
 import { httpAction } from "convex/server";
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInProfile } from "./linkedin/oauth";
-import { upsertUserHandler } from "./linkedin/auth";
+
+// Reference to internal mutation by its module path (used until _generated/ exists)
+const upsertUserMutation = makeFunctionReference<"mutation">("linkedin/auth:upsertUser");
 
 const http = httpRouter();
 
@@ -44,11 +45,10 @@ http.route({
 
       const tokenExpiresAt = Date.now() + tokens.expires_in * 1000;
 
-      // Get profile picture URL from nested structure
       const pictureElements = profile.profilePicture?.["displayImage~"]?.elements;
       const profilePictureUrl = pictureElements?.[pictureElements.length - 1]?.identifiers?.[0]?.identifier;
 
-      const userId = await upsertUserHandler(ctx.db, {
+      const userId = await ctx.runMutation(upsertUserMutation, {
         linkedinId: profile.id,
         name: `${profile.localizedFirstName} ${profile.localizedLastName}`,
         headline: profile.headline,

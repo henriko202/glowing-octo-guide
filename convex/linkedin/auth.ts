@@ -1,16 +1,9 @@
 // convex/linkedin/auth.ts
-// NOTE: Cannot use _generated imports until `npx convex dev` has been run.
-// These functions will be wired via http.ts once generated types exist.
+import { internalMutation } from "convex/server";
 import { v } from "convex/values";
 
-// Trial duration: 3 days in milliseconds
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
 
-/**
- * Upsert a user record after LinkedIn OAuth.
- * New users start on Starter tier with a 3-day trial.
- * Existing users get their tokens updated.
- */
 export interface UpsertUserArgs {
   linkedinId: string;
   name: string;
@@ -21,8 +14,7 @@ export interface UpsertUserArgs {
   tokenExpiresAt: number;
 }
 
-// This will become an internalMutation once _generated/ exists.
-// For now, export the handler logic as a plain function for testability.
+// Plain handler function — used by the registered mutation and testable in isolation
 export async function upsertUserHandler(
   db: any,
   args: UpsertUserArgs
@@ -44,7 +36,6 @@ export async function upsertUserHandler(
     return existing._id;
   }
 
-  // New user: start Starter trial
   const trialEndsAt = Date.now() + TRIAL_DURATION_MS;
   return await db.insert("users", {
     linkedinId: args.linkedinId,
@@ -60,3 +51,17 @@ export async function upsertUserHandler(
     createdAt: Date.now(),
   });
 }
+
+// Registered Convex internal mutation — delegates to the plain handler
+export const upsertUser = internalMutation({
+  args: {
+    linkedinId: v.string(),
+    name: v.string(),
+    headline: v.optional(v.string()),
+    profilePictureUrl: v.optional(v.string()),
+    accessToken: v.string(),
+    refreshToken: v.string(),
+    tokenExpiresAt: v.number(),
+  },
+  handler: async (ctx, args) => upsertUserHandler(ctx.db, args),
+});
