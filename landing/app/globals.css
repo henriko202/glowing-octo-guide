@@ -43,3 +43,13 @@ body {
   display: block;
   line-height: var(--slot-h);
 }
+
+/* Slot-machine cycling animation
+   Words: "you" → "recruiters" → "everyone else" → "you" (loop)
+   Each word pauses for ~1.8s, then snaps to the next in ~0.2s */
+@keyframes slotRoll {
+  0%,   28%  { transform: translateY(0); }
+  33%,  61%  { transform: translateY(calc(-1 * var(--slot-h))); }
+  66%,  94%  { transform: translateY(calc(-2 * var(--slot-h))); }
+  99%,  100% { transform: translateY(calc(-3 * var(--slot-h))); }
+}

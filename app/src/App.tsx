@@ -13,7 +13,8 @@ function PlaceholderPage({ name }: { name: string }) {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const me = useQuery(api.users.getMe);
+  const userId = sessionStorage.getItem("convexUserId") ?? undefined;
+  const me = useQuery(api.users.getMe, { userId });
   if (me === undefined) return <div style={{ padding: 32 }}>Loading...</div>;
   if (me === null) return <Navigate to="/login" replace />;
   return <>{children}</>;

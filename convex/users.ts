@@ -28,17 +28,21 @@ export const getActiveSubscribers = internalQuery({
   },
 });
 
-// Public: returns safe user profile — strips ALL token fields
+// Public: returns safe user profile — strips ALL token fields.
+//
+// Auth note: this app uses custom LinkedIn OAuth, not Convex's built-in JWT
+// auth (Clerk / Auth0). ctx.auth.getUserIdentity() is therefore unavailable.
+// Instead the client passes the Convex _id stored in sessionStorage after the
+// OAuth callback redirect.
+//
+// TODO: When integrating Clerk/Auth0, replace userId arg with getUserIdentity()
+// for a server-enforced identity guarantee.
 export const getMe = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, { userId }: { userId?: string }) => {
+    if (!userId) return null;
     const queryCtx = ctx as unknown as QueryCtx;
-    const identity = await queryCtx.auth.getUserIdentity();
-    if (!identity) return null;
-    const user = await queryCtx.db
-      .query("users")
-      .withIndex("by_linkedin_id", (q) => q.eq("linkedinId", identity.subject))
-      .first() as UserDoc | null;
+    const user = (await queryCtx.db.get(userId)) as UserDoc | null;
     if (!user) return null;
     // IMPORTANT: Strip tokens before returning to client
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

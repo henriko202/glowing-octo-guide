@@ -18,7 +18,8 @@ const PLAN_PRICES: Record<string, string> = {
 
 export default function BillingPage() {
   const { t } = useTranslation();
-  const me = useQuery(api.users.getMe);
+  const userId = sessionStorage.getItem("convexUserId") ?? undefined;
+  const me = useQuery(api.users.getMe, { userId });
   const createCheckout = useAction(api.billing.createCheckoutSession);
 
   async function handleUpgrade(priceId: string) {

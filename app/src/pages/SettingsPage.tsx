@@ -20,7 +20,8 @@ interface MeProfile {
 
 export default function SettingsPage() {
   const { t } = useTranslation();
-  const me = useQuery(api.users.getMe) as MeProfile | null | undefined;
+  const userId = sessionStorage.getItem("convexUserId") ?? undefined;
+  const me = useQuery(api.users.getMe, { userId }) as MeProfile | null | undefined;
 
   if (!me) {
     return <div style={{ padding: 32, fontFamily: "system-ui, sans-serif" }}>{t("auth.loading")}</div>;
