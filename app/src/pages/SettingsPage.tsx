@@ -2,9 +2,25 @@ import { useQuery } from "convex/react";
 import { useTranslation } from "react-i18next";
 import { api } from "../convex";
 
+/** Safe user profile as returned by the getMe query (no token fields) */
+interface MeProfile {
+  _id: string;
+  linkedinId: string;
+  name: string;
+  headline?: string;
+  profilePictureUrl?: string;
+  industry?: string;
+  country?: string;
+  tier: "starter" | "growth" | "pro" | "contact";
+  subscriptionStatus: "trialing" | "active" | "canceled" | "past_due" | "none";
+  trialEndsAt?: number;
+  stripeCustomerId?: string;
+  createdAt: number;
+}
+
 export default function SettingsPage() {
   const { t } = useTranslation();
-  const me = useQuery(api.users.getMe);
+  const me = useQuery(api.users.getMe) as MeProfile | null | undefined;
 
   if (!me) {
     return <div style={{ padding: 32, fontFamily: "system-ui, sans-serif" }}>{t("auth.loading")}</div>;
@@ -23,10 +39,10 @@ export default function SettingsPage() {
           {t("settings.profile")}
         </h2>
         <p style={{ color: "#64748b", fontSize: 14, margin: "4px 0" }}>
-          {t("settings.industry")}: {(me as any).industry ?? t("settings.notSet")}
+          {t("settings.industry")}: {me.industry ?? t("settings.notSet")}
         </p>
         <p style={{ color: "#64748b", fontSize: 14, margin: "4px 0" }}>
-          {t("settings.country")}: {(me as any).country ?? t("settings.notSet")}
+          {t("settings.country")}: {me.country ?? t("settings.notSet")}
         </p>
         <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 8, marginBottom: 0 }}>
           {t("settings.profileNote")}

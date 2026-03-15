@@ -25,8 +25,8 @@ export default function BillingPage() {
     try {
       const result = await createCheckout({ priceId });
       if (result?.url) window.location.href = result.url;
-    } catch (err: any) {
-      alert(`Checkout failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Checkout failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

@@ -1,4 +1,5 @@
 // convex/linkedin/posts.ts
+import type { LinkedInUGCPost, LinkedInUGCPostsResponse } from "./types.js";
 
 export interface ParsedPost {
   linkedinPostUrn: string;
@@ -9,12 +10,12 @@ export interface ParsedPost {
   mediaUrls: string[];
 }
 
-export function parseLinkedInPost(raw: any): ParsedPost {
+export function parseLinkedInPost(raw: LinkedInUGCPost): ParsedPost {
   const share = raw.specificContent?.["com.linkedin.ugc.ShareContent"];
   const content = share?.shareCommentary?.text ?? "";
   const mediaUrls: string[] = (share?.media ?? [])
-    .map((m: any) => m?.originalUrl)
-    .filter(Boolean);
+    .map((m) => m?.originalUrl)
+    .filter((url): url is string => typeof url === "string" && url.length > 0);
 
   const counts = raw.socialDetail?.totalSocialActivityCounts ?? {};
   return {
@@ -42,6 +43,6 @@ export async function fetchUserPosts(
     }
   );
   if (!res.ok) throw new Error(`Posts fetch failed: ${res.status}`);
-  const data = await res.json() as { elements?: any[] };
+  const data = await res.json() as LinkedInUGCPostsResponse;
   return (data.elements ?? []).map(parseLinkedInPost);
 }

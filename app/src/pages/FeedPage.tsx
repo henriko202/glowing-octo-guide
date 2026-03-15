@@ -28,12 +28,12 @@ export default function FeedPage() {
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {feed.posts.map((post: any) => (
+        {(feed.posts as PostWithAuthor[]).map((post) => (
           <div key={post._id as string}>
             <PostCard
-              post={post as unknown as PostWithAuthor}
+              post={post}
               onComment={(id) => setCommentingOn(id === commentingOn ? null : id)}
-              onReact={(id) => react({ postId: id as any, reactionType: "LIKE" })}
+              onReact={(id) => react({ postId: id as unknown as string, reactionType: "LIKE" })}
             />
             {commentingOn === (post._id as string) && (
               <CommentBox

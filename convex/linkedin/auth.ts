@@ -1,6 +1,7 @@
 // convex/linkedin/auth.ts
 import { internalMutationGeneric as internalMutation } from "convex/server";
 import { v } from "convex/values";
+import type { UpsertDb, ConvexDb } from "../convexTypes.js";
 
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -16,12 +17,12 @@ export interface UpsertUserArgs {
 
 // Plain handler function — used by the registered mutation and testable in isolation
 export async function upsertUserHandler(
-  db: any,
+  db: UpsertDb,
   args: UpsertUserArgs
 ): Promise<string> {
   const existing = await db
     .query("users")
-    .withIndex("by_linkedin_id", (q: any) => q.eq("linkedinId", args.linkedinId))
+    .withIndex("by_linkedin_id", (q) => q.eq("linkedinId", args.linkedinId))
     .first();
 
   if (existing) {
@@ -63,5 +64,5 @@ export const upsertUser = internalMutation({
     refreshToken: v.string(),
     tokenExpiresAt: v.number(),
   },
-  handler: async (ctx: any, args: UpsertUserArgs) => upsertUserHandler(ctx.db, args),
+  handler: async (ctx, args: UpsertUserArgs) => upsertUserHandler(ctx.db as unknown as UpsertDb, args),
 });

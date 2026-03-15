@@ -5,6 +5,7 @@
 
 import { internalMutationGeneric as internalMutation } from "convex/server";
 import { v } from "convex/values";
+import type { MutationCtx, UserDoc, PostDoc, SubscriptionDoc } from "./convexTypes.js";
 
 // These internal mutations are called from webhook callbacks registered in http.ts
 // to keep our users table in sync with Stripe subscription state.
@@ -27,45 +28,46 @@ export const syncUserSubscription = internalMutation({
     status: v.string(),
     currentPeriodEnd: v.number(),
   },
-  handler: async (ctx: any, args: { stripeCustomerId: string; stripeSubscriptionId: string; tier: "starter" | "growth" | "pro"; status: string; currentPeriodEnd: number }) => {
-    const user = await ctx.db
+  handler: async (ctx, args: { stripeCustomerId: string; stripeSubscriptionId: string; tier: "starter" | "growth" | "pro"; status: string; currentPeriodEnd: number }) => {
+    const db = (ctx as unknown as MutationCtx).db;
+    const user = await db
       .query("users")
-      .withIndex("by_stripe_customer", (q: any) => q.eq("stripeCustomerId", args.stripeCustomerId))
-      .first();
+      .withIndex("by_stripe_customer", (q) => q.eq("stripeCustomerId", args.stripeCustomerId))
+      .first() as UserDoc | null;
     if (!user) {
       console.warn(`syncUserSubscription: no user for Stripe customer ${args.stripeCustomerId}`);
       return;
     }
 
-    await ctx.db.patch(user._id, {
+    await db.patch(user._id, {
       tier: args.tier,
-      subscriptionStatus: args.status as any,
+      subscriptionStatus: args.status as UserDoc["subscriptionStatus"],
       trialEndsAt: undefined,
     });
 
     // Un-hide posts when subscription becomes active
     if (args.status === "active") {
-      const posts = await ctx.db
+      const posts = await db
         .query("posts")
-        .withIndex("by_author", (q: any) => q.eq("authorId", user._id))
-        .filter((q: any) => q.eq(q.field("hidden"), true))
-        .collect();
-      await Promise.all(posts.map((p: any) => ctx.db.patch(p._id, { hidden: false })));
+        .withIndex("by_author", (q) => q.eq("authorId", user._id))
+        .filter((q) => q.eq(q.field("hidden"), true))
+        .collect() as PostDoc[];
+      await Promise.all(posts.map((p) => db.patch(p._id, { hidden: false })));
     }
 
     // Upsert our own subscriptions table
-    const existing = await ctx.db
+    const existing = await db
       .query("subscriptions")
-      .withIndex("by_stripe_id", (q: any) => q.eq("stripeSubscriptionId", args.stripeSubscriptionId))
-      .first();
+      .withIndex("by_stripe_id", (q) => q.eq("stripeSubscriptionId", args.stripeSubscriptionId))
+      .first() as SubscriptionDoc | null;
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      await db.patch(existing._id, {
         tier: args.tier,
         status: args.status,
         currentPeriodEnd: args.currentPeriodEnd,
       });
     } else {
-      await ctx.db.insert("subscriptions", {
+      await db.insert("subscriptions", {
         userId: user._id,
         stripeSubscriptionId: args.stripeSubscriptionId,
         tier: args.tier,
@@ -79,14 +81,15 @@ export const syncUserSubscription = internalMutation({
 /** Downgrade user to starter on subscription cancellation */
 export const cancelUserSubscription = internalMutation({
   args: { stripeSubscriptionId: v.string() },
-  handler: async (ctx: any, { stripeSubscriptionId }: { stripeSubscriptionId: string }) => {
-    const sub = await ctx.db
+  handler: async (ctx, { stripeSubscriptionId }: { stripeSubscriptionId: string }) => {
+    const db = (ctx as unknown as MutationCtx).db;
+    const sub = await db
       .query("subscriptions")
-      .withIndex("by_stripe_id", (q: any) => q.eq("stripeSubscriptionId", stripeSubscriptionId))
-      .first();
+      .withIndex("by_stripe_id", (q) => q.eq("stripeSubscriptionId", stripeSubscriptionId))
+      .first() as SubscriptionDoc | null;
     if (!sub) return;
-    await ctx.db.patch(sub._id, { status: "canceled" });
-    await ctx.db.patch(sub.userId, { tier: "starter", subscriptionStatus: "canceled" });
+    await db.patch(sub._id, { status: "canceled" });
+    await db.patch(sub.userId, { tier: "starter", subscriptionStatus: "canceled" });
   },
 });
 
@@ -96,18 +99,19 @@ export const markPastDue = internalMutation({
     stripeCustomerId: v.string(),
     stripeSubscriptionId: v.string(),
   },
-  handler: async (ctx: any, { stripeCustomerId, stripeSubscriptionId }: { stripeCustomerId: string; stripeSubscriptionId: string }) => {
-    const user = await ctx.db
+  handler: async (ctx, { stripeCustomerId, stripeSubscriptionId }: { stripeCustomerId: string; stripeSubscriptionId: string }) => {
+    const db = (ctx as unknown as MutationCtx).db;
+    const user = await db
       .query("users")
-      .withIndex("by_stripe_customer", (q: any) => q.eq("stripeCustomerId", stripeCustomerId))
-      .first();
+      .withIndex("by_stripe_customer", (q) => q.eq("stripeCustomerId", stripeCustomerId))
+      .first() as UserDoc | null;
     if (!user) return;
-    await ctx.db.patch(user._id, { subscriptionStatus: "past_due" });
-    const sub = await ctx.db
+    await db.patch(user._id, { subscriptionStatus: "past_due" });
+    const sub = await db
       .query("subscriptions")
-      .withIndex("by_stripe_id", (q: any) => q.eq("stripeSubscriptionId", stripeSubscriptionId))
-      .first();
-    if (sub) await ctx.db.patch(sub._id, { status: "past_due" });
+      .withIndex("by_stripe_id", (q) => q.eq("stripeSubscriptionId", stripeSubscriptionId))
+      .first() as SubscriptionDoc | null;
+    if (sub) await db.patch(sub._id, { status: "past_due" });
   },
 });
 

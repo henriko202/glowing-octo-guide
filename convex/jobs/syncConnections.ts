@@ -2,15 +2,16 @@
 import { internalActionGeneric as internalAction, internalMutationGeneric as internalMutation, cronJobs } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
+import type { MutationCtx, ActionCtx, UserDoc } from "../convexTypes.js";
+import type { LinkedInConnectionsResponse } from "../linkedin/types.js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function parseConnectionIds(data: { elements?: any[] }): string[] {
+export function parseConnectionIds(data: LinkedInConnectionsResponse): string[] {
   return (data.elements ?? [])
-    .map((el: any) => {
+    .map((el) => {
       const urn: string = el.connectedMember ?? "";
       return urn.split(":").pop() ?? null;
     })
-    .filter((id: string | null): id is string => !!id && id.length > 0);
+    .filter((id): id is string => !!id && id.length > 0);
 }
 
 const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
@@ -20,15 +21,16 @@ export const upsertConnections = internalMutation({
     userId: v.id("users"),
     connectionLinkedinIds: v.array(v.string()),
   },
-  handler: async (ctx: any, { userId, connectionLinkedinIds }: { userId: any; connectionLinkedinIds: string[] }) => {
-    const existing = await ctx.db
+  handler: async (ctx, { userId, connectionLinkedinIds }: { userId: string; connectionLinkedinIds: string[] }) => {
+    const db = (ctx as unknown as MutationCtx).db;
+    const existing = await db
       .query("userConnections")
-      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
     if (existing) {
-      await ctx.db.patch(existing._id, { connectionLinkedinIds, lastSyncedAt: Date.now() });
+      await db.patch(existing._id, { connectionLinkedinIds, lastSyncedAt: Date.now() });
     } else {
-      await ctx.db.insert("userConnections", {
+      await db.insert("userConnections", {
         userId,
         connectionLinkedinIds,
         lastSyncedAt: Date.now(),
@@ -39,8 +41,9 @@ export const upsertConnections = internalMutation({
 
 export const syncUserConnections = internalAction({
   args: { userId: v.id("users") },
-  handler: async (ctx: any, { userId }: { userId: any }) => {
-    const user = await ctx.runQuery(getUserWithTokens, { userId });
+  handler: async (ctx, { userId }: { userId: string }) => {
+    const actionCtx = ctx as unknown as ActionCtx;
+    const user = await actionCtx.runQuery<UserDoc | null>(getUserWithTokens, { userId });
     if (!user?.linkedinAccessToken) return;
 
     let allIds: string[] = [];
@@ -65,7 +68,7 @@ export const syncUserConnections = internalAction({
       }
       if (!res.ok) throw new Error(`Connections fetch failed: ${res.status}`);
 
-      const data = await res.json() as { elements?: any[] };
+      const data = await res.json() as LinkedInConnectionsResponse;
       const ids = parseConnectionIds(data);
       allIds.push(...ids);
       if (ids.length < count) break;
@@ -73,7 +76,7 @@ export const syncUserConnections = internalAction({
     }
 
     const upsertFn = makeFunctionReference<"mutation">("jobs/syncConnections:upsertConnections");
-    await ctx.runMutation(upsertFn, { userId, connectionLinkedinIds: allIds });
+    await actionCtx.runMutation(upsertFn, { userId, connectionLinkedinIds: allIds });
   },
 });
 
@@ -81,11 +84,12 @@ const getActiveSubscribers = makeFunctionReference<"query">("users:getActiveSubs
 
 export const syncAllConnections = internalAction({
   args: {},
-  handler: async (ctx: any) => {
-    const users = await ctx.runQuery(getActiveSubscribers, {});
+  handler: async (ctx) => {
+    const actionCtx = ctx as unknown as ActionCtx;
+    const users = await actionCtx.runQuery<UserDoc[]>(getActiveSubscribers, {});
     const syncFn = makeFunctionReference<"action">("jobs/syncConnections:syncUserConnections");
     await Promise.allSettled(
-      users.map((u: any) => ctx.runAction(syncFn, { userId: u._id }))
+      users.map((u) => actionCtx.runAction(syncFn, { userId: u._id }))
     );
   },
 });

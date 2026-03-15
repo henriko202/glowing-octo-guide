@@ -13,6 +13,7 @@ function createMockDb(existingUser?: any) {
         first: async () => records[0] ?? null,
       }),
     }),
+    get: async (_id: string) => records.find((r) => r._id === _id) ?? null,
     patch: async (id: string, data: any) => {
       patches.push({ id, data });
     },

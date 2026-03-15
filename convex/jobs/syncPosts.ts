@@ -3,10 +3,25 @@ import { internalMutationGeneric as internalMutation, internalActionGeneric as i
 import { v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
 import { fetchUserPosts } from "../linkedin/posts.js";
+import type { MutationCtx, ActionCtx, UserDoc } from "../convexTypes.js";
 
 // References to other internal functions (avoids _generated/ dependency)
 const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
 const getActiveSubscribers = makeFunctionReference<"query">("users:getActiveSubscribers");
+
+interface UpsertPostArgs {
+  linkedinPostUrn: string;
+  authorId: string;
+  content: string;
+  publishedAt: number;
+  likeCount: number;
+  commentCount: number;
+  mediaUrls: string[];
+  isFeatured: boolean;
+  visibilityIndustries: string[];
+  visibilityCountries: string[];
+  hidden: boolean;
+}
 
 // Upsert a single post — inserts new, updates like/comment counts on existing
 export const upsertPost = internalMutation({
@@ -23,20 +38,21 @@ export const upsertPost = internalMutation({
     visibilityCountries: v.array(v.string()),
     hidden: v.boolean(),
   },
-  handler: async (ctx: any, args: any) => {
-    const existing = await ctx.db
+  handler: async (ctx, args: UpsertPostArgs) => {
+    const db = (ctx as unknown as MutationCtx).db;
+    const existing = await db
       .query("posts")
-      .withIndex("by_urn", (q: any) => q.eq("linkedinPostUrn", args.linkedinPostUrn))
+      .withIndex("by_urn", (q) => q.eq("linkedinPostUrn", args.linkedinPostUrn))
       .first();
     if (existing) {
       // Only update mutable fields on re-sync
-      await ctx.db.patch(existing._id, {
+      await db.patch(existing._id, {
         likeCount: args.likeCount,
         commentCount: args.commentCount,
         hidden: args.hidden,
       });
     } else {
-      await ctx.db.insert("posts", {
+      await db.insert("posts", {
         ...args,
         featuredAt: undefined,
       });
@@ -47,22 +63,23 @@ export const upsertPost = internalMutation({
 // Sync posts for one user
 export const syncUserPosts = internalAction({
   args: { userId: v.id("users") },
-  handler: async (ctx: any, { userId }: { userId: any }) => {
-    const user = await ctx.runQuery(getUserWithTokens, { userId });
+  handler: async (ctx, { userId }: { userId: string }) => {
+    const actionCtx = ctx as unknown as ActionCtx;
+    const user = await actionCtx.runQuery<UserDoc | null>(getUserWithTokens, { userId });
     if (!user?.linkedinAccessToken) {
       console.warn(`No LinkedIn token for user ${userId}, skipping sync`);
       return;
     }
 
-    if (user.tokenExpiresAt && user.tokenExpiresAt - Date.now() < 7 * 86400000) {
+    if (user.tokenExpiresAt && (user.tokenExpiresAt as number) - Date.now() < 7 * 86400000) {
       console.warn(`Token for user ${userId} expires within 7 days — re-auth needed`);
     }
 
-    const posts = await fetchUserPosts(user.linkedinAccessToken, user.linkedinId);
+    const posts = await fetchUserPosts(user.linkedinAccessToken as string, user.linkedinId as string);
     const upsertPostFn = makeFunctionReference<"mutation">("jobs/syncPosts:upsertPost");
 
     for (const post of posts) {
-      await ctx.runMutation(upsertPostFn, {
+      await actionCtx.runMutation(upsertPostFn, {
         ...post,
         authorId: userId,
         isFeatured: false,
@@ -77,12 +94,13 @@ export const syncUserPosts = internalAction({
 // Hourly cron: sync posts for all active/trialing subscribers
 export const syncAllPosts = internalAction({
   args: {},
-  handler: async (ctx: any) => {
-    const users = await ctx.runQuery(getActiveSubscribers, {});
+  handler: async (ctx) => {
+    const actionCtx = ctx as unknown as ActionCtx;
+    const users = await actionCtx.runQuery<UserDoc[]>(getActiveSubscribers, {});
     await Promise.allSettled(
-      users.map((u: any) => {
+      users.map((u) => {
         const syncFn = makeFunctionReference<"action">("jobs/syncPosts:syncUserPosts");
-        return ctx.runAction(syncFn, { userId: u._id });
+        return actionCtx.runAction(syncFn, { userId: u._id });
       })
     );
   },

@@ -22,11 +22,11 @@ export default function CommentBox({
     setSubmitting(true);
     setError(null);
     try {
-      await comment({ postId: postId as any, commentText: text.trim() });
+      await comment({ postId: postId as unknown as string, commentText: text.trim() });
       setText("");
       onClose();
-    } catch (err: any) {
-      setError(err.message ?? "Failed to post comment");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to post comment");
     } finally {
       setSubmitting(false);
     }
