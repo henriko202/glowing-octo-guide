@@ -6,6 +6,37 @@ export function internalMutation(_def: any) {
   return _def;
 }
 
+export function internalQuery(_def: any) {
+  return _def;
+}
+
+export function internalAction(_def: any) {
+  return _def;
+}
+
+export function query(_def: any) {
+  return _def;
+}
+
+export function action(_def: any) {
+  return _def;
+}
+
+export function mutation(_def: any) {
+  return _def;
+}
+
+export function cronJobs() {
+  return {
+    hourly: () => {},
+    daily: () => {},
+    weekly: () => {},
+    monthly: () => {},
+    interval: () => {},
+    cron: () => {},
+  };
+}
+
 export function httpRouter() {
   return {
     route: () => {},
