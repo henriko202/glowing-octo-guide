@@ -1,0 +1,8 @@
+node_modules/
+.env*
+dist/
+.next/
+.convex/
+*.log
+.DS_Store
+.idea/
