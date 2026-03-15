@@ -28,7 +28,7 @@ export default function FeedPage() {
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {feed.posts.map((post) => (
+        {feed.posts.map((post: any) => (
           <div key={post._id as string}>
             <PostCard
               post={post as unknown as PostWithAuthor}

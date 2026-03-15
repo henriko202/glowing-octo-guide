@@ -4,7 +4,7 @@ import path from "path";
 export default defineConfig({
   resolve: {
     alias: {
-      "convex/server": path.resolve(__dirname, "test/__mocks__/convex-server.ts"),
+      "convex/server": path.resolve(__dirname, "test/__mocks__/convex-server-with-generics.ts"),
     },
   },
 });

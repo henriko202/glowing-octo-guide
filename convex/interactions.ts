@@ -1,20 +1,20 @@
 // convex/interactions.ts
-import { action, internalMutation, internalQuery } from "convex/server";
+import { actionGeneric as action, internalMutationGeneric as internalMutation, internalQueryGeneric as internalQuery } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
-const getUserWithTokens = makeFunctionReference<"internalQuery">("users:getWithTokens");
+const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
   args: { postId: v.id("posts") },
-  handler: async (ctx, { postId }) => ctx.db.get(postId),
+  handler: async (ctx: any, { postId }: { postId: any }) => ctx.db.get(postId),
 });
 
 // Internal mutation to increment comment count
 export const incrementCommentCount = internalMutation({
   args: { postId: v.id("posts") },
-  handler: async (ctx, { postId }) => {
+  handler: async (ctx: any, { postId }: { postId: any }) => {
     const post = await ctx.db.get(postId);
     if (post) await ctx.db.patch(postId, { commentCount: post.commentCount + 1 });
   },
@@ -23,7 +23,7 @@ export const incrementCommentCount = internalMutation({
 // Internal mutation to increment like count
 export const incrementLikeCount = internalMutation({
   args: { postId: v.id("posts") },
-  handler: async (ctx, { postId }) => {
+  handler: async (ctx: any, { postId }: { postId: any }) => {
     const post = await ctx.db.get(postId);
     if (post) await ctx.db.patch(postId, { likeCount: post.likeCount + 1 });
   },
@@ -35,14 +35,14 @@ export const commentOnPost = action({
     postId: v.id("posts"),
     commentText: v.string(),
   },
-  handler: async (ctx, { postId, commentText }) => {
+  handler: async (ctx: any, { postId, commentText }: { postId: any; commentText: string }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
     const user = await ctx.runQuery(getUserWithTokens, { userId: identity.subject as any });
     if (!user?.linkedinAccessToken) throw new Error("No LinkedIn token");
 
-    const getPostFn = makeFunctionReference<"internalQuery">("interactions:getPost");
+    const getPostFn = makeFunctionReference<"query">("interactions:getPost");
     const post = await ctx.runQuery(getPostFn, { postId });
     if (!post) throw new Error("Post not found");
 
@@ -66,7 +66,7 @@ export const commentOnPost = action({
       throw new Error(`LinkedIn comment failed: ${res.status} ${err}`);
     }
 
-    const incrementFn = makeFunctionReference<"internalMutation">("interactions:incrementCommentCount");
+    const incrementFn = makeFunctionReference<"mutation">("interactions:incrementCommentCount");
     await ctx.runMutation(incrementFn, { postId });
     return { success: true };
   },
@@ -85,14 +85,14 @@ export const reactToPost = action({
       v.literal("INSIGHTFUL")
     ),
   },
-  handler: async (ctx, { postId, reactionType }) => {
+  handler: async (ctx: any, { postId, reactionType }: { postId: any; reactionType: string }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
     const user = await ctx.runQuery(getUserWithTokens, { userId: identity.subject as any });
     if (!user?.linkedinAccessToken) throw new Error("No LinkedIn token");
 
-    const getPostFn = makeFunctionReference<"internalQuery">("interactions:getPost");
+    const getPostFn = makeFunctionReference<"query">("interactions:getPost");
     const post = await ctx.runQuery(getPostFn, { postId });
     if (!post) throw new Error("Post not found");
 
@@ -116,7 +116,7 @@ export const reactToPost = action({
       throw new Error(`LinkedIn reaction failed: ${res.status} ${err}`);
     }
 
-    const incrementFn = makeFunctionReference<"internalMutation">("interactions:incrementLikeCount");
+    const incrementFn = makeFunctionReference<"mutation">("interactions:incrementLikeCount");
     await ctx.runMutation(incrementFn, { postId });
     return { success: true };
   },

@@ -5,15 +5,15 @@
 //   import { StripeSubscriptions } from "@convex-dev/stripe";
 //   const stripe = new StripeSubscriptions(components.stripe, {});
 
-import { action, internalMutation } from "convex/server";
+import { actionGeneric as action, internalMutationGeneric as internalMutation } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
-const getUserWithTokens = makeFunctionReference<"internalQuery">("users:getWithTokens");
+const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
 
 export const createCheckoutSession = action({
   args: { priceId: v.string() },
-  handler: async (ctx, { priceId }) => {
+  handler: async (ctx: any, { priceId }: { priceId: string }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
@@ -25,7 +25,8 @@ export const createCheckoutSession = action({
     //   const stripe = new StripeSubscriptions(components.stripe, {});
     //   const session = await stripe.createCheckoutSession(ctx, { priceId, userId: user._id, ... });
     const Stripe = (await import("stripe")).default;
-    const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-04-10" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" as any });
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -34,7 +35,7 @@ export const createCheckoutSession = action({
         metadata: { convexUserId: user._id as string },
       });
       customerId = customer.id;
-      const setCustomerFn = makeFunctionReference<"internalMutation">("billing:setStripeCustomerId");
+      const setCustomerFn = makeFunctionReference<"mutation">("billing:setStripeCustomerId");
       await ctx.runMutation(setCustomerFn, { userId: user._id, stripeCustomerId: customerId });
     }
 
@@ -54,7 +55,7 @@ export const createCheckoutSession = action({
 
 export const setStripeCustomerId = internalMutation({
   args: { userId: v.id("users"), stripeCustomerId: v.string() },
-  handler: async (ctx, { userId, stripeCustomerId }) => {
+  handler: async (ctx: any, { userId, stripeCustomerId }: { userId: any; stripeCustomerId: string }) => {
     await ctx.db.patch(userId, { stripeCustomerId });
   },
 });

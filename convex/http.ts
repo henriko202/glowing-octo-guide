@@ -1,7 +1,6 @@
 // convex/http.ts
-import { httpRouter, makeFunctionReference } from "convex/server";
-import { httpAction } from "convex/server";
-import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInProfile } from "./linkedin/oauth";
+import { httpRouter, makeFunctionReference, httpActionGeneric as httpAction } from "convex/server";
+import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInProfile } from "./linkedin/oauth.js";
 
 const http = httpRouter();
 
@@ -16,7 +15,7 @@ http.route({
   }),
 });
 
-const upsertUserMutation = makeFunctionReference<"internalMutation">("linkedin/auth:upsertUser");
+const upsertUserMutation = makeFunctionReference<"mutation">("linkedin/auth:upsertUser");
 
 http.route({
   path: "/auth/linkedin/callback",

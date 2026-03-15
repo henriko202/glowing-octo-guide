@@ -1,9 +1,10 @@
 // convex/jobs/syncConnections.ts
-import { internalAction, internalMutation, cronJobs } from "convex/server";
+import { internalActionGeneric as internalAction, internalMutationGeneric as internalMutation, cronJobs } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
-export function parseConnectionIds(data: any): string[] {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseConnectionIds(data: { elements?: any[] }): string[] {
   return (data.elements ?? [])
     .map((el: any) => {
       const urn: string = el.connectedMember ?? "";
@@ -12,17 +13,17 @@ export function parseConnectionIds(data: any): string[] {
     .filter((id: string | null): id is string => !!id && id.length > 0);
 }
 
-const getUserWithTokens = makeFunctionReference<"internalQuery">("users:getWithTokens");
+const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
 
 export const upsertConnections = internalMutation({
   args: {
     userId: v.id("users"),
     connectionLinkedinIds: v.array(v.string()),
   },
-  handler: async (ctx, { userId, connectionLinkedinIds }) => {
+  handler: async (ctx: any, { userId, connectionLinkedinIds }: { userId: any; connectionLinkedinIds: string[] }) => {
     const existing = await ctx.db
       .query("userConnections")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
       .first();
     if (existing) {
       await ctx.db.patch(existing._id, { connectionLinkedinIds, lastSyncedAt: Date.now() });
@@ -38,7 +39,7 @@ export const upsertConnections = internalMutation({
 
 export const syncUserConnections = internalAction({
   args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
+  handler: async (ctx: any, { userId }: { userId: any }) => {
     const user = await ctx.runQuery(getUserWithTokens, { userId });
     if (!user?.linkedinAccessToken) return;
 
@@ -71,18 +72,18 @@ export const syncUserConnections = internalAction({
       start += count;
     }
 
-    const upsertFn = makeFunctionReference<"internalMutation">("jobs/syncConnections:upsertConnections");
+    const upsertFn = makeFunctionReference<"mutation">("jobs/syncConnections:upsertConnections");
     await ctx.runMutation(upsertFn, { userId, connectionLinkedinIds: allIds });
   },
 });
 
-const getActiveSubscribers = makeFunctionReference<"internalQuery">("users:getActiveSubscribers");
+const getActiveSubscribers = makeFunctionReference<"query">("users:getActiveSubscribers");
 
 export const syncAllConnections = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: any) => {
     const users = await ctx.runQuery(getActiveSubscribers, {});
-    const syncFn = makeFunctionReference<"internalAction">("jobs/syncConnections:syncUserConnections");
+    const syncFn = makeFunctionReference<"action">("jobs/syncConnections:syncUserConnections");
     await Promise.allSettled(
       users.map((u: any) => ctx.runAction(syncFn, { userId: u._id }))
     );
@@ -94,6 +95,6 @@ export const connectionCrons = cronJobs();
 connectionCrons.weekly(
   "sync LinkedIn connections",
   { dayOfWeek: "monday", hourUTC: 3, minuteUTC: 0 },
-  makeFunctionReference<"internalAction">("jobs/syncConnections:syncAllConnections"),
+  makeFunctionReference<"action">("jobs/syncConnections:syncAllConnections"),
   {}
 );

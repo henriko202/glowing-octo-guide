@@ -1,5 +1,5 @@
 // convex/linkedin/auth.ts
-import { internalMutation } from "convex/server";
+import { internalMutationGeneric as internalMutation } from "convex/server";
 import { v } from "convex/values";
 
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
@@ -63,5 +63,5 @@ export const upsertUser = internalMutation({
     refreshToken: v.string(),
     tokenExpiresAt: v.number(),
   },
-  handler: async (ctx, args) => upsertUserHandler(ctx.db, args),
+  handler: async (ctx: any, args: UpsertUserArgs) => upsertUserHandler(ctx.db, args),
 });

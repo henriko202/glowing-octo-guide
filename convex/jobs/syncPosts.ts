@@ -1,12 +1,12 @@
 // convex/jobs/syncPosts.ts
-import { internalMutation, internalAction, cronJobs } from "convex/server";
+import { internalMutationGeneric as internalMutation, internalActionGeneric as internalAction, cronJobs } from "convex/server";
 import { v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
-import { fetchUserPosts } from "../linkedin/posts";
+import { fetchUserPosts } from "../linkedin/posts.js";
 
 // References to other internal functions (avoids _generated/ dependency)
-const getUserWithTokens = makeFunctionReference<"internalQuery">("users:getWithTokens");
-const getActiveSubscribers = makeFunctionReference<"internalQuery">("users:getActiveSubscribers");
+const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
+const getActiveSubscribers = makeFunctionReference<"query">("users:getActiveSubscribers");
 
 // Upsert a single post — inserts new, updates like/comment counts on existing
 export const upsertPost = internalMutation({
@@ -23,10 +23,10 @@ export const upsertPost = internalMutation({
     visibilityCountries: v.array(v.string()),
     hidden: v.boolean(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx: any, args: any) => {
     const existing = await ctx.db
       .query("posts")
-      .withIndex("by_urn", (q) => q.eq("linkedinPostUrn", args.linkedinPostUrn))
+      .withIndex("by_urn", (q: any) => q.eq("linkedinPostUrn", args.linkedinPostUrn))
       .first();
     if (existing) {
       // Only update mutable fields on re-sync
@@ -47,7 +47,7 @@ export const upsertPost = internalMutation({
 // Sync posts for one user
 export const syncUserPosts = internalAction({
   args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
+  handler: async (ctx: any, { userId }: { userId: any }) => {
     const user = await ctx.runQuery(getUserWithTokens, { userId });
     if (!user?.linkedinAccessToken) {
       console.warn(`No LinkedIn token for user ${userId}, skipping sync`);
@@ -59,7 +59,7 @@ export const syncUserPosts = internalAction({
     }
 
     const posts = await fetchUserPosts(user.linkedinAccessToken, user.linkedinId);
-    const upsertPostFn = makeFunctionReference<"internalMutation">("jobs/syncPosts:upsertPost");
+    const upsertPostFn = makeFunctionReference<"mutation">("jobs/syncPosts:upsertPost");
 
     for (const post of posts) {
       await ctx.runMutation(upsertPostFn, {
@@ -77,11 +77,11 @@ export const syncUserPosts = internalAction({
 // Hourly cron: sync posts for all active/trialing subscribers
 export const syncAllPosts = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx: any) => {
     const users = await ctx.runQuery(getActiveSubscribers, {});
     await Promise.allSettled(
       users.map((u: any) => {
-        const syncFn = makeFunctionReference<"internalAction">("jobs/syncPosts:syncUserPosts");
+        const syncFn = makeFunctionReference<"action">("jobs/syncPosts:syncUserPosts");
         return ctx.runAction(syncFn, { userId: u._id });
       })
     );
@@ -93,6 +93,6 @@ export const crons = cronJobs();
 crons.hourly(
   "sync LinkedIn posts",
   { minuteUTC: 0 },
-  makeFunctionReference<"internalAction">("jobs/syncPosts:syncAllPosts"),
+  makeFunctionReference<"action">("jobs/syncPosts:syncAllPosts"),
   {}
 );
