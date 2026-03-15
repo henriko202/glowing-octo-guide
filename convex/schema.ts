@@ -1,0 +1,75 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  users: defineTable({
+    linkedinId: v.string(),
+    name: v.string(),
+    headline: v.optional(v.string()),
+    profilePictureUrl: v.optional(v.string()),
+    industry: v.optional(v.string()),
+    country: v.optional(v.string()),
+    tier: v.union(
+      v.literal("starter"),
+      v.literal("growth"),
+      v.literal("pro"),
+      v.literal("contact")
+    ),
+    subscriptionStatus: v.union(
+      v.literal("trialing"),
+      v.literal("active"),
+      v.literal("canceled"),
+      v.literal("past_due"),
+      v.literal("none")
+    ),
+    trialEndsAt: v.optional(v.number()),
+    stripeCustomerId: v.optional(v.string()),
+    linkedinAccessToken: v.optional(v.string()),
+    linkedinRefreshToken: v.optional(v.string()),
+    tokenExpiresAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_linkedin_id", ["linkedinId"])
+    .index("by_stripe_customer", ["stripeCustomerId"]),
+
+  posts: defineTable({
+    linkedinPostUrn: v.string(),
+    authorId: v.id("users"),
+    content: v.string(),
+    publishedAt: v.number(),
+    likeCount: v.number(),
+    commentCount: v.number(),
+    mediaUrls: v.array(v.string()),
+    isFeatured: v.boolean(),
+    featuredAt: v.optional(v.number()),
+    visibilityIndustries: v.array(v.string()),
+    visibilityCountries: v.array(v.string()),
+    hidden: v.boolean(),
+  })
+    .index("by_author", ["authorId"])
+    .index("by_urn", ["linkedinPostUrn"])
+    .index("by_featured", ["isFeatured", "featuredAt"])
+    .index("by_published", ["hidden", "publishedAt"]),
+
+  subscriptions: defineTable({
+    userId: v.id("users"),
+    stripeSubscriptionId: v.string(),
+    tier: v.string(),
+    status: v.string(),
+    currentPeriodEnd: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_stripe_id", ["stripeSubscriptionId"]),
+
+  featuredPostUsage: defineTable({
+    userId: v.id("users"),
+    month: v.string(),
+    usedCount: v.number(),
+  }).index("by_user_month", ["userId", "month"]),
+
+  userConnections: defineTable({
+    userId: v.id("users"),
+    connectionLinkedinIds: v.array(v.string()),
+    lastSyncedAt: v.number(),
+  }).index("by_user", ["userId"]),
+});

@@ -4,9 +4,13 @@
   "scripts": {
     "dev": "convex dev",
     "deploy": "convex deploy",
-    "build": "convex deploy"
+    "build": "convex deploy",
+    "test": "vitest run"
   },
   "dependencies": {
     "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
   }
 }
