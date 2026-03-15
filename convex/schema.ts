@@ -49,12 +49,18 @@ export default defineSchema({
     .index("by_author", ["authorId"])
     .index("by_urn", ["linkedinPostUrn"])
     .index("by_featured", ["isFeatured", "featuredAt"])
-    .index("by_published", ["hidden", "publishedAt"]),
+    .index("by_published", ["hidden", "publishedAt"])
+    .index("by_feed", ["hidden", "isFeatured", "featuredAt"]),
 
   subscriptions: defineTable({
     userId: v.id("users"),
     stripeSubscriptionId: v.string(),
-    tier: v.string(),
+    tier: v.union(
+      v.literal("starter"),
+      v.literal("growth"),
+      v.literal("pro"),
+      v.literal("contact")
+    ),
     status: v.string(),
     currentPeriodEnd: v.number(),
   })
