@@ -81,6 +81,33 @@ export const cancelSubscription = internalMutation({
   },
 });
 
+// Called when a payment fails — only marks past_due, preserves tier
+export const markPastDue = internalMutation({
+  args: {
+    stripeCustomerId: v.string(),
+    stripeSubscriptionId: v.string(),
+  },
+  handler: async (ctx, { stripeCustomerId, stripeSubscriptionId }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_stripe_customer", (q) => q.eq("stripeCustomerId", stripeCustomerId))
+      .first();
+    if (!user) return; // Graceful — user may not exist yet
+
+    // Only update status — preserve existing tier
+    await ctx.db.patch(user._id, { subscriptionStatus: "past_due" });
+
+    // Update subscription record status
+    const sub = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_stripe_id", (q) => q.eq("stripeSubscriptionId", stripeSubscriptionId))
+      .first();
+    if (sub) {
+      await ctx.db.patch(sub._id, { status: "past_due" });
+    }
+  },
+});
+
 // HTTP action for Stripe webhook — registered in http.ts
 export const stripeWebhookHandler = httpAction(async (ctx, req) => {
   const body = await req.text();
@@ -126,12 +153,10 @@ export const stripeWebhookHandler = httpAction(async (ctx, req) => {
     case "invoice.payment_failed": {
       const invoice = event.data.object;
       if (invoice.subscription) {
-        await ctx.runMutation(updateSubFn, {
+        const markPastDueFn = makeFunctionReference<"internalMutation">("stripe:markPastDue");
+        await ctx.runMutation(markPastDueFn, {
           stripeCustomerId: invoice.customer as string,
           stripeSubscriptionId: invoice.subscription as string,
-          tier: "starter",
-          status: "past_due",
-          currentPeriodEnd: Date.now(),
         });
       }
       break;
