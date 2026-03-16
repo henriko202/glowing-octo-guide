@@ -78,6 +78,12 @@ export const syncUserPosts = internalAction({
       user.linkedinId as string
     );
 
+    if (posts === null) {
+      // r_member_social scope not granted — LinkedIn MDP approval required
+      console.warn(`r_member_social scope not available for user ${userId} — skipping post sync`);
+      return;
+    }
+
     for (const post of posts) {
       await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, {
         ...post,
