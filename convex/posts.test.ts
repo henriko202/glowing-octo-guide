@@ -1,5 +1,5 @@
 // convex/posts.test.ts
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 // We test the handler logic directly since Convex query wrappers are
 // not testable in unit tests — this mirrors the pattern in feed.test.ts.
