@@ -35,7 +35,9 @@ export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
 
   // Format 1: /posts/{vanityName}_{slug}-{activityId}-{hash}
   // The vanity name is everything before the first underscore in the slug segment.
-  // The activityId is the large number (17-19 digits) near the end.
+  // The activityId is the large number (15-20 digits) near the end.
+  // Known limitation: if the slug contains a 15-20 digit number, the lazy .*? may
+  // match it instead of the actual activityId. Extremely unlikely in practice.
   const format1Match = pathname.match(/\/posts\/([^_]+)_.*?-(\d{15,20})-[^/]+/);
   if (format1Match) {
     return { activityId: format1Match[2], vanityName: format1Match[1] };
