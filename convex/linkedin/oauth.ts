@@ -1,9 +1,20 @@
+import type { LinkedInTokenResponse, LinkedInUserInfo } from "./types.js";
+
+// Scopes for "Sign In with LinkedIn using OpenID Connect" (default product for new apps).
+//
+// - openid / profile / email: standard OIDC, requires "Sign In with LinkedIn using OpenID Connect"
+// - w_member_social: comment + react as the user, requires "Share on LinkedIn" product
+//
+// Scopes that need LinkedIn MDP review (NOT included here until approved):
+//   r_member_social  — read user's own posts
+//   r_network        — read 1st-degree connection IDs
+// Add them back to SCOPES once LinkedIn approves the app:
+//   "r_member_social", "r_network"
 const SCOPES = [
-  "r_liteprofile",
-  "r_emailaddress",
-  "r_member_social",
+  "openid",
+  "profile",
+  "email",
   "w_member_social",
-  "r_network",
 ].join(" ");
 
 export function buildAuthUrl(state: string): string {
@@ -19,11 +30,7 @@ export function buildAuthUrl(state: string): string {
   return `https://www.linkedin.com/oauth/v2/authorization?${params}`;
 }
 
-export async function exchangeCodeForTokens(code: string): Promise<{
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}> {
+export async function exchangeCodeForTokens(code: string): Promise<LinkedInTokenResponse> {
   const clientId = process.env.LINKEDIN_CLIENT_ID!;
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET!;
   const redirectUri = process.env.LINKEDIN_REDIRECT_URI!;
@@ -39,27 +46,24 @@ export async function exchangeCodeForTokens(code: string): Promise<{
       client_secret: clientSecret,
     }),
   });
-  if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
-  return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>;
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Token exchange failed: ${res.status} — ${body}`);
+  }
+  return res.json() as Promise<LinkedInTokenResponse>;
 }
 
-export async function fetchLinkedInProfile(accessToken: string): Promise<{
-  id: string;
-  localizedFirstName: string;
-  localizedLastName: string;
-  headline?: string;
-  profilePicture?: { "displayImage~": { elements: Array<{ identifiers: Array<{ identifier: string }> }> } };
-}> {
-  const res = await fetch(
-    "https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,headline,profilePicture(displayImage~:playableStreams))",
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
-  return res.json() as Promise<{
-    id: string;
-    localizedFirstName: string;
-    localizedLastName: string;
-    headline?: string;
-    profilePicture?: { "displayImage~": { elements: Array<{ identifiers: Array<{ identifier: string }> }> } };
-  }>;
+// OpenID Connect userinfo endpoint — works with openid/profile/email scopes.
+// Replaces the deprecated /v2/me + r_liteprofile approach.
+export async function fetchLinkedInUserInfo(accessToken: string): Promise<LinkedInUserInfo> {
+  const res = await fetch("https://api.linkedin.com/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`UserInfo fetch failed: ${res.status} — ${body}`);
+  }
+  return res.json() as Promise<LinkedInUserInfo>;
 }

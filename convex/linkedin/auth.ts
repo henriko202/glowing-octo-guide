@@ -1,7 +1,7 @@
 // convex/linkedin/auth.ts
 import { internalMutationGeneric as internalMutation } from "convex/server";
 import { v } from "convex/values";
-import type { UpsertDb, ConvexDb } from "../convexTypes.js";
+import type { UpsertDb } from "../convexTypes.js";
 
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -11,7 +11,7 @@ export interface UpsertUserArgs {
   headline?: string;
   profilePictureUrl?: string;
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string; // LinkedIn standard OAuth may omit refresh_token
   tokenExpiresAt: number;
 }
 
@@ -61,7 +61,7 @@ export const upsertUser = internalMutation({
     headline: v.optional(v.string()),
     profilePictureUrl: v.optional(v.string()),
     accessToken: v.string(),
-    refreshToken: v.string(),
+    refreshToken: v.optional(v.string()), // optional — LinkedIn may not return it
     tokenExpiresAt: v.number(),
   },
   handler: async (ctx, args: UpsertUserArgs) => upsertUserHandler(ctx.db as unknown as UpsertDb, args),

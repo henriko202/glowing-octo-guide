@@ -1,10 +1,12 @@
 // convex/http.ts
-import { httpRouter, makeFunctionReference, httpActionGeneric as httpAction } from "convex/server";
-import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInProfile } from "./linkedin/oauth.js";
+import { httpRouter, httpActionGeneric as httpAction } from "convex/server";
+import { internal } from "./_generated/api.js";
+import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from "./linkedin/oauth.js";
 
 const http = httpRouter();
 
-// LinkedIn OAuth routes
+// ─── LinkedIn OAuth ──────────────────────────────────────────────────────────
+
 http.route({
   path: "/auth/linkedin",
   method: "GET",
@@ -15,52 +17,62 @@ http.route({
   }),
 });
 
-const upsertUserMutation = makeFunctionReference<"mutation">("linkedin/auth:upsertUser");
-
 http.route({
   path: "/auth/linkedin/callback",
   method: "GET",
   handler: httpAction(async (ctx, req) => {
-    const url = new URL(req.url);
-    const code = url.searchParams.get("code");
-    const error = url.searchParams.get("error");
-
-    if (error || !code) {
-      const appUrl = process.env.APP_URL ?? "http://localhost:5173";
-      return new Response(null, { status: 302, headers: { Location: `${appUrl}/login?error=oauth_failed` } });
-    }
+    const appUrl = process.env.APP_URL ?? "http://localhost:5173";
 
     try {
-      const tokens = await exchangeCodeForTokens(code);
-      const profile = await fetchLinkedInProfile(tokens.access_token);
-      const tokenExpiresAt = Date.now() + tokens.expires_in * 1000;
-      const pictureElements = profile.profilePicture?.["displayImage~"]?.elements;
-      const profilePictureUrl = pictureElements?.[pictureElements.length - 1]?.identifiers?.[0]?.identifier;
+      const url = new URL(req.url);
+      const code = url.searchParams.get("code");
+      const error = url.searchParams.get("error");
 
-      const userId = await ctx.runMutation(upsertUserMutation, {
-        linkedinId: profile.id,
-        name: `${profile.localizedFirstName} ${profile.localizedLastName}`,
-        headline: profile.headline,
-        profilePictureUrl,
+      if (error) {
+        console.error("LinkedIn OAuth error param:", error, url.searchParams.get("error_description"));
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/login?error=oauth_denied` },
+        });
+      }
+
+      if (!code) {
+        console.error("LinkedIn callback: missing code parameter");
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/login?error=oauth_failed` },
+        });
+      }
+
+      const tokens = await exchangeCodeForTokens(code);
+      const userInfo = await fetchLinkedInUserInfo(tokens.access_token);
+
+      const tokenExpiresAt = Date.now() + tokens.expires_in * 1000;
+
+      const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
+        linkedinId: userInfo.sub,
+        name: userInfo.name,
+        headline: undefined, // OIDC userinfo doesn't include headline
+        profilePictureUrl: userInfo.picture,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         tokenExpiresAt,
       });
 
-      const appUrl = process.env.APP_URL ?? "http://localhost:5173";
-      return new Response(null, { status: 302, headers: { Location: `${appUrl}/auth/success?userId=${userId}` } });
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/auth/success?userId=${userId}` },
+      });
     } catch (err) {
-      console.error("OAuth callback error:", err);
-      const appUrl = process.env.APP_URL ?? "http://localhost:5173";
-      return new Response(null, { status: 302, headers: { Location: `${appUrl}/login?error=auth_failed` } });
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("OAuth callback error:", message, err);
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/login?error=auth_failed&reason=${encodeURIComponent(message)}` },
+      });
     }
   }),
 });
 
 // NOTE: Stripe webhook route is registered by @convex-dev/stripe component.
-// It requires _generated/api to be available (run `npx convex dev` first).
-// The registration code lives in a separate file to avoid import errors
-// before code generation runs.
-// See: convex/stripeRoutes.ts (created after `npx convex dev` generates types)
-
 export default http;
