@@ -46,8 +46,9 @@ export const upsertPost = internalMutation({
         commentCount: args.commentCount,
         hidden: args.hidden,
       });
+      return existing._id;
     } else {
-      await db.insert("posts", {
+      return await db.insert("posts", {
         ...args,
         featuredAt: undefined,
       });

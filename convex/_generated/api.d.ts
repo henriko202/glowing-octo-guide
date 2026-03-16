@@ -10,6 +10,8 @@
 
 import type * as billing from "../billing.js";
 import type * as convexTypes from "../convexTypes.js";
+import type * as convex__generated_api from "../convex/_generated/api.js";
+import type * as convex__generated_server from "../convex/_generated/server.js";
 import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as http from "../http.js";
@@ -18,8 +20,11 @@ import type * as jobs_syncConnections from "../jobs/syncConnections.js";
 import type * as jobs_syncPosts from "../jobs/syncPosts.js";
 import type * as linkedin_auth from "../linkedin/auth.js";
 import type * as linkedin_oauth from "../linkedin/oauth.js";
+import type * as linkedin_parsePostUrl from "../linkedin/parsePostUrl.js";
 import type * as linkedin_posts from "../linkedin/posts.js";
 import type * as linkedin_types from "../linkedin/types.js";
+import type * as linkedin_verifyPostOwnership from "../linkedin/verifyPostOwnership.js";
+import type * as posts from "../posts.js";
 import type * as stripe from "../stripe.js";
 import type * as users from "../users.js";
 
@@ -32,6 +37,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   convexTypes: typeof convexTypes;
+  "convex/_generated/api": typeof convex__generated_api;
+  "convex/_generated/server": typeof convex__generated_server;
   crons: typeof crons;
   feed: typeof feed;
   http: typeof http;
@@ -40,8 +47,11 @@ declare const fullApi: ApiFromModules<{
   "jobs/syncPosts": typeof jobs_syncPosts;
   "linkedin/auth": typeof linkedin_auth;
   "linkedin/oauth": typeof linkedin_oauth;
+  "linkedin/parsePostUrl": typeof linkedin_parsePostUrl;
   "linkedin/posts": typeof linkedin_posts;
   "linkedin/types": typeof linkedin_types;
+  "linkedin/verifyPostOwnership": typeof linkedin_verifyPostOwnership;
+  posts: typeof posts;
   stripe: typeof stripe;
   users: typeof users;
 }>;
