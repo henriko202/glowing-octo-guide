@@ -10,6 +10,7 @@
 
 import type * as billing from "../billing.js";
 import type * as convexTypes from "../convexTypes.js";
+import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
@@ -31,6 +32,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   convexTypes: typeof convexTypes;
+  crons: typeof crons;
   feed: typeof feed;
   http: typeof http;
   interactions: typeof interactions;

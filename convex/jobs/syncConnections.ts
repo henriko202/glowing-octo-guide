@@ -1,7 +1,7 @@
 // convex/jobs/syncConnections.ts
-import { internalActionGeneric as internalAction, internalMutationGeneric as internalMutation, cronJobs } from "convex/server";
-import { makeFunctionReference } from "convex/server";
+import { internalActionGeneric as internalAction, internalMutationGeneric as internalMutation } from "convex/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api.js";
 import type { MutationCtx, ActionCtx, UserDoc } from "../convexTypes.js";
 import type { LinkedInConnectionsResponse } from "../linkedin/types.js";
 
@@ -13,8 +13,6 @@ export function parseConnectionIds(data: LinkedInConnectionsResponse): string[] 
     })
     .filter((id): id is string => !!id && id.length > 0);
 }
-
-const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
 
 export const upsertConnections = internalMutation({
   args: {
@@ -43,7 +41,10 @@ export const syncUserConnections = internalAction({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }: { userId: string }) => {
     const actionCtx = ctx as unknown as ActionCtx;
-    const user = await actionCtx.runQuery<UserDoc | null>(getUserWithTokens, { userId });
+    const user = await actionCtx.runQuery<UserDoc | null>(
+      internal.users.getWithTokens,
+      { userId }
+    );
     if (!user?.linkedinAccessToken) return;
 
     let allIds: string[] = [];
@@ -68,37 +69,33 @@ export const syncUserConnections = internalAction({
       }
       if (!res.ok) throw new Error(`Connections fetch failed: ${res.status}`);
 
-      const data = await res.json() as LinkedInConnectionsResponse;
+      const data = (await res.json()) as LinkedInConnectionsResponse;
       const ids = parseConnectionIds(data);
       allIds.push(...ids);
       if (ids.length < count) break;
       start += count;
     }
 
-    const upsertFn = makeFunctionReference<"mutation">("jobs/syncConnections:upsertConnections");
-    await actionCtx.runMutation(upsertFn, { userId, connectionLinkedinIds: allIds });
+    await actionCtx.runMutation(internal.jobs.syncConnections.upsertConnections, {
+      userId,
+      connectionLinkedinIds: allIds,
+    });
   },
 });
 
-const getActiveSubscribers = makeFunctionReference<"query">("users:getActiveSubscribers");
-
+// Fan-out action — dispatches per-user connection syncs
 export const syncAllConnections = internalAction({
   args: {},
   handler: async (ctx) => {
     const actionCtx = ctx as unknown as ActionCtx;
-    const users = await actionCtx.runQuery<UserDoc[]>(getActiveSubscribers, {});
-    const syncFn = makeFunctionReference<"action">("jobs/syncConnections:syncUserConnections");
+    const users = await actionCtx.runQuery<UserDoc[]>(
+      internal.users.getActiveSubscribers,
+      {}
+    );
     await Promise.allSettled(
-      users.map((u) => actionCtx.runAction(syncFn, { userId: u._id }))
+      users.map((u) =>
+        actionCtx.runAction(internal.jobs.syncConnections.syncUserConnections, { userId: u._id })
+      )
     );
   },
 });
-
-// Weekly cron: refresh connection caches every Monday at 3am UTC
-export const connectionCrons = cronJobs();
-connectionCrons.weekly(
-  "sync LinkedIn connections",
-  { dayOfWeek: "monday", hourUTC: 3, minuteUTC: 0 },
-  makeFunctionReference<"action">("jobs/syncConnections:syncAllConnections"),
-  {}
-);
