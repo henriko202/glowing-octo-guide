@@ -65,7 +65,10 @@ Set environment variables in the [Convex dashboard](https://dashboard.convex.dev
 ```
 LINKEDIN_CLIENT_ID=<your LinkedIn app client ID>
 LINKEDIN_CLIENT_SECRET=<your LinkedIn app client secret>
-LINKEDIN_REDIRECT_URI=http://localhost:5173/auth/callback
+LINKEDIN_REDIRECT_URI=https://<your-deployment>.convex.site/auth/linkedin/callback
+# ↑ Must point to Convex (.convex.site), NOT the React app.
+#   LinkedIn sends the code to Convex, which exchanges it server-side (keeps client secret safe).
+#   After upsert, Convex redirects the user to APP_URL/auth/success?userId=...
 APP_URL=http://localhost:5173
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
