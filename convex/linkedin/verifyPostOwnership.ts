@@ -12,7 +12,8 @@ export interface OwnershipResult {
  *
  * Step A: Try GET /v2/ugcPosts/{urn} and compare post.author.
  * Step B (fallback): If A returns 403/404 and vanityName is available,
- *   call GET /v2/me?projection=(vanityName) and compare vanity names.
+ *   call GET /rest/me?fields=publicIdentifier (versioned API, works with OIDC profile scope)
+ *   and compare publicIdentifier against the URL's vanityName (case-insensitive).
  *
  * Throws on unrecoverable errors or ownership mismatch.
  */
@@ -68,11 +69,15 @@ export async function verifyPostOwnership(
         "Could not verify post ownership. Use a /posts/\u2026 URL format for fallback verification."
       );
     }
+    // Use the versioned REST API — /v2/me requires r_liteprofile (legacy, blocked for
+    // OIDC apps). /rest/me with LinkedIn-Version header works with our profile OIDC scope.
+    // `publicIdentifier` is the versioned API's name for the legacy `vanityName` field.
     const meRes = await fetch(
-      "https://api.linkedin.com/v2/me?projection=(vanityName)",
+      "https://api.linkedin.com/rest/me?fields=publicIdentifier",
       {
         headers: {
           Authorization: `Bearer ${token}`,
+          "LinkedIn-Version": "202401",
           "X-Restli-Protocol-Version": "2.0.0",
         },
       }
@@ -80,11 +85,11 @@ export async function verifyPostOwnership(
     if (!meRes.ok) {
       const body = await meRes.text().catch(() => "");
       throw new Error(
-        `Could not verify post ownership. LinkedIn /v2/me returned ${meRes.status}${body ? `: ${body}` : ""}.`
+        `Could not verify post ownership. LinkedIn /rest/me returned ${meRes.status}${body ? `: ${body}` : ""}.`
       );
     }
     const meData = (await meRes.json()) as Record<string, unknown>;
-    const myVanity = meData.vanityName as string | undefined;
+    const myVanity = meData.publicIdentifier as string | undefined;
     if (!myVanity || myVanity.toLowerCase() !== vanityName.toLowerCase()) {
       throw new Error("This post doesn't belong to your LinkedIn account.");
     }

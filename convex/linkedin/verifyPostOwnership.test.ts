@@ -52,18 +52,17 @@ describe("verifyPostOwnership", () => {
     ).rejects.toThrow("doesn't belong to your LinkedIn account");
   });
 
-  // Step B calls GET /v2/me?projection=(vanityName) with the REST API Restli header.
-  // LinkedIn OIDC `profile` scope grants the same access as `r_liteprofile`,
-  // so this endpoint is available to our tokens.
-  // We compare the returned vanityName with the one extracted from the post URL —
-  // this is the real ownership check (confirms the URL's name belongs to this account).
+  // Step B calls GET /rest/me?fields=publicIdentifier with LinkedIn-Version header.
+  // This is the versioned REST API that works with our OIDC `profile` scope tokens.
+  // The legacy /v2/me required r_liteprofile (not available to OIDC apps).
+  // `publicIdentifier` is the versioned API's name for what /v2/me called `vanityName`.
 
-  it("Step B: confirms when UGC returns 403 + /v2/me vanityName matches URL vanityName", async () => {
+  it("Step B: confirms when UGC returns 403 + publicIdentifier matches URL vanityName", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ vanityName: "henri-durand" }),
+        json: async () => ({ publicIdentifier: "henri-durand" }),
       } as Response);
 
     const result = await verifyPostOwnership(
@@ -77,12 +76,12 @@ describe("verifyPostOwnership", () => {
     expect(result.strategy).toBe("vanity-heuristic");
   });
 
-  it("Step B: is case-insensitive when comparing vanity names", async () => {
+  it("Step B: is case-insensitive when comparing publicIdentifier with URL vanityName", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ vanityName: "Henri-Durand" }),
+        json: async () => ({ publicIdentifier: "Henri-Durand" }),
       } as Response);
 
     const result = await verifyPostOwnership(
@@ -95,12 +94,12 @@ describe("verifyPostOwnership", () => {
     expect(result.confirmed).toBe(true);
   });
 
-  it("throws when Step A (403) + /v2/me vanityName does not match URL vanityName", async () => {
+  it("throws when Step A (403) + publicIdentifier does not match URL vanityName", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ vanityName: "someone-else" }),
+        json: async () => ({ publicIdentifier: "someone-else" }),
       } as Response);
 
     await expect(
@@ -108,10 +107,14 @@ describe("verifyPostOwnership", () => {
     ).rejects.toThrow("doesn't belong to your LinkedIn account");
   });
 
-  it("throws when Step A (403) + /v2/me also fails", async () => {
+  it("throws when Step A (403) + /rest/me also fails", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
-      .mockResolvedValueOnce({ ok: false, status: 401, text: async () => "Unauthorized" } as Response);
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: async () => '{"message":"ACCESS_DENIED"}',
+      } as Response);
 
     await expect(
       verifyPostOwnership("token", "urn", "abc123", "henri-durand")
