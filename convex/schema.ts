@@ -45,6 +45,10 @@ export default defineSchema({
     visibilityIndustries: v.array(v.string()),
     visibilityCountries: v.array(v.string()),
     hidden: v.boolean(),
+    // Original URL submitted by the user — stored so we can link back correctly
+    // without reconstructing URNs (activity IDs ≠ ugcPost IDs across LinkedIn namespaces).
+    // Absent for cron-synced posts (those use urnToLinkedInUrl fallback).
+    sourceUrl: v.optional(v.string()),
   })
     .index("by_author", ["authorId"])
     .index("by_urn", ["linkedinPostUrn"])

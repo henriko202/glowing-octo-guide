@@ -52,17 +52,18 @@ describe("verifyPostOwnership", () => {
     ).rejects.toThrow("doesn't belong to your LinkedIn account");
   });
 
-  // Step B uses GET /v2/userinfo (OIDC endpoint — works with openid/profile scopes)
-  // and compares the returned `sub` (LinkedIn person ID) against the stored linkedinId.
-  // This is stronger than comparing mutable vanity name strings, and works without
-  // r_liteprofile (the legacy GET /v2/me endpoint requires that deprecated scope).
+  // Step B calls GET /v2/me?projection=(vanityName) with the REST API Restli header.
+  // LinkedIn OIDC `profile` scope grants the same access as `r_liteprofile`,
+  // so this endpoint is available to our tokens.
+  // We compare the returned vanityName with the one extracted from the post URL —
+  // this is the real ownership check (confirms the URL's name belongs to this account).
 
-  it("Step B: confirms via userinfo sub match when UGC returns 403", async () => {
+  it("Step B: confirms when UGC returns 403 + /v2/me vanityName matches URL vanityName", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ sub: "abc123" }),
+        json: async () => ({ vanityName: "henri-durand" }),
       } as Response);
 
     const result = await verifyPostOwnership(
@@ -76,17 +77,45 @@ describe("verifyPostOwnership", () => {
     expect(result.strategy).toBe("vanity-heuristic");
   });
 
-  it("throws when Step A (403) + userinfo sub does not match linkedinId", async () => {
+  it("Step B: is case-insensitive when comparing vanity names", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ sub: "someone-else-id" }),
+        json: async () => ({ vanityName: "Henri-Durand" }),
+      } as Response);
+
+    const result = await verifyPostOwnership(
+      "token",
+      "urn:li:ugcPost:123",
+      "abc123",
+      "henri-durand"
+    );
+
+    expect(result.confirmed).toBe(true);
+  });
+
+  it("throws when Step A (403) + /v2/me vanityName does not match URL vanityName", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ vanityName: "someone-else" }),
       } as Response);
 
     await expect(
       verifyPostOwnership("token", "urn", "abc123", "henri-durand")
     ).rejects.toThrow("doesn't belong to your LinkedIn account");
+  });
+
+  it("throws when Step A (403) + /v2/me also fails", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 401, text: async () => "Unauthorized" } as Response);
+
+    await expect(
+      verifyPostOwnership("token", "urn", "abc123", "henri-durand")
+    ).rejects.toThrow("Could not verify post ownership");
   });
 
   it("throws immediately for Format 2 URL (null vanityName) when Step A returns 403", async () => {
@@ -97,6 +126,6 @@ describe("verifyPostOwnership", () => {
 
     await expect(
       verifyPostOwnership("token", "urn", "abc123", null)
-    ).rejects.toThrow("Use a /posts/… URL format");
+    ).rejects.toThrow("Use a /posts/\u2026 URL format");
   });
 });

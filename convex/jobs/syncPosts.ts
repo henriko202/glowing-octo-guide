@@ -17,6 +17,7 @@ interface UpsertPostArgs {
   visibilityIndustries: string[];
   visibilityCountries: string[];
   hidden: boolean;
+  sourceUrl?: string;
 }
 
 // Upsert a single post — inserts new, updates like/comment counts on existing
@@ -33,6 +34,7 @@ export const upsertPost = internalMutation({
     visibilityIndustries: v.array(v.string()),
     visibilityCountries: v.array(v.string()),
     hidden: v.boolean(),
+    sourceUrl: v.optional(v.string()),
   },
   handler: async (ctx, args: UpsertPostArgs) => {
     const db = (ctx as unknown as MutationCtx).db;

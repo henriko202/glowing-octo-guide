@@ -11,6 +11,26 @@ interface MyPost {
   publishedAt: number;
   likeCount: number;
   commentCount: number;
+  sourceUrl?: string;
+}
+
+/** Build a LinkedIn embed iframe URL from a ugcPost URN */
+function buildEmbedUrl(urn: string): string {
+  return `https://www.linkedin.com/embed/feed/update/${encodeURIComponent(urn)}/`;
+}
+
+/**
+ * Build the "open on LinkedIn" link.
+ * Uses the original sourceUrl if we stored it (most accurate).
+ * Falls back to reconstructing a /feed/update/ URL for cron-synced posts.
+ * NOTE: urn:li:ugcPost IDs and urn:li:activity IDs can differ in LinkedIn's
+ * data model, so sourceUrl is always preferred over reconstruction.
+ */
+function buildLinkedInUrl(post: MyPost): string {
+  if (post.sourceUrl) return post.sourceUrl;
+  // Fallback for cron-synced posts: use the /feed/update/ format with the ugcPost URN.
+  // This may not always resolve correctly due to URN type differences.
+  return `https://www.linkedin.com/feed/update/${encodeURIComponent(post.linkedinPostUrn)}/`;
 }
 
 function timeAgo(ts: number): string {
@@ -18,12 +38,6 @@ function timeAgo(ts: number): string {
   if (days === 0) return "Today";
   if (days === 1) return "1 day ago";
   return `${days} days ago`;
-}
-
-function urnToLinkedInUrl(urn: string): string {
-  // urn:li:ugcPost:123456789 → /feed/update/urn:li:activity:123456789/
-  const id = urn.split(":").pop() ?? "";
-  return `https://www.linkedin.com/feed/update/urn:li:activity:${id}/`;
 }
 
 export default function MyPostsPage() {
@@ -118,53 +132,72 @@ export default function MyPostsPage() {
           </p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {posts.map((post) => (
             <div
               key={post._id}
               style={{
-                background: "#f8fafc",
                 borderRadius: 8,
-                padding: 14,
                 border: "1px solid #e2e8f0",
-                borderLeft: "3px solid #3b82f6",
+                overflow: "hidden",
+                background: "#fff",
               }}
             >
+              {/* LinkedIn embed — clipped to hide the Like/Comment/Share button bar */}
               <div
                 style={{
-                  fontSize: 13,
-                  color: "#475569",
-                  marginBottom: 8,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
+                  position: "relative",
+                  // Container height clips the iframe — LinkedIn's action buttons are
+                  // ~52px tall at the bottom of the embed, so we hide that strip.
+                  // The iframe itself renders at full height; overflow hides the buttons.
+                  height: 420,
                   overflow: "hidden",
                 }}
               >
-                {post.content || "(content not available — post added via URL)"}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 12,
-                  color: "#64748b",
-                }}
-              >
-                <span>
-                  👍 {post.likeCount} · 💬 {post.commentCount}
-                </span>
-                <span>
-                  {timeAgo(post.publishedAt)} ·{" "}
-                  <a
-                    href={urnToLinkedInUrl(post.linkedinPostUrn)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: "#3b82f6", textDecoration: "none" }}
-                  >
-                    View on LinkedIn ↗
-                  </a>
-                </span>
+                <iframe
+                  src={buildEmbedUrl(post.linkedinPostUrn)}
+                  title="LinkedIn post"
+                  width="100%"
+                  // Render taller than the container so content is visible;
+                  // the container's overflow:hidden clips the button bar below.
+                  height={480}
+                  style={{ border: "none", display: "block" }}
+                  allowFullScreen
+                  loading="lazy"
+                />
+                {/* Opaque overlay covering the bottom action buttons strip.
+                    Positioned absolute so it sits over the iframe without shifting layout. */}
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 52,
+                    background: "#fff",
+                    borderTop: "1px solid #e2e8f0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0 14px",
+                  }}
+                >
+                  {/* Engagement stats from our own tracking data */}
+                  <span style={{ fontSize: 12, color: "#64748b" }}>
+                    👍 {post.likeCount} · 💬 {post.commentCount}
+                  </span>
+                  <span style={{ fontSize: 12, color: "#64748b" }}>
+                    {timeAgo(post.publishedAt)} ·{" "}
+                    <a
+                      href={buildLinkedInUrl(post)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#3b82f6", textDecoration: "none" }}
+                    >
+                      View on LinkedIn ↗
+                    </a>
+                  </span>
+                </div>
               </div>
             </div>
           ))}

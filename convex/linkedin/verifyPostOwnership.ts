@@ -58,29 +58,34 @@ export async function verifyPostOwnership(
   }
 
   if (ugcRes.status === 403 || ugcRes.status === 404) {
-    // Step A failed — fall back to OIDC identity check if vanityName is available.
-    // We use GET /v2/userinfo (requires only openid+profile scopes — always available)
-    // instead of GET /v2/me?projection=(vanityName) which requires the deprecated
-    // r_liteprofile scope that is not granted to OIDC apps.
-    // We compare the `sub` (LinkedIn person ID) against the stored linkedinId —
-    // this is stronger than comparing mutable vanity name strings.
+    // Step A failed — fall back to vanity name heuristic if available.
+    // We call GET /v2/me?projection=(vanityName) with the Restli REST header.
+    // LinkedIn OIDC `profile` scope grants the same r_liteprofile access, so this
+    // endpoint works with our tokens. We compare the returned vanityName against the
+    // name extracted from the post URL — this is the actual ownership check.
     if (!vanityName) {
       throw new Error(
         "Could not verify post ownership. Use a /posts/\u2026 URL format for fallback verification."
       );
     }
-    const userinfoRes = await fetch(
-      "https://api.linkedin.com/v2/userinfo",
-      { headers: { Authorization: `Bearer ${token}` } }
+    const meRes = await fetch(
+      "https://api.linkedin.com/v2/me?projection=(vanityName)",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      }
     );
-    if (!userinfoRes.ok) {
+    if (!meRes.ok) {
+      const body = await meRes.text().catch(() => "");
       throw new Error(
-        "Could not verify post ownership. LinkedIn API unavailable."
+        `Could not verify post ownership. LinkedIn /v2/me returned ${meRes.status}${body ? `: ${body}` : ""}.`
       );
     }
-    const userinfo = (await userinfoRes.json()) as Record<string, unknown>;
-    const sub = userinfo.sub as string | undefined;
-    if (!sub || sub !== linkedinId) {
+    const meData = (await meRes.json()) as Record<string, unknown>;
+    const myVanity = meData.vanityName as string | undefined;
+    if (!myVanity || myVanity.toLowerCase() !== vanityName.toLowerCase()) {
       throw new Error("This post doesn't belong to your LinkedIn account.");
     }
     return {

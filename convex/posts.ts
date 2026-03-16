@@ -77,6 +77,9 @@ export const submitPost = action({
         visibilityIndustries: [],
         visibilityCountries: [],
         hidden: (user.subscriptionStatus as string) === "trialing",
+        // Preserve the original submitted URL so we can link back correctly —
+        // reconstructing from URN loses information (activity ID ≠ ugcPost ID).
+        sourceUrl: postUrl,
       }
     );
 
