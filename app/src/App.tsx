@@ -7,18 +7,27 @@ import FeedPage from "./pages/FeedPage";
 import SettingsPage from "./pages/SettingsPage";
 import BillingPage from "./pages/BillingPage";
 import AuthSuccessPage from "./pages/AuthSuccessPage";
-
-// Placeholder pages — implemented in Tasks 12-15
-function PlaceholderPage({ name }: { name: string }) {
-  return <div style={{ padding: 32 }}>{name} — coming soon</div>;
-}
+import MyPostsPage from "./pages/MyPostsPage";
+import AppNav from "./components/AppNav";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const userId = (sessionStorage.getItem("convexUserId") ?? undefined) as Id<"users"> | undefined;
+  const userId = (sessionStorage.getItem("convexUserId") ?? undefined) as
+    | Id<"users">
+    | undefined;
   const me = useQuery(api.users.getMe, { userId });
-  if (me === undefined) return <div style={{ padding: 32 }}>Loading...</div>;
+  if (me === undefined)
+    return (
+      <div style={{ padding: 32, fontFamily: "system-ui, sans-serif" }}>
+        Loading…
+      </div>
+    );
   if (me === null) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  return (
+    <>
+      <AppNav />
+      {children}
+    </>
+  );
 }
 
 export default function App() {
@@ -31,6 +40,14 @@ export default function App() {
         element={
           <RequireAuth>
             <FeedPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/my-posts"
+        element={
+          <RequireAuth>
+            <MyPostsPage />
           </RequireAuth>
         }
       />
