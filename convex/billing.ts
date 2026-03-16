@@ -13,13 +13,12 @@ import type { ActionCtx, MutationCtx, UserDoc } from "./convexTypes.js";
 const getUserWithTokens = makeFunctionReference<"query">("users:getWithTokens");
 
 export const createCheckoutSession = action({
-  args: { priceId: v.string() },
-  handler: async (ctx, { priceId }: { priceId: string }) => {
+  args: { priceId: v.string(), userId: v.id("users") },
+  handler: async (ctx, { priceId, userId }: { priceId: string; userId: string }) => {
     const actionCtx = ctx as unknown as ActionCtx;
-    const identity = await actionCtx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-
-    const user = await actionCtx.runQuery<UserDoc | null>(getUserWithTokens, { userId: identity.subject });
+    // Note: ctx.auth.getUserIdentity() only works with Convex JWT auth (Clerk/Auth0).
+    // We use custom LinkedIn OAuth, so userId is passed explicitly from sessionStorage.
+    const user = await actionCtx.runQuery<UserDoc | null>(getUserWithTokens, { userId });
     if (!user) throw new Error("User not found");
 
     // Dynamic import of stripe for checkout session creation

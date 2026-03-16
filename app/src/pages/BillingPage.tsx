@@ -25,7 +25,8 @@ export default function BillingPage() {
 
   async function handleUpgrade(priceId: string) {
     try {
-      const result = await createCheckout({ priceId });
+      if (!userId) throw new Error("Not signed in");
+      const result = await createCheckout({ priceId, userId });
       if (result?.url) window.location.href = result.url;
     } catch (err: unknown) {
       alert(`Checkout failed: ${err instanceof Error ? err.message : String(err)}`);

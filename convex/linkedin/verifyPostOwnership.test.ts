@@ -52,12 +52,17 @@ describe("verifyPostOwnership", () => {
     ).rejects.toThrow("doesn't belong to your LinkedIn account");
   });
 
-  it("Step B: confirms via vanity name when UGC returns 403 + vanity matches", async () => {
+  // Step B uses GET /v2/userinfo (OIDC endpoint — works with openid/profile scopes)
+  // and compares the returned `sub` (LinkedIn person ID) against the stored linkedinId.
+  // This is stronger than comparing mutable vanity name strings, and works without
+  // r_liteprofile (the legacy GET /v2/me endpoint requires that deprecated scope).
+
+  it("Step B: confirms via userinfo sub match when UGC returns 403", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ vanityName: "henri-durand" }),
+        json: async () => ({ sub: "abc123" }),
       } as Response);
 
     const result = await verifyPostOwnership(
@@ -71,12 +76,12 @@ describe("verifyPostOwnership", () => {
     expect(result.strategy).toBe("vanity-heuristic");
   });
 
-  it("throws when Step A (403) + Step B vanity mismatch", async () => {
+  it("throws when Step A (403) + userinfo sub does not match linkedinId", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ vanityName: "someone-else" }),
+        json: async () => ({ sub: "someone-else-id" }),
       } as Response);
 
     await expect(

@@ -58,24 +58,29 @@ export async function verifyPostOwnership(
   }
 
   if (ugcRes.status === 403 || ugcRes.status === 404) {
-    // Step A failed — fall back to vanity heuristic if available
+    // Step A failed — fall back to OIDC identity check if vanityName is available.
+    // We use GET /v2/userinfo (requires only openid+profile scopes — always available)
+    // instead of GET /v2/me?projection=(vanityName) which requires the deprecated
+    // r_liteprofile scope that is not granted to OIDC apps.
+    // We compare the `sub` (LinkedIn person ID) against the stored linkedinId —
+    // this is stronger than comparing mutable vanity name strings.
     if (!vanityName) {
       throw new Error(
         "Could not verify post ownership. Use a /posts/\u2026 URL format for fallback verification."
       );
     }
-    const meRes = await fetch(
-      "https://api.linkedin.com/v2/me?projection=(vanityName)",
+    const userinfoRes = await fetch(
+      "https://api.linkedin.com/v2/userinfo",
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    if (!meRes.ok) {
+    if (!userinfoRes.ok) {
       throw new Error(
         "Could not verify post ownership. LinkedIn API unavailable."
       );
     }
-    const meData = (await meRes.json()) as Record<string, unknown>;
-    const myVanity = meData.vanityName as string | undefined;
-    if (!myVanity || myVanity.toLowerCase() !== vanityName.toLowerCase()) {
+    const userinfo = (await userinfoRes.json()) as Record<string, unknown>;
+    const sub = userinfo.sub as string | undefined;
+    if (!sub || sub !== linkedinId) {
       throw new Error("This post doesn't belong to your LinkedIn account.");
     }
     return {
