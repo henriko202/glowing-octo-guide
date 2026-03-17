@@ -10,6 +10,7 @@ vi.mock("convex/react", () => ({
     country: "US",
   })),
   useAction: vi.fn(),
+  useMutation: vi.fn(() => vi.fn()),
 }));
 
 import SettingsPage from "./SettingsPage";

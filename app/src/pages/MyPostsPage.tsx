@@ -16,7 +16,10 @@ interface MyPost {
 
 /** Build a LinkedIn embed iframe URL from a ugcPost URN */
 function buildEmbedUrl(urn: string): string {
-  return `https://www.linkedin.com/embed/feed/update/${encodeURIComponent(urn)}/`;
+  // Extract numeric ID: urn:li:ugcPost:{id} → urn:li:activity:{id}
+  // LinkedIn embed requires activity URN format; colons must NOT be URL-encoded.
+  const id = urn.split(":").pop() ?? "";
+  return `https://www.linkedin.com/embed/feed/update/urn:li:activity:${id}/`;
 }
 
 /**

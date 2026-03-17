@@ -10,19 +10,31 @@ export interface OwnershipResult {
 /**
  * Verifies that a LinkedIn post belongs to the given user.
  *
- * Step A: Try GET /v2/ugcPosts/{urn} and compare post.author.
- * Step B (fallback): If A returns 403/404 and vanityName is available,
- *   call GET /rest/me?fields=publicIdentifier (versioned API, works with OIDC profile scope)
- *   and compare publicIdentifier against the URL's vanityName (case-insensitive).
+ * Step A: Try GET /v2/ugcPosts/{urn} and compare post.author to urn:li:person:{linkedinId}.
+ *         Requires r_member_social scope (LinkedIn MDP approval). Returns post content if ok.
+ *
+ * Step B (fallback): If Step A returns 403/404 AND vanityName is available,
+ *         compare it case-insensitively against storedPublicIdentifier (the user's
+ *         LinkedIn vanityName stored in their profile).
+ *         NO external API call is made in Step B — standard OAuth apps cannot access
+ *         any LinkedIn profile-identity endpoint with non-partner scopes.
  *
  * Throws on unrecoverable errors or ownership mismatch.
+ *
+ * @param token                  LinkedIn access token
+ * @param urn                    Post URN (urn:li:ugcPost:{id})
+ * @param linkedinId             User's LinkedIn person ID (OIDC sub)
+ * @param vanityName             Vanity name extracted from the post URL (null for Format 2)
+ * @param storedPublicIdentifier User's LinkedIn publicIdentifier stored in their profile
  */
 export async function verifyPostOwnership(
   token: string,
   urn: string,
   linkedinId: string,
-  vanityName: string | null
+  vanityName: string | null,
+  storedPublicIdentifier: string | null
 ): Promise<OwnershipResult> {
+  // Step A: try the UGC Posts API (works when r_member_social scope is approved)
   const ugcRes = await fetch(
     `https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(urn)}`,
     {
@@ -59,38 +71,23 @@ export async function verifyPostOwnership(
   }
 
   if (ugcRes.status === 403 || ugcRes.status === 404) {
-    // Step A failed — fall back to vanity name heuristic if available.
-    // We call GET /v2/me?projection=(vanityName) with the Restli REST header.
-    // LinkedIn OIDC `profile` scope grants the same r_liteprofile access, so this
-    // endpoint works with our tokens. We compare the returned vanityName against the
-    // name extracted from the post URL — this is the actual ownership check.
+    // Step A failed (expected: r_member_social not approved for standard OAuth apps).
+    // Step B: local comparison — no LinkedIn API call.
+    // All authenticated LinkedIn profile-identity endpoints require either r_liteprofile
+    // (legacy, not granted to OIDC apps) or LinkedIn Partner/MDP status.
+    // Instead, we compare the URL's vanityName against the user's stored publicIdentifier.
     if (!vanityName) {
       throw new Error(
         "Could not verify post ownership. Use a /posts/\u2026 URL format for fallback verification."
       );
     }
-    // Use the versioned REST API — /v2/me requires r_liteprofile (legacy, blocked for
-    // OIDC apps). /rest/me with LinkedIn-Version header works with our profile OIDC scope.
-    // `publicIdentifier` is the versioned API's name for the legacy `vanityName` field.
-    const meRes = await fetch(
-      "https://api.linkedin.com/rest/me?fields=publicIdentifier",
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "LinkedIn-Version": "202401",
-          "X-Restli-Protocol-Version": "2.0.0",
-        },
-      }
-    );
-    if (!meRes.ok) {
-      const body = await meRes.text().catch(() => "");
+    if (!storedPublicIdentifier) {
       throw new Error(
-        `Could not verify post ownership. LinkedIn /rest/me returned ${meRes.status}${body ? `: ${body}` : ""}.`
+        "Please set your LinkedIn Profile URL in Settings before submitting posts. " +
+          "This lets us verify that submitted posts belong to your account."
       );
     }
-    const meData = (await meRes.json()) as Record<string, unknown>;
-    const myVanity = meData.publicIdentifier as string | undefined;
-    if (!myVanity || myVanity.toLowerCase() !== vanityName.toLowerCase()) {
+    if (storedPublicIdentifier.toLowerCase() !== vanityName.toLowerCase()) {
       throw new Error("This post doesn't belong to your LinkedIn account.");
     }
     return {

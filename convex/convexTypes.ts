@@ -92,6 +92,7 @@ export interface UserDoc extends ConvexDocument {
   linkedinAccessToken?: string;
   linkedinRefreshToken?: string;
   tokenExpiresAt?: number;
+  linkedinPublicIdentifier?: string;
   createdAt: number;
 }
 

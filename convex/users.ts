@@ -1,6 +1,6 @@
-import { internalQueryGeneric as internalQuery, queryGeneric as query } from "convex/server";
+import { internalQueryGeneric as internalQuery, queryGeneric as query, mutationGeneric as mutation } from "convex/server";
 import { v } from "convex/values";
-import type { QueryCtx, UserDoc } from "./convexTypes.js";
+import type { QueryCtx, MutationCtx, UserDoc } from "./convexTypes.js";
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -48,5 +48,20 @@ export const getMe = query({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, ...safeUser } = user;
     return safeUser;
+  },
+});
+
+// Public: stores the user's LinkedIn public profile identifier (vanityName).
+// Called from Settings page when the user enters their LinkedIn profile URL.
+// Used for post ownership verification without requiring LinkedIn Partner API access.
+export const setPublicIdentifier = mutation({
+  args: {
+    userId: v.id("users"),
+    publicIdentifier: v.string(),
+  },
+  handler: async (ctx, { userId, publicIdentifier }: { userId: string; publicIdentifier: string }) => {
+    const db = (ctx as unknown as MutationCtx).db;
+    // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
+    await db.patch(userId, { linkedinPublicIdentifier: publicIdentifier.trim().toLowerCase() });
   },
 });

@@ -54,12 +54,15 @@ export const submitPost = action({
     const urn = `urn:li:ugcPost:${parsed.activityId}`;
 
     // 3. Verify ownership (Step A → Step B fallback)
-    // verifyPostOwnership throws if ownership cannot be confirmed
+    // Step A: UGC API (works when r_member_social is approved)
+    // Step B: local comparison against stored publicIdentifier (no API call needed)
+    const storedIdentifier = (user.linkedinPublicIdentifier as string | undefined) ?? null;
     const ownership = await verifyPostOwnership(
       token,
       urn,
       user.linkedinId as string,
-      parsed.vanityName
+      parsed.vanityName,
+      storedIdentifier
     );
 
     // 4. Upsert the post — returns the post _id

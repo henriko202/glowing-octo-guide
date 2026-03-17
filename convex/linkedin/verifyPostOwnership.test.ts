@@ -28,6 +28,7 @@ describe("verifyPostOwnership", () => {
       "test-token",
       "urn:li:ugcPost:123",
       "abc123",
+      "henri-durand",
       "henri-durand"
     );
 
@@ -35,6 +36,8 @@ describe("verifyPostOwnership", () => {
     expect(result.content).toBe("Hello world");
     expect(result.publishedAt).toBe(1700000000000);
     expect(result.strategy).toBe("ugc-api");
+    // Step A succeeded — only one fetch (UGC API)
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
   });
 
   it("Step A: throws when author does not match", async () => {
@@ -48,77 +51,72 @@ describe("verifyPostOwnership", () => {
     } as Response);
 
     await expect(
-      verifyPostOwnership("token", "urn:li:ugcPost:123", "abc123", null)
+      verifyPostOwnership("token", "urn:li:ugcPost:123", "abc123", null, null)
     ).rejects.toThrow("doesn't belong to your LinkedIn account");
   });
 
-  // Step B calls GET /rest/me?fields=publicIdentifier with LinkedIn-Version header.
-  // This is the versioned REST API that works with our OIDC `profile` scope tokens.
-  // The legacy /v2/me required r_liteprofile (not available to OIDC apps).
-  // `publicIdentifier` is the versioned API's name for what /v2/me called `vanityName`.
+  // Step B: local comparison only — no API calls.
+  // We compare the vanityName extracted from the URL against the user's stored
+  // linkedinPublicIdentifier. No LinkedIn API calls are made in Step B because
+  // standard OAuth apps don't have access to profile identity endpoints.
 
-  it("Step B: confirms when UGC returns 403 + publicIdentifier matches URL vanityName", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ publicIdentifier: "henri-durand" }),
-      } as Response);
+  it("Step B: confirms when stored publicIdentifier matches URL vanityName (no extra API call)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+    } as Response);
 
     const result = await verifyPostOwnership(
       "token",
       "urn:li:ugcPost:123",
       "abc123",
-      "henri-durand"
+      "henri-durand",
+      "henri-durand"        // stored identifier matches URL vanityName
     );
 
     expect(result.confirmed).toBe(true);
     expect(result.strategy).toBe("vanity-heuristic");
+    // Only ONE fetch call (Step A attempt) — Step B makes NO API call
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
   });
 
-  it("Step B: is case-insensitive when comparing publicIdentifier with URL vanityName", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ publicIdentifier: "Henri-Durand" }),
-      } as Response);
+  it("Step B: comparison is case-insensitive", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+    } as Response);
 
     const result = await verifyPostOwnership(
       "token",
       "urn:li:ugcPost:123",
       "abc123",
-      "henri-durand"
+      "Henri-Durand",       // URL vanityName with uppercase
+      "henri-durand"        // stored identifier with lowercase
     );
 
     expect(result.confirmed).toBe(true);
   });
 
-  it("throws when Step A (403) + publicIdentifier does not match URL vanityName", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ publicIdentifier: "someone-else" }),
-      } as Response);
+  it("Step B: throws when stored publicIdentifier does not match URL vanityName", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+    } as Response);
 
     await expect(
-      verifyPostOwnership("token", "urn", "abc123", "henri-durand")
+      verifyPostOwnership("token", "urn", "abc123", "other-persons-name", "henri-durand")
     ).rejects.toThrow("doesn't belong to your LinkedIn account");
   });
 
-  it("throws when Step A (403) + /rest/me also fails", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-        text: async () => '{"message":"ACCESS_DENIED"}',
-      } as Response);
+  it("Step B: throws asking user to set LinkedIn profile URL when no stored identifier", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+    } as Response);
 
     await expect(
-      verifyPostOwnership("token", "urn", "abc123", "henri-durand")
-    ).rejects.toThrow("Could not verify post ownership");
+      verifyPostOwnership("token", "urn", "abc123", "henri-durand", null)
+    ).rejects.toThrow("Settings");
   });
 
   it("throws immediately for Format 2 URL (null vanityName) when Step A returns 403", async () => {
@@ -128,7 +126,7 @@ describe("verifyPostOwnership", () => {
     } as Response);
 
     await expect(
-      verifyPostOwnership("token", "urn", "abc123", null)
+      verifyPostOwnership("token", "urn", "abc123", null, null)
     ).rejects.toThrow("Use a /posts/\u2026 URL format");
   });
 });

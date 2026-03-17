@@ -27,6 +27,10 @@ export default defineSchema({
     linkedinAccessToken: v.optional(v.string()),
     linkedinRefreshToken: v.optional(v.string()),
     tokenExpiresAt: v.optional(v.number()),
+    // The user's LinkedIn public profile identifier (vanityName / publicIdentifier).
+    // Set once by the user in Settings. Used for post ownership verification without
+    // requiring LinkedIn Partner API access.
+    linkedinPublicIdentifier: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_linkedin_id", ["linkedinId"])
