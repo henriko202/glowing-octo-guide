@@ -1,5 +1,5 @@
-import { defineSchema, defineTable } from "convex/server";
-import { v } from "convex/values";
+import { defineSchema, defineTable } from 'convex/server'
+import { v } from 'convex/values'
 
 export default defineSchema({
   users: defineTable({
@@ -9,18 +9,13 @@ export default defineSchema({
     profilePictureUrl: v.optional(v.string()),
     industry: v.optional(v.string()),
     country: v.optional(v.string()),
-    tier: v.union(
-      v.literal("starter"),
-      v.literal("growth"),
-      v.literal("pro"),
-      v.literal("contact")
-    ),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     subscriptionStatus: v.union(
-      v.literal("trialing"),
-      v.literal("active"),
-      v.literal("canceled"),
-      v.literal("past_due"),
-      v.literal("none")
+      v.literal('trialing'),
+      v.literal('active'),
+      v.literal('canceled'),
+      v.literal('past_due'),
+      v.literal('none')
     ),
     trialEndsAt: v.optional(v.number()),
     stripeCustomerId: v.optional(v.string()),
@@ -31,14 +26,14 @@ export default defineSchema({
     // Set once by the user in Settings. Used for post ownership verification without
     // requiring LinkedIn Partner API access.
     linkedinPublicIdentifier: v.optional(v.string()),
-    createdAt: v.number(),
+    createdAt: v.number()
   })
-    .index("by_linkedin_id", ["linkedinId"])
-    .index("by_stripe_customer", ["stripeCustomerId"]),
+    .index('by_linkedin_id', ['linkedinId'])
+    .index('by_stripe_customer', ['stripeCustomerId']),
 
   posts: defineTable({
     linkedinPostUrn: v.string(),
-    authorId: v.id("users"),
+    authorId: v.id('users'),
     content: v.string(),
     publishedAt: v.number(),
     likeCount: v.number(),
@@ -52,38 +47,33 @@ export default defineSchema({
     // Original URL submitted by the user — stored so we can link back correctly
     // without reconstructing URNs (activity IDs ≠ ugcPost IDs across LinkedIn namespaces).
     // Absent for cron-synced posts (those use urnToLinkedInUrl fallback).
-    sourceUrl: v.optional(v.string()),
+    sourceUrl: v.optional(v.string())
   })
-    .index("by_author", ["authorId"])
-    .index("by_urn", ["linkedinPostUrn"])
-    .index("by_featured", ["isFeatured", "featuredAt"])
-    .index("by_published", ["hidden", "publishedAt"])
-    .index("by_feed", ["hidden", "isFeatured", "featuredAt"]),
+    .index('by_author', ['authorId'])
+    .index('by_urn', ['linkedinPostUrn'])
+    .index('by_featured', ['isFeatured', 'featuredAt'])
+    .index('by_published', ['hidden', 'publishedAt'])
+    .index('by_feed', ['hidden', 'isFeatured', 'featuredAt']),
 
   subscriptions: defineTable({
-    userId: v.id("users"),
+    userId: v.id('users'),
     stripeSubscriptionId: v.string(),
-    tier: v.union(
-      v.literal("starter"),
-      v.literal("growth"),
-      v.literal("pro"),
-      v.literal("contact")
-    ),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     status: v.string(),
-    currentPeriodEnd: v.number(),
+    currentPeriodEnd: v.number()
   })
-    .index("by_user", ["userId"])
-    .index("by_stripe_id", ["stripeSubscriptionId"]),
+    .index('by_user', ['userId'])
+    .index('by_stripe_id', ['stripeSubscriptionId']),
 
   featuredPostUsage: defineTable({
-    userId: v.id("users"),
+    userId: v.id('users'),
     month: v.string(),
-    usedCount: v.number(),
-  }).index("by_user_month", ["userId", "month"]),
+    usedCount: v.number()
+  }).index('by_user_month', ['userId', 'month']),
 
   userConnections: defineTable({
-    userId: v.id("users"),
+    userId: v.id('users'),
     connectionLinkedinIds: v.array(v.string()),
-    lastSyncedAt: v.number(),
-  }).index("by_user", ["userId"]),
-});
+    lastSyncedAt: v.number()
+  }).index('by_user', ['userId'])
+})

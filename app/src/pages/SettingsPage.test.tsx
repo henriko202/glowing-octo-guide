@@ -1,23 +1,23 @@
-import { render, screen } from "@testing-library/react";
-import { vi } from "vitest";
+import { render, screen } from '@testing-library/react'
+import { vi } from 'vitest'
 
-vi.mock("convex/react", () => ({
+vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => ({
-    _id: "u1",
-    name: "Test User",
-    tier: "pro",
-    industry: "tech",
-    country: "US",
+    _id: 'u1',
+    name: 'Test User',
+    tier: 'pro',
+    industry: 'tech',
+    country: 'US'
   })),
   useAction: vi.fn(),
-  useMutation: vi.fn(() => vi.fn()),
-}));
+  useMutation: vi.fn(() => vi.fn())
+}))
 
-import SettingsPage from "./SettingsPage";
+import SettingsPage from './SettingsPage'
 
-describe("SettingsPage", () => {
-  it("shows Pro visibility section for Pro users", () => {
-    render(<SettingsPage />);
-    expect(screen.getByText(/who can see your posts/i)).toBeInTheDocument();
-  });
-});
+describe('SettingsPage', () => {
+  it('shows Pro visibility section for Pro users', () => {
+    render(<SettingsPage />)
+    expect(screen.getByText(/who can see your posts/i)).toBeInTheDocument()
+  })
+})

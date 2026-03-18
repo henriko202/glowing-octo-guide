@@ -1,14 +1,14 @@
-import Nav from "../components/Nav";
-import Hero from "../components/Hero";
-import HowItWorks from "../components/HowItWorks";
-import Features from "../components/Features";
-import Pricing from "../components/Pricing";
-import FinalCTA from "../components/FinalCTA";
-import Footer from "../components/Footer";
+import Nav from '../components/Nav'
+import Hero from '../components/Hero'
+import HowItWorks from '../components/HowItWorks'
+import Features from '../components/Features'
+import Pricing from '../components/Pricing'
+import FinalCTA from '../components/FinalCTA'
+import Footer from '../components/Footer'
 
 export default function HomePage() {
   return (
-    <div className="bg-ink min-h-screen">
+    <div className="min-h-screen bg-ink">
       <Nav />
       <Hero />
       <HowItWorks />
@@ -17,5 +17,5 @@ export default function HomePage() {
       <FinalCTA />
       <Footer />
     </div>
-  );
+  )
 }

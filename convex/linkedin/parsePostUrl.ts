@@ -1,8 +1,8 @@
 export interface ParsedPostUrl {
   /** LinkedIn activity ID — used to form urn:li:ugcPost:{activityId} */
-  activityId: string;
+  activityId: string
   /** Vanity name extracted from URL path (null for Format 2) */
-  vanityName: string | null;
+  vanityName: string | null
 }
 
 /**
@@ -15,22 +15,20 @@ export interface ParsedPostUrl {
  * Returns null for unrecognized formats.
  */
 export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
-  if (!url) return null;
+  if (!url) return null
 
-  let pathname: string;
+  let pathname: string
   try {
-    const parsed = new URL(url);
-    pathname = parsed.pathname;
+    const parsed = new URL(url)
+    pathname = parsed.pathname
   } catch {
-    return null;
+    return null
   }
 
   // Format 2: /feed/update/urn:li:activity:{id}
-  const format2Match = pathname.match(
-    /\/feed\/update\/urn:li:activity:(\d+)/
-  );
+  const format2Match = pathname.match(/\/feed\/update\/urn:li:activity:(\d+)/)
   if (format2Match) {
-    return { activityId: format2Match[1], vanityName: null };
+    return { activityId: format2Match[1], vanityName: null }
   }
 
   // Format 1: /posts/{vanityName}_{slug}-{activityId}-{hash}
@@ -38,10 +36,10 @@ export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
   // The activityId is the large number (15-20 digits) near the end.
   // Known limitation: if the slug contains a 15-20 digit number, the lazy .*? may
   // match it instead of the actual activityId. Extremely unlikely in practice.
-  const format1Match = pathname.match(/\/posts\/([^_]+)_.*?-(\d{15,20})-[^/]+/);
+  const format1Match = pathname.match(/\/posts\/([^_]+)_.*?-(\d{15,20})-[^/]+/)
   if (format1Match) {
-    return { activityId: format1Match[2], vanityName: format1Match[1] };
+    return { activityId: format1Match[2], vanityName: format1Match[1] }
   }
 
-  return null;
+  return null
 }

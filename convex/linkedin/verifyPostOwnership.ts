@@ -1,10 +1,10 @@
 // convex/linkedin/verifyPostOwnership.ts
 
 export interface OwnershipResult {
-  confirmed: boolean;
-  content: string;
-  publishedAt: number;
-  strategy: "ugc-api" | "vanity-heuristic";
+  confirmed: boolean
+  content: string
+  publishedAt: number
+  strategy: 'ugc-api' | 'vanity-heuristic'
 }
 
 /**
@@ -35,39 +35,33 @@ export async function verifyPostOwnership(
   storedPublicIdentifier: string | null
 ): Promise<OwnershipResult> {
   // Step A: try the UGC Posts API (works when r_member_social scope is approved)
-  const ugcRes = await fetch(
-    `https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(urn)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
+  const ugcRes = await fetch(`https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(urn)}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Restli-Protocol-Version': '2.0.0'
     }
-  );
+  })
 
   if (ugcRes.ok) {
-    const ugcPost = (await ugcRes.json()) as Record<string, unknown>;
-    const expectedAuthor = `urn:li:person:${linkedinId}`;
+    const ugcPost = (await ugcRes.json()) as Record<string, unknown>
+    const expectedAuthor = `urn:li:person:${linkedinId}`
     if (ugcPost.author !== expectedAuthor) {
-      throw new Error("This post doesn't belong to your LinkedIn account.");
+      throw new Error("This post doesn't belong to your LinkedIn account.")
     }
-    const share = (
-      ugcPost.specificContent as Record<string, unknown> | undefined
-    )?.["com.linkedin.ugc.ShareContent"] as Record<string, unknown> | undefined;
-    const commentary = (
-      share?.shareCommentary as Record<string, unknown> | undefined
-    )?.text;
+    const share = (ugcPost.specificContent as Record<string, unknown> | undefined)?.[
+      'com.linkedin.ugc.ShareContent'
+    ] as Record<string, unknown> | undefined
+    const commentary = (share?.shareCommentary as Record<string, unknown> | undefined)?.text
     const publishedAt =
-      typeof ugcPost.created === "object" && ugcPost.created !== null
-        ? ((ugcPost.created as Record<string, unknown>).time as number) ??
-          Date.now()
-        : Date.now();
+      typeof ugcPost.created === 'object' && ugcPost.created !== null
+        ? (((ugcPost.created as Record<string, unknown>).time as number) ?? Date.now())
+        : Date.now()
     return {
       confirmed: true,
-      content: typeof commentary === "string" ? commentary : "",
+      content: typeof commentary === 'string' ? commentary : '',
       publishedAt,
-      strategy: "ugc-api",
-    };
+      strategy: 'ugc-api'
+    }
   }
 
   if (ugcRes.status === 403 || ugcRes.status === 404) {
@@ -77,26 +71,24 @@ export async function verifyPostOwnership(
     // (legacy, not granted to OIDC apps) or LinkedIn Partner/MDP status.
     // Instead, we compare the URL's vanityName against the user's stored publicIdentifier.
     if (!vanityName) {
-      throw new Error(
-        "Could not verify post ownership. Use a /posts/\u2026 URL format for fallback verification."
-      );
+      throw new Error('Could not verify post ownership. Use a /posts/\u2026 URL format for fallback verification.')
     }
     if (!storedPublicIdentifier) {
       throw new Error(
-        "Please set your LinkedIn Profile URL in Settings before submitting posts. " +
-          "This lets us verify that submitted posts belong to your account."
-      );
+        'Please set your LinkedIn Profile URL in Settings before submitting posts. ' +
+          'This lets us verify that submitted posts belong to your account.'
+      )
     }
     if (storedPublicIdentifier.toLowerCase() !== vanityName.toLowerCase()) {
-      throw new Error("This post doesn't belong to your LinkedIn account.");
+      throw new Error("This post doesn't belong to your LinkedIn account.")
     }
     return {
       confirmed: true,
-      content: "",
+      content: '',
       publishedAt: Date.now(),
-      strategy: "vanity-heuristic",
-    };
+      strategy: 'vanity-heuristic'
+    }
   }
 
-  throw new Error(`LinkedIn API error: ${ugcRes.status}`);
+  throw new Error(`LinkedIn API error: ${ugcRes.status}`)
 }
