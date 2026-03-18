@@ -15,12 +15,12 @@ A LinkedIn growth accelerator SaaS. Users authorize the app to read their Linked
 └── convex/     # Convex backend — shared by both apps
 ```
 
-| Service   | Platform    | URL                              |
-|-----------|-------------|----------------------------------|
-| landing/  | Vercel      | `linkintothessi.com`             |
-| app/      | Railway     | `app.linkintothessi.com`         |
-| Backend   | Convex.dev  | Managed serverless               |
-| DNS / CDN | Cloudflare  | In front of both Vercel/Railway  |
+| Service   | Platform   | URL                             |
+| --------- | ---------- | ------------------------------- |
+| landing/  | Vercel     | `linkintothessi.com`            |
+| app/      | Railway    | `app.linkintothessi.com`        |
+| Backend   | Convex.dev | Managed serverless              |
+| DNS / CDN | Cloudflare | In front of both Vercel/Railway |
 
 ---
 
@@ -123,43 +123,49 @@ The app runs at `http://localhost:5173`, landing at `http://localhost:3000`.
 
 ## Subscription Tiers
 
-| Feature                                   | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) | Contact |
-|-------------------------------------------|:---------------:|:---------------:|:------------:|:-------:|
-| Access feed                               | ✓               | ✓               | ✓            | ✓       |
-| 3-day free trial                          | ✓               | —               | —            | —       |
-| Feed filtered by industry + country       | ✗               | ✓ (auto)        | ✓ (custom)   | ✓       |
-| Filter who sees your posts                | ✗               | ✗               | ✓            | ✓       |
-| Featured posts / month                    | 0               | 1               | 3            | Custom  |
-| AI comment generator                      | ✗ (future)      | ✓ (future)      | ✓ (future)   | ✓       |
+| Feature                             | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) | Contact |
+| ----------------------------------- | :-------------: | :-------------: | :----------: | :-----: |
+| Access feed                         |        ✓        |        ✓        |      ✓       |    ✓    |
+| 3-day free trial                    |        ✓        |        —        |      —       |    —    |
+| Feed filtered by industry + country |        ✗        |    ✓ (auto)     |  ✓ (custom)  |    ✓    |
+| Filter who sees your posts          |        ✗        |        ✗        |      ✓       |    ✓    |
+| Featured posts / month              |        0        |        1        |      3       | Custom  |
+| AI comment generator                |   ✗ (future)    |   ✓ (future)    |  ✓ (future)  |    ✓    |
 
 ---
 
 ## Key Flows
 
 ### LinkedIn OAuth
+
 1. User clicks "Sign in with LinkedIn" → Convex HTTP action redirects to LinkedIn
 2. LinkedIn returns `code` → Convex exchanges for tokens + fetches profile
 3. User record created/updated in Convex (tokens stored server-side only — never exposed to clients)
 
 ### Post Sync (hourly cron)
+
 - Active subscribers: posts fetched and stored with `hidden = false`
 - Trial users: posts stored with `hidden = true`
 - When trial user subscribes, Stripe webhook triggers un-hiding of their posts
 - Token refresh attempted automatically when within 7 days of expiry
 
 ### Feed Query (real-time)
+
 Sort priority across all tiers:
+
 1. Featured posts first (Pro)
 2. Mutual LinkedIn connections (cached weekly from `r_network` scope)
 3. Same industry + same country
 4. Chronological
 
 Tier gating:
+
 - **Starter:** all visible posts, chronological
 - **Growth:** filtered to user's LinkedIn industry + country (auto-detected)
 - **Pro:** user-configurable industry/country filters for both viewing and visibility
 
 ### Comment / React
+
 User submits → Convex action calls LinkedIn API using the **user's own** stored token → count updated in Convex → real-time push to all clients viewing that post.
 
 ---
@@ -264,14 +270,14 @@ Connect the repo to Vercel, set the root directory to `landing/`, and add `NEXT_
 
 ## LinkedIn API Notes
 
-| Capability                     | Available? | Notes                                     |
-|--------------------------------|------------|-------------------------------------------|
-| Read own posts                 | ✓          | `r_member_social` scope                   |
-| Post comments as user          | ✓          | `w_member_social` scope                   |
-| Post reactions as user         | ✓          | `w_member_social` scope                   |
+| Capability                     | Available? | Notes                                                          |
+| ------------------------------ | ---------- | -------------------------------------------------------------- |
+| Read own posts                 | ✓          | `r_member_social` scope                                        |
+| Post comments as user          | ✓          | `w_member_social` scope                                        |
+| Post reactions as user         | ✓          | `w_member_social` scope                                        |
 | Read 1st-degree connections    | ✓          | `r_network` scope (degrades to 403 gracefully if not approved) |
-| Read connections' posts (feed) | ✗          | Requires LinkedIn MDP partner access      |
-| Token lifetime                 | 60 days    | Refresh flow implemented                  |
+| Read connections' posts (feed) | ✗          | Requires LinkedIn MDP partner access                           |
+| Token lifetime                 | 60 days    | Refresh flow implemented                                       |
 
 The app requires LinkedIn app approval for `r_member_social` and `w_member_social` scopes before going live. The `privacy` and `terms` pages at `/privacy` and `/terms` are required by LinkedIn for app review.
 

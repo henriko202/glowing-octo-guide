@@ -47,7 +47,7 @@ export default function MyPostsPage() {
   const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
 
   const me = useQuery(api.users.getMe, { userId })
-  const posts = (useQuery(api.posts.getMyPosts, { userId }) ?? []) as MyPost[]
+  const posts = (useQuery(api.posts.getMyPosts, { userId }) ?? []) as unknown as MyPost[]
 
   return (
     <div

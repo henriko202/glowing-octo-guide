@@ -21,7 +21,7 @@ export const getMyPosts = query({
     // other users' feeds, not from the author's own My Posts page.
     // Sort by publishedAt descending — the by_author index orders by _creationTime,
     // not publishedAt, so we sort in-memory to get correct chronological order.
-    return posts.sort((a, b) => b.publishedAt - a.publishedAt)
+    return posts.sort((a, b) => (b.publishedAt as number) - (a.publishedAt as number))
   }
 })
 

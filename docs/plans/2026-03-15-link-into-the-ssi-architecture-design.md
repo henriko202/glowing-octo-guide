@@ -31,7 +31,7 @@ network-effect growth loop: more users → richer feed → more value → more u
 ### Deployment
 
 | Service   | Platform   | Notes                                     |
-|-----------|------------|-------------------------------------------|
+| --------- | ---------- | ----------------------------------------- |
 | landing/  | Vercel     | Next.js, edge-optimized, SSR for SEO      |
 | app/      | Railway    | React/Vite, Dockerized static + server    |
 | Backend   | Convex.dev | Fully managed, real-time, serverless      |
@@ -48,7 +48,7 @@ network-effect growth loop: more users → richer feed → more value → more u
 ## Subscription Tiers
 
 | Feature                                   |  Starter ($5/mo)  |    Growth ($15/mo)    | Pro ($50/mo) |  Contact   |
-|-------------------------------------------|:-----------------:|:---------------------:|:------------:|:----------:|
+| ----------------------------------------- | :---------------: | :-------------------: | :----------: | :--------: |
 | Access feed                               |         ✓         |           ✓           |      ✓       |     ✓      |
 | 3-day free trial                          |         ✓         |           —           |      —       |     —      |
 | Posts visible to others (during trial)    |         ✗         |           —           |      —       |     —      |
@@ -135,15 +135,15 @@ usedCount           number         # max 3 for Pro
 ### B. Post Sync (Convex Scheduled Job — hourly)
 
 1. For each user with `subscriptionStatus = "active"` (not trialing):
-    - Call `GET /v2/ugcPosts?q=authors&authors=urn:li:person:{id}` using stored token
-    - Upsert posts into Convex `posts` table (deduplicate by `linkedinPostUrn`)
-    - Store with `hidden = false`
+   - Call `GET /v2/ugcPosts?q=authors&authors=urn:li:person:{id}` using stored token
+   - Upsert posts into Convex `posts` table (deduplicate by `linkedinPostUrn`)
+   - Store with `hidden = false`
 2. For trial users:
-    - Fetch posts but store with `hidden = true`
-    - When user subscribes, a Stripe webhook triggers un-hiding their posts
+   - Fetch posts but store with `hidden = true`
+   - When user subscribes, a Stripe webhook triggers un-hiding their posts
 3. Token refresh: if `tokenExpiresAt` is within 7 days, attempt refresh using `refresh_token`
-    - LinkedIn tokens expire after 60 days; refresh tokens last longer
-    - If refresh fails, mark user as needing re-authentication
+   - LinkedIn tokens expire after 60 days; refresh tokens last longer
+   - If refresh fails, mark user as needing re-authentication
 
 ### C. Feed Query (Convex real-time query)
 
@@ -171,20 +171,20 @@ Pro:
 
 1. Featured posts first (Pro tier `isFeatured = true`)
 2. Within featured: most recently featured
-3. Non-featured: LinkedIn mutual connections first*
+3. Non-featured: LinkedIn mutual connections first\*
 4. Then same industry + same country
 5. Then all others, chronologically
 
-*\*Mutual connections sort: LinkedIn's connections API requires MDP partner access and is NOT available at standard API
+_\*Mutual connections sort: LinkedIn's connections API requires MDP partner access and is NOT available at standard API
 tier. At launch, sort falls back to same industry + country. Mutual connection boosting can be added after LinkedIn MDP
-partnership.*
+partnership._
 
 ### D. Comment / React
 
 1. User submits comment/reaction → Convex mutation called from app
 2. Convex server function calls LinkedIn API using **the current user's** stored token:
-    - Comment: `POST /v2/socialActions/{postUrn}/comments`
-    - Reaction: `POST /v2/socialActions/{postUrn}/likes`
+   - Comment: `POST /v2/socialActions/{postUrn}/comments`
+   - Reaction: `POST /v2/socialActions/{postUrn}/likes`
 3. On success: update `posts.commentCount` or `likeCount` in Convex
 4. Convex's reactive queries push the update to all clients viewing that post in real-time
 
@@ -193,10 +193,10 @@ partnership.*
 1. User selects plan → app calls Convex mutation → Convex creates Stripe Checkout session
 2. User completes payment on Stripe-hosted page
 3. Stripe webhook hits Convex HTTP action endpoint:
-    - `customer.subscription.created` → set tier + status on user
-    - `customer.subscription.updated` → update tier/status
-    - `customer.subscription.deleted` → downgrade to free/canceled
-    - `invoice.payment_failed` → set `past_due`
+   - `customer.subscription.created` → set tier + status on user
+   - `customer.subscription.updated` → update tier/status
+   - `customer.subscription.deleted` → downgrade to free/canceled
+   - `invoice.payment_failed` → set `past_due`
 4. Trial expiry: Convex daily cron checks `trialEndsAt`; if expired and no active subscription, marks user as `canceled`
 
 ### F. Featured Posts (Pro)
@@ -211,7 +211,7 @@ partnership.*
 ## LinkedIn API: Known Limitations & Risks
 
 | Capability                     | Available? | Notes                                     |
-|--------------------------------|------------|-------------------------------------------|
+| ------------------------------ | ---------- | ----------------------------------------- |
 | Read own posts                 | ✓          | `r_member_social` scope                   |
 | Post comments as user          | ✓          | `w_member_social` scope                   |
 | Post reactions as user         | ✓          | `w_member_social` scope                   |
@@ -228,7 +228,7 @@ mutual-connections sorting, which is a v2 feature after MDP partnership.
 ## App Pages (React SaaS)
 
 | Route        | Description                                         |
-|--------------|-----------------------------------------------------|
+| ------------ | --------------------------------------------------- |
 | `/`          | Redirect to `/feed` if logged in, else to login     |
 | `/login`     | LinkedIn OAuth entry point                          |
 | `/feed`      | Main dashboard — filtered post feed                 |
@@ -241,7 +241,7 @@ mutual-connections sorting, which is a v2 feature after MDP partnership.
 ## Landing Page (Next.js)
 
 | Page                 | Notes                                        |
-|----------------------|----------------------------------------------|
+| -------------------- | -------------------------------------------- |
 | `/`                  | Hero, value prop, social proof               |
 | `/pricing`           | Tier comparison table, Stripe Checkout links |
 | `/blog`              | Optional — SEO content about LinkedIn SSI    |
@@ -254,5 +254,4 @@ mutual-connections sorting, which is a v2 feature after MDP partnership.
 - **AI comment generator**: Placeholder in comment box UI. Integrate Claude/OpenAI in a later sprint. Gated at Pro+
   tier.
 - **LinkedIn MDP**: Apply for partner status to unlock mutual-connections API and potentially the home feed endpoint.
-- **Email notifications**: Notify users when someone comments on their post.
 - **Analytics dashboard**: Show user's SSI trend over time (requires SSI API, which is MDP-only).

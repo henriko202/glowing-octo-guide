@@ -69,5 +69,5 @@ export const upsertUser = internalMutation({
     tokenExpiresAt: v.number(),
     linkedinPublicIdentifier: v.optional(v.string())
   },
-  handler: async (ctx, args: UpsertUserArgs) => upsertUserHandler(ctx.db as unknown as UpsertDb, args)
+  handler: async (ctx, args) => upsertUserHandler(ctx.db as unknown as UpsertDb, args as UpsertUserArgs)
 })

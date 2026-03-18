@@ -26,6 +26,7 @@ Since `r_member_social` scope is pending LinkedIn MDP approval, post sync is not
 ### Feed page
 
 A "Share a post" composer box sits at the very top of the Feed page (above all feed posts). It contains:
+
 - Label: "Share a post"
 - URL input: `placeholder="https://www.linkedin.com/posts/your-name_…"`
 - Helper text: "Paste your LinkedIn post URL"
@@ -36,6 +37,7 @@ The composer is always visible to authenticated users.
 ### My Posts page (`/my-posts`)
 
 New page accessible via a new nav item "My Posts". Contains:
+
 - User profile header (avatar placeholder, name, plan tier)
 - Section header: "Your posts (N)"
 - List of posts submitted by the user, each showing:
@@ -81,10 +83,10 @@ If neither A nor B confirm ownership → return error: "We couldn't verify this 
 
 Support two LinkedIn post URL formats:
 
-| Format | Example | Activity ID extraction |
-|--------|---------|----------------------|
+| Format   | Example                                                        | Activity ID extraction                   |
+| -------- | -------------------------------------------------------------- | ---------------------------------------- |
 | Format 1 | `/posts/henri-durand_typescript-patterns-{activityId}-{hash}/` | Last numeric segment before trailing `/` |
-| Format 2 | `/feed/update/urn:li:activity:{activityId}/` | URN in path |
+| Format 2 | `/feed/update/urn:li:activity:{activityId}/`                   | URN in path                              |
 
 Utility: `parseLinkedInPostUrl(url: string): { activityId: string; vanityName: string | null } | null`
 
@@ -99,10 +101,12 @@ Returns `null` for unrecognized formats.
 **Public action** — callable from client.
 
 **Args:**
+
 - `userId: v.id("users")` — the submitting user
 - `postUrl: v.string()` — raw LinkedIn post URL
 
 **Steps:**
+
 1. Parse URL → extract `activityId` and `vanityName`
 2. Load user (via `internal.users.getWithTokens`)
 3. Attempt Step A: `GET /v2/ugcPosts/{urn}` — if 200 and author matches, extract post content/stats
@@ -112,6 +116,7 @@ Returns `null` for unrecognized formats.
 7. Return `{ postId }` on success
 
 **Error cases:**
+
 - Unrecognized URL format
 - Ownership not confirmed (neither A nor B succeeded)
 - LinkedIn API errors (non-403/404 failures)

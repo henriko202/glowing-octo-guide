@@ -4,37 +4,37 @@
 
 // Schema builder stubs — pure structural helpers, no Convex runtime needed
 export function defineTable(_fields: any) {
-  const tableStub: any = { _fields };
-  tableStub.index = (_name: string, _fields: string[]) => tableStub;
-  return tableStub;
+  const tableStub: any = { _fields }
+  tableStub.index = (_name: string, _fields: string[]) => tableStub
+  return tableStub
 }
 
 export function defineSchema(tables: Record<string, any>) {
-  return { tables };
+  return { tables }
 }
 
 export function internalMutation(_def: any) {
-  return _def;
+  return _def
 }
 
 export function internalQuery(_def: any) {
-  return _def;
+  return _def
 }
 
 export function internalAction(_def: any) {
-  return _def;
+  return _def
 }
 
 export function query(_def: any) {
-  return _def;
+  return _def
 }
 
 export function action(_def: any) {
-  return _def;
+  return _def
 }
 
 export function mutation(_def: any) {
-  return _def;
+  return _def
 }
 
 export function cronJobs() {
@@ -44,20 +44,20 @@ export function cronJobs() {
     weekly: () => {},
     monthly: () => {},
     interval: () => {},
-    cron: () => {},
-  };
+    cron: () => {}
+  }
 }
 
 export function httpRouter() {
   return {
-    route: () => {},
-  };
+    route: () => {}
+  }
 }
 
 export function httpAction(fn: any) {
-  return fn;
+  return fn
 }
 
 export function makeFunctionReference<_T extends string>(path: string) {
-  return path as any;
+  return path as any
 }

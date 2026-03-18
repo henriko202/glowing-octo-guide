@@ -1,9 +1,10 @@
+import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 const CONVEX_URL = import.meta.env.VITE_CONVEX_SITE as string
 const AUTH_URL = `${CONVEX_URL}/auth/linkedin`
 
-export default function LoginPage(): JSX.Element {
+export default function LoginPage(): React.JSX.Element {
   const { t } = useTranslation()
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">

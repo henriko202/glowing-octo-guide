@@ -17,6 +17,7 @@
 ### Task 1: LinkedIn post URL parser
 
 **Files:**
+
 - Create: `convex/linkedin/parsePostUrl.ts`
 - Create: `convex/linkedin/parsePostUrl.test.ts`
 
@@ -24,52 +25,48 @@
 
 ```typescript
 // convex/linkedin/parsePostUrl.test.ts
-import { describe, it, expect } from "vitest";
-import { parseLinkedInPostUrl } from "./parsePostUrl";
+import { describe, it, expect } from 'vitest'
+import { parseLinkedInPostUrl } from './parsePostUrl'
 
-describe("parseLinkedInPostUrl", () => {
-  it("parses Format 1 — /posts/{vanity}_{slug}-{activityId}-{hash}/", () => {
-    const url =
-      "https://www.linkedin.com/posts/henri-durand_typescript-patterns-7234567890123456789-Abcd/";
-    const result = parseLinkedInPostUrl(url);
-    expect(result).not.toBeNull();
-    expect(result!.activityId).toBe("7234567890123456789");
-    expect(result!.vanityName).toBe("henri-durand");
-  });
+describe('parseLinkedInPostUrl', () => {
+  it('parses Format 1 — /posts/{vanity}_{slug}-{activityId}-{hash}/', () => {
+    const url = 'https://www.linkedin.com/posts/henri-durand_typescript-patterns-7234567890123456789-Abcd/'
+    const result = parseLinkedInPostUrl(url)
+    expect(result).not.toBeNull()
+    expect(result!.activityId).toBe('7234567890123456789')
+    expect(result!.vanityName).toBe('henri-durand')
+  })
 
-  it("parses Format 1 without trailing slash", () => {
-    const url =
-      "https://www.linkedin.com/posts/jane-doe_some-title-7111111111111111111-XyZa";
-    const result = parseLinkedInPostUrl(url);
-    expect(result).not.toBeNull();
-    expect(result!.activityId).toBe("7111111111111111111");
-    expect(result!.vanityName).toBe("jane-doe");
-  });
+  it('parses Format 1 without trailing slash', () => {
+    const url = 'https://www.linkedin.com/posts/jane-doe_some-title-7111111111111111111-XyZa'
+    const result = parseLinkedInPostUrl(url)
+    expect(result).not.toBeNull()
+    expect(result!.activityId).toBe('7111111111111111111')
+    expect(result!.vanityName).toBe('jane-doe')
+  })
 
-  it("parses Format 2 — /feed/update/urn:li:activity:{id}/", () => {
-    const url =
-      "https://www.linkedin.com/feed/update/urn:li:activity:7234567890123456789/";
-    const result = parseLinkedInPostUrl(url);
-    expect(result).not.toBeNull();
-    expect(result!.activityId).toBe("7234567890123456789");
-    expect(result!.vanityName).toBeNull();
-  });
+  it('parses Format 2 — /feed/update/urn:li:activity:{id}/', () => {
+    const url = 'https://www.linkedin.com/feed/update/urn:li:activity:7234567890123456789/'
+    const result = parseLinkedInPostUrl(url)
+    expect(result).not.toBeNull()
+    expect(result!.activityId).toBe('7234567890123456789')
+    expect(result!.vanityName).toBeNull()
+  })
 
-  it("returns null for unrecognized URL", () => {
-    expect(parseLinkedInPostUrl("https://linkedin.com/in/someone")).toBeNull();
-    expect(parseLinkedInPostUrl("not-a-url")).toBeNull();
-    expect(parseLinkedInPostUrl("")).toBeNull();
-  });
+  it('returns null for unrecognized URL', () => {
+    expect(parseLinkedInPostUrl('https://linkedin.com/in/someone')).toBeNull()
+    expect(parseLinkedInPostUrl('not-a-url')).toBeNull()
+    expect(parseLinkedInPostUrl('')).toBeNull()
+  })
 
-  it("extracts activityId from Format 1 with query params", () => {
-    const url =
-      "https://www.linkedin.com/posts/bob-smith_hello-world-7999999999999999999-Abcd/?utm_source=share";
-    const result = parseLinkedInPostUrl(url);
-    expect(result).not.toBeNull();
-    expect(result!.activityId).toBe("7999999999999999999");
-    expect(result!.vanityName).toBe("bob-smith");
-  });
-});
+  it('extracts activityId from Format 1 with query params', () => {
+    const url = 'https://www.linkedin.com/posts/bob-smith_hello-world-7999999999999999999-Abcd/?utm_source=share'
+    const result = parseLinkedInPostUrl(url)
+    expect(result).not.toBeNull()
+    expect(result!.activityId).toBe('7999999999999999999')
+    expect(result!.vanityName).toBe('bob-smith')
+  })
+})
 ```
 
 - [ ] **Step 2: Run test to confirm failure**
@@ -77,6 +74,7 @@ describe("parseLinkedInPostUrl", () => {
 ```bash
 cd /d/ERP/LinkIntoTheSSI/LinkIntoTheSSI && npx vitest run convex/linkedin/parsePostUrl.test.ts
 ```
+
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement the parser**
@@ -86,9 +84,9 @@ Expected: FAIL — module not found.
 
 export interface ParsedPostUrl {
   /** LinkedIn activity ID — used to form urn:li:ugcPost:{activityId} */
-  activityId: string;
+  activityId: string
   /** Vanity name extracted from URL path (null for Format 2) */
-  vanityName: string | null;
+  vanityName: string | null
 }
 
 /**
@@ -101,33 +99,31 @@ export interface ParsedPostUrl {
  * Returns null for unrecognized formats.
  */
 export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
-  if (!url) return null;
+  if (!url) return null
 
-  let pathname: string;
+  let pathname: string
   try {
-    const parsed = new URL(url);
-    pathname = parsed.pathname;
+    const parsed = new URL(url)
+    pathname = parsed.pathname
   } catch {
-    return null;
+    return null
   }
 
   // Format 2: /feed/update/urn:li:activity:{id}
-  const format2Match = pathname.match(
-    /\/feed\/update\/urn:li:activity:(\d+)/
-  );
+  const format2Match = pathname.match(/\/feed\/update\/urn:li:activity:(\d+)/)
   if (format2Match) {
-    return { activityId: format2Match[1], vanityName: null };
+    return { activityId: format2Match[1], vanityName: null }
   }
 
   // Format 1: /posts/{vanityName}_{slug}-{activityId}-{hash}
   // The vanity name is everything before the first underscore in the slug segment.
   // The activityId is the large number (17-19 digits) near the end.
-  const format1Match = pathname.match(/\/posts\/([^_]+)_.*?-(\d{15,20})-[^/]+/);
+  const format1Match = pathname.match(/\/posts\/([^_]+)_.*?-(\d{15,20})-[^/]+/)
   if (format1Match) {
-    return { activityId: format1Match[2], vanityName: format1Match[1] };
+    return { activityId: format1Match[2], vanityName: format1Match[1] }
   }
 
-  return null;
+  return null
 }
 ```
 
@@ -136,6 +132,7 @@ export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
 ```bash
 npx vitest run convex/linkedin/parsePostUrl.test.ts
 ```
+
 Expected: PASS — all 5 tests green.
 
 - [ ] **Step 5: Commit**
@@ -152,29 +149,27 @@ git commit -m "feat(convex): LinkedIn post URL parser utility"
 ### Task 2: `getMyPosts` query
 
 **Files:**
+
 - Create: `convex/posts.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
 // convex/posts.test.ts
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi } from 'vitest'
 
 // We test the handler logic directly since Convex query wrappers are
 // not testable in unit tests — this mirrors the pattern in feed.test.ts.
-describe("getMyPosts handler", () => {
-  it("returns empty array when userId is undefined", async () => {
-    const handler = async (
-      _ctx: unknown,
-      args: { userId?: string }
-    ): Promise<unknown[]> => {
-      if (!args.userId) return [];
-      return []; // db would be called here
-    };
-    const result = await handler({}, { userId: undefined });
-    expect(result).toEqual([]);
-  });
-});
+describe('getMyPosts handler', () => {
+  it('returns empty array when userId is undefined', async () => {
+    const handler = async (_ctx: unknown, args: { userId?: string }): Promise<unknown[]> => {
+      if (!args.userId) return []
+      return [] // db would be called here
+    }
+    const result = await handler({}, { userId: undefined })
+    expect(result).toEqual([])
+  })
+})
 ```
 
 - [ ] **Step 2: Run test to confirm it fails**
@@ -182,32 +177,33 @@ describe("getMyPosts handler", () => {
 ```bash
 npx vitest run convex/posts.test.ts
 ```
+
 Expected: FAIL — `posts.test.ts` does not exist yet (module not found).
 
 - [ ] **Step 3: Create `convex/posts.ts` with `getMyPosts`**
 
 ```typescript
 // convex/posts.ts
-import { query } from "./_generated/server";
-import { v } from "convex/values";
-import type { QueryCtx } from "./convexTypes";
+import { query } from './_generated/server'
+import { v } from 'convex/values'
+import type { QueryCtx } from './convexTypes'
 
 export const getMyPosts = query({
   args: {
-    userId: v.optional(v.id("users")),
+    userId: v.optional(v.id('users'))
   },
   handler: async (ctx, { userId }) => {
-    if (!userId) return [];
-    const queryCtx = ctx as unknown as QueryCtx;
+    if (!userId) return []
+    const queryCtx = ctx as unknown as QueryCtx
     const posts = await queryCtx.db
-      .query("posts")
-      .withIndex("by_author", (q) => q.eq("authorId", userId))
-      .collect();
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', userId))
+      .collect()
     // Sort by publishedAt descending — the by_author index orders by _creationTime,
     // not publishedAt, so we sort in-memory to get correct chronological order.
-    return posts.sort((a, b) => b.publishedAt - a.publishedAt);
-  },
-});
+    return posts.sort((a, b) => b.publishedAt - a.publishedAt)
+  }
+})
 ```
 
 - [ ] **Step 4: Run test to confirm pass**
@@ -215,6 +211,7 @@ export const getMyPosts = query({
 ```bash
 npx vitest run convex/posts.test.ts
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -229,9 +226,11 @@ git commit -m "feat(convex): getMyPosts query"
 ### Task 3: `submitPost` action
 
 **Files:**
+
 - Modify: `convex/posts.ts` (add `submitPost` action)
 
 The `submitPost` action:
+
 1. Parses the URL
 2. Loads the user's LinkedIn token
 3. Tries Step A: `GET /v2/ugcPosts/{urn}` — checks `post.author`
@@ -243,71 +242,58 @@ The `submitPost` action:
 Add after the `getMyPosts` export:
 
 ```typescript
-import { action } from "./_generated/server";
-import { internal } from "./_generated/api";
-import { parseLinkedInPostUrl } from "./linkedin/parsePostUrl";
-import { verifyPostOwnership } from "./linkedin/verifyPostOwnership";
-import type { ActionCtx, UserDoc } from "./convexTypes";
+import { action } from './_generated/server'
+import { internal } from './_generated/api'
+import { parseLinkedInPostUrl } from './linkedin/parsePostUrl'
+import { verifyPostOwnership } from './linkedin/verifyPostOwnership'
+import type { ActionCtx, UserDoc } from './convexTypes'
 
 export const submitPost = action({
   args: {
-    userId: v.id("users"),
-    postUrl: v.string(),
+    userId: v.id('users'),
+    postUrl: v.string()
   },
   handler: async (ctx, { userId, postUrl }) => {
-    const actionCtx = ctx as unknown as ActionCtx;
+    const actionCtx = ctx as unknown as ActionCtx
 
     // 1. Parse URL
-    const parsed = parseLinkedInPostUrl(postUrl);
+    const parsed = parseLinkedInPostUrl(postUrl)
     if (!parsed) {
-      throw new Error(
-        "Unrecognized LinkedIn post URL. Use a /posts/… or /feed/update/… URL."
-      );
+      throw new Error('Unrecognized LinkedIn post URL. Use a /posts/… or /feed/update/… URL.')
     }
 
     // 2. Load user with token
-    const user = await actionCtx.runQuery<UserDoc | null>(
-      internal.users.getWithTokens,
-      { userId }
-    );
+    const user = await actionCtx.runQuery<UserDoc | null>(internal.users.getWithTokens, { userId })
     if (!user?.linkedinAccessToken) {
-      throw new Error("No LinkedIn access token. Please sign in again.");
+      throw new Error('No LinkedIn access token. Please sign in again.')
     }
 
-    const token = user.linkedinAccessToken as string;
-    const urn = `urn:li:ugcPost:${parsed.activityId}`;
+    const token = user.linkedinAccessToken as string
+    const urn = `urn:li:ugcPost:${parsed.activityId}`
 
     // 3. Verify ownership (Step A → Step B fallback)
     // verifyPostOwnership throws if ownership cannot be confirmed
-    const ownership = await verifyPostOwnership(
-      token,
-      urn,
-      user.linkedinId as string,
-      parsed.vanityName
-    );
+    const ownership = await verifyPostOwnership(token, urn, user.linkedinId as string, parsed.vanityName)
 
     // 4. Upsert the post
     // Note: upsertPost was extended to return the post _id (see Step 1b above).
-    const postId = await actionCtx.runMutation(
-      internal.jobs.syncPosts.upsertPost,
-      {
-        linkedinPostUrn: urn,
-        authorId: userId,
-        content: ownership.content,
-        publishedAt: ownership.publishedAt,
-        likeCount: 0,
-        commentCount: 0,
-        mediaUrls: [],
-        isFeatured: false,
-        visibilityIndustries: [],
-        visibilityCountries: [],
-        hidden: user.subscriptionStatus === "trialing",
-      }
-    );
+    const postId = await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, {
+      linkedinPostUrn: urn,
+      authorId: userId,
+      content: ownership.content,
+      publishedAt: ownership.publishedAt,
+      likeCount: 0,
+      commentCount: 0,
+      mediaUrls: [],
+      isFeatured: false,
+      visibilityIndustries: [],
+      visibilityCountries: [],
+      hidden: user.subscriptionStatus === 'trialing'
+    })
 
-    return { postId };
-  },
-});
+    return { postId }
+  }
+})
 ```
 
 - [ ] **Step 1b: Extend `upsertPost` in `convex/jobs/syncPosts.ts` to return the post `_id`**
@@ -348,10 +334,10 @@ Create `convex/linkedin/verifyPostOwnership.ts`:
 // convex/linkedin/verifyPostOwnership.ts
 
 export interface OwnershipResult {
-  confirmed: boolean;
-  content: string;
-  publishedAt: number;
-  strategy: "ugc-api" | "vanity-heuristic";
+  confirmed: boolean
+  content: string
+  publishedAt: number
+  strategy: 'ugc-api' | 'vanity-heuristic'
 }
 
 /**
@@ -369,71 +355,60 @@ export async function verifyPostOwnership(
   linkedinId: string,
   vanityName: string | null
 ): Promise<OwnershipResult> {
-  const ugcRes = await fetch(
-    `https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(urn)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
+  const ugcRes = await fetch(`https://api.linkedin.com/v2/ugcPosts/${encodeURIComponent(urn)}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Restli-Protocol-Version': '2.0.0'
     }
-  );
+  })
 
   if (ugcRes.ok) {
-    const ugcPost = (await ugcRes.json()) as Record<string, unknown>;
-    const expectedAuthor = `urn:li:person:${linkedinId}`;
+    const ugcPost = (await ugcRes.json()) as Record<string, unknown>
+    const expectedAuthor = `urn:li:person:${linkedinId}`
     if (ugcPost.author !== expectedAuthor) {
-      throw new Error("This post doesn't belong to your LinkedIn account.");
+      throw new Error("This post doesn't belong to your LinkedIn account.")
     }
-    const share = (
-      ugcPost.specificContent as Record<string, unknown> | undefined
-    )?.["com.linkedin.ugc.ShareContent"] as Record<string, unknown> | undefined;
-    const commentary = (
-      share?.shareCommentary as Record<string, unknown> | undefined
-    )?.text;
+    const share = (ugcPost.specificContent as Record<string, unknown> | undefined)?.[
+      'com.linkedin.ugc.ShareContent'
+    ] as Record<string, unknown> | undefined
+    const commentary = (share?.shareCommentary as Record<string, unknown> | undefined)?.text
     const publishedAt =
-      typeof ugcPost.created === "object" && ugcPost.created !== null
-        ? ((ugcPost.created as Record<string, unknown>).time as number) ??
-          Date.now()
-        : Date.now();
+      typeof ugcPost.created === 'object' && ugcPost.created !== null
+        ? (((ugcPost.created as Record<string, unknown>).time as number) ?? Date.now())
+        : Date.now()
     return {
       confirmed: true,
-      content: typeof commentary === "string" ? commentary : "",
+      content: typeof commentary === 'string' ? commentary : '',
       publishedAt,
-      strategy: "ugc-api",
-    };
+      strategy: 'ugc-api'
+    }
   }
 
   if (ugcRes.status === 403 || ugcRes.status === 404) {
     // Step A failed — fall back to vanity heuristic if available
     if (!vanityName) {
-      throw new Error(
-        "Could not verify post ownership. Use a /posts/… URL format for fallback verification."
-      );
+      throw new Error('Could not verify post ownership. Use a /posts/… URL format for fallback verification.')
     }
-    const meRes = await fetch(
-      "https://api.linkedin.com/v2/me?projection=(vanityName)",
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    const meRes = await fetch('https://api.linkedin.com/v2/me?projection=(vanityName)', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
     if (!meRes.ok) {
-      throw new Error(
-        "Could not verify post ownership. LinkedIn API unavailable."
-      );
+      throw new Error('Could not verify post ownership. LinkedIn API unavailable.')
     }
-    const meData = (await meRes.json()) as Record<string, unknown>;
-    const myVanity = meData.vanityName as string | undefined;
+    const meData = (await meRes.json()) as Record<string, unknown>
+    const myVanity = meData.vanityName as string | undefined
     if (!myVanity || myVanity.toLowerCase() !== vanityName.toLowerCase()) {
-      throw new Error("This post doesn't belong to your LinkedIn account.");
+      throw new Error("This post doesn't belong to your LinkedIn account.")
     }
     return {
       confirmed: true,
-      content: "",
+      content: '',
       publishedAt: Date.now(),
-      strategy: "vanity-heuristic",
-    };
+      strategy: 'vanity-heuristic'
+    }
   }
 
-  throw new Error(`LinkedIn API error: ${ugcRes.status}`);
+  throw new Error(`LinkedIn API error: ${ugcRes.status}`)
 }
 ```
 
@@ -443,102 +418,90 @@ Create `convex/linkedin/verifyPostOwnership.test.ts`:
 
 ```typescript
 // convex/linkedin/verifyPostOwnership.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { verifyPostOwnership } from "./verifyPostOwnership";
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { verifyPostOwnership } from './verifyPostOwnership'
 
-describe("verifyPostOwnership", () => {
+describe('verifyPostOwnership', () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn());
-  });
+    vi.stubGlobal('fetch', vi.fn())
+  })
   afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+    vi.unstubAllGlobals()
+  })
 
-  it("Step A: returns confirmed + content when UGC API returns matching author", async () => {
+  it('Step A: returns confirmed + content when UGC API returns matching author', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        author: "urn:li:person:abc123",
+        author: 'urn:li:person:abc123',
         specificContent: {
-          "com.linkedin.ugc.ShareContent": {
-            shareCommentary: { text: "Hello world" },
-          },
+          'com.linkedin.ugc.ShareContent': {
+            shareCommentary: { text: 'Hello world' }
+          }
         },
-        created: { time: 1700000000000 },
-      }),
-    } as Response);
+        created: { time: 1700000000000 }
+      })
+    } as Response)
 
-    const result = await verifyPostOwnership(
-      "test-token",
-      "urn:li:ugcPost:123",
-      "abc123",
-      "henri-durand"
-    );
+    const result = await verifyPostOwnership('test-token', 'urn:li:ugcPost:123', 'abc123', 'henri-durand')
 
-    expect(result.confirmed).toBe(true);
-    expect(result.content).toBe("Hello world");
-    expect(result.publishedAt).toBe(1700000000000);
-    expect(result.strategy).toBe("ugc-api");
-  });
+    expect(result.confirmed).toBe(true)
+    expect(result.content).toBe('Hello world')
+    expect(result.publishedAt).toBe(1700000000000)
+    expect(result.strategy).toBe('ugc-api')
+  })
 
-  it("Step A: throws when author does not match", async () => {
+  it('Step A: throws when author does not match', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        author: "urn:li:person:someone-else",
+        author: 'urn:li:person:someone-else',
         specificContent: {},
-        created: { time: 0 },
-      }),
-    } as Response);
+        created: { time: 0 }
+      })
+    } as Response)
 
-    await expect(
-      verifyPostOwnership("token", "urn:li:ugcPost:123", "abc123", null)
-    ).rejects.toThrow("doesn't belong to your LinkedIn account");
-  });
+    await expect(verifyPostOwnership('token', 'urn:li:ugcPost:123', 'abc123', null)).rejects.toThrow(
+      "doesn't belong to your LinkedIn account"
+    )
+  })
 
-  it("Step B: confirms via vanity name when UGC returns 403 + vanity matches", async () => {
+  it('Step B: confirms via vanity name when UGC returns 403 + vanity matches', async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ vanityName: "henri-durand" }),
-      } as Response);
+        json: async () => ({ vanityName: 'henri-durand' })
+      } as Response)
 
-    const result = await verifyPostOwnership(
-      "token",
-      "urn:li:ugcPost:123",
-      "abc123",
-      "henri-durand"
-    );
+    const result = await verifyPostOwnership('token', 'urn:li:ugcPost:123', 'abc123', 'henri-durand')
 
-    expect(result.confirmed).toBe(true);
-    expect(result.strategy).toBe("vanity-heuristic");
-  });
+    expect(result.confirmed).toBe(true)
+    expect(result.strategy).toBe('vanity-heuristic')
+  })
 
-  it("throws when Step A (403) + Step B vanity mismatch", async () => {
+  it('throws when Step A (403) + Step B vanity mismatch', async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ vanityName: "someone-else" }),
-      } as Response);
+        json: async () => ({ vanityName: 'someone-else' })
+      } as Response)
 
-    await expect(
-      verifyPostOwnership("token", "urn", "abc123", "henri-durand")
-    ).rejects.toThrow("doesn't belong to your LinkedIn account");
-  });
+    await expect(verifyPostOwnership('token', 'urn', 'abc123', 'henri-durand')).rejects.toThrow(
+      "doesn't belong to your LinkedIn account"
+    )
+  })
 
-  it("throws immediately for Format 2 URL (null vanityName) when Step A returns 403", async () => {
+  it('throws immediately for Format 2 URL (null vanityName) when Step A returns 403', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
-      status: 403,
-    } as Response);
+      status: 403
+    } as Response)
 
-    await expect(
-      verifyPostOwnership("token", "urn", "abc123", null)
-    ).rejects.toThrow("Use a /posts/… URL format");
-  });
-});
+    await expect(verifyPostOwnership('token', 'urn', 'abc123', null)).rejects.toThrow('Use a /posts/… URL format')
+  })
+})
 ```
 
 - [ ] **Step 1e: Update `submitPost` handler to use `verifyPostOwnership` helper**
@@ -546,20 +509,15 @@ describe("verifyPostOwnership", () => {
 In `convex/posts.ts`, replace the inline Step A / Step B logic with a call to the helper:
 
 ```typescript
-import { verifyPostOwnership } from "./linkedin/verifyPostOwnership";
+import { verifyPostOwnership } from './linkedin/verifyPostOwnership'
 
 // ... inside submitPost handler, replace everything between
 // "3. Step A" and "4. Upsert the post" with:
 
-    const ownership = await verifyPostOwnership(
-      token,
-      urn,
-      user.linkedinId as string,
-      parsed.vanityName
-    );
-    // ownership.content and ownership.publishedAt replace the inline variables from the
-    // earlier draft — use ownership.content and ownership.publishedAt directly in the
-    // upsertPost call below (the upsert block in Step 1 already uses these field names).
+const ownership = await verifyPostOwnership(token, urn, user.linkedinId as string, parsed.vanityName)
+// ownership.content and ownership.publishedAt replace the inline variables from the
+// earlier draft — use ownership.content and ownership.publishedAt directly in the
+// upsertPost call below (the upsert block in Step 1 already uses these field names).
 ```
 
 - [ ] **Step 2: Deploy to Convex to catch any type errors**
@@ -567,6 +525,7 @@ import { verifyPostOwnership } from "./linkedin/verifyPostOwnership";
 ```bash
 cd /d/ERP/LinkIntoTheSSI/LinkIntoTheSSI && npx convex dev --once
 ```
+
 Expected: deployment succeeds with no errors. If TypeScript errors appear, fix them before continuing.
 
 - [ ] **Step 3: Commit**
@@ -583,6 +542,7 @@ git commit -m "feat(convex): submitPost action with A+B ownership verification"
 ### Task 4: PostComposer component
 
 **Files:**
+
 - Create: `app/src/components/PostComposer.tsx`
 - Create: `app/src/components/PostComposer.test.tsx`
 - Modify: `app/src/pages/FeedPage.tsx` (add `<PostComposer />` above feed)
@@ -648,6 +608,7 @@ describe("PostComposer", () => {
 ```bash
 cd /d/ERP/LinkIntoTheSSI/LinkIntoTheSSI && npx vitest run app/src/components/PostComposer.test.tsx
 ```
+
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement PostComposer**
@@ -764,6 +725,7 @@ export default function PostComposer({ onSubmit }: PostComposerProps) {
 ```bash
 npx vitest run app/src/components/PostComposer.test.tsx
 ```
+
 Expected: PASS — all 5 tests green.
 
 - [ ] **Step 5: Wire PostComposer into FeedPage**
@@ -772,17 +734,17 @@ In `app/src/pages/FeedPage.tsx`, add the import and action, then render `<PostCo
 
 ```typescript
 // Add at top of FeedPage.tsx with other imports:
-import { useAction } from "convex/react";
-import type { Id } from "../../../convex/_generated/dataModel";
-import PostComposer from "../components/PostComposer";
+import { useAction } from 'convex/react'
+import type { Id } from '../../../convex/_generated/dataModel'
+import PostComposer from '../components/PostComposer'
 
 // Inside FeedPage() function body, add:
-const submitPost = useAction(api.posts.submitPost);
-const userId = (sessionStorage.getItem("convexUserId") ?? undefined) as Id<"users"> | undefined;
+const submitPost = useAction(api.posts.submitPost)
+const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
 
 async function handlePostSubmit(url: string) {
-  if (!userId) throw new Error("Not signed in");
-  await submitPost({ userId, postUrl: url });
+  if (!userId) throw new Error('Not signed in')
+  await submitPost({ userId, postUrl: url })
 }
 ```
 
@@ -890,6 +852,7 @@ git commit -m "feat(app): PostComposer component wired into Feed"
 ### Task 5: MyPostsPage + nav integration
 
 **Files:**
+
 - Create: `app/src/pages/MyPostsPage.tsx`
 - Create: `app/src/pages/MyPostsPage.test.tsx`
 - Create: `app/src/components/AppNav.tsx`
@@ -946,6 +909,7 @@ describe("MyPostsPage", () => {
 ```bash
 npx vitest run app/src/pages/MyPostsPage.test.tsx
 ```
+
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement MyPostsPage**
@@ -1135,6 +1099,7 @@ export default function MyPostsPage() {
 ```bash
 npx vitest run app/src/pages/MyPostsPage.test.tsx
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Create AppNav component**
@@ -1225,6 +1190,7 @@ export default function AppNav() {
 - [ ] **Step 6: Add `/my-posts` route and AppNav to App.tsx**
 
 Update `app/src/App.tsx` to:
+
 1. Import `MyPostsPage` and `AppNav`
 2. Add `/my-posts` route inside `RequireAuth`
 3. Wrap all authenticated routes with `AppNav`
@@ -1311,6 +1277,7 @@ export default function App() {
 ```bash
 cd /d/ERP/LinkIntoTheSSI/LinkIntoTheSSI && npx convex dev --once
 ```
+
 Expected: `posts:getMyPosts` and `posts:submitPost` appear in deployment output.
 
 - [ ] **Step 8: Run all tests**
@@ -1318,6 +1285,7 @@ Expected: `posts:getMyPosts` and `posts:submitPost` appear in deployment output.
 ```bash
 npx vitest run
 ```
+
 Expected: all tests pass (parser, schema, feed, PostComposer, MyPostsPage, PostCard, LoginPage, SettingsPage).
 
 - [ ] **Step 9: Commit**
