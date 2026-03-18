@@ -13,6 +13,7 @@ export interface UpsertUserArgs {
   accessToken: string;
   refreshToken?: string; // LinkedIn standard OAuth may omit refresh_token
   tokenExpiresAt: number;
+  linkedinPublicIdentifier?: string; // vanityName from /rest/identityMe — null-safe
 }
 
 // Plain handler function — used by the registered mutation and testable in isolation
@@ -26,14 +27,19 @@ export async function upsertUserHandler(
     .first();
 
   if (existing) {
-    await db.patch(existing._id, {
+    const patch: Record<string, unknown> = {
       name: args.name,
       headline: args.headline,
       profilePictureUrl: args.profilePictureUrl,
       linkedinAccessToken: args.accessToken,
       linkedinRefreshToken: args.refreshToken,
       tokenExpiresAt: args.tokenExpiresAt,
-    });
+    };
+    // Only update publicIdentifier if we have a fresh value — preserves manually-set values
+    if (args.linkedinPublicIdentifier) {
+      patch.linkedinPublicIdentifier = args.linkedinPublicIdentifier;
+    }
+    await db.patch(existing._id, patch);
     return existing._id;
   }
 
@@ -43,6 +49,7 @@ export async function upsertUserHandler(
     name: args.name,
     headline: args.headline,
     profilePictureUrl: args.profilePictureUrl,
+    linkedinPublicIdentifier: args.linkedinPublicIdentifier,
     tier: "starter" as const,
     subscriptionStatus: "trialing" as const,
     trialEndsAt,
@@ -63,6 +70,7 @@ export const upsertUser = internalMutation({
     accessToken: v.string(),
     refreshToken: v.optional(v.string()), // optional — LinkedIn may not return it
     tokenExpiresAt: v.number(),
+    linkedinPublicIdentifier: v.optional(v.string()),
   },
   handler: async (ctx, args: UpsertUserArgs) => upsertUserHandler(ctx.db as unknown as UpsertDb, args),
 });

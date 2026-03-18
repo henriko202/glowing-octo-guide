@@ -1,7 +1,7 @@
 // convex/http.ts
 import { httpRouter, httpActionGeneric as httpAction } from "convex/server";
 import { internal } from "./_generated/api.js";
-import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from "./linkedin/oauth.js";
+import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo, fetchLinkedInPublicIdentifier } from "./linkedin/oauth.js";
 
 const http = httpRouter();
 
@@ -45,7 +45,11 @@ http.route({
       }
 
       const tokens = await exchangeCodeForTokens(code);
-      const userInfo = await fetchLinkedInUserInfo(tokens.access_token);
+      // Run userInfo and publicIdentifier fetches concurrently — independent requests
+      const [userInfo, publicIdentifier] = await Promise.all([
+        fetchLinkedInUserInfo(tokens.access_token),
+        fetchLinkedInPublicIdentifier(tokens.access_token),
+      ]);
 
       const tokenExpiresAt = Date.now() + tokens.expires_in * 1000;
 
@@ -57,6 +61,8 @@ http.route({
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         tokenExpiresAt,
+        // May be null if identityMe is unavailable — upsertUser handles null-safety
+        linkedinPublicIdentifier: publicIdentifier ?? undefined,
       });
 
       return new Response(null, {
