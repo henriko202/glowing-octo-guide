@@ -17,7 +17,6 @@ import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
-import type * as jobs_syncConnections from "../jobs/syncConnections.js";
 import type * as jobs_syncPosts from "../jobs/syncPosts.js";
 import type * as jobs_syncPostsApify from "../jobs/syncPostsApify.js";
 import type * as linkedin_auth from "../linkedin/auth.js";
@@ -46,7 +45,6 @@ declare const fullApi: ApiFromModules<{
   feed: typeof feed;
   http: typeof http;
   interactions: typeof interactions;
-  "jobs/syncConnections": typeof jobs_syncConnections;
   "jobs/syncPosts": typeof jobs_syncPosts;
   "jobs/syncPostsApify": typeof jobs_syncPostsApify;
   "linkedin/auth": typeof linkedin_auth;

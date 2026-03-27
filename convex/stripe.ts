@@ -5,7 +5,7 @@
 
 import { internalMutationGeneric as internalMutation } from 'convex/server'
 import { v } from 'convex/values'
-import type { MutationCtx, UserDoc, PostDoc, SubscriptionDoc } from './convexTypes.js'
+import type { MutationCtx, PostDoc, SubscriptionDoc, UserDoc } from './convexTypes.js'
 
 // These internal mutations are called from webhook callbacks registered in http.ts
 // to keep our users table in sync with Stripe subscription state.
@@ -26,7 +26,7 @@ export const syncUserSubscription = internalMutation({
     stripeSubscriptionId: v.string(),
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro')),
     status: v.string(),
-    currentPeriodEnd: v.number()
+    currentPeriodEnd: v.optional(v.number())
   },
   handler: async (
     ctx,
@@ -35,7 +35,7 @@ export const syncUserSubscription = internalMutation({
       stripeSubscriptionId: string
       tier: 'starter' | 'growth' | 'pro'
       status: string
-      currentPeriodEnd: number
+      currentPeriodEnd?: number
     }
   ) => {
     const db = (ctx as unknown as MutationCtx).db

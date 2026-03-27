@@ -28,98 +28,45 @@ export default function PostCard({
   const { t } = useTranslation()
 
   return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 12,
-        border: '1px solid #e2e8f0',
-        padding: 20,
-        fontFamily: 'system-ui, sans-serif'
-      }}
-    >
+    <div className="rounded-xl border border-slate-200 bg-white p-5 font-sans">
       {post.isFeatured && (
-        <span
-          style={{
-            display: 'inline-block',
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#d97706',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: 8
-          }}
-        >
+        <span className="mb-2 inline-block text-[11px] font-bold uppercase tracking-wider text-amber-600">
           {t('feed.featured')}
         </span>
       )}
 
       {post.author && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div className="mb-3 flex items-center gap-2.5">
           {post.author.profilePictureUrl ? (
             <img
               src={post.author.profilePictureUrl}
               alt=""
-              style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }}
+              className="h-10 w-10 rounded-full object-cover"
             />
           ) : (
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                background: '#dbeafe',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                color: '#1d4ed8',
-                fontSize: 16
-              }}
-            >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-base font-bold text-blue-700">
               {post.author.name[0]}
             </div>
           )}
           <div>
-            <p style={{ fontWeight: 600, color: '#0f172a', margin: 0, fontSize: 14 }}>{post.author.name}</p>
-            {post.author.headline && (
-              <p style={{ color: '#64748b', margin: 0, fontSize: 12 }}>{post.author.headline}</p>
-            )}
+            <p className="m-0 text-sm font-semibold text-slate-900">{post.author.name}</p>
+            {post.author.headline && <p className="m-0 text-xs text-slate-500">{post.author.headline}</p>}
           </div>
         </div>
       )}
 
-      <p style={{ color: '#1e293b', whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}>
-        {post.content}
-      </p>
+      <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{post.content}</p>
 
-      <div style={{ display: 'flex', gap: 16 }}>
+      <div className="flex gap-4">
         <button
           onClick={() => onReact(post._id)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: '#64748b',
-            fontSize: 13,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4
-          }}
+          className="flex cursor-pointer items-center gap-1 border-none bg-none text-[13px] text-slate-500 outline-none"
         >
           👍 {post.likeCount} {t('feed.like')}
         </button>
         <button
           onClick={() => onComment(post._id)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: '#64748b',
-            fontSize: 13,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4
-          }}
+          className="flex cursor-pointer items-center gap-1 border-none bg-none text-[13px] text-slate-500 outline-none"
         >
           💬 {post.commentCount} {t('feed.comment')}
         </button>

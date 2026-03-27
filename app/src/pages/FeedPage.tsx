@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useQuery, useAction } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 import PostCard, { type PostWithAuthor } from '../components/PostCard'
 import CommentBox from '../components/CommentBox'
 import PostComposer from '../components/PostComposer'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function FeedPage() {
   const { t } = useTranslation()
@@ -22,23 +23,17 @@ export default function FeedPage() {
   }
 
   if (!feed) {
-    return (
-      <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontFamily: 'system-ui, sans-serif' }}>
-        {t('feed.loading')}
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '32px 16px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', marginBottom: 24 }}>{t('feed.title')}</h1>
+    <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
+      <h1 className="mb-6 text-2xl font-bold text-slate-900">{t('feed.title')}</h1>
 
       <PostComposer onSubmit={handlePostSubmit} />
 
-      {feed.posts.length === 0 && (
-        <p style={{ textAlign: 'center', color: '#64748b', padding: '32px 0' }}>{t('feed.empty')}</p>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {feed.posts.length === 0 && <p className="py-8 text-center text-slate-500">{t('feed.empty')}</p>}
+      <div className="flex flex-col gap-4">
         {(feed.posts as unknown as PostWithAuthor[]).map(post => (
           <div key={post._id}>
             <PostCard

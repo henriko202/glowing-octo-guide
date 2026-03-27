@@ -51,7 +51,7 @@ export default function Nav() {
         </div>
 
         <a
-          href={`${APP_URL}/login`}
+          href={`${APP_URL}`}
           className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold transition-all duration-200 hover:bg-gold hover:text-ink"
         >
           Join the circle

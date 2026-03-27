@@ -2,6 +2,7 @@
 import { useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -47,108 +48,46 @@ export default function MyPostsPage() {
   const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
 
   const me = useQuery(api.users.getMe, { userId })
-  const posts = (useQuery(api.posts.getMyPosts, { userId }) ?? []) as unknown as MyPost[]
+  const posts = useQuery(api.posts.getMyPosts, { userId }) as unknown as MyPost[] | undefined
+
+  if (posts === undefined) {
+    return <LoadingSpinner />
+  }
 
   return (
-    <div
-      style={{
-        maxWidth: 640,
-        margin: '0 auto',
-        padding: '32px 16px',
-        fontFamily: 'system-ui, sans-serif'
-      }}
-    >
-      <h1
-        style={{
-          fontSize: 24,
-          fontWeight: 700,
-          color: '#0f172a',
-          marginBottom: 24
-        }}
-      >
-        My Posts
-      </h1>
+    <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
+      <h1 className="mb-6 text-2xl font-bold text-slate-900">My Posts</h1>
 
       {/* Profile header */}
       {me && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            marginBottom: 24
-          }}
-        >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: '#334155',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#94a3b8',
-              fontWeight: 700
-            }}
-          >
+        <div className="mb-6 flex items-center gap-3">
+          <div className="color-[#94a3b8] flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 font-bold">
             {me.name[0]}
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{me.name}</div>
-            <div style={{ fontSize: 12, color: '#64748b', textTransform: 'capitalize' }}>{me.tier} plan</div>
+            <div className="text-sm font-semibold text-slate-900">{me.name}</div>
+            <div className="text-xs capitalize text-slate-500">{me.tier} plan</div>
           </div>
         </div>
       )}
 
       {/* Section header */}
-      <div
-        style={{
-          fontSize: 10,
-          textTransform: 'uppercase',
-          color: '#64748b',
-          marginBottom: 12,
-          letterSpacing: '0.05em'
-        }}
-      >
-        Your posts ({posts.length})
-      </div>
+      <div className="mb-3 text-[10px] uppercase tracking-wider text-slate-500">Your posts ({posts.length})</div>
 
       {/* Post list */}
       {posts.length === 0 ? (
-        <div
-          style={{
-            borderTop: '1px solid #e2e8f0',
-            paddingTop: 20,
-            textAlign: 'center'
-          }}
-        >
-          <p style={{ fontSize: 13, color: '#64748b' }}>Add posts from the Feed page composer ↑</p>
+        <div className="border-t border-slate-200 pt-5 text-center">
+          <p className="text-[13px] text-slate-500">Add posts from the Feed page composer ↑</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-4">
           {posts.map(post => (
             <div
               key={post._id}
-              style={{
-                borderRadius: 8,
-                border: '1px solid #e2e8f0',
-                overflow: 'hidden',
-                background: '#fff'
-              }}
+              className="overflow-hidden rounded-lg border border-slate-200 bg-white"
             >
               {/* LinkedIn embed — clipped to hide the Like/Comment/Share button bar */}
-              <div
-                style={{
-                  position: 'relative',
-                  // Container height clips the iframe — LinkedIn's action buttons are
-                  // ~52px tall at the bottom of the embed, so we hide that strip.
-                  // The iframe itself renders at full height; overflow hides the buttons.
-                  height: 420,
-                  overflow: 'hidden'
-                }}
-              >
+              <div className="relative h-[420px] overflow-hidden">
                 <iframe
                   src={buildEmbedUrl(post.linkedinPostUrn)}
                   title="LinkedIn post"
@@ -156,38 +95,24 @@ export default function MyPostsPage() {
                   // Render taller than the container so content is visible;
                   // the container's overflow:hidden clips the button bar below.
                   height={480}
-                  style={{ border: 'none', display: 'block' }}
+                  className="block border-none"
                   allowFullScreen
                   loading="lazy"
                 />
                 {/* Opaque overlay covering the bottom action buttons strip.
                     Positioned absolute so it sits over the iframe without shifting layout. */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 52,
-                    background: '#fff',
-                    borderTop: '1px solid #e2e8f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0 14px'
-                  }}
-                >
+                <div className="absolute bottom-0 left-0 right-0 flex h-[52px] items-center justify-between border-t border-slate-200 bg-white px-[14px]">
                   {/* Engagement stats from our own tracking data */}
-                  <span style={{ fontSize: 12, color: '#64748b' }}>
+                  <span className="text-xs text-slate-500">
                     👍 {post.likeCount} · 💬 {post.commentCount}
                   </span>
-                  <span style={{ fontSize: 12, color: '#64748b' }}>
+                  <span className="text-xs text-slate-500">
                     {timeAgo(post.publishedAt)} ·{' '}
                     <a
                       href={buildLinkedInUrl(post)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: '#3b82f6', textDecoration: 'none' }}
+                      className="text-blue-500 no-underline"
                     >
                       View on LinkedIn ↗
                     </a>

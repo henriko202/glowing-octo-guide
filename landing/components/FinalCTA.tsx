@@ -25,7 +25,7 @@ export default function FinalCTA() {
         </h2>
         <p className="text-base text-cream/50">Start your 3-day free trial. No credit card required.</p>
         <a
-          href={`${APP_URL}/login`}
+          href={`${APP_URL}`}
           className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-ink shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
         >
           Sign in with LinkedIn — it&apos;s free

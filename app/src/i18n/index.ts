@@ -17,9 +17,10 @@ i18n
     fallbackLng: 'en',
     supportedLngs: ['en', 'pt', 'es'],
     detection: {
-      order: ['querystring', 'navigator'],
+      order: ['localStorage', 'querystring', 'navigator'],
       lookupQuerystring: 'lang',
-      caches: []
+      lookupLocalStorage: 'i18nextLng',
+      caches: ['localStorage']
     },
     interpolation: {
       escapeValue: false

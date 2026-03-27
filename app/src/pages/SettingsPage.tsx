@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useQuery, useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -46,7 +47,7 @@ export default function SettingsPage() {
   const [identifierSaved, setIdentifierSaved] = useState(false)
 
   if (!me) {
-    return <div style={{ padding: 32, fontFamily: 'system-ui, sans-serif' }}>{t('auth.loading')}</div>
+    return <LoadingSpinner />
   }
 
   const isPro = me.tier === 'pro' || me.tier === 'contact'
@@ -66,32 +67,24 @@ export default function SettingsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto', padding: '32px 16px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', marginBottom: 24 }}>{t('settings.title')}</h1>
+    <div className="mx-auto max-w-[560px] px-4 py-8 font-sans">
+      <h1 className="mb-6 text-2xl font-bold text-slate-900">{t('settings.title')}</h1>
 
-      <section
-        style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 }}
-      >
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', marginTop: 0, marginBottom: 12 }}>
-          {t('settings.profile')}
-        </h2>
-        <p style={{ color: '#64748b', fontSize: 14, margin: '4px 0' }}>
+      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-3 mt-0 text-base font-semibold text-slate-900">{t('settings.profile')}</h2>
+        <p className="my-1 text-sm text-slate-500">
           {t('settings.industry')}: {me.industry ?? t('settings.notSet')}
         </p>
-        <p style={{ color: '#64748b', fontSize: 14, margin: '4px 0' }}>
+        <p className="my-1 text-sm text-slate-500">
           {t('settings.country')}: {me.country ?? t('settings.notSet')}
         </p>
-        <p style={{ color: '#94a3b8', fontSize: 12, marginTop: 8, marginBottom: 0 }}>{t('settings.profileNote')}</p>
+        <p className="mb-0 mt-2 text-xs text-slate-400">{t('settings.profileNote')}</p>
       </section>
 
       {/* LinkedIn identity — required for post ownership verification */}
-      <section
-        style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 }}
-      >
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', marginTop: 0, marginBottom: 4 }}>
-          LinkedIn Identity
-        </h2>
-        <p style={{ color: '#64748b', fontSize: 13, marginTop: 0, marginBottom: 12 }}>
+      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-1 mt-0 text-base font-semibold text-slate-900">LinkedIn Identity</h2>
+        <p className="mb-3 mt-0 text-[13px] text-slate-500">
           {me.linkedinPublicIdentifier ? (
             <>
               Verified as{' '}
@@ -99,7 +92,7 @@ export default function SettingsPage() {
                 href={`https://www.linkedin.com/in/${me.linkedinPublicIdentifier}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}
+                className="font-semibold text-blue-500 no-underline"
               >
                 {me.linkedinPublicIdentifier}
               </a>
@@ -109,7 +102,7 @@ export default function SettingsPage() {
             'Set your LinkedIn profile URL so we can verify that submitted posts belong to your account.'
           )}
         </p>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <input
             type="text"
             value={profileUrl}
@@ -119,64 +112,37 @@ export default function SettingsPage() {
                 ? `https://www.linkedin.com/in/${me.linkedinPublicIdentifier}`
                 : 'https://www.linkedin.com/in/your-name'
             }
-            style={{
-              flex: 1,
-              padding: '7px 10px',
-              borderRadius: 6,
-              border: '1px solid #cbd5e1',
-              fontSize: 13,
-              outline: 'none'
-            }}
+            className="flex-1 rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
           />
           <button
             onClick={handleSaveIdentifier}
             disabled={!extractedVanity || identifierSaving}
-            style={{
-              background: identifierSaved ? '#22c55e' : '#3b82f6',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '7px 16px',
-              fontSize: 13,
-              cursor: !extractedVanity || identifierSaving ? 'not-allowed' : 'pointer',
-              opacity: !extractedVanity || identifierSaving ? 0.6 : 1,
-              whiteSpace: 'nowrap',
-              transition: 'background 0.2s'
-            }}
+            className={`whitespace-nowrap rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${identifierSaved ? 'bg-green-500' : 'bg-blue-500'} ${!extractedVanity || identifierSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
           >
             {identifierSaved ? 'Saved ✓' : identifierSaving ? 'Saving…' : 'Save'}
           </button>
         </div>
         {profileUrl && !extractedVanity && (
-          <p style={{ fontSize: 12, color: '#ef4444', marginTop: 6, marginBottom: 0 }}>
+          <p className="mb-0 mt-[6px] text-xs text-red-500">
             Couldn't extract a username from that URL. Try: https://www.linkedin.com/in/your-name
           </p>
         )}
         {extractedVanity && (
-          <p style={{ fontSize: 12, color: '#64748b', marginTop: 6, marginBottom: 0 }}>
+          <p className="mb-0 mt-[6px] text-xs text-slate-500">
             Will save as: <strong>{extractedVanity}</strong>
           </p>
         )}
       </section>
 
       {isPro ? (
-        <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', marginTop: 0, marginBottom: 8 }}>
-            {t('settings.visibility')}
-          </h2>
-          <p style={{ color: '#64748b', fontSize: 14, marginBottom: 12 }}>{t('settings.visibilityNote')}</p>
-          <p style={{ color: '#3b82f6', fontSize: 13 }}>{t('settings.visibilityComingSoon')}</p>
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-2 mt-0 text-base font-semibold text-slate-900">{t('settings.visibility')}</h2>
+          <p className="mb-3 text-sm text-slate-500">{t('settings.visibilityNote')}</p>
+          <p className="text-[13px] text-blue-500">{t('settings.visibilityComingSoon')}</p>
         </section>
       ) : (
-        <section
-          style={{
-            background: '#eff6ff',
-            border: '1px solid #bfdbfe',
-            borderRadius: 12,
-            padding: 20
-          }}
-        >
-          <p style={{ color: '#1d4ed8', fontSize: 14, margin: 0 }}>{t('settings.upgradePrompt')}</p>
+        <section className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+          <p className="m-0 text-sm text-blue-700">{t('settings.upgradePrompt')}</p>
         </section>
       )}
     </div>

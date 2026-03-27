@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function AuthSuccessPage() {
   const [params] = useSearchParams()
@@ -14,5 +15,5 @@ export default function AuthSuccessPage() {
     navigate('/feed', { replace: true })
   }, [params, navigate])
 
-  return <div style={{ padding: 32 }}>Signing you in...</div>
+  return <LoadingSpinner />
 }

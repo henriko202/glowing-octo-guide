@@ -1,5 +1,12 @@
 // app/src/components/AppNav.tsx
 import { Link, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+
+const LANGUAGES = [
+  { code: 'en', label: 'EN' },
+  { code: 'pt', label: 'PT' },
+  { code: 'es', label: 'ES' }
+]
 
 const NAV_LINKS = [
   { path: '/feed', label: 'Feed' },
@@ -10,67 +17,42 @@ const NAV_LINKS = [
 
 export default function AppNav() {
   const { pathname } = useLocation()
+  const { i18n } = useTranslation()
 
   function handleSignOut() {
     sessionStorage.removeItem('convexUserId')
-    window.location.href = '/login'
+    window.location.href = '/'
   }
 
   return (
-    <nav
-      style={{
-        background: '#0f172a',
-        borderBottom: '1px solid #1e293b',
-        padding: '0 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 0,
-        height: 48,
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: 14
-      }}
-    >
-      <span
-        style={{
-          color: '#e2e8f0',
-          fontWeight: 700,
-          marginRight: 24,
-          fontSize: 13,
-          letterSpacing: '0.02em'
-        }}
-      >
-        🔗 Link Into The SSI
-      </span>
+    <nav className="flex h-12 items-center border-b border-slate-800 bg-slate-900 px-4 font-sans text-sm">
+      <span className="mr-6 text-[13px] font-bold tracking-tight text-slate-200">🔗 Link Into The SSI</span>
       {NAV_LINKS.map(link => (
         <Link
           key={link.path}
           to={link.path}
-          style={{
-            color: pathname === link.path ? '#3b82f6' : '#94a3b8',
-            textDecoration: 'none',
-            padding: '0 12px',
-            height: 48,
-            display: 'flex',
-            alignItems: 'center',
-            borderBottom: pathname === link.path ? '2px solid #3b82f6' : '2px solid transparent',
-            fontSize: 13,
-            fontWeight: pathname === link.path ? 600 : 400
-          }}
+          className={`flex h-12 items-center border-b-2 px-3 text-[13px] no-underline ${pathname === link.path ? 'border-blue-500 font-semibold text-blue-500' : 'border-transparent font-normal text-slate-400'}`}
         >
           {link.label}
         </Link>
       ))}
+      <select
+        value={i18n.language?.split('-')[0] ?? 'en'}
+        onChange={e => i18n.changeLanguage(e.target.value)}
+        className="ml-auto h-7 cursor-pointer rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400 outline-none"
+      >
+        {LANGUAGES.map(lang => (
+          <option
+            key={lang.code}
+            value={lang.code}
+          >
+            {lang.label}
+          </option>
+        ))}
+      </select>
       <button
         onClick={handleSignOut}
-        style={{
-          marginLeft: 'auto',
-          background: 'none',
-          border: 'none',
-          color: '#64748b',
-          cursor: 'pointer',
-          fontSize: 13,
-          padding: '0 8px'
-        }}
+        className="ml-3 cursor-pointer border-none bg-none px-2 text-[13px] text-slate-500 outline-none"
       >
         Sign out
       </button>

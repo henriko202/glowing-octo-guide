@@ -1,6 +1,8 @@
 # Link Into The SSI
 
-A LinkedIn growth accelerator SaaS. Users authorize the app to read their LinkedIn posts, then get access to a real-time feed of posts from all other subscribers. They engage (comment, react) directly from the app using their LinkedIn identity — growing their LinkedIn Social Selling Index (SSI) through consistent, relevant engagement.
+A LinkedIn growth accelerator SaaS. Users authorize the app to read their LinkedIn posts, then get access to a real-time
+feed of posts from all other subscribers. They engage (comment, react) directly from the app using their LinkedIn
+identity — growing their LinkedIn Social Selling Index (SSI) through consistent, relevant engagement.
 
 **Network effect:** More users → richer feed → more engagement → higher SSI → more users.
 
@@ -16,7 +18,7 @@ A LinkedIn growth accelerator SaaS. Users authorize the app to read their Linked
 ```
 
 | Service   | Platform   | URL                             |
-| --------- | ---------- | ------------------------------- |
+|-----------|------------|---------------------------------|
 | landing/  | Vercel     | `linkintothessi.com`            |
 | app/      | Railway    | `app.linkintothessi.com`        |
 | Backend   | Convex.dev | Managed serverless              |
@@ -26,7 +28,7 @@ A LinkedIn growth accelerator SaaS. Users authorize the app to read their Linked
 
 ## Tech Stack
 
-- **Frontend (app):** React 18, Vite, TypeScript, Tailwind CSS, react-i18next (en/pt/es)
+- **Frontend (app):** React 19, Vite, TypeScript, Tailwind CSS, react-i18next (en/pt/es)
 - **Landing:** Next.js 14, TypeScript, Tailwind CSS
 - **Backend:** [Convex](https://convex.dev) — real-time, serverless, TypeScript-native
 - **Auth:** LinkedIn 3-legged OAuth (`r_liteprofile`, `r_member_social`, `w_member_social`, `r_network`)
@@ -124,7 +126,7 @@ The app runs at `http://localhost:5173`, landing at `http://localhost:3000`.
 ## Subscription Tiers
 
 | Feature                             | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) | Contact |
-| ----------------------------------- | :-------------: | :-------------: | :----------: | :-----: |
+|-------------------------------------|:---------------:|:---------------:|:------------:|:-------:|
 | Access feed                         |        ✓        |        ✓        |      ✓       |    ✓    |
 | 3-day free trial                    |        ✓        |        —        |      —       |    —    |
 | Feed filtered by industry + country |        ✗        |    ✓ (auto)     |  ✓ (custom)  |    ✓    |
@@ -166,7 +168,8 @@ Tier gating:
 
 ### Comment / React
 
-User submits → Convex action calls LinkedIn API using the **user's own** stored token → count updated in Convex → real-time push to all clients viewing that post.
+User submits → Convex action calls LinkedIn API using the **user's own** stored token → count updated in Convex →
+real-time push to all clients viewing that post.
 
 ---
 
@@ -260,18 +263,20 @@ cd convex && npx convex deploy
 
 ### App (Railway)
 
-The `app/` directory includes a `Dockerfile` and `nginx.conf` for Railway deployment. Set the same environment variables as local dev (using production values).
+The `app/` directory includes a `Dockerfile` and `nginx.conf` for Railway deployment. Set the same environment variables
+as local dev (using production values).
 
 ### Landing (Vercel)
 
-Connect the repo to Vercel, set the root directory to `landing/`, and add `NEXT_PUBLIC_APP_URL=https://app.linkintothessi.com`.
+Connect the repo to Vercel, set the root directory to `landing/`, and add
+`NEXT_PUBLIC_APP_URL=https://app.linkintothessi.com`.
 
 ---
 
 ## LinkedIn API Notes
 
 | Capability                     | Available? | Notes                                                          |
-| ------------------------------ | ---------- | -------------------------------------------------------------- |
+|--------------------------------|------------|----------------------------------------------------------------|
 | Read own posts                 | ✓          | `r_member_social` scope                                        |
 | Post comments as user          | ✓          | `w_member_social` scope                                        |
 | Post reactions as user         | ✓          | `w_member_social` scope                                        |
@@ -279,7 +284,8 @@ Connect the repo to Vercel, set the root directory to `landing/`, and add `NEXT_
 | Read connections' posts (feed) | ✗          | Requires LinkedIn MDP partner access                           |
 | Token lifetime                 | 60 days    | Refresh flow implemented                                       |
 
-The app requires LinkedIn app approval for `r_member_social` and `w_member_social` scopes before going live. The `privacy` and `terms` pages at `/privacy` and `/terms` are required by LinkedIn for app review.
+The app requires LinkedIn app approval for `r_member_social` and `w_member_social` scopes before going live. The
+`privacy` and `terms` pages at `/privacy` and `/terms` are required by LinkedIn for app review.
 
 ---
 

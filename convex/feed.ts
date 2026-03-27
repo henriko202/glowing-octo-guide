@@ -1,7 +1,7 @@
 // convex/feed.ts
 import { queryGeneric as query } from 'convex/server'
 import { v } from 'convex/values'
-import type { QueryCtx, UserDoc, PostDoc, UserConnectionsDoc } from './convexTypes.js'
+import type { PostDoc, QueryCtx, UserDoc } from './convexTypes.js'
 
 type FeedFilterParams = {
   tier: string
@@ -48,12 +48,10 @@ export function buildFeedFilter(params: FeedFilterParams): FeedFilter {
 
 // Sort score for non-featured posts (higher = shown earlier)
 function postSortScore(
-  author: { linkedinId: string; industry?: string; country?: string } | null,
-  viewer: { industry?: string; country?: string },
-  mutualLinkedinIds: Set<string>
+  author: { industry?: string; country?: string } | null,
+  viewer: { industry?: string; country?: string }
 ): number {
   if (!author) return 0
-  if (mutualLinkedinIds.has(author.linkedinId)) return 3
   if (author.industry && author.industry === viewer.industry) return 2
   if (author.country && author.country === viewer.country) return 1
   return 0
@@ -141,13 +139,6 @@ export const getFeed = query({
       })
     }
 
-    // Load viewer's cached connection IDs for sort scoring
-    const connCache = (await db
-      .query('userConnections')
-      .withIndex('by_user', q => q.eq('userId', viewer._id))
-      .first()) as UserConnectionsDoc | null
-    const mutualLinkedinIds = new Set<string>(connCache?.connectionLinkedinIds ?? [])
-
     // Load all unique authors for sort scoring
     const allAuthorIdStrings = [...new Set<string>(allPosts.map(p => p.authorId as string))]
     const allAuthorIdMap = new Map<string, string>(allPosts.map(p => [p.authorId as string, p.authorId as string]))
@@ -165,8 +156,7 @@ export const getFeed = query({
       .sort((a, b) => {
         const aAuthor = allAuthorMap.get(a.authorId as string) ?? null
         const bAuthor = allAuthorMap.get(b.authorId as string) ?? null
-        const scoreDiff =
-          postSortScore(bAuthor, viewer, mutualLinkedinIds) - postSortScore(aAuthor, viewer, mutualLinkedinIds)
+        const scoreDiff = postSortScore(bAuthor, viewer) - postSortScore(aAuthor, viewer)
         if (scoreDiff !== 0) return scoreDiff
         return b.publishedAt - a.publishedAt
       })

@@ -124,7 +124,6 @@ export interface SubscriptionDoc extends ConvexDocument {
 
 /** AppSettings document shape (mirrors schema.ts) */
 export interface AppSettingsDoc extends ConvexDocument {
-  key: string
   apifySyncEnabled: boolean
   lastApifySyncAt?: number
   lastApifySyncError?: string

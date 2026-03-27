@@ -28,67 +28,24 @@ export default function PostComposer({ onSubmit }: PostComposerProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      style={{
-        background: '#1e293b',
-        borderRadius: 8,
-        padding: 16,
-        marginBottom: 24,
-        border: '1px solid #334155',
-        fontFamily: 'system-ui, sans-serif'
-      }}
+      className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4 font-sans"
     >
-      <div
-        style={{
-          fontSize: 10,
-          textTransform: 'uppercase',
-          color: '#64748b',
-          marginBottom: 8,
-          letterSpacing: '0.05em'
-        }}
-      >
-        Share a post
-      </div>
+      <div className="mb-2 text-[10px] uppercase tracking-wider text-slate-500">Share a post</div>
       <input
         type="url"
         value={url}
         onChange={e => setUrl(e.target.value)}
         placeholder="https://www.linkedin.com/posts/your-name_…"
         disabled={submitting}
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          padding: '8px 10px',
-          borderRadius: 6,
-          border: '1px solid #334155',
-          background: '#0f172a',
-          color: '#e2e8f0',
-          fontSize: 13,
-          marginBottom: 8,
-          outline: 'none'
-        }}
+        className="mb-2 box-border w-full rounded-md border border-slate-700 bg-slate-900 px-2.5 py-2 text-[13px] text-slate-200 outline-none"
       />
-      {error && <p style={{ color: '#f87171', fontSize: 12, marginBottom: 8 }}>{error}</p>}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}
-      >
-        <span style={{ fontSize: 11, color: '#64748b' }}>Paste your LinkedIn post URL</span>
+      {error && <p className="mb-2 text-xs text-red-400">{error}</p>}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-slate-500">Paste your LinkedIn post URL</span>
         <button
           type="submit"
           disabled={!url.trim() || submitting}
-          style={{
-            background: url.trim() && !submitting ? '#3b82f6' : '#1e3a5f',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            padding: '6px 14px',
-            fontSize: 12,
-            cursor: url.trim() && !submitting ? 'pointer' : 'not-allowed',
-            opacity: !url.trim() || submitting ? 0.5 : 1
-          }}
+          className={`rounded-md border-none px-3.5 py-1.5 text-xs font-semibold text-white ${url.trim() && !submitting ? 'cursor-pointer bg-blue-500 opacity-100' : 'cursor-not-allowed bg-blue-900 opacity-50'}`}
         >
           {submitting ? 'Submitting\u2026' : 'Submit \u2192'}
         </button>

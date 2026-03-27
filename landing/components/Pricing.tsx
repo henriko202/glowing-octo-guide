@@ -117,7 +117,7 @@ export default function Pricing() {
                 ))}
               </ul>
               <a
-                href={plan.href ?? `${APP_URL}/login`}
+                href={plan.href ?? `${APP_URL}`}
                 className={`block rounded-xl py-3 text-center text-sm font-semibold transition-all duration-200 ${
                   plan.highlight
                     ? 'bg-lnblue text-cream shadow-[0_0_20px_rgba(0,119,181,0.4)] hover:bg-lnblue-light'

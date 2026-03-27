@@ -1,4 +1,5 @@
 import './i18n'
+import './index.css'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'

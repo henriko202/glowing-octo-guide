@@ -31,48 +31,29 @@ export default function CommentBox({ postId, onClose }: { postId: Id<'posts'>; o
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ padding: '12px 0', fontFamily: 'system-ui, sans-serif' }}
+      className="py-3 font-sans"
     >
       <textarea
         value={text}
         onChange={e => setText(e.target.value)}
         placeholder={t('comment.placeholder')}
-        style={{
-          width: '100%',
-          border: '1px solid #e2e8f0',
-          borderRadius: 8,
-          padding: '8px 12px',
-          fontSize: 13,
-          resize: 'vertical',
-          boxSizing: 'border-box',
-          minHeight: 72,
-          fontFamily: 'inherit'
-        }}
+        className="font-inherit box-border min-h-[72px] w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none"
         disabled={submitting}
         rows={3}
       />
-      {error && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0' }}>{error}</p>}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+      {error && <p className="my-1 text-xs text-red-500">{error}</p>}
+      <div className="mt-2 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 13 }}
+          className="cursor-pointer border-none bg-none text-[13px] text-slate-500 outline-none"
         >
           {t('comment.cancel')}
         </button>
         <button
           type="submit"
           disabled={submitting || !text.trim()}
-          style={{
-            padding: '6px 16px',
-            background: submitting || !text.trim() ? '#93c5fd' : '#2563eb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: submitting || !text.trim() ? 'not-allowed' : 'pointer'
-          }}
+          className={`rounded-md border-none px-4 py-1.5 text-[13px] font-semibold text-white ${submitting || !text.trim() ? 'cursor-not-allowed bg-blue-300' : 'cursor-pointer bg-blue-600'}`}
         >
           {submitting ? t('comment.submitting') : t('comment.submit')}
         </button>

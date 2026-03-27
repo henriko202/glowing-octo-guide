@@ -85,7 +85,7 @@ export default function Hero() {
         {/* CTAs */}
         <div className="flex flex-col items-center justify-center gap-4 pt-2 sm:flex-row">
           <a
-            href={`${APP_URL}/login`}
+            href={`${APP_URL}`}
             className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-ink shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)]"
           >
             Join the circle — it&apos;s free

@@ -1,10 +1,11 @@
 import {
   internalQueryGeneric as internalQuery,
-  queryGeneric as query,
-  mutationGeneric as mutation
+  mutationGeneric as mutation,
+  queryGeneric as query
 } from 'convex/server'
 import { v } from 'convex/values'
-import type { QueryCtx, MutationCtx, UserDoc } from './convexTypes.js'
+import { components } from './_generated/api.js'
+import type { MutationCtx, QueryCtx, UserDoc } from './convexTypes.js'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -48,6 +49,52 @@ export const getMe = query({
     const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, isAdmin, ...safeUser } = user
     // Only include isAdmin if the user IS an admin (needed for frontend route guard)
     return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
+  }
+})
+
+// Public: returns subscription info for billing page display.
+// Sources:
+//   - component's subscriptions table (auto-synced on every Stripe webhook) for active subs
+//   - user document for trialing / no-subscription state
+export const getSubscriptionInfo = query({
+  args: { userId: v.optional(v.id('users')) },
+  handler: async (ctx, { userId }: { userId?: string }) => {
+    if (!userId) return null
+    const db = (ctx as unknown as QueryCtx).db
+    const user = (await db.get(userId)) as UserDoc | null
+    if (!user) return null
+
+    // Query the component's live subscription data (always up-to-date via webhooks)
+    const componentSubs = await ctx.runQuery(components.stripe.public.listSubscriptionsByUserId, { userId })
+
+    // Pick the most recent subscription that isn't fully canceled
+    const activeSub =
+      (componentSubs as Array<{ status: string; stripeSubscriptionId: string; cancelAtPeriodEnd?: boolean }>).filter(
+        s => s.status !== 'canceled'
+      )[0] ?? null
+
+    if (activeSub) {
+      // Resolve tier from our own subscriptions table (component doesn't store tier names)
+      const ourSub = await db
+        .query('subscriptions')
+        .withIndex('by_stripe_id', q => q.eq('stripeSubscriptionId', activeSub.stripeSubscriptionId))
+        .first()
+
+      return {
+        tier: ourSub?.tier ?? user.tier ?? null,
+        status: activeSub.status,
+        cancelAtPeriodEnd: activeSub.cancelAtPeriodEnd ?? false,
+        stripeSubscriptionId: activeSub.stripeSubscriptionId
+      }
+    }
+
+    // No active subscription: trialing, canceled, or never subscribed — tier is empty
+    return {
+      tier: null,
+      status: user.subscriptionStatus ?? 'trialing',
+      cancelAtPeriodEnd: false,
+      stripeSubscriptionId: null
+    }
   }
 })
 

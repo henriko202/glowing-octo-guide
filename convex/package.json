@@ -1,6 +1,7 @@
 {
   "name": "convex",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "convex dev",
     "deploy": "convex deploy",

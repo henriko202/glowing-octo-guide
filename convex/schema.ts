@@ -9,7 +9,7 @@ export default defineSchema({
     profilePictureUrl: v.optional(v.string()),
     industry: v.optional(v.string()),
     country: v.optional(v.string()),
-    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
+    tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))),
     subscriptionStatus: v.union(
       v.literal('trialing'),
       v.literal('active'),
@@ -63,7 +63,7 @@ export default defineSchema({
     stripeSubscriptionId: v.string(),
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     status: v.string(),
-    currentPeriodEnd: v.number()
+    currentPeriodEnd: v.optional(v.number())
   })
     .index('by_user', ['userId'])
     .index('by_stripe_id', ['stripeSubscriptionId']),
@@ -74,16 +74,9 @@ export default defineSchema({
     usedCount: v.number()
   }).index('by_user_month', ['userId', 'month']),
 
-  userConnections: defineTable({
-    userId: v.id('users'),
-    connectionLinkedinIds: v.array(v.string()),
-    lastSyncedAt: v.number()
-  }).index('by_user', ['userId']),
-
   appSettings: defineTable({
-    key: v.string(),
     apifySyncEnabled: v.boolean(),
     lastApifySyncAt: v.optional(v.number()),
     lastApifySyncError: v.optional(v.string())
-  }).index('by_key', ['key'])
+  })
 })
