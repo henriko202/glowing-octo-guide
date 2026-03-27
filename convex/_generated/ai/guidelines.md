@@ -9,7 +9,6 @@
 ```typescript
 import {httpRouter} from "convex/server";
 import {httpAction} from "./_generated/server";
-
 const http = httpRouter();
 http.route({
   path: "/echo",
@@ -50,16 +49,16 @@ import {v} from "convex/values";
 
 export default defineSchema({
   results: defineTable(
-    v.union(
-      v.object({
-        kind: v.literal("error"),
-        errorMessage: v.string(),
-      }),
-      v.object({
-        kind: v.literal("success"),
-        value: v.number(),
-      }),
-    ),
+          v.union(
+                  v.object({
+                    kind: v.literal("error"),
+                    errorMessage: v.string(),
+                  }),
+                  v.object({
+                    kind: v.literal("success"),
+                    value: v.number(),
+                  }),
+          ),
   )
 });
 ```
