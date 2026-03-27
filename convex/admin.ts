@@ -1,7 +1,7 @@
-import type { DatabaseReader, DatabaseWriter } from './_generated/server'
-import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { v } from 'convex/values'
-import type { Doc, Id } from './_generated/dataModel' // SECURITY: Every admin endpoint MUST call this. Reads isAdmin directly from DB.
+import type {DatabaseReader, DatabaseWriter} from './_generated/server'
+import {internalMutation, internalQuery, mutation, query} from './_generated/server'
+import {v} from 'convex/values'
+import type {Doc, Id} from './_generated/dataModel' // SECURITY: Every admin endpoint MUST call this. Reads isAdmin directly from DB.
 
 // SECURITY: Every admin endpoint MUST call this. Reads isAdmin directly from DB.
 // Never trust client-provided "isAdmin" — always verify server-side.
@@ -25,8 +25,6 @@ async function getOrCreateSettings(db: DatabaseWriter): Promise<Doc<'appSettings
   return created
 }
 
-// ─── Public queries/mutations (all require isAdmin check) ────────────────────
-
 export const checkIsAdmin = query({
   args: { userId: v.id('users') },
   handler: async (ctx, { userId }) => {
@@ -40,7 +38,13 @@ export const getSettings = query({
   handler: async (ctx, { userId }) => {
     await assertAdmin(ctx.db, userId)
     const settings = await ctx.db.query('appSettings').first()
-    return settings ?? { apifySyncEnabled: false }
+    return (
+      settings ?? {
+        apifySyncEnabled: false,
+        lastApifySyncAt: undefined,
+        lastApifySyncError: undefined
+      }
+    )
   }
 })
 

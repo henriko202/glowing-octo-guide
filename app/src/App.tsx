@@ -1,3 +1,4 @@
+import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -14,15 +15,19 @@ import LoadingSpinner from './components/LoadingSpinner'
 const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE as string
 const AUTH_URL = `${CONVEX_SITE_URL}/auth/linkedin`
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function RequireAuth({ children }: { children: ReactNode }) {
   const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
   const me = useQuery(api.users.getMe, { userId })
-  if (me === undefined) return <LoadingSpinner />
-  if (me === null) {
-    // Redirect directly to LinkedIn auth
-    window.location.href = AUTH_URL
-    return <LoadingSpinner />
-  }
+
+  useEffect(() => {
+    if (me === null) {
+      // Redirect directly to LinkedIn auth
+      window.location.href = AUTH_URL
+    }
+  }, [me])
+
+  if (me === undefined || me === null) return <LoadingSpinner />
+
   return (
     <>
       <AppNav />

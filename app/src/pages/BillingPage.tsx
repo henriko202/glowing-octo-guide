@@ -33,7 +33,7 @@ export default function BillingPage() {
   const [portalLoading, setPortalLoading] = useState(false)
 
   const isTrialing = me?.subscriptionStatus === 'trialing'
-  const trialEndsAt = (me as { trialEndsAt?: number })?.trialEndsAt
+  const trialEndsAt = me?.trialEndsAt
   const isTrialExpired = isTrialing && !!trialEndsAt && trialEndsAt <= Date.now()
   const isExpired = me?.subscriptionStatus === 'canceled' || me?.subscriptionStatus === 'none' || isTrialExpired
   const trialDaysRemaining = isTrialing ? getTrialDaysRemaining(trialEndsAt) : 0
