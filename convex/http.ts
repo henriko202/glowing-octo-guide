@@ -1,6 +1,7 @@
 // convex/http.ts
-import { httpActionGeneric as httpAction, httpRouter } from 'convex/server'
-import { components, internal } from './_generated/api.js'
+import { httpAction } from './_generated/server'
+import { httpRouter } from 'convex/server'
+import { components, internal } from './_generated/api'
 import { registerRoutes } from '@convex-dev/stripe'
 import {
   buildAuthUrl,

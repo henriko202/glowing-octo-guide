@@ -1,29 +1,23 @@
-import {
-  internalQueryGeneric as internalQuery,
-  mutationGeneric as mutation,
-  queryGeneric as query
-} from 'convex/server'
+import { internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
-import { components } from './_generated/api.js'
-import type { MutationCtx, QueryCtx, UserDoc } from './convexTypes.js'
+import { components } from './_generated/api'
+import type { UserDoc } from './convexTypes'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
   args: { userId: v.id('users') },
-  handler: async (ctx, { userId }: { userId: string }) => {
-    const db = (ctx as unknown as QueryCtx).db
-    return db.get(userId)
+  handler: async (ctx, { userId }) => {
+    return ctx.db.get(userId)
   }
 })
 
-// Internal: returns all users with active or trialing subscriptions
+// Internal: returns all users with active subscriptions (excludes trialing)
 export const getActiveSubscribers = internalQuery({
   args: {},
   handler: async ctx => {
-    const db = (ctx as unknown as QueryCtx).db
-    return db
+    return ctx.db
       .query('users')
-      .filter(q => q.or(q.eq(q.field('subscriptionStatus'), 'active'), q.eq(q.field('subscriptionStatus'), 'trialing')))
+      .filter(q => q.eq(q.field('subscriptionStatus'), 'active'))
       .collect()
   }
 })
@@ -39,10 +33,9 @@ export const getActiveSubscribers = internalQuery({
 // for a server-enforced identity guarantee.
 export const getMe = query({
   args: { userId: v.optional(v.id('users')) },
-  handler: async (ctx, { userId }: { userId?: string }) => {
+  handler: async (ctx, { userId }) => {
     if (!userId) return null
-    const queryCtx = ctx as unknown as QueryCtx
-    const user = (await queryCtx.db.get(userId)) as UserDoc | null
+    const user = (await ctx.db.get(userId)) as UserDoc | null
     if (!user) return null
     // IMPORTANT: Strip tokens and isAdmin before returning to client
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -58,10 +51,9 @@ export const getMe = query({
 //   - user document for trialing / no-subscription state
 export const getSubscriptionInfo = query({
   args: { userId: v.optional(v.id('users')) },
-  handler: async (ctx, { userId }: { userId?: string }) => {
+  handler: async (ctx, { userId }) => {
     if (!userId) return null
-    const db = (ctx as unknown as QueryCtx).db
-    const user = (await db.get(userId)) as UserDoc | null
+    const user = (await ctx.db.get(userId)) as UserDoc | null
     if (!user) return null
 
     // Query the component's live subscription data (always up-to-date via webhooks)
@@ -75,7 +67,7 @@ export const getSubscriptionInfo = query({
 
     if (activeSub) {
       // Resolve tier from our own subscriptions table (component doesn't store tier names)
-      const ourSub = await db
+      const ourSub = await ctx.db
         .query('subscriptions')
         .withIndex('by_stripe_id', q => q.eq('stripeSubscriptionId', activeSub.stripeSubscriptionId))
         .first()
@@ -106,9 +98,8 @@ export const setPublicIdentifier = mutation({
     userId: v.id('users'),
     publicIdentifier: v.string()
   },
-  handler: async (ctx, { userId, publicIdentifier }: { userId: string; publicIdentifier: string }) => {
-    const db = (ctx as unknown as MutationCtx).db
+  handler: async (ctx, { userId, publicIdentifier }) => {
     // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
-    await db.patch(userId, { linkedinPublicIdentifier: publicIdentifier.trim().toLowerCase() })
+    await ctx.db.patch(userId, { linkedinPublicIdentifier: publicIdentifier.trim().toLowerCase() })
   }
 })

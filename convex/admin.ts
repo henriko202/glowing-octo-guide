@@ -1,16 +1,12 @@
-import {
-  internalMutationGeneric as internalMutation,
-  internalQueryGeneric as internalQuery,
-  mutationGeneric as mutation,
-  queryGeneric as query
-} from 'convex/server'
+import type { DatabaseReader, DatabaseWriter } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
-import type { AppSettingsDoc, MutationCtx, QueryCtx, UserDoc } from './convexTypes.js'
+import type { Doc, Id } from './_generated/dataModel' // SECURITY: Every admin endpoint MUST call this. Reads isAdmin directly from DB.
 
 // SECURITY: Every admin endpoint MUST call this. Reads isAdmin directly from DB.
 // Never trust client-provided "isAdmin" — always verify server-side.
-async function assertAdmin(db: QueryCtx['db'] | MutationCtx['db'], userId: string): Promise<UserDoc> {
-  const user = (await db.get(userId)) as UserDoc | null
+async function assertAdmin(db: DatabaseReader, userId: Id<'users'>): Promise<Doc<'users'>> {
+  const user = await db.get(userId)
   if (!user || !user.isAdmin) {
     throw new Error('Forbidden: admin access required')
   }
@@ -18,43 +14,42 @@ async function assertAdmin(db: QueryCtx['db'] | MutationCtx['db'], userId: strin
 }
 
 // Returns global app settings (creates default if missing)
-async function getOrCreateSettings(db: MutationCtx['db']): Promise<AppSettingsDoc> {
-  const existing = (await db.query('appSettings').first()) as AppSettingsDoc | null
+async function getOrCreateSettings(db: DatabaseWriter): Promise<Doc<'appSettings'>> {
+  const existing = await db.query('appSettings').first()
   if (existing) return existing
   const id = await db.insert('appSettings', {
     apifySyncEnabled: false
   })
-  return { _id: id, _creationTime: Date.now(), apifySyncEnabled: false }
+  const created = await db.get(id)
+  if (!created) throw new Error('Failed to create settings')
+  return created
 }
 
 // ─── Public queries/mutations (all require isAdmin check) ────────────────────
 
 export const checkIsAdmin = query({
   args: { userId: v.id('users') },
-  handler: async (ctx, { userId }: { userId: string }) => {
-    const db = (ctx as unknown as QueryCtx).db
-    const user = (await db.get(userId)) as UserDoc | null
+  handler: async (ctx, { userId }) => {
+    const user = await ctx.db.get(userId)
     return user?.isAdmin === true
   }
 })
 
 export const getSettings = query({
   args: { userId: v.id('users') },
-  handler: async (ctx, { userId }: { userId: string }) => {
-    const db = (ctx as unknown as QueryCtx).db
-    await assertAdmin(db, userId)
-    const settings = (await db.query('appSettings').first()) as AppSettingsDoc | null
-    return settings ?? { apifySyncEnabled: false, lastApifySyncAt: undefined, lastApifySyncError: undefined }
+  handler: async (ctx, { userId }) => {
+    await assertAdmin(ctx.db, userId)
+    const settings = await ctx.db.query('appSettings').first()
+    return settings ?? { apifySyncEnabled: false }
   }
 })
 
 export const toggleApifySync = mutation({
   args: { userId: v.id('users'), enabled: v.boolean() },
-  handler: async (ctx, { userId, enabled }: { userId: string; enabled: boolean }) => {
-    const db = (ctx as unknown as MutationCtx).db
-    await assertAdmin(db, userId)
-    const settings = await getOrCreateSettings(db)
-    await db.patch(settings._id, { apifySyncEnabled: enabled })
+  handler: async (ctx, { userId, enabled }) => {
+    await assertAdmin(ctx.db, userId)
+    const settings = await getOrCreateSettings(ctx.db)
+    await ctx.db.patch(settings._id, { apifySyncEnabled: enabled })
   }
 })
 
@@ -63,8 +58,7 @@ export const toggleApifySync = mutation({
 export const getSettingsInternal = internalQuery({
   args: {},
   handler: async ctx => {
-    const db = (ctx as unknown as QueryCtx).db
-    return (await db.query('appSettings').first()) as AppSettingsDoc | null
+    return ctx.db.query('appSettings').first()
   }
 })
 
@@ -73,11 +67,10 @@ export const updateSyncStatus = internalMutation({
     lastApifySyncAt: v.number(),
     lastApifySyncError: v.optional(v.string())
   },
-  handler: async (ctx, args: { lastApifySyncAt: number; lastApifySyncError?: string }) => {
-    const db = (ctx as unknown as MutationCtx).db
-    const settings = await db.query('appSettings').first()
+  handler: async (ctx, args) => {
+    const settings = await ctx.db.query('appSettings').first()
     if (settings) {
-      await db.patch(settings._id, {
+      await ctx.db.patch(settings._id, {
         lastApifySyncAt: args.lastApifySyncAt,
         lastApifySyncError: args.lastApifySyncError
       })

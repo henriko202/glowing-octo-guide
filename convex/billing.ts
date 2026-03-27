@@ -1,32 +1,24 @@
 // convex/billing.ts
 // Uses @convex-dev/stripe component for checkout sessions and customer portal.
 
-import {
-  actionGeneric as action,
-  internalMutationGeneric as internalMutation,
-  makeFunctionReference
-} from 'convex/server'
+import { action, internalMutation } from './_generated/server'
 import { v } from 'convex/values'
-import { components, internal } from './_generated/api.js'
+import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
-import type { ActionCtx, MutationCtx, UserDoc } from './convexTypes.js'
 
 const stripeClient = new StripeSubscriptions(components.stripe, {})
 
-const getUserWithTokens = makeFunctionReference<'query'>('users:getWithTokens')
-
 export const createCheckoutSession = action({
   args: { priceId: v.string(), userId: v.id('users') },
-  handler: async (ctx, { priceId, userId }: { priceId: string; userId: string }) => {
-    const actionCtx = ctx as unknown as ActionCtx
-    const user = await actionCtx.runQuery<UserDoc | null>(getUserWithTokens, { userId })
+  handler: async (ctx, { priceId, userId }) => {
+    const user = await ctx.runQuery(internal.users.getWithTokens, { userId })
     if (!user) throw new Error('User not found')
 
     // Get or create Stripe customer via the component
     const customer = await stripeClient.getOrCreateCustomer(ctx, {
-      userId: user._id as string,
+      userId: user._id,
       email: undefined,
-      name: user.name as string
+      name: user.name
     })
 
     const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
@@ -40,14 +32,14 @@ export const createCheckoutSession = action({
       successUrl: `${appUrl}/billing?success=true`,
       cancelUrl: `${appUrl}/billing`,
       subscriptionMetadata: {
-        convexUserId: user._id as string
+        convexUserId: user._id
       }
     })
 
     // Store stripeCustomerId on our users table so webhook handlers can find the user.
     // MUST happen before checkout completes — the webhook needs this to link subscription → user.
     if (!user.stripeCustomerId) {
-      await actionCtx.runMutation(internal.billing.setStripeCustomerId, {
+      await ctx.runMutation(internal.billing.setStripeCustomerId, {
         userId: user._id,
         stripeCustomerId: customer.customerId
       })
@@ -60,16 +52,15 @@ export const createCheckoutSession = action({
 // Customer portal session — lets users manage their subscription
 export const createPortalSession = action({
   args: { userId: v.id('users') },
-  handler: async (ctx, { userId }: { userId: string }) => {
-    const actionCtx = ctx as unknown as ActionCtx
-    const user = await actionCtx.runQuery<UserDoc | null>(getUserWithTokens, { userId })
+  handler: async (ctx, { userId }) => {
+    const user = await ctx.runQuery(internal.users.getWithTokens, { userId })
     if (!user) throw new Error('User not found')
     if (!user.stripeCustomerId) throw new Error('No Stripe customer found')
 
     const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
 
     const portal = await stripeClient.createCustomerPortalSession(ctx, {
-      customerId: user.stripeCustomerId as string,
+      customerId: user.stripeCustomerId,
       returnUrl: `${appUrl}/billing`
     })
 
@@ -80,8 +71,7 @@ export const createPortalSession = action({
 // Store Stripe customer ID on user record
 export const setStripeCustomerId = internalMutation({
   args: { userId: v.id('users'), stripeCustomerId: v.string() },
-  handler: async (ctx, { userId, stripeCustomerId }: { userId: string; stripeCustomerId: string }) => {
-    const db = (ctx as unknown as MutationCtx).db
-    await db.patch(userId, { stripeCustomerId })
+  handler: async (ctx, { userId, stripeCustomerId }) => {
+    await ctx.db.patch(userId, { stripeCustomerId })
   }
 })

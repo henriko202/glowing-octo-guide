@@ -67,6 +67,9 @@ export interface QueryCtx {
 export interface MutationCtx {
   db: ConvexDb
   auth: ConvexAuth
+  scheduler: {
+    runAfter(delayMs: number, ref: unknown, args: Record<string, unknown>): Promise<unknown>
+  }
 }
 
 /** Minimal ctx for action handlers */

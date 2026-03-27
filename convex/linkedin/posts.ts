@@ -28,35 +28,6 @@ export function parseLinkedInPost(raw: LinkedInUGCPost): ParsedPost {
   }
 }
 
-/**
- * Diagnostic probe — calls memberCreatorPostAnalytics?q=me for the rolling
- * last 7 days and logs the raw JSON response. Used to discover what LinkedIn
- * actually returns with our Partner API access (especially post URNs/links).
- * Remove or replace once we know the response shape.
- */
-export async function probePostAnalyticsAPI(accessToken: string): Promise<void> {
-  const today = new Date()
-  const sevenDaysAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000)
-
-  const dateRange = [
-    `start:(day:${sevenDaysAgo.getUTCDate()},month:${sevenDaysAgo.getUTCMonth() + 1},year:${sevenDaysAgo.getUTCFullYear()})`,
-    `end:(day:${today.getUTCDate()},month:${today.getUTCMonth() + 1},year:${today.getUTCFullYear()})`
-  ].join(',')
-
-  const url = `https://api.linkedin.com/rest/memberCreatorPostAnalytics?q=me&queryType=MEMBERS_REACHED&aggregation=TOTAL&dateRange=(${dateRange})`
-
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'LinkedIn-Version': '202603',
-      'X-Restli-Protocol-Version': '2.0.0'
-    }
-  })
-
-  const body = await res.text()
-  console.log(`[probePostAnalyticsAPI] status=${res.status} body=${body}`)
-}
-
 // Returns null when the r_member_social scope has not been granted (403).
 // The caller should treat null as "skip silently" rather than an error.
 // r_member_social requires LinkedIn Marketing Developer Platform (MDP) approval —
