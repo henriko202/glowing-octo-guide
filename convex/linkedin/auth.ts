@@ -25,6 +25,7 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
 
   if (existing) {
     const patch: Record<string, unknown> = {
+      // SECURITY: isAdmin is intentionally excluded — it can only be set directly in the DB
       name: args.name,
       headline: args.headline,
       profilePictureUrl: args.profilePictureUrl,
@@ -42,6 +43,7 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
 
   const trialEndsAt = Date.now() + TRIAL_DURATION_MS
   return await db.insert('users', {
+    // SECURITY: isAdmin is intentionally excluded — only settable via direct DB edit
     linkedinId: args.linkedinId,
     name: args.name,
     headline: args.headline,

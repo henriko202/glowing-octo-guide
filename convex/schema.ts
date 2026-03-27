@@ -26,6 +26,9 @@ export default defineSchema({
     // Set once by the user in Settings. Used for post ownership verification without
     // requiring LinkedIn Partner API access.
     linkedinPublicIdentifier: v.optional(v.string()),
+    // Admin flag — MUST only be set directly in the database.
+    // All application code (upsertUser, setPublicIdentifier, etc.) must ignore this field.
+    isAdmin: v.optional(v.boolean()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
@@ -75,5 +78,12 @@ export default defineSchema({
     userId: v.id('users'),
     connectionLinkedinIds: v.array(v.string()),
     lastSyncedAt: v.number()
-  }).index('by_user', ['userId'])
+  }).index('by_user', ['userId']),
+
+  appSettings: defineTable({
+    key: v.string(),
+    apifySyncEnabled: v.boolean(),
+    lastApifySyncAt: v.optional(v.number()),
+    lastApifySyncError: v.optional(v.string())
+  }).index('by_key', ['key'])
 })

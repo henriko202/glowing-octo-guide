@@ -8,6 +8,7 @@ import SettingsPage from './pages/SettingsPage'
 import BillingPage from './pages/BillingPage'
 import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
+import AdminPage from './pages/AdminPage'
 import AppNav from './components/AppNav'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -69,6 +70,14 @@ export default function App() {
         element={
           <RequireAuth>
             <BillingPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <RequireAuth>
+            <AdminPage />
           </RequireAuth>
         }
       />

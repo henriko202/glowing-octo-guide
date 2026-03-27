@@ -2,7 +2,7 @@
 import { internalMutationGeneric as internalMutation, internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
-import { fetchUserPosts } from '../linkedin/posts.js'
+import { fetchUserPosts, probePostAnalyticsAPI } from '../linkedin/posts.js'
 import type { MutationCtx, ActionCtx, UserDoc } from '../convexTypes.js'
 
 interface UpsertPostArgs {
@@ -73,6 +73,9 @@ export const syncUserPosts = internalAction({
       console.warn(`Token for user ${userId} expires within 7 days — re-auth needed`)
     }
 
+    // Diagnostic probe — logs raw analytics API response to Convex logs
+    await probePostAnalyticsAPI(user.linkedinAccessToken as string)
+
     const posts = await fetchUserPosts(user.linkedinAccessToken as string, user.linkedinId as string)
 
     if (posts === null) {
@@ -94,11 +97,22 @@ export const syncUserPosts = internalAction({
   }
 })
 
-// Fan-out action — queries all active subscribers and dispatches per-user syncs
+// Fan-out action — checks if Apify sync is enabled, then delegates accordingly
 export const syncAllPosts = internalAction({
   args: {},
   handler: async ctx => {
     const actionCtx = ctx as unknown as ActionCtx
+
+    // Check if Apify sync is enabled
+    const settings = await actionCtx.runQuery(internal.admin.getSettingsInternal, {})
+
+    if ((settings as Record<string, unknown> | null)?.apifySyncEnabled) {
+      // Delegate to Apify-based sync
+      await actionCtx.runAction(internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
+      return
+    }
+
+    // Fallback: original LinkedIn API sync (will no-op due to missing r_member_social)
     const users = await actionCtx.runQuery<UserDoc[]>(internal.users.getActiveSubscribers, {})
     await Promise.allSettled(
       users.map(u => actionCtx.runAction(internal.jobs.syncPosts.syncUserPosts, { userId: u._id }))

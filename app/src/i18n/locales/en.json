@@ -69,5 +69,14 @@
   },
   "auth": {
     "loading": "Loading..."
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "forbidden": "You do not have admin access.",
+    "apifySync": "Apify Post Sync",
+    "apifySyncDescription": "Scrapes LinkedIn posts for all active users every hour via Apify.",
+    "enable": "Enable",
+    "disable": "Disable",
+    "lastSync": "Last sync"
   }
 }

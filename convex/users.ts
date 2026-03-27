@@ -43,10 +43,11 @@ export const getMe = query({
     const queryCtx = ctx as unknown as QueryCtx
     const user = (await queryCtx.db.get(userId)) as UserDoc | null
     if (!user) return null
-    // IMPORTANT: Strip tokens before returning to client
+    // IMPORTANT: Strip tokens and isAdmin before returning to client
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, ...safeUser } = user
-    return safeUser
+    const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, isAdmin, ...safeUser } = user
+    // Only include isAdmin if the user IS an admin (needed for frontend route guard)
+    return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
   }
 })
 

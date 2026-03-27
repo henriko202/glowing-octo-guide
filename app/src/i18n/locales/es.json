@@ -69,5 +69,14 @@
   },
   "auth": {
     "loading": "Cargando..."
+  },
+  "admin": {
+    "title": "Panel de Administración",
+    "forbidden": "No tienes acceso de administrador.",
+    "apifySync": "Sincronización de Publicaciones via Apify",
+    "apifySyncDescription": "Recopila publicaciones de LinkedIn para todos los usuarios activos cada hora via Apify.",
+    "enable": "Activar",
+    "disable": "Desactivar",
+    "lastSync": "Última sincronización"
   }
 }

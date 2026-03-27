@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as billing from "../billing.js";
 import type * as convexTypes from "../convexTypes.js";
 import type * as convex__generated_api from "../convex/_generated/api.js";
@@ -18,6 +19,7 @@ import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
 import type * as jobs_syncConnections from "../jobs/syncConnections.js";
 import type * as jobs_syncPosts from "../jobs/syncPosts.js";
+import type * as jobs_syncPostsApify from "../jobs/syncPostsApify.js";
 import type * as linkedin_auth from "../linkedin/auth.js";
 import type * as linkedin_oauth from "../linkedin/oauth.js";
 import type * as linkedin_parsePostUrl from "../linkedin/parsePostUrl.js";
@@ -35,6 +37,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   billing: typeof billing;
   convexTypes: typeof convexTypes;
   "convex/_generated/api": typeof convex__generated_api;
@@ -45,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   interactions: typeof interactions;
   "jobs/syncConnections": typeof jobs_syncConnections;
   "jobs/syncPosts": typeof jobs_syncPosts;
+  "jobs/syncPostsApify": typeof jobs_syncPostsApify;
   "linkedin/auth": typeof linkedin_auth;
   "linkedin/oauth": typeof linkedin_oauth;
   "linkedin/parsePostUrl": typeof linkedin_parsePostUrl;

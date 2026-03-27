@@ -93,6 +93,7 @@ export interface UserDoc extends ConvexDocument {
   linkedinRefreshToken?: string
   tokenExpiresAt?: number
   linkedinPublicIdentifier?: string
+  isAdmin?: boolean
   createdAt: number
 }
 
@@ -119,6 +120,14 @@ export interface SubscriptionDoc extends ConvexDocument {
   tier: 'starter' | 'growth' | 'pro' | 'contact'
   status: string
   currentPeriodEnd: number
+}
+
+/** AppSettings document shape (mirrors schema.ts) */
+export interface AppSettingsDoc extends ConvexDocument {
+  key: string
+  apifySyncEnabled: boolean
+  lastApifySyncAt?: number
+  lastApifySyncError?: string
 }
 
 /** UserConnections document shape (mirrors schema.ts) */
