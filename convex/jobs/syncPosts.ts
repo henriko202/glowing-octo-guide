@@ -3,21 +3,6 @@ import { internalAction, internalMutation } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 
-interface UpsertPostArgs {
-  linkedinPostUrn: string
-  authorId: string
-  content: string
-  publishedAt: number
-  likeCount: number
-  commentCount: number
-  mediaUrls: string[]
-  isFeatured: boolean
-  visibilityIndustries: string[]
-  visibilityCountries: string[]
-  hidden: boolean
-  sourceUrl?: string
-}
-
 // Upsert a single post — inserts new, updates like/comment counts on existing
 export const upsertPost = internalMutation({
   args: {

@@ -2,6 +2,7 @@
 import { action, internalMutation, internalQuery } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
+import { Id } from './_generated/dataModel'
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
@@ -39,7 +40,7 @@ export const commentOnPost = action({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
 
-    const user = await ctx.runQuery(internal.users.getWithTokens, { userId: identity.subject as any })
+    const user = await ctx.runQuery(internal.users.getWithTokens, { userId: identity.subject as Id<'users'> })
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
@@ -87,7 +88,7 @@ export const reactToPost = action({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error('Not authenticated')
 
-    const user = await ctx.runQuery(internal.users.getWithTokens, { userId: identity.subject as any })
+    const user = await ctx.runQuery(internal.users.getWithTokens, { userId: identity.subject as Id<'users'> })
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
