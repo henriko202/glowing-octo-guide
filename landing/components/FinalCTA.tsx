@@ -19,11 +19,11 @@ export default function FinalCTA() {
       />
       <div className="relative z-10 mx-auto max-w-xl space-y-6">
         <h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
-          Ready to join
+          Ready to start
           <br />
-          <span className="italic text-gold">the circle?</span>
+          <span className="italic text-gold">climbing?</span>
         </h2>
-        <p className="text-base text-cream/50">Start your 3-day free trial. No credit card required.</p>
+        <p className="text-base text-cream/50">Start your 3-day free trial. See your first SSI gains within a week.</p>
         <a
           href={`${APP_URL}`}
           className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-ink shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
