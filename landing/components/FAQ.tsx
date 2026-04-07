@@ -46,12 +46,15 @@ export default function FAQ() {
           {FAQS.map((faq, i) => (
             <div key={faq.q}>
               <button
+                id={`faq-btn-${i}`}
+                aria-controls={`faq-panel-${i}`}
+                aria-expanded={openIndex === i}
                 className="flex w-full items-center justify-between gap-6 py-6 text-left"
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                aria-expanded={openIndex === i}
               >
                 <span className="text-base font-medium text-cream">{faq.q}</span>
                 <span
+                  aria-hidden="true"
                   className="flex-shrink-0 font-display text-2xl text-gold transition-transform duration-200"
                   style={{ transform: openIndex === i ? 'rotate(45deg)' : 'rotate(0deg)' }}
                 >
@@ -59,8 +62,11 @@ export default function FAQ() {
                 </span>
               </button>
               <div
+                id={`faq-panel-${i}`}
+                role="region"
+                aria-labelledby={`faq-btn-${i}`}
                 className="overflow-hidden transition-all duration-300 ease-in-out"
-                style={{ maxHeight: openIndex === i ? '400px' : '0px' }}
+                style={{ maxHeight: openIndex === i ? '600px' : '0px' }}
               >
                 <p className="pb-6 text-sm leading-relaxed text-cream/50">{faq.a}</p>
               </div>

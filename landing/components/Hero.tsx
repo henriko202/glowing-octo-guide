@@ -99,8 +99,10 @@ export default function Hero() {
           </Link>
         </div>
 
-        <p className="text-xs tracking-wide text-cream/30">3-day free trial · No credit card required</p>
-        <p className="text-sm text-cream-muted">Join 500+ professionals already growing their SSI</p>
+        <div className="flex flex-col items-center gap-1.5">
+          <p className="text-xs tracking-wide text-cream/30">3-day free trial · No credit card required</p>
+          <p className="text-sm text-cream-muted">Join 500+ professionals already growing their SSI</p>
+        </div>
       </div>
 
       {/* Scroll indicator */}

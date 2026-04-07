@@ -7,7 +7,7 @@ const STATS = [
 
 export default function StatsBar() {
   return (
-    <section id="our-numbers" className="bg-ink-800 px-6 py-16">
+    <section id="our-numbers" className="bg-ink px-6 py-16">
       <div className="mx-auto max-w-5xl">
         <div className="grid grid-cols-2 gap-y-10 md:grid-cols-4 md:gap-0 md:divide-x md:divide-gold/20">
           {STATS.map(stat => (
@@ -15,6 +15,7 @@ export default function StatsBar() {
               <p
                 className="animate-shimmer font-display text-4xl font-semibold"
                 style={{
+                  color: '#F5F0E8',
                   background: 'linear-gradient(90deg, #F5F0E8 0%, #C9963E 50%, #F5F0E8 100%)',
                   backgroundSize: '200% auto',
                   WebkitBackgroundClip: 'text',
