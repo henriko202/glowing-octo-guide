@@ -44,7 +44,7 @@ export default function FAQ() {
 
         <div className="divide-y divide-ink-600">
           {FAQS.map((faq, i) => (
-            <div key={i}>
+            <div key={faq.q}>
               <button
                 className="flex w-full items-center justify-between gap-6 py-6 text-left"
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
