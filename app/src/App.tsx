@@ -1,7 +1,6 @@
 import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from 'convex/react'
-import type { Id } from '../../convex/_generated/dataModel'
 import { api } from './convex'
 import FeedPage from './pages/FeedPage'
 import SettingsPage from './pages/SettingsPage'
@@ -16,8 +15,8 @@ const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE as string
 const AUTH_URL = `${CONVEX_SITE_URL}/auth/linkedin`
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
-  const me = useQuery(api.users.getMe, { userId })
+  const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
+  const me = useQuery(api.users.getMe, { sessionToken })
 
   useEffect(() => {
     if (me === null) {

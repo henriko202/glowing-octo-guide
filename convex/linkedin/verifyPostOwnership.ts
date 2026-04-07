@@ -90,5 +90,6 @@ export async function verifyPostOwnership(
     }
   }
 
-  throw new Error(`LinkedIn API error: ${ugcRes.status}`)
+  console.error(`LinkedIn UGC API error: ${ugcRes.status}`)
+  throw new Error('Could not verify post ownership. Please try again or set your LinkedIn profile URL in Settings.')
 }

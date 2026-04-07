@@ -19,6 +19,8 @@ import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
 import type * as jobs_syncPosts from "../jobs/syncPosts.js";
 import type * as jobs_syncPostsApify from "../jobs/syncPostsApify.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as linkedin_auth from "../linkedin/auth.js";
 import type * as linkedin_oauth from "../linkedin/oauth.js";
 import type * as linkedin_parsePostUrl from "../linkedin/parsePostUrl.js";
@@ -26,6 +28,7 @@ import type * as linkedin_posts from "../linkedin/posts.js";
 import type * as linkedin_types from "../linkedin/types.js";
 import type * as linkedin_verifyPostOwnership from "../linkedin/verifyPostOwnership.js";
 import type * as posts from "../posts.js";
+import type * as sessions from "../sessions.js";
 import type * as stripe from "../stripe.js";
 import type * as users from "../users.js";
 
@@ -47,6 +50,8 @@ declare const fullApi: ApiFromModules<{
   interactions: typeof interactions;
   "jobs/syncPosts": typeof jobs_syncPosts;
   "jobs/syncPostsApify": typeof jobs_syncPostsApify;
+  "lib/auth": typeof lib_auth;
+  "lib/rateLimit": typeof lib_rateLimit;
   "linkedin/auth": typeof linkedin_auth;
   "linkedin/oauth": typeof linkedin_oauth;
   "linkedin/parsePostUrl": typeof linkedin_parsePostUrl;
@@ -54,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   "linkedin/types": typeof linkedin_types;
   "linkedin/verifyPostOwnership": typeof linkedin_verifyPostOwnership;
   posts: typeof posts;
+  sessions: typeof sessions;
   stripe: typeof stripe;
   users: typeof users;
 }>;

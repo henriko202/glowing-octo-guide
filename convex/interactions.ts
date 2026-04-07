@@ -2,7 +2,8 @@
 import { action, internalMutation, internalQuery } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
-import { Id } from './_generated/dataModel'
+import type { Doc } from './_generated/dataModel'
+import { requireAuthAction } from './lib/auth'
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
@@ -34,14 +35,24 @@ export const incrementLikeCount = internalMutation({
 export const commentOnPost = action({
   args: {
     postId: v.id('posts'),
-    commentText: v.string()
+    commentText: v.string(),
+    sessionToken: v.string()
   },
-  handler: async (ctx, { postId, commentText }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error('Not authenticated')
+  handler: async (ctx, { postId, commentText, sessionToken }) => {
+    if (commentText.length > 3000) {
+      throw new Error('Comment text exceeds maximum length of 3000 characters')
+    }
 
-    const user = await ctx.runQuery(internal.users.getWithTokens, { userId: identity.subject as Id<'users'> })
+    const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
+
+    // Rate limit: TODO — set the max comments per hour appropriate for your use case
+    // e.g. 20/hr to prevent spam while allowing active engagement
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'commentOnPost',
+      maxPerHour: 20
+    })
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
     if (!post) throw new Error('Post not found')
@@ -63,7 +74,8 @@ export const commentOnPost = action({
     )
     if (!res.ok) {
       const err = await res.text()
-      throw new Error(`LinkedIn comment failed: ${res.status} ${err}`)
+      console.error(`LinkedIn comment failed: ${res.status}`, err)
+      throw new Error('Failed to post comment. Please try again.')
     }
 
     await ctx.runMutation(internal.interactions.incrementCommentCount, { postId })
@@ -82,14 +94,20 @@ export const reactToPost = action({
       v.literal('FUNNY'),
       v.literal('LOVE'),
       v.literal('INSIGHTFUL')
-    )
+    ),
+    sessionToken: v.string()
   },
-  handler: async (ctx, { postId, reactionType }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) throw new Error('Not authenticated')
-
-    const user = await ctx.runQuery(internal.users.getWithTokens, { userId: identity.subject as Id<'users'> })
+  handler: async (ctx, { postId, reactionType, sessionToken }) => {
+    const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
+
+    // Rate limit: TODO — set the max reactions per hour appropriate for your use case
+    // e.g. 30/hr to allow active engagement without overwhelming LinkedIn API
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'reactToPost',
+      maxPerHour: 30
+    })
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
     if (!post) throw new Error('Post not found')
@@ -108,7 +126,8 @@ export const reactToPost = action({
     })
     if (!res.ok) {
       const err = await res.text()
-      throw new Error(`LinkedIn reaction failed: ${res.status} ${err}`)
+      console.error(`LinkedIn reaction failed: ${res.status}`, err)
+      throw new Error('Failed to post reaction. Please try again.')
     }
 
     await ctx.runMutation(internal.interactions.incrementLikeCount, { postId })

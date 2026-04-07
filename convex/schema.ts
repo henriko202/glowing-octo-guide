@@ -78,5 +78,28 @@ export default defineSchema({
     apifySyncEnabled: v.boolean(),
     lastApifySyncAt: v.optional(v.number()),
     lastApifySyncError: v.optional(v.string())
+  }),
+
+  sessions: defineTable({
+    token: v.string(),
+    userId: v.id('users'),
+    expiresAt: v.number()
   })
+    .index('by_token', ['token'])
+    .index('by_userId', ['userId']),
+
+  rateLimits: defineTable({
+    userId: v.id('users'),
+    action: v.string(),
+    windowStart: v.number(),
+    count: v.number()
+  }).index('by_user_and_action', ['userId', 'action']),
+
+  // Ephemeral OAuth state storage for CSRF protection.
+  // Each entry lives for 10 minutes — enough time to complete the LinkedIn OAuth flow.
+  // Validated on callback; deleted immediately after use (replay protection).
+  oauthStates: defineTable({
+    state: v.string(),
+    expiresAt: v.number()
+  }).index('by_state', ['state'])
 })

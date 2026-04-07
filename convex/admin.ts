@@ -1,16 +1,15 @@
-import type {DatabaseReader, DatabaseWriter} from './_generated/server'
-import {internalMutation, internalQuery, mutation, query} from './_generated/server'
-import {v} from 'convex/values'
-import type {Doc, Id} from './_generated/dataModel' // SECURITY: Every admin endpoint MUST call this. Reads isAdmin directly from DB.
+import type { DatabaseWriter } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { v } from 'convex/values'
+import type { Doc } from './_generated/dataModel'
+import { requireAuth } from './lib/auth'
 
-// SECURITY: Every admin endpoint MUST call this. Reads isAdmin directly from DB.
-// Never trust client-provided "isAdmin" — always verify server-side.
-async function assertAdmin(db: DatabaseReader, userId: Id<'users'>): Promise<Doc<'users'>> {
-  const user = await db.get(userId)
-  if (!user || !user.isAdmin) {
+// SECURITY: Every admin endpoint MUST call this.
+// Accepts the user doc already resolved by requireAuth — never re-fetches from client ID.
+function assertAdmin(user: Doc<'users'>): void {
+  if (!user.isAdmin) {
     throw new Error('Forbidden: admin access required')
   }
-  return user
 }
 
 // Returns global app settings (creates default if missing)
@@ -26,17 +25,23 @@ async function getOrCreateSettings(db: DatabaseWriter): Promise<Doc<'appSettings
 }
 
 export const checkIsAdmin = query({
-  args: { userId: v.id('users') },
-  handler: async (ctx, { userId }) => {
-    const user = await ctx.db.get(userId)
-    return user?.isAdmin === true
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    if (!sessionToken) return false
+    try {
+      const user = await requireAuth(ctx, sessionToken)
+      return user.isAdmin === true
+    } catch {
+      return false
+    }
   }
 })
 
 export const getSettings = query({
-  args: { userId: v.id('users') },
-  handler: async (ctx, { userId }) => {
-    await assertAdmin(ctx.db, userId)
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    assertAdmin(user)
     const settings = await ctx.db.query('appSettings').first()
     return (
       settings ?? {
@@ -49,9 +54,10 @@ export const getSettings = query({
 })
 
 export const toggleApifySync = mutation({
-  args: { userId: v.id('users'), enabled: v.boolean() },
-  handler: async (ctx, { userId, enabled }) => {
-    await assertAdmin(ctx.db, userId)
+  args: { sessionToken: v.string(), enabled: v.boolean() },
+  handler: async (ctx, { sessionToken, enabled }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    assertAdmin(user)
     const settings = await getOrCreateSettings(ctx.db)
     await ctx.db.patch(settings._id, { apifySyncEnabled: enabled })
   }

@@ -2,6 +2,7 @@
 import { httpAction } from './_generated/server'
 import { httpRouter } from 'convex/server'
 import { components, internal } from './_generated/api'
+import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
 import {
   buildAuthUrl,
@@ -17,8 +18,10 @@ const http = httpRouter()
 http.route({
   path: '/auth/linkedin',
   method: 'GET',
-  handler: httpAction(async (_ctx, _req) => {
+  handler: httpAction(async (ctx, _req) => {
     const state = crypto.randomUUID()
+    // Persist state server-side before redirecting — validated on callback (CSRF protection).
+    await ctx.runMutation(internal.sessions.createOAuthState, { state })
     const url = buildAuthUrl(state)
     return new Response(null, { status: 302, headers: { Location: url } })
   })
@@ -51,6 +54,19 @@ http.route({
         })
       }
 
+      // CSRF: validate the state parameter against the value we stored on initiation.
+      // If missing, expired, or unknown — reject the callback to prevent account takeover.
+      const state = url.searchParams.get('state')
+      if (!state) {
+        console.error('LinkedIn callback: missing state parameter')
+        return new Response(null, { status: 302, headers: { Location: `${appUrl}/?error=oauth_failed` } })
+      }
+      const stateValid = await ctx.runMutation(internal.sessions.validateAndConsumeOAuthState, { state })
+      if (!stateValid) {
+        console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
+        return new Response(null, { status: 302, headers: { Location: `${appUrl}/?error=oauth_failed` } })
+      }
+
       const tokens = await exchangeCodeForTokens(code)
       // Run userInfo and publicIdentifier fetches concurrently — independent requests
       const [userInfo, publicIdentifier] = await Promise.all([
@@ -72,18 +88,26 @@ http.route({
         linkedinPublicIdentifier: publicIdentifier ?? undefined
       })
 
+      // Issue a cryptographically random session token — never expose the raw userId.
+      // The client stores this token; all protected functions resolve it server-side.
+      const sessionToken = crypto.randomUUID()
+      await ctx.runMutation(internal.sessions.create, {
+        token: sessionToken,
+        userId: userId as Id<'users'>,
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days
+      })
+
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appUrl}/auth/success?userId=${userId}` }
+        headers: { Location: `${appUrl}/auth/success?session=${sessionToken}` }
       })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('OAuth callback error:', message, err)
+      // Log the real error server-side; send only a generic message to the client
+      // to prevent leaking internal details (API responses, stack traces, etc.)
+      console.error('OAuth callback error:', err instanceof Error ? err.message : String(err), err)
       return new Response(null, {
         status: 302,
-        headers: {
-          Location: `${appUrl}/?error=auth_failed&reason=${encodeURIComponent(message)}`
-        }
+        headers: { Location: `${appUrl}/?error=auth_failed` }
       })
     }
   })

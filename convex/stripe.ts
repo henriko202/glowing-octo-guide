@@ -8,6 +8,22 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 
+const VALID_SUBSCRIPTION_STATUSES: ReadonlySet<Doc<'users'>['subscriptionStatus']> = new Set([
+  'trialing',
+  'active',
+  'canceled',
+  'past_due',
+  'none'
+])
+
+function toSubscriptionStatus(raw: string): Doc<'users'>['subscriptionStatus'] {
+  if (VALID_SUBSCRIPTION_STATUSES.has(raw as Doc<'users'>['subscriptionStatus'])) {
+    return raw as Doc<'users'>['subscriptionStatus']
+  }
+  console.warn(`Unknown Stripe subscription status "${raw}" — defaulting to "active"`)
+  return 'active'
+}
+
 // These internal mutations are called from webhook callbacks registered in http.ts
 // to keep our users table in sync with Stripe subscription state.
 
@@ -41,7 +57,7 @@ export const syncUserSubscription = internalMutation({
 
     await ctx.db.patch(user._id, {
       tier: args.tier,
-      subscriptionStatus: args.status as Doc<'users'>['subscriptionStatus'],
+      subscriptionStatus: toSubscriptionStatus(args.status),
       trialEndsAt: undefined
     })
 

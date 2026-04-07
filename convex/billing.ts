@@ -5,13 +5,25 @@ import { action, internalMutation } from './_generated/server'
 import { v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
+import { requireAuthAction } from './lib/auth'
 
 const stripeClient = new StripeSubscriptions(components.stripe, {})
 
+const ALLOWED_PRICE_IDS = new Set(
+  [process.env.STRIPE_STARTER_PRICE_ID, process.env.STRIPE_GROWTH_PRICE_ID, process.env.STRIPE_PRO_PRICE_ID].filter(
+    Boolean
+  )
+)
+
 export const createCheckoutSession = action({
-  args: { priceId: v.string(), userId: v.id('users') },
-  handler: async (ctx, { priceId, userId }) => {
-    const user = await ctx.runQuery(internal.users.getWithTokens, { userId })
+  args: { priceId: v.string(), sessionToken: v.string() },
+  handler: async (ctx, { priceId, sessionToken }) => {
+    // Validate priceId against known price IDs before doing any work
+    if (!ALLOWED_PRICE_IDS.has(priceId)) {
+      throw new Error('Invalid price ID')
+    }
+
+    const user = await requireAuthAction(ctx, sessionToken)
     if (!user) throw new Error('User not found')
 
     // Get or create Stripe customer via the component
@@ -51,9 +63,9 @@ export const createCheckoutSession = action({
 
 // Customer portal session — lets users manage their subscription
 export const createPortalSession = action({
-  args: { userId: v.id('users') },
-  handler: async (ctx, { userId }) => {
-    const user = await ctx.runQuery(internal.users.getWithTokens, { userId })
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuthAction(ctx, sessionToken)
     if (!user) throw new Error('User not found')
     if (!user.stripeCustomerId) throw new Error('No Stripe customer found')
 

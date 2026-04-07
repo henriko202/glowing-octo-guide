@@ -34,7 +34,8 @@ export async function exchangeCodeForTokens(code: string): Promise<LinkedInToken
 
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`Token exchange failed: ${res.status} — ${body}`)
+    console.error(`LinkedIn token exchange failed: ${res.status}`, body)
+    throw new Error('LinkedIn authentication failed. Please try again.')
   }
   return res.json() as Promise<LinkedInTokenResponse>
 }
@@ -48,7 +49,8 @@ export async function fetchLinkedInUserInfo(accessToken: string): Promise<Linked
 
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`UserInfo fetch failed: ${res.status} — ${body}`)
+    console.error(`LinkedIn userinfo fetch failed: ${res.status}`, body)
+    throw new Error('Failed to retrieve LinkedIn profile. Please try again.')
   }
   return res.json() as Promise<LinkedInUserInfo>
 }

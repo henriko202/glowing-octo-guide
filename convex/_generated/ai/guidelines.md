@@ -7,16 +7,16 @@
 - HTTP endpoints are defined in `convex/http.ts` and require an `httpAction` decorator. For example:
 
 ```typescript
-import {httpRouter} from "convex/server";
-import {httpAction} from "./_generated/server";
+import { httpRouter } from "convex/server";
+import { httpAction } from "./_generated/server";
 const http = httpRouter();
 http.route({
-  path: "/echo",
-  method: "POST",
-  handler: httpAction(async (ctx, req) => {
+    path: "/echo",
+    method: "POST",
+    handler: httpAction(async (ctx, req) => {
     const body = await req.bytes();
-    return new Response(body, {status: 200});
-  }),
+    return new Response(body, { status: 200 });
+    }),
 });
 ```
 
@@ -44,22 +44,22 @@ handler: async (ctx, args) => {
 - Below is an example of a schema with validators that codify a discriminated union type:
 
 ```typescript
-import {defineSchema, defineTable} from "convex/server";
-import {v} from "convex/values";
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
 
 export default defineSchema({
-  results: defineTable(
-          v.union(
-                  v.object({
-                    kind: v.literal("error"),
-                    errorMessage: v.string(),
-                  }),
-                  v.object({
-                    kind: v.literal("success"),
-                    value: v.number(),
-                  }),
-          ),
-  )
+    results: defineTable(
+        v.union(
+            v.object({
+                kind: v.literal("error"),
+                errorMessage: v.string(),
+            }),
+            v.object({
+                kind: v.literal("success"),
+                value: v.number(),
+            }),
+        ),
+    )
 });
 ```
 
@@ -353,9 +353,9 @@ export const exampleAction = action({
   For example,
 
 ```ts
-import {cronJobs} from "convex/server";
-import {internal} from "./_generated/api";
-import {internalAction} from "./_generated/server";
+import { cronJobs } from "convex/server";
+import { internal } from "./_generated/api";
+import { internalAction } from "./_generated/server";
 
 const empty = internalAction({
   args: {},
@@ -367,7 +367,7 @@ const empty = internalAction({
 const crons = cronJobs();
 
 // Run `internal.crons.empty` every two hours.
-crons.interval("delete inactive users", {hours: 2}, internal.crons.empty, {});
+crons.interval("delete inactive users", { hours: 2 }, internal.crons.empty, {});
 
 export default crons;
 ```

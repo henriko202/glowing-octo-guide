@@ -7,10 +7,10 @@ export default function AuthSuccessPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Store userId for session tracking, then redirect to feed
-    const userId = params.get('userId')
-    if (userId) {
-      sessionStorage.setItem('convexUserId', userId)
+    // Store the server-issued session token, then redirect to feed
+    const session = params.get('session')
+    if (session) {
+      sessionStorage.setItem('sessionToken', session)
     }
     navigate('/feed', { replace: true })
   }, [params, navigate])

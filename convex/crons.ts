@@ -7,8 +7,15 @@ import { internal } from './_generated/api.js'
 const crons = cronJobs()
 
 // ─── Post sync ───────────────────────────────────────────────────────────────
-// Runs every hour at :00 — fetches latest LinkedIn posts for all active users
-// TODO: when live, change to hourly
+// Runs daily at 3:00 UTC — fetches latest LinkedIn posts for all active users
 crons.daily('sync LinkedIn posts', { hourUTC: 3, minuteUTC: 0 }, internal.jobs.syncPosts.syncAllPosts, {})
+
+// ─── Session & OAuth state cleanup ───────────────────────────────────────────
+// Purge expired session tokens every 6 hours to prevent unbounded table growth.
+// Each batch removes up to 200 rows; large backlogs are handled across multiple runs.
+crons.interval('cleanup expired sessions', { hours: 6 }, internal.sessions.deleteExpiredSessions, {})
+
+// Purge expired OAuth state tokens every hour (they have a 10-minute TTL).
+crons.interval('cleanup expired oauth states', { hours: 1 }, internal.sessions.deleteExpiredOAuthStates, {})
 
 export default crons

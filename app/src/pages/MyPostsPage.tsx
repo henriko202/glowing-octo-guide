@@ -2,6 +2,7 @@
 import { useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
+
 import LoadingSpinner from '../components/LoadingSpinner'
 
 // The shape returned by getMyPosts — matches the posts table schema
@@ -45,10 +46,10 @@ function timeAgo(ts: number): string {
 }
 
 export default function MyPostsPage() {
-  const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
+  const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
 
-  const me = useQuery(api.users.getMe, { userId })
-  const posts = useQuery(api.posts.getMyPosts, { userId }) as unknown as MyPost[] | undefined
+  const me = useQuery(api.users.getMe, { sessionToken })
+  const posts = useQuery(api.posts.getMyPosts, { sessionToken }) as unknown as MyPost[] | undefined
 
   if (posts === undefined) {
     return <LoadingSpinner />
@@ -96,7 +97,11 @@ export default function MyPostsPage() {
                   // the container's overflow:hidden clips the button bar below.
                   height={480}
                   className="block border-none"
-                  allowFullScreen
+                  // sandbox: explicit permission whitelist — prevents the iframe from
+                  // navigating the top window, opening popups, or submitting forms.
+                  // allow-scripts: needed for LinkedIn's embed JS to render the post.
+                  // allow-same-origin: needed so LinkedIn's cookies work (avoids sign-in wall).
+                  sandbox="allow-scripts allow-same-origin"
                   loading="lazy"
                 />
                 {/* Opaque overlay covering the bottom action buttons strip.

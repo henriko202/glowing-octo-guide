@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
-import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -38,8 +37,8 @@ function extractVanityName(input: string): string | null {
 
 export default function SettingsPage() {
   const { t } = useTranslation()
-  const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
-  const me = useQuery(api.users.getMe, { userId }) as MeProfile | null | undefined
+  const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
+  const me = useQuery(api.users.getMe, { sessionToken }) as MeProfile | null | undefined
   const setPublicIdentifier = useMutation(api.users.setPublicIdentifier)
 
   const [profileUrl, setProfileUrl] = useState('')
@@ -54,10 +53,10 @@ export default function SettingsPage() {
   const extractedVanity = extractVanityName(profileUrl)
 
   async function handleSaveIdentifier() {
-    if (!userId || !extractedVanity) return
+    if (!sessionToken || !extractedVanity) return
     setIdentifierSaving(true)
     try {
-      await setPublicIdentifier({ userId, publicIdentifier: extractedVanity })
+      await setPublicIdentifier({ sessionToken, publicIdentifier: extractedVanity })
       setProfileUrl('')
       setIdentifierSaved(true)
       setTimeout(() => setIdentifierSaved(false), 3000)

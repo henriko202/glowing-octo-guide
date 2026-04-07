@@ -1,7 +1,8 @@
 import { internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
-import { components } from './_generated/api'
+import { components, internal } from './_generated/api'
 import type { UserDoc } from './convexTypes'
+import { requireAuth } from './lib/auth'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -23,20 +24,17 @@ export const getActiveSubscribers = internalQuery({
 })
 
 // Public: returns safe user profile — strips ALL token fields.
-//
-// Auth note: this app uses custom LinkedIn OAuth, not Convex's built-in JWT
-// auth (Clerk / Auth0). ctx.auth.getUserIdentity() is therefore unavailable.
-// Instead the client passes the Convex _id stored in sessionStorage after the
-// OAuth callback redirect.
-//
-// TODO: When integrating Clerk/Auth0, replace userId arg with getUserIdentity()
-// for a server-enforced identity guarantee.
+// Auth: resolves the session token server-side; never accepts a userId from the client.
 export const getMe = query({
-  args: { userId: v.optional(v.id('users')) },
-  handler: async (ctx, { userId }) => {
-    if (!userId) return null
-    const user = (await ctx.db.get(userId)) as UserDoc | null
-    if (!user) return null
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    if (!sessionToken) return null
+    let user: UserDoc
+    try {
+      user = (await requireAuth(ctx, sessionToken)) as UserDoc
+    } catch {
+      return null
+    }
     // IMPORTANT: Strip tokens and isAdmin before returning to client
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, isAdmin, ...safeUser } = user
@@ -46,18 +44,20 @@ export const getMe = query({
 })
 
 // Public: returns subscription info for billing page display.
-// Sources:
-//   - component's subscriptions table (auto-synced on every Stripe webhook) for active subs
-//   - user document for trialing / no-subscription state
+// Auth: resolves the session token server-side.
 export const getSubscriptionInfo = query({
-  args: { userId: v.optional(v.id('users')) },
-  handler: async (ctx, { userId }) => {
-    if (!userId) return null
-    const user = (await ctx.db.get(userId)) as UserDoc | null
-    if (!user) return null
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    if (!sessionToken) return null
+    let user: UserDoc
+    try {
+      user = (await requireAuth(ctx, sessionToken)) as UserDoc
+    } catch {
+      return null
+    }
 
     // Query the component's live subscription data (always up-to-date via webhooks)
-    const componentSubs = await ctx.runQuery(components.stripe.public.listSubscriptionsByUserId, { userId })
+    const componentSubs = await ctx.runQuery(components.stripe.public.listSubscriptionsByUserId, { userId: user._id })
 
     // Pick the most recent subscription that isn't fully canceled
     const activeSub =
@@ -95,11 +95,35 @@ export const getSubscriptionInfo = query({
 // Used for post ownership verification without requiring LinkedIn Partner API access.
 export const setPublicIdentifier = mutation({
   args: {
-    userId: v.id('users'),
+    sessionToken: v.string(),
     publicIdentifier: v.string()
   },
-  handler: async (ctx, { userId, publicIdentifier }) => {
+  handler: async (ctx, { sessionToken, publicIdentifier }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    // Validate LinkedIn vanity name format: alphanumeric, hyphens, underscores, 3-100 chars
+    const trimmed = publicIdentifier.trim().toLowerCase()
+    if (!/^[a-zA-Z0-9\-_]{3,100}$/.test(trimmed)) {
+      throw new Error('Invalid LinkedIn profile identifier format')
+    }
     // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
-    await ctx.db.patch(userId, { linkedinPublicIdentifier: publicIdentifier.trim().toLowerCase() })
+    await ctx.db.patch(user._id, { linkedinPublicIdentifier: trimmed })
+  }
+})
+
+// Public: invalidates the session token server-side on sign out.
+export const logout = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    await ctx.runMutation(internal.sessions.deleteByToken, { token: sessionToken })
+  }
+})
+
+// Public: invalidates ALL sessions for the authenticated user (emergency use —
+// e.g., if user suspects their account is compromised on another device).
+export const forceLogoutAll = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await ctx.runMutation(internal.sessions.deleteAllForUser, { userId: user._id })
   }
 })

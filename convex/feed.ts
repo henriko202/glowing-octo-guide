@@ -2,6 +2,7 @@
 import { query } from './_generated/server'
 import { v } from 'convex/values'
 import type { Doc } from './_generated/dataModel'
+import { requireAuth } from './lib/auth'
 
 type FeedFilterParams = {
   tier?: string
@@ -59,19 +60,19 @@ function postSortScore(
 
 export const getFeed = query({
   args: {
+    sessionToken: v.optional(v.string()),
     limit: v.optional(v.number()),
     filterIndustries: v.optional(v.array(v.string())),
     filterCountries: v.optional(v.array(v.string()))
   },
-  handler: async (ctx, { limit = 20, filterIndustries, filterCountries }) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity) return { posts: [], hasMore: false }
-
-    const viewer = await ctx.db
-      .query('users')
-      .withIndex('by_linkedin_id', q => q.eq('linkedinId', identity.subject))
-      .first()
-    if (!viewer) return { posts: [], hasMore: false }
+  handler: async (ctx, { sessionToken, limit = 20, filterIndustries, filterCountries }) => {
+    if (!sessionToken) return { posts: [], hasMore: false }
+    let viewer: Doc<'users'>
+    try {
+      viewer = await requireAuth(ctx, sessionToken)
+    } catch {
+      return { posts: [], hasMore: false }
+    }
 
     const filter = buildFeedFilter({
       tier: viewer.tier,

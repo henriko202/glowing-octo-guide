@@ -1,6 +1,8 @@
 // app/src/components/AppNav.tsx
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useMutation } from 'convex/react'
+import { api } from '../convex'
 
 const LANGUAGES = [
   { code: 'en', label: 'EN' },
@@ -18,9 +20,18 @@ const NAV_LINKS = [
 export default function AppNav() {
   const { pathname } = useLocation()
   const { i18n } = useTranslation()
+  const logout = useMutation(api.users.logout)
 
-  function handleSignOut() {
-    sessionStorage.removeItem('convexUserId')
+  async function handleSignOut() {
+    const token = sessionStorage.getItem('sessionToken')
+    sessionStorage.removeItem('sessionToken')
+    if (token) {
+      try {
+        await logout({ sessionToken: token })
+      } catch {
+        /* ignore */
+      }
+    }
     window.location.href = '/'
   }
 

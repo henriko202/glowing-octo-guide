@@ -10,16 +10,15 @@ import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function FeedPage() {
   const { t } = useTranslation()
-  const feed = useQuery(api.feed.getFeed, {})
+  const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
+  const feed = useQuery(api.feed.getFeed, { sessionToken })
   const react = useAction(api.interactions.reactToPost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
 
-  const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
-
   async function handlePostSubmit(url: string) {
-    if (!userId) throw new Error('Not signed in')
-    await submitPost({ userId, postUrl: url })
+    if (!sessionToken) throw new Error('Not signed in')
+    await submitPost({ sessionToken, postUrl: url })
   }
 
   if (!feed) {
@@ -39,11 +38,12 @@ export default function FeedPage() {
             <PostCard
               post={post}
               onComment={id => setCommentingOn(id === commentingOn ? null : id)}
-              onReact={id => react({ postId: id, reactionType: 'LIKE' })}
+              onReact={id => react({ postId: id, reactionType: 'LIKE', sessionToken: sessionToken ?? '' })}
             />
             {commentingOn === post._id && (
               <CommentBox
                 postId={post._id}
+                sessionToken={sessionToken ?? ''}
                 onClose={() => setCommentingOn(null)}
               />
             )}

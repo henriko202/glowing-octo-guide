@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
-import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 import { useNavigate } from 'react-router-dom'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
-  const isAdmin = useQuery(api.admin.checkIsAdmin, userId ? { userId } : 'skip')
-  const settings = useQuery(api.admin.getSettings, userId && isAdmin ? { userId } : 'skip')
+  const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
+  const isAdmin = useQuery(api.admin.checkIsAdmin, { sessionToken })
+  const settings = useQuery(api.admin.getSettings, sessionToken && isAdmin ? { sessionToken } : 'skip')
   const toggleSync = useMutation(api.admin.toggleApifySync)
   const [toggling, setToggling] = useState(false)
 
@@ -22,10 +21,10 @@ export default function AdminPage() {
   }
 
   async function handleToggle() {
-    if (!userId || !settings) return
+    if (!sessionToken || !settings) return
     setToggling(true)
     try {
-      await toggleSync({ userId, enabled: !settings.apifySyncEnabled })
+      await toggleSync({ sessionToken, enabled: !settings.apifySyncEnabled })
     } finally {
       setToggling(false)
     }

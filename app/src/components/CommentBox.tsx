@@ -5,7 +5,15 @@ import { api } from '../convex'
 
 import type { Id } from '../../../convex/_generated/dataModel'
 
-export default function CommentBox({ postId, onClose }: { postId: Id<'posts'>; onClose: () => void }) {
+export default function CommentBox({
+  postId,
+  sessionToken,
+  onClose
+}: {
+  postId: Id<'posts'>
+  sessionToken: string
+  onClose: () => void
+}) {
   const { t } = useTranslation()
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -18,7 +26,7 @@ export default function CommentBox({ postId, onClose }: { postId: Id<'posts'>; o
     setSubmitting(true)
     setError(null)
     try {
-      await comment({ postId, commentText: text.trim() })
+      await comment({ postId, commentText: text.trim(), sessionToken })
       setText('')
       onClose()
     } catch (err: unknown) {

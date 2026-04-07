@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useAction, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
-import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 
 const PLAN_IDS = ['starter', 'growth', 'pro'] as const
@@ -25,9 +24,9 @@ function getTrialDaysRemaining(trialEndsAt: number | undefined): number {
 
 export default function BillingPage() {
   const { t } = useTranslation()
-  const userId = (sessionStorage.getItem('convexUserId') ?? undefined) as Id<'users'> | undefined
-  const me = useQuery(api.users.getMe, { userId })
-  const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, userId ? { userId } : 'skip')
+  const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
+  const me = useQuery(api.users.getMe, { sessionToken })
+  const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, sessionToken ? { sessionToken } : 'skip')
   const createCheckout = useAction(api.billing.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
   const [portalLoading, setPortalLoading] = useState(false)
@@ -48,8 +47,8 @@ export default function BillingPage() {
 
   async function handleUpgrade(priceId: string) {
     try {
-      if (!userId) throw new Error('Not signed in')
-      const result = await createCheckout({ priceId, userId })
+      if (!sessionToken) throw new Error('Not signed in')
+      const result = await createCheckout({ priceId, sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
       alert(`Checkout failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -57,10 +56,10 @@ export default function BillingPage() {
   }
 
   async function handleManageSubscription() {
-    if (!userId) return
+    if (!sessionToken) return
     setPortalLoading(true)
     try {
-      const result = await createPortal({ userId })
+      const result = await createPortal({ sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
       alert(`Failed to open portal: ${err instanceof Error ? err.message : String(err)}`)

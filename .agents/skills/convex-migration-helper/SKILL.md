@@ -58,13 +58,13 @@ comment explaining it is deprecated and why it existed.
 ```typescript
 // Before
 users: defineTable({
-  name: v.string()
+  name: v.string(),
 })
 
 // After - safe, new field is optional
 users: defineTable({
   name: v.string(),
-  bio: v.optional(v.string())
+  bio: v.optional(v.string()),
 })
 ```
 
@@ -72,9 +72,9 @@ users: defineTable({
 
 ```typescript
 posts: defineTable({
-  userId: v.id('users'),
-  title: v.string()
-}).index('by_user', ['userId'])
+  userId: v.id("users"),
+  title: v.string(),
+}).index("by_user", ["userId"])
 ```
 
 ### Adding Index
@@ -82,8 +82,9 @@ posts: defineTable({
 ```typescript
 users: defineTable({
   name: v.string(),
-  email: v.string()
-}).index('by_email', ['email'])
+  email: v.string(),
+})
+  .index("by_email", ["email"])
 ```
 
 ## Breaking Changes: The Deployment Workflow
