@@ -100,6 +100,7 @@ export default function Hero() {
         </div>
 
         <p className="text-xs tracking-wide text-cream/30">3-day free trial · No credit card required</p>
+        <p className="text-sm text-cream-muted">Join 500+ professionals already growing their SSI</p>
       </div>
 
       {/* Scroll indicator */}
