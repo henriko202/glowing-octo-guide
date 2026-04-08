@@ -7,6 +7,7 @@ import { internalMutation } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
+import { tierToRank } from './lib/planLimits'
 
 const VALID_SUBSCRIPTION_STATUSES: ReadonlySet<Doc<'users'>['subscriptionStatus']> = new Set([
   'trialing',
@@ -61,6 +62,14 @@ export const syncUserSubscription = internalMutation({
       trialEndsAt: undefined
     })
 
+    // Sync authorTierRank on all posts by this user
+    const newRank = tierToRank(args.tier)
+    const userPosts = await ctx.db
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', user._id))
+      .collect()
+    await Promise.all(userPosts.map(p => ctx.db.patch(p._id, { authorTierRank: newRank })))
+
     // Trigger immediate post fetch when subscription becomes active
     if (args.status === 'active') {
       await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncUserPostsViaApify, {
@@ -112,6 +121,14 @@ export const cancelUserSubscription = internalMutation({
     if (!sub) return
     await ctx.db.patch(sub._id, { status: 'canceled' })
     await ctx.db.patch(sub.userId, { tier: 'starter', subscriptionStatus: 'canceled' })
+
+    // Sync authorTierRank on all posts by this user (downgraded to starter)
+    const starterRank = tierToRank('starter')
+    const userPosts = await ctx.db
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', sub.userId))
+      .collect()
+    await Promise.all(userPosts.map(p => ctx.db.patch(p._id, { authorTierRank: starterRank })))
   }
 })
 
