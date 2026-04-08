@@ -47,16 +47,6 @@ export function buildFeedFilter(params: FeedFilterParams): FeedFilter {
   }
 }
 
-// Sort score for non-featured posts (higher = shown earlier)
-function postSortScore(
-  author: { industry?: string; country?: string } | null,
-  viewer: { industry?: string; country?: string }
-): number {
-  if (!author) return 0
-  if (author.industry && author.industry === viewer.industry) return 2
-  if (author.country && author.country === viewer.country) return 1
-  return 0
-}
 
 export const getFeed = query({
   args: {
@@ -88,6 +78,9 @@ export const getFeed = query({
       .withIndex('by_published', q => q.eq('hidden', false))
       .order('desc')
       .collect()
+
+    // Filter out posts that have reached their interaction limit
+    allPosts = allPosts.filter(post => post.interactionLimitReached !== true)
 
     // Apply post-level visibility restrictions (Pro author settings)
     allPosts = allPosts.filter(post => {
@@ -123,21 +116,28 @@ export const getFeed = query({
       })
     }
 
-    // Load all unique authors for sort scoring
+    // Load all unique authors for sort scoring and trial filter
     const uniqueAllAuthorIds = [...new Set(allPosts.map(p => p.authorId))]
     const allAuthors = await Promise.all(uniqueAllAuthorIds.map(id => ctx.db.get(id)))
     const allAuthorMap = new Map(allAuthors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
 
-    // Sort: featured first (by featuredAt desc) → score (mutual/industry/country) → publishedAt desc
-    const featured = allPosts.filter(p => p.isFeatured).sort((a, b) => (b.featuredAt ?? 0) - (a.featuredAt ?? 0))
+    // Filter out posts from trialing users
+    allPosts = allPosts.filter(post => {
+      const author = allAuthorMap.get(post.authorId)
+      return author?.subscriptionStatus !== 'trialing'
+    })
+
+    // Sort: featured first (by publishedAt desc) → authorTierRank desc → publishedAt desc
+    const featured = allPosts
+      .filter(p => p.isFeatured)
+      .sort((a, b) => b.publishedAt - a.publishedAt)
 
     const regular = allPosts
       .filter(p => !p.isFeatured)
       .sort((a, b) => {
-        const aAuthor = allAuthorMap.get(a.authorId) ?? null
-        const bAuthor = allAuthorMap.get(b.authorId) ?? null
-        const scoreDiff = postSortScore(bAuthor, viewer) - postSortScore(aAuthor, viewer)
-        if (scoreDiff !== 0) return scoreDiff
+        // Sort by authorTierRank desc (higher tier first), then publishedAt desc
+        const rankDiff = (b.authorTierRank ?? 1) - (a.authorTierRank ?? 1)
+        if (rankDiff !== 0) return rankDiff
         return b.publishedAt - a.publishedAt
       })
 
