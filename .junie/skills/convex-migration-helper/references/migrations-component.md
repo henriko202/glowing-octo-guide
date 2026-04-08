@@ -1,7 +1,6 @@
 # Migrations Component Reference
 
-Complete guide to the [`@convex-dev/migrations`](https://www.convex.dev/components/migrations) component for batched,
-resumable Convex data migrations.
+Complete guide to the [`@convex-dev/migrations`](https://www.convex.dev/components/migrations) component for batched, resumable Convex data migrations.
 
 ## Installation
 
@@ -91,8 +90,7 @@ export const runAll = migrations.runner([
 npx convex run migrations:runAll
 ```
 
-If one fails, it stops and will not continue to the next. Call it again to retry from where it left off. Completed
-migrations are skipped automatically.
+If one fails, it stops and will not continue to the next. Call it again to retry from where it left off. Completed migrations are skipped automatically.
 
 ## Dry Run
 
@@ -134,8 +132,7 @@ npx convex deploy --cmd 'npm run build' && npx convex run migrations:runAll --pr
 
 ### Custom Batch Size
 
-If documents are large or the table has heavy write traffic, reduce the batch size to avoid transaction limits or OCC
-conflicts:
+If documents are large or the table has heavy write traffic, reduce the batch size to avoid transaction limits or OCC conflicts:
 
 ```typescript
 export const migrateHeavyTable = migrations.define({
@@ -162,8 +159,7 @@ export const fixEmptyNames = migrations.define({
 
 ### Parallelize Within a Batch
 
-By default each document in a batch is processed serially. Enable parallel processing if your migration logic does not
-depend on ordering:
+By default each document in a batch is processed serially. Enable parallel processing if your migration logic does not depend on ordering:
 
 ```typescript
 export const clearField = migrations.define({

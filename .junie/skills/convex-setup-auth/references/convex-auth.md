@@ -9,31 +9,29 @@ Use this when the user wants auth handled directly in Convex rather than through
 
 1. Confirm the user wants Convex Auth specifically
 2. Determine which sign-in methods the app needs:
-    - magic links or OTPs
-    - OAuth providers
-    - passwords and password reset
+   - magic links or OTPs
+   - OAuth providers
+   - passwords and password reset
 3. Ask whether the user wants local-only setup or production-ready setup now
 4. Read the Convex Auth setup guide before writing code
 5. Make sure the project has a configured Convex deployment:
-    - run `npx convex dev` first if `CONVEX_DEPLOYMENT` is not set
-    - if CLI configuration requires interactive human input, stop and ask the user to complete that step before
-      continuing
+   - run `npx convex dev` first if `CONVEX_DEPLOYMENT` is not set
+   - if CLI configuration requires interactive human input, stop and ask the user to complete that step before continuing
 6. Install the auth packages:
-    - `npm install @convex-dev/auth @auth/core@0.37.0`
+   - `npm install @convex-dev/auth @auth/core@0.37.0`
 7. Run the initialization command:
-    - `npx @convex-dev/auth`
+   - `npx @convex-dev/auth`
 8. Confirm the initializer created:
-    - `convex/auth.config.ts`
-    - `convex/auth.ts`
-    - `convex/http.ts`
+   - `convex/auth.config.ts`
+   - `convex/auth.ts`
+   - `convex/http.ts`
 9. Add the required `authTables` to `convex/schema.ts`
 10. Replace plain `ConvexProvider` wiring with `ConvexAuthProvider`
 11. Configure at least one auth method in `convex/auth.ts`
 12. Run `npx convex dev --once` or the normal dev flow to push the updated schema and generated code
 13. Verify the client can sign in successfully
 14. Verify Convex receives authenticated identity in backend functions
-15. If the user wants production-ready setup, make sure the same auth setup is configured for the production deployment
-    as well
+15. If the user wants production-ready setup, make sure the same auth setup is configured for the production deployment as well
 16. Only add a `users` table and `storeUser` flow if the app needs app-level user records inside Convex
 
 ## What This Reference Is For
@@ -56,9 +54,9 @@ Use this when the user wants auth handled directly in Convex rather than through
 3. If `npx convex dev` blocks on interactive setup, ask the user explicitly to finish configuring the Convex deployment
 4. Run `npx @convex-dev/auth`
 5. Confirm the generated auth setup is present before continuing:
-    - `convex/auth.config.ts`
-    - `convex/auth.ts`
-    - `convex/http.ts`
+   - `convex/auth.config.ts`
+   - `convex/auth.ts`
+   - `convex/http.ts`
 6. Add `authTables` to `convex/schema.ts`
 7. Replace `ConvexProvider` with `ConvexAuthProvider` in the app entry
 8. Configure the selected auth methods in `convex/auth.ts`
@@ -77,42 +75,31 @@ Use this when the user wants auth handled directly in Convex rather than through
 - Decide whether the user is creating a new app or adding auth to an existing app
 - For a new app, prefer the official starter flow instead of rebuilding setup by hand
 - Decide which auth methods the app needs:
-    - magic links or OTPs
-    - OAuth providers
-    - passwords
+  - magic links or OTPs
+  - OAuth providers
+  - passwords
 - Decide whether the user wants local-only setup or production-ready setup now
 - Decide whether the app actually needs a `users` table inside Convex, or whether provider identity alone is enough
 
 ## Gotchas
 
 - Do not assume a specific sign-in method. Ask which methods the app needs before wiring UI and backend behavior.
-- `npx @convex-dev/auth` is important because it initializes the auth setup, including the key material. Do not skip it
-  when adding Convex Auth to an existing project.
+- `npx @convex-dev/auth` is important because it initializes the auth setup, including the key material. Do not skip it when adding Convex Auth to an existing project.
 - `npx @convex-dev/auth` will fail if the project does not already have a configured `CONVEX_DEPLOYMENT`.
-- `npx convex dev` may require interactive setup for deployment creation or project selection. If that happens, ask the
-  user explicitly for that human step instead of guessing.
-- `npx @convex-dev/auth` does not finish the whole integration by itself. You still need to add `authTables`, swap in
-  `ConvexAuthProvider`, and configure at least one auth method.
-- A project can still build even if `convex/auth.ts` still has `providers: []`, so do not treat a successful build as
-  proof that sign-in is fully configured.
-- Convex Auth does not mean every app needs a `users` table. If the app only needs authentication gates,
-  `ctx.auth.getUserIdentity()` may be enough.
-- If the app is greenfield, starting from the official starter flow is usually better than partially recreating it by
-  hand.
-- Do not stop at local dev setup if the user expects production-ready auth. The production deployment needs the auth
-  setup too.
-- Keep provider-specific setup and Convex Auth authorization behavior in the official docs instead of inventing shared
-  patterns from memory.
+- `npx convex dev` may require interactive setup for deployment creation or project selection. If that happens, ask the user explicitly for that human step instead of guessing.
+- `npx @convex-dev/auth` does not finish the whole integration by itself. You still need to add `authTables`, swap in `ConvexAuthProvider`, and configure at least one auth method.
+- A project can still build even if `convex/auth.ts` still has `providers: []`, so do not treat a successful build as proof that sign-in is fully configured.
+- Convex Auth does not mean every app needs a `users` table. If the app only needs authentication gates, `ctx.auth.getUserIdentity()` may be enough.
+- If the app is greenfield, starting from the official starter flow is usually better than partially recreating it by hand.
+- Do not stop at local dev setup if the user expects production-ready auth. The production deployment needs the auth setup too.
+- Keep provider-specific setup and Convex Auth authorization behavior in the official docs instead of inventing shared patterns from memory.
 
 ## Production
 
 - Ask whether the user wants dev-only setup or production-ready setup
-- If the answer is production-ready, make sure the auth configuration is applied to the production deployment, not just
-  the dev deployment
-- Verify production-specific redirect URLs, auth method configuration, and deployment settings before calling the task
-  complete
-- Do not silently write a notes file into the repo by default. If the user wants rollout or handoff docs, create one
-  explicitly.
+- If the answer is production-ready, make sure the auth configuration is applied to the production deployment, not just the dev deployment
+- Verify production-specific redirect URLs, auth method configuration, and deployment settings before calling the task complete
+- Do not silently write a notes file into the repo by default. If the user wants rollout or handoff docs, create one explicitly.
 
 ## Human Handoff
 
@@ -131,8 +118,7 @@ If `npx convex dev` or deployment setup requires human input:
 - Verify `ctx.auth.getUserIdentity()` returns an identity in protected backend functions
 - Verify protected UI only renders after Convex-authenticated state is ready
 - Verify environment variables and redirect settings match the current app environment
-- Verify `convex/auth.ts` no longer has an empty `providers: []` configuration once the app is meant to support real
-  sign-in
+- Verify `convex/auth.ts` no longer has an empty `providers: []` configuration once the app is meant to support real sign-in
 - Run `npx convex dev --once` or the normal dev flow after setup changes and confirm Convex codegen and push succeed
 - If production-ready setup was requested, verify the production deployment is also configured correctly
 

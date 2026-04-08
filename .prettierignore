@@ -4,3 +4,8 @@ build
 .next
 convex/_generated
 pnpm-lock.yaml
+.agents/
+.junie/
+.windsurf/
+AGENTS.md
+CLAUDE.md

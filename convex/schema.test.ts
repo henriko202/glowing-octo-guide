@@ -8,6 +8,6 @@ describe('schema', () => {
     expect(tables).toHaveProperty('posts')
     expect(tables).toHaveProperty('subscriptions')
     expect(tables).toHaveProperty('featuredPostUsage')
-    expect(tables).toHaveProperty('userConnections')
+    expect(tables).toHaveProperty('planLimits')
   })
 })

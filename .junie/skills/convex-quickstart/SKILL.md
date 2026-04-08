@@ -28,23 +28,21 @@ Set up a working Convex project as fast as possible.
 
 ## Path 1: New Project (Recommended)
 
-Use the official scaffolding tool. It creates a complete project with the frontend framework, Convex backend, and all
-config wired together.
+Use the official scaffolding tool. It creates a complete project with the frontend framework, Convex backend, and all config wired together.
 
 ### Pick a template
 
-| Template                   | Stack                                     |
-|----------------------------|-------------------------------------------|
-| `react-vite-shadcn`        | React + Vite + Tailwind + shadcn/ui       |
-| `nextjs-shadcn`            | Next.js App Router + Tailwind + shadcn/ui |
-| `react-vite-clerk-shadcn`  | React + Vite + Clerk auth + shadcn/ui     |
-| `nextjs-clerk`             | Next.js + Clerk auth                      |
-| `nextjs-convexauth-shadcn` | Next.js + Convex Auth + shadcn/ui         |
-| `nextjs-lucia-shadcn`      | Next.js + Lucia auth + shadcn/ui          |
-| `bare`                     | Convex backend only, no frontend          |
+| Template | Stack |
+|----------|-------|
+| `react-vite-shadcn` | React + Vite + Tailwind + shadcn/ui |
+| `nextjs-shadcn` | Next.js App Router + Tailwind + shadcn/ui |
+| `react-vite-clerk-shadcn` | React + Vite + Clerk auth + shadcn/ui |
+| `nextjs-clerk` | Next.js + Clerk auth |
+| `nextjs-convexauth-shadcn` | Next.js + Convex Auth + shadcn/ui |
+| `nextjs-lucia-shadcn` | Next.js + Lucia auth + shadcn/ui |
+| `bare` | Convex backend only, no frontend |
 
-If the user has not specified a preference, default to `react-vite-shadcn` for simple apps or `nextjs-shadcn` for apps
-that need SSR or API routes.
+If the user has not specified a preference, default to `react-vite-shadcn` for simple apps or `nextjs-shadcn` for apps that need SSR or API routes.
 
 You can also use any GitHub repo as a template:
 
@@ -74,25 +72,19 @@ npm install
 
 ### Start the dev loop
 
-`npx convex dev` is a long-running watcher process that syncs backend code to a Convex deployment on every save. It also
-requires authentication on first run (browser-based OAuth). Both of these make it unsuitable for an agent to run
-directly.
+`npx convex dev` is a long-running watcher process that syncs backend code to a Convex deployment on every save. It also requires authentication on first run (browser-based OAuth). Both of these make it unsuitable for an agent to run directly.
 
 **Ask the user to run this themselves:**
 
-Tell the user to run `npx convex dev` in their terminal. On first run it will prompt them to log in or develop
-anonymously. Once running, it will:
-
+Tell the user to run `npx convex dev` in their terminal. On first run it will prompt them to log in or develop anonymously. Once running, it will:
 - Create a Convex project and dev deployment
 - Write the deployment URL to `.env.local`
 - Create the `convex/` directory with generated types
 - Watch for changes and sync continuously
 
-The user should keep `npx convex dev` running in the background while you work on code. The watcher will automatically
-pick up any files you create or edit in `convex/`.
+The user should keep `npx convex dev` running in the background while you work on code. The watcher will automatically pick up any files you create or edit in `convex/`.
 
-**Exception - cloud or headless agents:** Environments that cannot open a browser for interactive login should use Agent
-Mode (see below) to run anonymously without user interaction.
+**Exception - cloud or headless agents:** Environments that cannot open a browser for interactive login should use Agent Mode (see below) to run anonymously without user interaction.
 
 ### Start the frontend
 
@@ -119,7 +111,6 @@ my-app/
 ```
 
 The template already has:
-
 - `ConvexProvider` wired into the app root
 - Correct env var names for the framework
 - Tailwind and shadcn/ui ready (for shadcn templates)
@@ -139,9 +130,7 @@ npm install convex
 
 ### Initialize and start dev loop
 
-Ask the user to run `npx convex dev` in their terminal. This handles login, creates the `convex/` directory, writes the
-deployment URL to `.env.local`, and starts the file watcher. See the notes in Path 1 about why the agent should not run
-this directly.
+Ask the user to run `npx convex dev` in their terminal. This handles login, creates the `convex/` directory, writes the deployment URL to `.env.local`, and starts the file watcher. See the notes in Path 1 about why the agent should not run this directly.
 
 ### Wire up the provider
 
@@ -229,19 +218,18 @@ For Vue, Svelte, React Native, TanStack Start, Remix, and others, follow the mat
 
 The env var name depends on the framework:
 
-| Framework    | Variable                 |
-|--------------|--------------------------|
-| Vite         | `VITE_CONVEX_URL`        |
-| Next.js      | `NEXT_PUBLIC_CONVEX_URL` |
-| Remix        | `CONVEX_URL`             |
+| Framework | Variable |
+|-----------|----------|
+| Vite | `VITE_CONVEX_URL` |
+| Next.js | `NEXT_PUBLIC_CONVEX_URL` |
+| Remix | `CONVEX_URL` |
 | React Native | `EXPO_PUBLIC_CONVEX_URL` |
 
 `npx convex dev` writes the correct variable to `.env.local` automatically.
 
 ## Agent Mode (Cloud and Headless Agents)
 
-When running in a cloud or headless agent environment where interactive browser login is not possible, set
-`CONVEX_AGENT_MODE=anonymous` to use a local anonymous deployment.
+When running in a cloud or headless agent environment where interactive browser login is not possible, set `CONVEX_AGENT_MODE=anonymous` to use a local anonymous deployment.
 
 Add `CONVEX_AGENT_MODE=anonymous` to `.env.local`, or set it inline:
 
@@ -249,8 +237,7 @@ Add `CONVEX_AGENT_MODE=anonymous` to `.env.local`, or set it inline:
 CONVEX_AGENT_MODE=anonymous npx convex dev
 ```
 
-This runs a local Convex backend on the VM without requiring authentication, and avoids conflicting with the user's
-personal dev deployment.
+This runs a local Convex backend on the VM without requiring authentication, and avoids conflicting with the user's personal dev deployment.
 
 ## Verify the Setup
 

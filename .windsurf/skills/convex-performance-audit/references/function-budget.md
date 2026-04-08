@@ -1,29 +1,26 @@
 # Function Budget
 
-Use these rules when functions are hitting execution limits, transaction size errors, or returning excessively large
-payloads to the client.
+Use these rules when functions are hitting execution limits, transaction size errors, or returning excessively large payloads to the client.
 
 ## Core Principle
 
-Convex functions run inside transactions with budgets for time, reads, and writes. Staying well within these limits is
-not just about avoiding errors, it reduces latency and contention.
+Convex functions run inside transactions with budgets for time, reads, and writes. Staying well within these limits is not just about avoiding errors, it reduces latency and contention.
 
 ## Limits to Know
 
-These are the current values from the [Convex limits docs](https://docs.convex.dev/production/state/limits). Check that
-page for the latest numbers.
+These are the current values from the [Convex limits docs](https://docs.convex.dev/production/state/limits). Check that page for the latest numbers.
 
-| Resource                          | Limit                                                 |
-|-----------------------------------|-------------------------------------------------------|
-| Query/mutation execution time     | 1 second (user code only, excludes DB operations)     |
-| Action execution time             | 10 minutes                                            |
-| Data read per transaction         | 16 MiB                                                |
-| Data written per transaction      | 16 MiB                                                |
+| Resource | Limit |
+|---|---|
+| Query/mutation execution time | 1 second (user code only, excludes DB operations) |
+| Action execution time | 10 minutes |
+| Data read per transaction | 16 MiB |
+| Data written per transaction | 16 MiB |
 | Documents scanned per transaction | 32,000 (includes documents filtered out by `.filter`) |
-| Index ranges read per transaction | 4,096 (each `db.get` and `db.query` call)             |
-| Documents written per transaction | 16,000                                                |
-| Individual document size          | 1 MiB                                                 |
-| Function return value size        | 16 MiB                                                |
+| Index ranges read per transaction | 4,096 (each `db.get` and `db.query` call) |
+| Documents written per transaction | 16,000 |
+| Individual document size | 1 MiB |
+| Function return value size | 16 MiB |
 
 ## Symptoms
 
@@ -37,13 +34,11 @@ page for the latest numbers.
 
 ### Unbounded collection
 
-A query that calls `.collect()` on a table without a reasonable limit. As the table grows, the query reads more and more
-documents.
+A query that calls `.collect()` on a table without a reasonable limit. As the table grows, the query reads more and more documents.
 
 ### Large document reads on hot paths
 
-Reading documents with large fields (rich text, embedded media references, long arrays) when only a small subset of the
-data is needed for the current view.
+Reading documents with large fields (rich text, embedded media references, long arrays) when only a small subset of the data is needed for the current view.
 
 ### Mutation doing too much work
 
@@ -123,8 +118,7 @@ export const backfillBatch = internalMutation({
 
 ### 4. Move heavy work to actions
 
-Queries and mutations run inside Convex's transactional runtime with strict budgets. If you need to do CPU-intensive
-computation, call external APIs, or process large files, use an action instead.
+Queries and mutations run inside Convex's transactional runtime with strict budgets. If you need to do CPU-intensive computation, call external APIs, or process large files, use an action instead.
 
 Actions run outside the transaction and can call mutations to write results back.
 
@@ -150,8 +144,7 @@ export const processUpload = action({
 
 ### 5. Trim return values
 
-Only return what the client needs. If a query fetches full documents but the component only renders a few fields, map
-the results before returning.
+Only return what the client needs. If a query fetches full documents but the component only renders a few fields, map the results before returning.
 
 ```ts
 // Bad: returns full documents including large content fields
@@ -179,8 +172,7 @@ export const list = query({
 
 ### 6. Replace `ctx.runQuery` and `ctx.runMutation` with helper functions
 
-Inside queries and mutations, `ctx.runQuery` and `ctx.runMutation` have overhead compared to calling a plain TypeScript
-helper function. They run in the same transaction but pay extra per-call cost.
+Inside queries and mutations, `ctx.runQuery` and `ctx.runMutation` have overhead compared to calling a plain TypeScript helper function. They run in the same transaction but pay extra per-call cost.
 
 ```ts
 // Bad: unnecessary overhead from ctx.runQuery inside a mutation
@@ -206,9 +198,7 @@ Exception: components require `ctx.runQuery`/`ctx.runMutation`. Use them there, 
 
 ### 7. Avoid unnecessary `runAction` calls
 
-`runAction` from within an action creates a separate function invocation with its own memory and CPU budget. The parent
-action just sits idle waiting. Replace with a plain TypeScript function call unless you need a different runtime (e.g.
-calling Node.js code from the Convex runtime).
+`runAction` from within an action creates a separate function invocation with its own memory and CPU budget. The parent action just sits idle waiting. Replace with a plain TypeScript function call unless you need a different runtime (e.g. calling Node.js code from the Convex runtime).
 
 ```ts
 // Bad: runAction overhead for no reason

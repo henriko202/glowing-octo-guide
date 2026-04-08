@@ -98,8 +98,7 @@ export const extractPreferences = migrations.define({
 });
 ```
 
-Make sure your code is already writing to the new `userPreferences` table for new users before running this migration,
-so you don't miss documents created during the migration window.
+Make sure your code is already writing to the new `userPreferences` table for new users before running this migration, so you don't miss documents created during the migration window.
 
 ## Cleaning Up Orphaned Documents
 
@@ -168,8 +167,7 @@ Read both formats. Write only the new format.
 2. Run migration on existing data
 3. Deploy code that reads and writes only new format
 
-This avoids duplicating writes, which is useful when having two copies of data could cause inconsistencies. The downside
-is that rolling back to before step 1 is harder, since new documents only have the new format.
+This avoids duplicating writes, which is useful when having two copies of data could cause inconsistencies. The downside is that rolling back to before step 1 is harder, since new documents only have the new format.
 
 ```typescript
 // Good: reading both formats, preferring new
@@ -181,8 +179,7 @@ function getTeamPlan(team: Doc<"teams">): "basic" | "pro" {
 
 ## Small Table Shortcut
 
-For small tables (a few thousand documents at most), you can migrate in a single `internalMutation` without the
-component:
+For small tables (a few thousand documents at most), you can migrate in a single `internalMutation` without the component:
 
 ```typescript
 import { internalMutation } from "./_generated/server";
