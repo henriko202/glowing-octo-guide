@@ -15,7 +15,7 @@ import type { Id } from '../_generated/dataModel'
 
 type PlanLimits = { interactionsPerPost: number; postsPerWeek: number }
 
-const DEFAULTS: Record<string, PlanLimits> = {
+const DEFAULTS: Record<'starter' | 'growth' | 'pro' | 'contact', PlanLimits> = {
   starter: { interactionsPerPost: 25, postsPerWeek: 1 },
   growth: { interactionsPerPost: 50, postsPerWeek: 2 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5 },
@@ -33,7 +33,7 @@ const DEFAULTS: Record<string, PlanLimits> = {
 export async function getPlanLimitsHelper(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
-  tier: string
+  tier: 'starter' | 'growth' | 'pro' | 'contact'
 ): Promise<PlanLimits> {
   if (tier === 'contact') {
     // Check for a per-user override first.
@@ -68,9 +68,7 @@ export async function getPlanLimitsHelper(
   // All other tiers: look up by tier.
   const row = await ctx.db
     .query('planLimits')
-    .withIndex('by_tier', q =>
-      q.eq('tier', tier as 'starter' | 'growth' | 'pro' | 'contact')
-    )
+    .withIndex('by_tier', q => q.eq('tier', tier))
     .unique()
 
   if (row) {
@@ -81,7 +79,7 @@ export async function getPlanLimitsHelper(
   }
 
   // Safety-net fallback.
-  return DEFAULTS[tier] ?? DEFAULTS.starter
+  return DEFAULTS[tier]
 }
 
 /**
@@ -111,7 +109,7 @@ export function tierToRank(tier?: string): number {
 export const getPlanLimits = internalQuery({
   args: {
     userId: v.id('users'),
-    tier: v.string(),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
   },
   handler: async (ctx, { userId, tier }): Promise<PlanLimits> => {
     return getPlanLimitsHelper(ctx, userId, tier)
