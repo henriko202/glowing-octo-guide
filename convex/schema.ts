@@ -47,6 +47,13 @@ export default defineSchema({
     visibilityIndustries: v.array(v.string()),
     visibilityCountries: v.array(v.string()),
     hidden: v.boolean(),
+    // Numeric rank of the author's subscription tier at post-write time.
+    // 4=contact, 3=pro, 2=growth, 1=starter. Used to filter/sort by tier without
+    // a join. Optional so existing posts without this field remain valid.
+    authorTierRank: v.optional(v.number()),
+    // Set to true when likeCount + commentCount >= the author's interactionsPerPost
+    // plan limit. Optional so existing posts without this field remain valid.
+    interactionLimitReached: v.optional(v.boolean()),
     // Original URL submitted by the user — stored so we can link back correctly
     // without reconstructing URNs (activity IDs ≠ ugcPost IDs across LinkedIn namespaces).
     // Absent for cron-synced posts (those use urnToLinkedInUrl fallback).
@@ -101,5 +108,21 @@ export default defineSchema({
   oauthStates: defineTable({
     state: v.string(),
     expiresAt: v.number()
-  }).index('by_state', ['state'])
+  }).index('by_state', ['state']),
+
+  // Subscription-tier limits for post interactions and weekly post volume.
+  // The contact tier supports optional per-user overrides via userId.
+  planLimits: defineTable({
+    tier: v.union(
+      v.literal('starter'),
+      v.literal('growth'),
+      v.literal('pro'),
+      v.literal('contact')
+    ),
+    userId: v.optional(v.id('users')), // Only set for contact-tier per-user overrides
+    interactionsPerPost: v.number(),
+    postsPerWeek: v.number()
+  })
+    .index('by_tier', ['tier'])
+    .index('by_user', ['userId'])
 })
