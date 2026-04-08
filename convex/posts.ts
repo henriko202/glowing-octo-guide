@@ -1,5 +1,5 @@
 // convex/posts.ts
-import { action, query } from './_generated/server'
+import { action, internalQuery, query } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
@@ -31,6 +31,21 @@ export const getMyPosts = query({
   }
 })
 
+export const countRecentPosts = internalQuery({
+  args: {
+    authorId: v.id('users'),
+    since: v.number()
+  },
+  handler: async (ctx, { authorId, since }) => {
+    const posts = await ctx.db
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', authorId))
+      .order('desc')
+      .take(20)
+    return posts.filter(p => p.publishedAt >= since).length
+  }
+})
+
 export const submitPost = action({
   args: {
     sessionToken: v.string(),
@@ -55,6 +70,23 @@ export const submitPost = action({
       action: 'submitPost',
       maxPerHour: 10
     })
+
+    // Posts per week limit check
+    const effectiveTier = user.tier ?? 'starter'
+    const planLimits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, {
+      userId: user._id,
+      tier: effectiveTier
+    })
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const recentPostCount = await ctx.runQuery(internal.posts.countRecentPosts, {
+      authorId: user._id,
+      since: sevenDaysAgo
+    })
+    if (recentPostCount >= planLimits.postsPerWeek) {
+      throw new Error(
+        `Weekly post limit reached. Your plan allows ${planLimits.postsPerWeek} post${planLimits.postsPerWeek === 1 ? '' : 's'} per week.`
+      )
+    }
 
     const token = user.linkedinAccessToken
     const urn = `urn:li:ugcPost:${parsed.activityId}`

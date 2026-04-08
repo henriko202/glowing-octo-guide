@@ -2,6 +2,7 @@
 import { internalAction, internalMutation } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
+import { tierToRank } from '../lib/planLimits'
 
 // Upsert a single post — inserts new, updates like/comment counts on existing
 export const upsertPost = internalMutation({
@@ -32,9 +33,14 @@ export const upsertPost = internalMutation({
       })
       return existing._id
     } else {
+      const author = await ctx.db.get(args.authorId)
+      const authorTierRank = tierToRank(author?.tier ?? 'starter')
+
       return await ctx.db.insert('posts', {
         ...args,
-        featuredAt: undefined
+        featuredAt: undefined,
+        authorTierRank,
+        interactionLimitReached: false
       })
     }
   }
