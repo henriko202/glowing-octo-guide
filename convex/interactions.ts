@@ -4,6 +4,7 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { requireAuthAction } from './lib/auth'
+import { getPlanLimitsHelper } from './lib/planLimits'
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
@@ -18,7 +19,19 @@ export const incrementCommentCount = internalMutation({
   args: { postId: v.id('posts') },
   handler: async (ctx, { postId }) => {
     const post = await ctx.db.get(postId)
-    if (post) await ctx.db.patch(postId, { commentCount: post.commentCount + 1 })
+    if (!post) return
+    const newCommentCount = post.commentCount + 1
+    await ctx.db.patch(postId, { commentCount: newCommentCount })
+
+    // Check if combined interactions have reached the author's limit
+    const total = newCommentCount + post.likeCount
+    const author = await ctx.db.get(post.authorId)
+    if (author) {
+      const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
+      if (total >= limits.interactionsPerPost && !post.interactionLimitReached) {
+        await ctx.db.patch(postId, { interactionLimitReached: true })
+      }
+    }
   }
 })
 
@@ -27,7 +40,19 @@ export const incrementLikeCount = internalMutation({
   args: { postId: v.id('posts') },
   handler: async (ctx, { postId }) => {
     const post = await ctx.db.get(postId)
-    if (post) await ctx.db.patch(postId, { likeCount: post.likeCount + 1 })
+    if (!post) return
+    const newLikeCount = post.likeCount + 1
+    await ctx.db.patch(postId, { likeCount: newLikeCount })
+
+    // Check if combined interactions have reached the author's limit
+    const total = post.commentCount + newLikeCount
+    const author = await ctx.db.get(post.authorId)
+    if (author) {
+      const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
+      if (total >= limits.interactionsPerPost && !post.interactionLimitReached) {
+        await ctx.db.patch(postId, { interactionLimitReached: true })
+      }
+    }
   }
 })
 
