@@ -55,6 +55,12 @@ describe('PlanLimitsTab — table', () => {
 })
 
 describe('PlanLimitsTab — edit modal', () => {
+  beforeEach(async () => {
+    const { useMutation } = await import('convex/react')
+    vi.mocked(useMutation).mockReset()
+    vi.mocked(useMutation).mockImplementation(() => vi.fn())
+  })
+
   it('opens modal with pre-filled values when Edit is clicked on a tier row', () => {
     render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
     // Click Edit on the starter row
@@ -92,6 +98,7 @@ describe('PlanLimitsTab — edit modal', () => {
         })
       )
     })
+    expect(screen.queryByRole('heading', { name: /edit .* defaults|edit .* limits/i })).not.toBeInTheDocument()
   })
 
   it('calls setContactUserLimit when Save is clicked on a contact override row', async () => {
@@ -119,6 +126,7 @@ describe('PlanLimitsTab — edit modal', () => {
         })
       )
     })
+    expect(screen.queryByRole('heading', { name: /edit .* defaults|edit .* limits/i })).not.toBeInTheDocument()
   })
 
   it('calls removeContactUserLimit when Reset to default is clicked in modal', async () => {
@@ -136,5 +144,6 @@ describe('PlanLimitsTab — edit modal', () => {
         expect.objectContaining({ sessionToken: 'tok', userId: 'u1' })
       )
     })
+    expect(screen.queryByRole('heading', { name: /edit .* defaults|edit .* limits/i })).not.toBeInTheDocument()
   })
 })
