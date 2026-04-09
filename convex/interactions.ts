@@ -137,18 +137,22 @@ export const reactToPost = action({
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
     if (!post) throw new Error('Post not found')
 
-    const res = await fetch(`https://api.linkedin.com/v2/reactions/${encodeURIComponent(post.linkedinPostUrn)}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${user.linkedinAccessToken}`,
-        'Content-Type': 'application/json',
-        'X-Restli-Protocol-Version': '2.0.0'
-      },
-      body: JSON.stringify({
-        actor: `urn:li:person:${user.linkedinId}`,
-        reactionType
-      })
-    })
+    const res = await fetch(
+      `https://api.linkedin.com/rest/reactions?actor=${encodeURIComponent(`urn:li:person:${user.linkedinId}`)}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${user.linkedinAccessToken}`,
+          'Content-Type': 'application/json',
+          'X-Restli-Protocol-Version': '2.0.0',
+          'Linkedin-Version': '202603'
+        },
+        body: JSON.stringify({
+          root: post.linkedinPostUrn,
+          reactionType
+        })
+      }
+    )
     if (!res.ok) {
       const err = await res.text()
       console.error(`LinkedIn reaction failed: ${res.status}`, err)

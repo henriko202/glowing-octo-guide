@@ -1,6 +1,14 @@
 import type { LinkedInTokenResponse, LinkedInUserInfo } from './types.js'
 
-const SCOPES = ['openid', 'profile', 'email', 'r_basicprofile', 'r_profile_basicinfo', 'w_member_social_feed'].join(' ')
+const SCOPES = [
+  'openid',
+  'profile',
+  'email',
+  'r_basicprofile',
+  'r_profile_basicinfo',
+  'w_member_social_feed',
+  'w_member_social'
+].join(' ')
 
 export function buildAuthUrl(state: string): string {
   const clientId = process.env.LINKEDIN_CLIENT_ID!
