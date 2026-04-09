@@ -12,7 +12,7 @@ crons.daily('sync LinkedIn posts', { hourUTC: 3, minuteUTC: 0 }, internal.jobs.s
 
 // Promote queued posts to the feed when authors regain capacity (runs at 4:00 UTC,
 // one hour after the post sync so new posts are already settled).
-crons.daily('process post queue', { hourUTC: 4, minuteUTC: 0 }, internal.jobs.processQueue.processPostQueue, {})
+crons.cron('process post queue', '0 4 * * *', internal.jobs.processQueue.processPostQueue, {})
 
 // ─── Session & OAuth state cleanup ───────────────────────────────────────────
 // Purge expired session tokens every 6 hours to prevent unbounded table growth.
