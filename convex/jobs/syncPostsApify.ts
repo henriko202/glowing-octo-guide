@@ -121,8 +121,6 @@ export const syncUserPostsViaApify = internalAction({
 
     console.log(`[Apify] Fetched ${posts.length} posts for user ${userId} (${user.linkedinPublicIdentifier as string})`)
 
-    console.log(posts)
-
     const hidden = user.subscriptionStatus === 'trialing'
 
     for (const post of posts) {

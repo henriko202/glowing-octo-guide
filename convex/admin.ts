@@ -76,6 +76,7 @@ export const listPlanLimits = query({
   handler: async (ctx, { sessionToken }) => {
     const user = await requireAuth(ctx, sessionToken)
     assertAdmin(user)
+    // Bounded: 4 tier defaults + one row per contact-tier custom override. 500 is a safe ceiling.
     const rows = await ctx.db.query('planLimits').take(500)
     return await Promise.all(
       rows.map(async row => {
