@@ -37,8 +37,17 @@ The `max-w-[640px]` container and page heading remain. The tab bar sits between 
 ### Data
 
 ```typescript
-useQuery(api.admin.listPlanLimits, { sessionToken })
+useQuery(
+  api.admin.listPlanLimits,
+  sessionToken && isAdmin ? { sessionToken } : 'skip'
+)
 ```
+
+`isAdmin` and `sessionToken` are already resolved in `AdminPage` before the tab renders. The `'skip'`
+pattern follows the same convention used for `getSettings` in the existing page — prevents the query from
+firing for unauthenticated or non-admin visitors while the `checkIsAdmin` guard is still resolving.
+
+
 
 Returns an array of rows typed as:
 
@@ -80,7 +89,9 @@ Single table. Columns:
   as plain numbers. "Edit" button only.
 
 - **Contact override row** (`userId` set): user name as plain text. Both limit values shown as numbers in
-  normal weight. "Edit" + "Reset" buttons.
+  normal weight. "Edit" + "Reset" buttons. The "Reset" button in the table calls `removeContactUserLimit`
+  directly (no modal) for quick access. The edit modal for this same row also has a "Reset to default" link
+  that does the same thing — both affordances are intentional.
 
 - **Contact user without a custom override:** These users do not appear in `listPlanLimits` results — the
   query only returns rows that exist in the `planLimits` table. Contact users who have no override row simply
