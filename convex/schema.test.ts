@@ -9,5 +9,6 @@ describe('schema', () => {
     expect(tables).toHaveProperty('subscriptions')
     expect(tables).toHaveProperty('featuredPostUsage')
     expect(tables).toHaveProperty('planLimits')
+    expect(tables).toHaveProperty('postQueue')
   })
 })

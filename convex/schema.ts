@@ -124,5 +124,23 @@ export default defineSchema({
     postsPerWeek: v.number()
   })
     .index('by_tier', ['tier'])
-    .index('by_user', ['userId'])
+    .index('by_user', ['userId']),
+
+  // Overflow queue for posts that could not be inserted because the author was at
+  // their weekly post limit. A daily cron promotes queued posts to the posts table
+  // when capacity opens (i.e. old posts fall outside the 7-day window).
+  postQueue: defineTable({
+    linkedinPostUrn: v.string(),
+    authorId: v.id('users'),
+    content: v.string(),
+    publishedAt: v.number(),
+    likeCount: v.number(),
+    commentCount: v.number(),
+    mediaUrls: v.array(v.string()),
+    hidden: v.boolean(),
+    sourceUrl: v.optional(v.string()),
+    queuedAt: v.number()
+  })
+    .index('by_author', ['authorId'])
+    .index('by_urn', ['linkedinPostUrn'])
 })
