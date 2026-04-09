@@ -12,7 +12,7 @@ const mockRows = [
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => mockRows),
-  useMutation: vi.fn(() => vi.fn()),
+  useMutation: vi.fn(() => Object.assign(vi.fn(), { withOptimisticUpdate: vi.fn() })),
 }))
 
 import PlanLimitsTab from './PlanLimitsTab'
@@ -58,7 +58,7 @@ describe('PlanLimitsTab — edit modal', () => {
   beforeEach(async () => {
     const { useMutation } = await import('convex/react')
     vi.mocked(useMutation).mockReset()
-    vi.mocked(useMutation).mockImplementation(() => vi.fn())
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(vi.fn(), { withOptimisticUpdate: vi.fn() }))
   })
 
   it('opens modal with pre-filled values when Edit is clicked on a tier row', () => {
@@ -82,7 +82,7 @@ describe('PlanLimitsTab — edit modal', () => {
   it('calls updateTierDefault with correct args when Save is clicked on tier row', async () => {
     const { useMutation } = await import('convex/react')
     const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(() => mockMutate)
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() }))
 
     render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
     fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]) // starter
@@ -104,7 +104,7 @@ describe('PlanLimitsTab — edit modal', () => {
   it('calls setContactUserLimit when Save is clicked on a contact override row', async () => {
     const { useMutation } = await import('convex/react')
     const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(() => mockMutate)
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() }))
 
     render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
     // Open any modal first to confirm cancel works, then open the contact override (Bob Smith)
@@ -132,7 +132,7 @@ describe('PlanLimitsTab — edit modal', () => {
   it('calls removeContactUserLimit when Reset to default is clicked in modal', async () => {
     const { useMutation } = await import('convex/react')
     const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(() => mockMutate)
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() }))
 
     render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
     const allEdits = screen.getAllByRole('button', { name: /^edit$/i })
