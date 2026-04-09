@@ -15,6 +15,17 @@ type PlanLimitRow = {
   postsPerWeek: number
 }
 
+// EditTarget covers both existing contact override rows and new overrides (no _id yet)
+type EditTarget = {
+  _id?: Id<'planLimits'>
+  tier: 'contact'
+  userId: Id<'users'>
+  userName: string
+  interactionsPerPost: number
+  postsPerWeek: number
+  isNew?: boolean
+}
+
 // Fixed display order for tier default rows
 const TIER_ORDER: Tier[] = ['starter', 'growth', 'pro', 'contact']
 
@@ -47,18 +58,36 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
     sessionToken && isAdmin ? { sessionToken } : 'skip'
   ) as PlanLimitRow[] | undefined
 
-  const updateTierDefault = useMutation(api.admin.updateTierDefault)
   const setContactUserLimit = useMutation(api.admin.setContactUserLimit)
   const removeContactUserLimit = useMutation(api.admin.removeContactUserLimit)
 
-  const [editingRow, setEditingRow] = useState<PlanLimitRow | null>(null)
-  const [resetting, setResetting] = useState<string | null>(null) // _id being reset
+  const [editingRow, setEditingRow] = useState<EditTarget | null>(null)
+  const [resetting, setResetting] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const searchResults = useQuery(
+    api.admin.searchContactUsers,
+    sessionToken && isAdmin && searchQuery ? { sessionToken, nameQuery: searchQuery } : 'skip'
+  ) as { _id: Id<'users'>; name: string }[] | undefined
 
   if (rows === undefined) {
     return <LoadingSpinner />
   }
 
   const { defaults, overrides } = sortRows(rows)
+
+  function handleSelectUser(user: { _id: Id<'users'>; name: string }) {
+    const contactDefault = rows?.find(r => r.tier === 'contact' && !r.userId)
+    setEditingRow({
+      tier: 'contact',
+      userId: user._id,
+      userName: user.name,
+      interactionsPerPost: contactDefault?.interactionsPerPost ?? 200,
+      postsPerWeek: contactDefault?.postsPerWeek ?? 5,
+      isNew: true,
+    })
+    setSearchQuery('')
+  }
 
   async function handleReset(row: PlanLimitRow) {
     if (!row.userId || !sessionToken) return
@@ -81,7 +110,7 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
           <div>Actions</div>
         </div>
 
-        {/* Tier default rows */}
+        {/* Tier default rows — read-only */}
         {defaults.map(row => (
           <div
             key={row._id}
@@ -94,14 +123,7 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
             </div>
             <div data-testid={`row-${row._id}-interactions`}>{row.interactionsPerPost}</div>
             <div data-testid={`row-${row._id}-posts`}>{row.postsPerWeek}</div>
-            <div>
-              <button
-                onClick={() => setEditingRow(row)}
-                className="text-xs font-medium text-blue-600 hover:underline"
-              >
-                Edit
-              </button>
-            </div>
+            <div className="text-xs text-slate-300">—</div>
           </div>
         ))}
 
@@ -121,7 +143,16 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
                 <div data-testid={`row-${row._id}-posts`}>{row.postsPerWeek}</div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setEditingRow(row)}
+                    onClick={() =>
+                      setEditingRow({
+                        _id: row._id,
+                        tier: 'contact',
+                        userId: row.userId!,
+                        userName: row.userName ?? '',
+                        interactionsPerPost: row.interactionsPerPost,
+                        postsPerWeek: row.postsPerWeek,
+                      })
+                    }
                     className="text-xs font-medium text-blue-600 hover:underline"
                   >
                     Edit
@@ -140,13 +171,42 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
         )}
       </div>
 
+      {/* Add contact override — live search */}
+      <div className="mt-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Add contact override
+        </p>
+        <input
+          type="text"
+          placeholder="Search contact users..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+        />
+        {searchQuery && searchResults && searchResults.length > 0 && (
+          <div className="mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+            {searchResults.map(user => (
+              <button
+                key={user._id}
+                onClick={() => handleSelectUser(user)}
+                className="block w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+              >
+                {user.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {searchQuery && searchResults?.length === 0 && (
+          <p className="mt-2 text-xs text-slate-400">No contact users found matching "{searchQuery}"</p>
+        )}
+      </div>
+
       {/* Edit modal */}
       {editingRow && (
         <EditModal
           row={editingRow}
           sessionToken={sessionToken!}
           onClose={() => setEditingRow(null)}
-          updateTierDefault={updateTierDefault}
           setContactUserLimit={setContactUserLimit}
           removeContactUserLimit={removeContactUserLimit}
         />
@@ -158,24 +218,22 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
 // ─── Edit Modal ──────────────────────────────────────────────────────────────
 
 type EditModalProps = {
-  row: PlanLimitRow
+  row: EditTarget
   sessionToken: string
   onClose: () => void
-  updateTierDefault: ReturnType<typeof useMutation<typeof api.admin.updateTierDefault>>
   setContactUserLimit: ReturnType<typeof useMutation<typeof api.admin.setContactUserLimit>>
   removeContactUserLimit: ReturnType<typeof useMutation<typeof api.admin.removeContactUserLimit>>
 }
 
-function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUserLimit, removeContactUserLimit }: EditModalProps) {
+function EditModal({ row, sessionToken, onClose, setContactUserLimit, removeContactUserLimit }: EditModalProps) {
   const [interactions, setInteractions] = useState(String(row.interactionsPerPost))
   const [posts, setPosts] = useState(String(row.postsPerWeek))
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const isOverride = Boolean(row.userId)
+  const isNew = Boolean(row.isNew)
 
-  // Validation: both fields must be integers >= 1
   const iValid = Number.isInteger(Number(interactions)) && Number(interactions) >= 1
   const pValid = Number.isInteger(Number(posts)) && Number(posts) >= 1
   const isValid = iValid && pValid
@@ -185,21 +243,12 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
     setSaving(true)
     setError(null)
     try {
-      if (isOverride && row.userId) {
-        await setContactUserLimit({
-          sessionToken,
-          userId: row.userId,
-          interactionsPerPost: Number(interactions),
-          postsPerWeek: Number(posts),
-        })
-      } else {
-        await updateTierDefault({
-          sessionToken,
-          tier: row.tier,
-          interactionsPerPost: Number(interactions),
-          postsPerWeek: Number(posts),
-        })
-      }
+      await setContactUserLimit({
+        sessionToken,
+        userId: row.userId,
+        interactionsPerPost: Number(interactions),
+        postsPerWeek: Number(posts),
+      })
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -209,7 +258,6 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
   }
 
   async function handleReset() {
-    if (!row.userId) return
     setResetting(true)
     setError(null)
     try {
@@ -222,9 +270,9 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
     }
   }
 
-  const title = isOverride
-    ? `Edit ${row.userName ?? 'user'} limits`
-    : `Edit ${row.tier} defaults`
+  const title = isNew
+    ? `Add override for ${row.userName}`
+    : `Edit ${row.userName} limits`
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
@@ -279,7 +327,7 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
           </button>
         </div>
 
-        {isOverride && (
+        {!isNew && (
           <button
             onClick={handleReset}
             disabled={resetting}
