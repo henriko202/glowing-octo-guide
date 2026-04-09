@@ -12,6 +12,7 @@ interface ApifyPostResult {
   type: string
   id: string
   linkedinUrl: string
+  shareUrn: string
   content: string
   author: {
     publicIdentifier: string
@@ -33,7 +34,7 @@ interface ApifyPostResult {
 // ─── Parse Apify result into our post shape ──────────────────────────────────
 
 function apifyPostToUpsertArgs(post: ApifyPostResult, authorId: string, hidden: boolean) {
-  const urn = `urn:li:ugcPost:${post.id}`
+  const urn = post.shareUrn
   const mediaUrls = (post.postImages ?? [])
     .map(img => img.url)
     .filter((url): url is string => typeof url === 'string' && url.length > 0)
@@ -120,10 +121,15 @@ export const syncUserPostsViaApify = internalAction({
 
     console.log(`[Apify] Fetched ${posts.length} posts for user ${userId} (${user.linkedinPublicIdentifier as string})`)
 
+    console.log(posts)
+
     const hidden = user.subscriptionStatus === 'trialing'
 
     for (const post of posts) {
-      await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, apifyPostToUpsertArgs(post, userId, hidden))
+      await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, {
+        ...apifyPostToUpsertArgs(post, userId, hidden),
+        queueOnLimitReached: true
+      })
     }
   }
 })
@@ -151,6 +157,8 @@ export const syncAllPostsViaApify = internalAction({
         actionCtx.runAction(internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId: u._id as string })
       )
     )
+
+    console.log(results)
 
     const failed = results.filter(r => r.status === 'rejected')
     if (failed.length > 0) {
