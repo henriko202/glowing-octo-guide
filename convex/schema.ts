@@ -63,6 +63,7 @@ export default defineSchema({
     .index('by_urn', ['linkedinPostUrn'])
     .index('by_featured', ['isFeatured', 'featuredAt'])
     .index('by_published', ['hidden', 'publishedAt'])
+    .index('by_author_and_publishedAt', ['authorId', 'publishedAt'])
     .index('by_feed', ['hidden', 'isFeatured', 'featuredAt']),
 
   subscriptions: defineTable({

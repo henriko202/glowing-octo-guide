@@ -52,10 +52,10 @@ export const upsertPost = internalMutation({
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
     const recentPosts = await ctx.db
       .query('posts')
-      .withIndex('by_author', q => q.eq('authorId', args.authorId))
-      .order('desc')
+      .withIndex('by_author_and_publishedAt', q =>
+        q.eq('authorId', args.authorId).gte('publishedAt', sevenDaysAgo))
       .take(limits.postsPerWeek)
-    const recentCount = countInWindow(recentPosts, sevenDaysAgo)
+    const recentCount = recentPosts.length
 
     if (recentCount >= limits.postsPerWeek) {
       if (args.queueOnLimitReached) {
