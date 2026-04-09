@@ -4,6 +4,7 @@ import { api } from '../convex'
 import { useNavigate } from 'react-router-dom'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PlanLimitsTab from '../components/PlanLimitsTab'
+import UsersTab from '../components/UsersTab'
 
 export default function AdminPage() {
   const navigate = useNavigate()
@@ -12,7 +13,7 @@ export default function AdminPage() {
   const settings = useQuery(api.admin.getSettings, sessionToken && isAdmin ? { sessionToken } : 'skip')
   const toggleSync = useMutation(api.admin.toggleApifySync)
   const [toggling, setToggling] = useState(false)
-  const [tab, setTab] = useState<'settings' | 'planLimits'>('settings')
+  const [tab, setTab] = useState<'settings' | 'planLimits' | 'users'>('settings')
 
   if (isAdmin === undefined) {
     return <LoadingSpinner />
@@ -58,6 +59,16 @@ export default function AdminPage() {
         >
           Plan Limits
         </button>
+        <button
+          onClick={() => setTab('users')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            tab === 'users'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Users
+        </button>
       </div>
 
       {/* Settings tab */}
@@ -92,6 +103,11 @@ export default function AdminPage() {
       {/* Plan Limits tab */}
       {tab === 'planLimits' && (
         <PlanLimitsTab sessionToken={sessionToken} isAdmin={isAdmin} />
+      )}
+
+      {/* Users tab */}
+      {tab === 'users' && (
+        <UsersTab sessionToken={sessionToken} isAdmin={isAdmin} />
       )}
     </div>
   )

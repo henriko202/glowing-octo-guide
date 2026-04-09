@@ -1,18 +1,18 @@
 // convex/crons.ts
 // THIS IS THE ONLY FILE Convex reads for scheduled jobs.
 // Cron definitions in other files are silently ignored.
-import { cronJobs } from 'convex/server'
-import { internal } from './_generated/api.js'
+import {cronJobs} from 'convex/server'
+import {internal} from './_generated/api.js'
 
 const crons = cronJobs()
 
 // ─── Post sync ───────────────────────────────────────────────────────────────
 // Runs daily at 3:00 UTC — fetches latest LinkedIn posts for all active users
-crons.daily('sync LinkedIn posts', { hourUTC: 3, minuteUTC: 0 }, internal.jobs.syncPosts.syncAllPosts, {})
+crons.interval('sync LinkedIn posts', { hours: 24 }, internal.jobs.syncPosts.syncAllPosts, {})
 
 // Promote queued posts to the feed when authors regain capacity (runs at 4:00 UTC,
 // one hour after the post sync so new posts are already settled).
-crons.cron('process post queue', '0 4 * * *', internal.jobs.processQueue.processPostQueue, {})
+crons.interval('process post queue', { hours: 25 }, internal.jobs.processQueue.processPostQueue, {})
 
 // ─── Session & OAuth state cleanup ───────────────────────────────────────────
 // Purge expired session tokens every 6 hours to prevent unbounded table growth.

@@ -353,9 +353,9 @@ export const exampleAction = action({
   For example,
 
 ```ts
-import { cronJobs } from "convex/server";
-import { internal } from "./_generated/api";
-import { internalAction } from "./_generated/server";
+import {cronJobs} from "convex/server";
+import {internal} from "./_generated/api";
+import {internalAction} from "./_generated/server";
 
 const empty = internalAction({
   args: {},
@@ -367,7 +367,7 @@ const empty = internalAction({
 const crons = cronJobs();
 
 // Run `internal.crons.empty` every two hours.
-crons.interval("delete inactive users", { hours: 2 }, internal.crons.empty, {});
+crons.interval("delete inactive users", {hours: 2}, internal.crons.empty, {});
 
 export default crons;
 ```

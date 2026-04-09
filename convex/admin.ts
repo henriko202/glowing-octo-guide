@@ -209,6 +209,80 @@ export const searchContactUsers = query({
   },
 })
 
+// Returns all users sorted by most recently created, with fields needed for admin management.
+// Sensitive fields (tokens, stripe IDs) are omitted — only public/admin-useful data is returned.
+export const listUsers = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+
+    // Bounded take — admin tool; 1000 is a safe ceiling for early-stage.
+    const users = await ctx.db.query('users').order('desc').take(1000)
+
+    return users.map(u => ({
+      _id: u._id,
+      name: u.name,
+      headline: u.headline,
+      tier: u.tier,
+      subscriptionStatus: u.subscriptionStatus,
+      createdAt: u._creationTime,
+    }))
+  },
+})
+
+// Sets a user's tier. Can be used to promote to 'contact' or change between any tiers.
+// When promoting to 'contact', automatically seeds a planLimits override entry using
+// the contact tier's current default values — so the user is fully covered in one step.
+// If a planLimits override already exists for this user, it is left untouched.
+export const setUserTier = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id('users'),
+    tier: v.union(
+      v.literal('starter'),
+      v.literal('growth'),
+      v.literal('pro'),
+      v.literal('contact')
+    ),
+  },
+  handler: async (ctx, { sessionToken, userId, tier }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+
+    const targetUser = await ctx.db.get(userId)
+    if (!targetUser) throw new Error('User not found')
+
+    await ctx.db.patch(userId, { tier })
+
+    // When promoting to contact, auto-seed a planLimits override so the user is
+    // immediately subject to the plan limits system without a separate admin step.
+    if (tier === 'contact') {
+      const existing = await ctx.db
+        .query('planLimits')
+        .withIndex('by_user', q => q.eq('userId', userId))
+        .unique()
+
+      if (!existing) {
+        const contactDefaults = await ctx.db
+          .query('planLimits')
+          .withIndex('by_tier', q => q.eq('tier', 'contact'))
+          .take(10)
+        const contactDefault = contactDefaults.find(r => r.userId === undefined)
+
+        if (contactDefault) {
+          await ctx.db.insert('planLimits', {
+            tier: 'contact',
+            userId,
+            interactionsPerPost: contactDefault.interactionsPerPost,
+            postsPerWeek: contactDefault.postsPerWeek,
+          })
+        }
+      }
+    }
+  },
+})
+
 // ─── Internal functions (for cron/action use — no admin check) ───────────────
 
 export const getSettingsInternal = internalQuery({
