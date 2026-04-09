@@ -4,6 +4,8 @@ import { vi, beforeEach } from 'vitest'
 // Track call order: first useQuery call = checkIsAdmin, subsequent = getSettings (skipped)
 let queryCallCount = 0
 
+// NOTE: This mock assumes exactly 2 useQuery calls per render (checkIsAdmin + getSettings).
+// When the PlanLimitsTab stub is replaced with the real component in Task 3, update this mock to handle 3 calls.
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((query: unknown, args: unknown) => {
     queryCallCount += 1
