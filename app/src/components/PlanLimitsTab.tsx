@@ -62,7 +62,7 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
   const removeContactUserLimit = useMutation(api.admin.removeContactUserLimit)
 
   const [editingRow, setEditingRow] = useState<EditTarget | null>(null)
-  const [resetting, setResetting] = useState<string | null>(null)
+  const [resetting, setResetting] = useState<Id<'planLimits'> | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
   const searchResults = useQuery(
@@ -77,14 +77,16 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
   const { defaults, overrides } = sortRows(rows)
 
   function handleSelectUser(user: { _id: Id<'users'>; name: string }) {
+    const existing = overrides.find(r => r.userId === user._id)
     const contactDefault = rows?.find(r => r.tier === 'contact' && !r.userId)
     setEditingRow({
+      _id: existing?._id,
       tier: 'contact',
       userId: user._id,
       userName: user.name,
-      interactionsPerPost: contactDefault?.interactionsPerPost ?? 200,
-      postsPerWeek: contactDefault?.postsPerWeek ?? 5,
-      isNew: true,
+      interactionsPerPost: existing?.interactionsPerPost ?? contactDefault?.interactionsPerPost ?? 200,
+      postsPerWeek: existing?.postsPerWeek ?? contactDefault?.postsPerWeek ?? 5,
+      isNew: !existing,
     })
     setSearchQuery('')
   }
@@ -202,10 +204,10 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
       </div>
 
       {/* Edit modal */}
-      {editingRow && (
+      {editingRow && sessionToken && (
         <EditModal
           row={editingRow}
-          sessionToken={sessionToken!}
+          sessionToken={sessionToken}
           onClose={() => setEditingRow(null)}
           setContactUserLimit={setContactUserLimit}
           removeContactUserLimit={removeContactUserLimit}
