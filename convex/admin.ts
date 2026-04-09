@@ -76,7 +76,7 @@ export const listPlanLimits = query({
   handler: async (ctx, { sessionToken }) => {
     const user = await requireAuth(ctx, sessionToken)
     assertAdmin(user)
-    const rows = await ctx.db.query('planLimits').collect()
+    const rows = await ctx.db.query('planLimits').take(500)
     return await Promise.all(
       rows.map(async row => {
         let userName: string | undefined
