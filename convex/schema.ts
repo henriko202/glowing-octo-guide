@@ -32,7 +32,8 @@ export default defineSchema({
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
-    .index('by_stripe_customer', ['stripeCustomerId']),
+    .index('by_stripe_customer', ['stripeCustomerId'])
+    .index('by_tier', ['tier']),
 
   posts: defineTable({
     linkedinPostUrn: v.string(),

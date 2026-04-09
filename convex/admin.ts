@@ -183,7 +183,7 @@ export const updateTierDefault = mutation({
 })
 
 // Returns up to 10 contact-tier users whose name contains nameQuery (case-insensitive).
-// Uses a bounded JS-side scan since there is no by_tier index on users.
+// Uses the by_tier index on users to avoid a full-table scan.
 export const searchContactUsers = query({
   args: {
     sessionToken: v.string(),
@@ -193,13 +193,18 @@ export const searchContactUsers = query({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
 
-    const allUsers = await ctx.db.query('users').take(1000)
-    const q = nameQuery.toLowerCase()
+    if (!nameQuery) return []
 
-    return allUsers
-      .filter(u => u.tier === 'contact' && (u.name ?? '').toLowerCase().includes(q))
+    const contactUsers = await ctx.db
+      .query('users')
+      .withIndex('by_tier', q => q.eq('tier', 'contact'))
+      .collect()
+
+    const q = nameQuery.toLowerCase()
+    return contactUsers
+      .filter(u => u.name.toLowerCase().includes(q))
       .slice(0, 10)
-      .map(u => ({ _id: u._id, name: u.name ?? '' }))
+      .map(u => ({ _id: u._id, name: u.name }))
   },
 })
 
