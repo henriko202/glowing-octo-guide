@@ -4,11 +4,6 @@ import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
 
-// Exported for testing. Counts posts published at or after `since`.
-export function countInWindow(posts: Array<{ publishedAt: number }>, since: number): number {
-  return posts.filter(p => p.publishedAt >= since).length
-}
-
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
 // If the limit is reached and queueOnLimitReached is true, routes to postQueue instead.
