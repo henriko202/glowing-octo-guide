@@ -63,6 +63,124 @@ export const toggleApifySync = mutation({
   }
 })
 
+// Exported for testing.
+export function validateLimitArgs(interactionsPerPost: number, postsPerWeek: number): void {
+  if (interactionsPerPost < 1 || postsPerWeek < 1) {
+    throw new Error('interactionsPerPost and postsPerWeek must each be >= 1')
+  }
+}
+
+// Returns all planLimits rows, enriched with userName for contact per-user overrides.
+export const listPlanLimits = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    assertAdmin(user)
+    const rows = await ctx.db.query('planLimits').collect()
+    return await Promise.all(
+      rows.map(async row => {
+        let userName: string | undefined
+        if (row.userId) {
+          const u = await ctx.db.get(row.userId)
+          userName = u?.name
+        }
+        return { ...row, userName }
+      })
+    )
+  }
+})
+
+// Upserts a per-user plan limit override for a contact-tier user.
+export const setContactUserLimit = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id('users'),
+    interactionsPerPost: v.number(),
+    postsPerWeek: v.number()
+  },
+  handler: async (ctx, { sessionToken, userId, interactionsPerPost, postsPerWeek }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+    validateLimitArgs(interactionsPerPost, postsPerWeek)
+
+    const targetUser = await ctx.db.get(userId)
+    if (!targetUser) throw new Error('User not found')
+    if (targetUser.tier !== 'contact') throw new Error('User is not on the contact tier')
+
+    const existing = await ctx.db
+      .query('planLimits')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .unique()
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { interactionsPerPost, postsPerWeek })
+    } else {
+      await ctx.db.insert('planLimits', {
+        tier: 'contact',
+        userId,
+        interactionsPerPost,
+        postsPerWeek
+      })
+    }
+  }
+})
+
+// Deletes a contact-tier per-user limit override (reverts user to tier default).
+export const removeContactUserLimit = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id('users')
+  },
+  handler: async (ctx, { sessionToken, userId }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+
+    const existing = await ctx.db
+      .query('planLimits')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .unique()
+
+    if (existing) {
+      await ctx.db.delete(existing._id)
+    }
+    // No-op if no override exists
+  }
+})
+
+// Updates the default limits for a tier's default row (the row without userId).
+// Filters JS-side to isolate the default row and avoid touching per-user overrides
+// that share the same tier value in the by_tier index.
+export const updateTierDefault = mutation({
+  args: {
+    sessionToken: v.string(),
+    tier: v.union(
+      v.literal('starter'),
+      v.literal('growth'),
+      v.literal('pro'),
+      v.literal('contact')
+    ),
+    interactionsPerPost: v.number(),
+    postsPerWeek: v.number()
+  },
+  handler: async (ctx, { sessionToken, tier, interactionsPerPost, postsPerWeek }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+    validateLimitArgs(interactionsPerPost, postsPerWeek)
+
+    const tierRows = await ctx.db
+      .query('planLimits')
+      .withIndex('by_tier', q => q.eq('tier', tier))
+      .collect()
+
+    const defaultRow = tierRows.find(r => r.userId === undefined)
+    if (!defaultRow) {
+      throw new Error('No default row found for tier — run seedPlanLimits first')
+    }
+
+    await ctx.db.patch(defaultRow._id, { interactionsPerPost, postsPerWeek })
+  }
+})
+
 // ─── Internal functions (for cron/action use — no admin check) ───────────────
 
 export const getSettingsInternal = internalQuery({
