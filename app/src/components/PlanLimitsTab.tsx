@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '../convex'
 import LoadingSpinner from './LoadingSpinner'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
@@ -64,10 +64,16 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
   const [editingRow, setEditingRow] = useState<EditTarget | null>(null)
   const [resetting, setResetting] = useState<Id<'planLimits'> | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 250)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   const searchResults = useQuery(
     api.admin.searchContactUsers,
-    sessionToken && isAdmin && searchQuery ? { sessionToken, nameQuery: searchQuery } : 'skip'
+    sessionToken && isAdmin && debouncedQuery ? { sessionToken, nameQuery: debouncedQuery } : 'skip'
   ) as { _id: Id<'users'>; name: string }[] | undefined
 
   if (rows === undefined) {

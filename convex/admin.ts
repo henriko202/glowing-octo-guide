@@ -184,6 +184,7 @@ export const updateTierDefault = mutation({
 
 // Returns up to 10 contact-tier users whose name contains nameQuery (case-insensitive).
 // Uses the by_tier index on users to avoid a full-table scan.
+// Note: users where `tier` is `undefined` are excluded from the `by_tier` index scan — they will not appear in search results.
 export const searchContactUsers = query({
   args: {
     sessionToken: v.string(),
