@@ -22,10 +22,11 @@ export const seedPlanLimits = internalMutation({
 
     for (const row of defaults) {
       // Only insert if no default row (no userId) for this tier already exists.
-      const existing = await ctx.db
+      const tierRows = await ctx.db
         .query('planLimits')
         .withIndex('by_tier', (q) => q.eq('tier', row.tier))
-        .first()
+        .take(20)
+      const existing = tierRows.find(r => r.userId === undefined)
 
       if (!existing) {
         await ctx.db.insert('planLimits', {

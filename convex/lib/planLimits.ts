@@ -49,11 +49,13 @@ export async function getPlanLimitsHelper(
       }
     }
 
-    // Fall back to the contact tier default row.
-    const tierRow = await ctx.db
+    // Fall back to the contact tier default row (no userId).
+    // Must filter JS-side because by_tier also matches per-user override rows.
+    const contactRows = await ctx.db
       .query('planLimits')
       .withIndex('by_tier', q => q.eq('tier', 'contact'))
-      .unique()
+      .take(20)
+    const tierRow = contactRows.find(r => r.userId === undefined)
 
     if (tierRow) {
       return {
