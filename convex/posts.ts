@@ -88,8 +88,16 @@ export const submitPost = action({
       )
     }
 
+    // fetch the URL and try to get data-attributed-urn
+    const rawLinkedinResponse = await fetch(postUrl)
+    const rawLinkedinText = await rawLinkedinResponse.text()
+    const urn = rawLinkedinText.match(/data-attributed-urn="([^"]+)"/)?.[1]
+
+    if (!urn) {
+      throw new Error('Could not find data-attributed-urn in LinkedIn post')
+    }
+
     const token = user.linkedinAccessToken
-    const urn = `urn:li:ugcPost:${parsed.activityId}`
 
     // 4. Verify ownership (Step A → Step B fallback)
     // Step A: UGC API (works when r_member_social is approved)
@@ -114,6 +122,10 @@ export const submitPost = action({
       // reconstructing from URN loses information (activity ID ≠ ugcPost ID).
       sourceUrl: postUrl
     })
+
+    if (!postId) {
+      throw new Error('Failed to upsert post')
+    }
 
     return { postId }
   }
