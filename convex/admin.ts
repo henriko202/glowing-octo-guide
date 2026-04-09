@@ -198,7 +198,7 @@ export const searchContactUsers = query({
     const contactUsers = await ctx.db
       .query('users')
       .withIndex('by_tier', q => q.eq('tier', 'contact'))
-      .collect()
+      .take(500)
 
     const q = nameQuery.toLowerCase()
     return contactUsers
