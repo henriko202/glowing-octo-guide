@@ -1,20 +1,24 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, beforeEach } from 'vitest'
 
-// Track call order: first useQuery call = checkIsAdmin, subsequent = getSettings (skipped)
+// Track call order: 3 useQuery calls per render cycle:
+//   1 = checkIsAdmin, 2 = getSettings (skipped), 3 = listPlanLimits
 let queryCallCount = 0
 
-// NOTE: This mock assumes exactly 2 useQuery calls per render (checkIsAdmin + getSettings).
-// When the PlanLimitsTab stub is replaced with the real component in Task 3, update this mock to handle 3 calls.
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((query: unknown, args: unknown) => {
     queryCallCount += 1
-    if (queryCallCount % 2 === 1) {
-      // Odd calls = checkIsAdmin → true
+    const mod = queryCallCount % 3
+    if (mod === 1) {
+      // checkIsAdmin → true
       return true
     }
-    // Even calls = getSettings (args === 'skip' because sessionToken is null in jsdom)
-    return undefined
+    if (mod === 2) {
+      // getSettings (args === 'skip' because sessionToken is null in jsdom)
+      return undefined
+    }
+    // mod === 0: listPlanLimits → empty array
+    return []
   }),
   useMutation: vi.fn(() => vi.fn()),
 }))
