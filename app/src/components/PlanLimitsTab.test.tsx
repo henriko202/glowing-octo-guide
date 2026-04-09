@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 
 // Default mock: 4 tier defaults, 1 contact override
@@ -51,5 +51,90 @@ describe('PlanLimitsTab — table', () => {
     vi.mocked(useQuery).mockReturnValueOnce(undefined)
     render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
     expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
+  })
+})
+
+describe('PlanLimitsTab — edit modal', () => {
+  it('opens modal with pre-filled values when Edit is clicked on a tier row', () => {
+    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    // Click Edit on the starter row
+    const editBtns = screen.getAllByRole('button', { name: /^edit$/i })
+    fireEvent.click(editBtns[0]) // first Edit = starter row
+    expect(screen.getByText(/edit starter defaults/i)).toBeInTheDocument()
+    expect(screen.getByDisplayValue('25')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('1')).toBeInTheDocument()
+  })
+
+  it('disables Save when an input is set to 0', () => {
+    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0])
+    const interactionsInput = screen.getByDisplayValue('25')
+    fireEvent.change(interactionsInput, { target: { value: '0' } })
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  })
+
+  it('calls updateTierDefault with correct args when Save is clicked on tier row', async () => {
+    const { useMutation } = await import('convex/react')
+    const mockMutate = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(useMutation).mockImplementation(() => mockMutate)
+
+    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]) // starter
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionToken: 'tok',
+          tier: 'starter',
+          interactionsPerPost: 25,
+          postsPerWeek: 1,
+        })
+      )
+    })
+  })
+
+  it('calls setContactUserLimit when Save is clicked on a contact override row', async () => {
+    const { useMutation } = await import('convex/react')
+    const mockMutate = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(useMutation).mockImplementation(() => mockMutate)
+
+    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    // Open any modal first to confirm cancel works, then open the contact override (Bob Smith)
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    const allEdits = screen.getAllByRole('button', { name: /^edit$/i })
+    fireEvent.click(allEdits[allEdits.length - 1]) // last Edit = contact override
+
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionToken: 'tok',
+          userId: 'u1',
+          interactionsPerPost: 500,
+          postsPerWeek: 10,
+        })
+      )
+    })
+  })
+
+  it('calls removeContactUserLimit when Reset to default is clicked in modal', async () => {
+    const { useMutation } = await import('convex/react')
+    const mockMutate = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(useMutation).mockImplementation(() => mockMutate)
+
+    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    const allEdits = screen.getAllByRole('button', { name: /^edit$/i })
+    fireEvent.click(allEdits[allEdits.length - 1]) // contact override
+    fireEvent.click(screen.getByRole('button', { name: /reset to default/i }))
+
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionToken: 'tok', userId: 'u1' })
+      )
+    })
   })
 })
