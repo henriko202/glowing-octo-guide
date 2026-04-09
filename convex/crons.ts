@@ -10,6 +10,10 @@ const crons = cronJobs()
 // Runs daily at 3:00 UTC — fetches latest LinkedIn posts for all active users
 crons.daily('sync LinkedIn posts', { hourUTC: 3, minuteUTC: 0 }, internal.jobs.syncPosts.syncAllPosts, {})
 
+// Promote queued posts to the feed when authors regain capacity (runs at 4:00 UTC,
+// one hour after the post sync so new posts are already settled).
+crons.daily('process post queue', { hourUTC: 4, minuteUTC: 0 }, internal.jobs.processQueue.processPostQueue, {})
+
 // ─── Session & OAuth state cleanup ───────────────────────────────────────────
 // Purge expired session tokens every 6 hours to prevent unbounded table growth.
 // Each batch removes up to 200 rows; large backlogs are handled across multiple runs.
