@@ -100,11 +100,19 @@ describe('PlanLimitsTab — table', () => {
 })
 
 describe('PlanLimitsTab — edit modal (contact override)', () => {
+  let mockSet: ReturnType<typeof vi.fn>
+  let mockRemove: ReturnType<typeof vi.fn>
+
   beforeEach(() => {
     vi.mocked(useMutation).mockReset()
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(vi.fn(), { withOptimisticUpdate: vi.fn() })
-    )
+    let mutCallCount = 0
+    mockSet = vi.fn()
+    mockRemove = vi.fn()
+    vi.mocked(useMutation).mockImplementation(() => {
+      mutCallCount++
+      const fn = mutCallCount % 2 === 1 ? mockSet : mockRemove
+      return Object.assign(fn, { withOptimisticUpdate: vi.fn() })
+    })
     vi.mocked(useQuery).mockReturnValue(mockRows)
   })
 
@@ -124,17 +132,14 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
   })
 
   it('calls setContactUserLimit with correct args when Save is clicked on override row', async () => {
-    const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() })
-    )
+    mockSet.mockResolvedValue(undefined)
 
     render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
     await waitFor(() => {
-      expect(mockMutate).toHaveBeenCalledWith(
+      expect(mockSet).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionToken: 'tok',
           userId: 'u1',
@@ -147,17 +152,14 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
   })
 
   it('calls removeContactUserLimit when Reset to default is clicked in modal', async () => {
-    const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() })
-    )
+    mockRemove.mockResolvedValue(undefined)
 
     render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     fireEvent.click(screen.getByRole('button', { name: /reset to default/i }))
 
     await waitFor(() => {
-      expect(mockMutate).toHaveBeenCalledWith(
+      expect(mockRemove).toHaveBeenCalledWith(
         expect.objectContaining({ sessionToken: 'tok', userId: 'u1' })
       )
     })
@@ -165,10 +167,7 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
   })
 
   it('calls setContactUserLimit when Save clicked on new-override modal (from search)', async () => {
-    const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() })
-    )
+    mockSet.mockResolvedValue(undefined)
 
     const mockSearchResults = [{ _id: 'u2', name: 'Alice Johnson' }]
     let callCount = 0
@@ -186,7 +185,7 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
     await waitFor(() => {
-      expect(mockMutate).toHaveBeenCalledWith(
+      expect(mockSet).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionToken: 'tok',
           userId: 'u2',
