@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import schema from './schema'
 
 describe('schema', () => {
-  it('defines users table with required fields', () => {
+  it('defines all required tables', () => {
     const tables = schema.tables
     expect(tables).toHaveProperty('users')
     expect(tables).toHaveProperty('posts')
