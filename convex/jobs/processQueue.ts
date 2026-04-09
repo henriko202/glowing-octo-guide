@@ -36,7 +36,7 @@ export const processPostQueue = internalMutation({
         const orphaned = await ctx.db
           .query('postQueue')
           .withIndex('by_author', q => q.eq('authorId', authorId))
-          .collect()
+          .take(BATCH_SIZE)
         for (const p of orphaned) await ctx.db.delete(p._id)
         continue
       }
@@ -88,7 +88,6 @@ export const processPostQueue = internalMutation({
           commentCount: queuedPost.commentCount,
           mediaUrls: queuedPost.mediaUrls,
           isFeatured: false,
-          featuredAt: undefined,
           visibilityIndustries: [],
           visibilityCountries: [],
           hidden: queuedPost.hidden,
