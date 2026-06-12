@@ -22,7 +22,6 @@ describe('BannedScreen', () => {
 
   it('clears the session token on sign out', () => {
     const remove = vi.spyOn(Storage.prototype, 'removeItem')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).location = { assign: vi.fn(), href: '/', origin: window.location.origin }
     render(<BannedScreen />)
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
