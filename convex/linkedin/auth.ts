@@ -1,7 +1,7 @@
 // convex/linkedin/auth.ts
-import {internalMutationGeneric as internalMutation} from 'convex/server'
-import {v} from 'convex/values'
-import type {UpsertDb} from '../convexTypes.js'
+import { internalMutationGeneric as internalMutation } from 'convex/server'
+import { v } from 'convex/values'
+import type { UpsertDb } from '../convexTypes.js'
 
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000
 

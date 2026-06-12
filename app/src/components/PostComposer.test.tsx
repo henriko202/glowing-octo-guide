@@ -1,6 +1,6 @@
 // app/src/components/PostComposer.test.tsx
-import { render, screen, fireEvent } from '@testing-library/react'
-import { vi, describe, it, expect } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import PostComposer from './PostComposer'
 
 describe('PostComposer', () => {
@@ -43,5 +43,31 @@ describe('PostComposer', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit/i }))
     await screen.findByRole('textbox')
     expect((input as HTMLInputElement).value).toBe('')
+  })
+
+  it('renders the light theme on a white surface', () => {
+    const { container } = render(
+      <PostComposer
+        onSubmit={async () => {}}
+        theme="light"
+      />
+    )
+    expect(container.querySelector('form')?.className).toContain('bg-white')
+    expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument()
+  })
+
+  it('keeps submit disabled at the weekly limit even with a URL typed', () => {
+    render(
+      <PostComposer
+        onSubmit={async () => {}}
+        atLimit
+        limitHint="Weekly limit reached"
+      />
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'https://www.linkedin.com/posts/test_123-XyZ' }
+    })
+    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
+    expect(screen.getByText(/weekly limit reached/i)).toBeInTheDocument()
   })
 })

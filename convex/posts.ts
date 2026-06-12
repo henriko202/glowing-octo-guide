@@ -6,6 +6,7 @@ import type { Doc } from './_generated/dataModel'
 import { parseLinkedInPostUrl } from './linkedin/parsePostUrl'
 import { verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
+import { getPlanLimitsHelper } from './lib/planLimits'
 
 export const getMyPosts = query({
   args: {
@@ -31,6 +32,16 @@ export const getMyPosts = query({
   }
 })
 
+/**
+ * Counts how many of the given posts were published at or after `since`.
+ * Pure helper — the single source of truth for the rolling-window count shared
+ * by weekly-limit enforcement (countRecentPosts → submitPost) and the My Posts
+ * usage pill (getWeeklyUsage), so the two can never drift apart.
+ */
+export function countPostsSince(posts: { publishedAt: number }[], since: number): number {
+  return posts.filter(p => p.publishedAt >= since).length
+}
+
 export const countRecentPosts = internalQuery({
   args: {
     authorId: v.id('users'),
@@ -42,7 +53,40 @@ export const countRecentPosts = internalQuery({
       .withIndex('by_author', q => q.eq('authorId', authorId))
       .order('desc')
       .take(20)
-    return posts.filter(p => p.publishedAt >= since).length
+    return countPostsSince(posts, since)
+  }
+})
+
+/**
+ * Public: returns the authenticated user's weekly post usage for the My Posts
+ * pill. `postsThisWeek` is counted over the SAME rolling 7-day window that
+ * submitPost enforces, so the pill always reflects what the backend will allow.
+ * Returns null when not signed in (mirrors getMe / getMyPosts).
+ */
+export const getWeeklyUsage = query({
+  args: {
+    sessionToken: v.optional(v.string())
+  },
+  handler: async (ctx, { sessionToken }) => {
+    if (!sessionToken) return null
+    let user: Doc<'users'>
+    try {
+      user = (await requireAuth(ctx, sessionToken)) as Doc<'users'>
+    } catch {
+      return null
+    }
+    const tier = user.tier ?? 'starter'
+    const limits = await getPlanLimitsHelper(ctx, user._id, tier)
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const posts = await ctx.db
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', user._id))
+      .order('desc')
+      .take(20)
+    return {
+      postsThisWeek: countPostsSince(posts, sevenDaysAgo),
+      postsPerWeek: limits.postsPerWeek
+    }
   }
 })
 

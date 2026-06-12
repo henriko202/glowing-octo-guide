@@ -1,47 +1,75 @@
 // app/src/pages/MyPostsPage.test.tsx
 import { render, screen } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
-
-// Track call order: first useQuery call = getMe, second = getMyPosts
-let queryCallCount = 0
-
-vi.mock('convex/react', () => ({
-  useQuery: vi.fn(() => {
-    queryCallCount += 1
-    if (queryCallCount % 2 === 1) {
-      // Odd calls = getMe
-      return { name: 'Henri Durand', tier: 'starter' }
-    }
-    // Even calls = getMyPosts — empty
-    return []
-  }),
-  useAction: vi.fn(() => async () => {})
-}))
-
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import MyPostsPage from './MyPostsPage'
 
+// Mock the Convex API module so each query/action has a stable, identifiable
+// reference. This lets the useQuery mock dispatch by *which* query was asked
+// for, rather than by call order (which broke when a third query was added).
+vi.mock('../convex', () => ({
+  api: {
+    users: { getMe: 'users.getMe' },
+    posts: {
+      getMyPosts: 'posts.getMyPosts',
+      getWeeklyUsage: 'posts.getWeeklyUsage',
+      submitPost: 'posts.submitPost'
+    }
+  }
+}))
+
+// Per-test return values keyed by the refs above. Must be `mock`-prefixed so
+// Vitest allows it inside the hoisted vi.mock factory.
+let mockQueryReturns: Record<string, unknown> = {}
+
+vi.mock('convex/react', () => ({
+  useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
+  useAction: vi.fn(() => async () => {})
+}))
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <MyPostsPage />
+    </MemoryRouter>
+  )
+}
+
 describe('MyPostsPage', () => {
   beforeEach(() => {
-    queryCallCount = 0
+    mockQueryReturns = {
+      'users.getMe': { name: 'Henri Durand', tier: 'starter' },
+      'posts.getMyPosts': [],
+      'posts.getWeeklyUsage': { postsThisWeek: 2, postsPerWeek: 5 }
+    }
   })
 
   it('shows the page heading and user name', () => {
-    render(
-      <MemoryRouter>
-        <MyPostsPage />
-      </MemoryRouter>
-    )
+    renderPage()
     expect(screen.getByText('My Posts')).toBeInTheDocument()
     expect(screen.getByText('Henri Durand')).toBeInTheDocument()
   })
 
   it('shows empty state when no posts', () => {
-    render(
-      <MemoryRouter>
-        <MyPostsPage />
-      </MemoryRouter>
-    )
-    expect(screen.getByText(/add posts from the feed/i)).toBeInTheDocument()
+    renderPage()
+    expect(screen.getByText(/share your first post/i)).toBeInTheDocument()
+  })
+
+  it('shows the weekly usage pill', () => {
+    renderPage()
+    expect(screen.getByText(/2 of 5 posts this week/i)).toBeInTheDocument()
+  })
+
+  it('renders the share composer', () => {
+    renderPage()
+    expect(screen.getByPlaceholderText(/linkedin\.com\/posts/i)).toBeInTheDocument()
+  })
+
+  it('turns the pill amber and disables submit at the weekly limit', () => {
+    mockQueryReturns['posts.getWeeklyUsage'] = { postsThisWeek: 5, postsPerWeek: 5 }
+    renderPage()
+    expect(screen.getByText(/5 of 5 posts this week/i)).toBeInTheDocument()
+    expect(screen.getByText(/weekly limit reached/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
   })
 })

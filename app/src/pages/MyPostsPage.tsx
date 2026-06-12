@@ -1,9 +1,10 @@
 // app/src/pages/MyPostsPage.tsx
-import { useQuery } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 
 import LoadingSpinner from '../components/LoadingSpinner'
+import PostComposer from '../components/PostComposer'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -14,6 +15,12 @@ interface MyPost {
   likeCount: number
   commentCount: number
   sourceUrl?: string
+}
+
+// The shape returned by getWeeklyUsage (null when not signed in).
+interface WeeklyUsage {
+  postsThisWeek: number
+  postsPerWeek: number
 }
 
 /** Build a LinkedIn embed iframe URL from a ugcPost URN */
@@ -49,28 +56,59 @@ export default function MyPostsPage() {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
 
   const me = useQuery(api.users.getMe, { sessionToken })
+  const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
   const posts = useQuery(api.posts.getMyPosts, { sessionToken }) as unknown as MyPost[] | undefined
+  const submitPost = useAction(api.posts.submitPost)
+
+  async function handleSubmit(postUrl: string) {
+    if (!sessionToken) throw new Error('Not signed in')
+    await submitPost({ sessionToken, postUrl })
+  }
 
   if (posts === undefined) {
     return <LoadingSpinner />
   }
 
+  // Hit the weekly cap once usage loads and the count meets the plan limit.
+  const atLimit = usage != null && usage.postsThisWeek >= usage.postsPerWeek
+
   return (
     <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
       <h1 className="mb-6 text-2xl font-bold text-slate-900">My Posts</h1>
 
-      {/* Profile header */}
+      {/* Profile header — with the weekly-usage pill on the right */}
       {me && (
-        <div className="mb-6 flex items-center gap-3">
-          <div className="color-[#94a3b8] flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 font-bold">
-            {me.name[0]}
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="color-[#94a3b8] flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 font-bold">
+              {me.name[0]}
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-900">{me.name}</div>
+              <div className="text-xs capitalize text-slate-500">{me.tier} plan</div>
+            </div>
           </div>
-          <div>
-            <div className="text-sm font-semibold text-slate-900">{me.name}</div>
-            <div className="text-xs capitalize text-slate-500">{me.tier} plan</div>
-          </div>
+          {usage && (
+            <span
+              title="In the last 7 days"
+              className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                atLimit ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+              }`}
+            >
+              {usage.postsThisWeek} of {usage.postsPerWeek} posts this week
+            </span>
+          )}
         </div>
       )}
+
+      {/* Manual share — copied from the Feed page, re-themed light to match this page.
+          Disabled at the weekly limit so we don't trigger a guaranteed-to-fail submit. */}
+      <PostComposer
+        theme="light"
+        atLimit={atLimit}
+        limitHint="Weekly limit reached"
+        onSubmit={handleSubmit}
+      />
 
       {/* Section header */}
       <div className="mb-3 text-[10px] uppercase tracking-wider text-slate-500">Your posts ({posts.length})</div>
@@ -78,7 +116,7 @@ export default function MyPostsPage() {
       {/* Post list */}
       {posts.length === 0 ? (
         <div className="border-t border-slate-200 pt-5 text-center">
-          <p className="text-[13px] text-slate-500">Add posts from the Feed page composer ↑</p>
+          <p className="text-[13px] text-slate-500">Share your first post using the composer above ↑</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
