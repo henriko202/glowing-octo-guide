@@ -10,6 +10,7 @@ import MyPostsPage from './pages/MyPostsPage'
 import AdminPage from './pages/AdminPage'
 import AppNav from './components/AppNav'
 import LoadingSpinner from './components/LoadingSpinner'
+import BannedScreen from './components/BannedScreen'
 
 const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE as string
 const AUTH_URL = `${CONVEX_SITE_URL}/auth/linkedin`
@@ -26,6 +27,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
   }, [me])
 
   if (me === undefined || me === null) return <LoadingSpinner />
+
+  if (me.isBanned) return <BannedScreen reason={me.bannedReason ?? undefined} />
 
   return (
     <>
