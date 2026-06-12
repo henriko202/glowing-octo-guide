@@ -2,7 +2,7 @@ import { internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import type { UserDoc } from './convexTypes'
-import { requireAuth } from './lib/auth'
+import { requireAuth, resolveSession } from './lib/auth'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -23,23 +23,26 @@ export const getActiveSubscribers = internalQuery({
   }
 })
 
+// Pure: turns a full user doc into the safe client payload.
+// Strips tokens + the raw isAdmin flag; re-adds isAdmin:true only for admins
+// (needed by the frontend route guard); passes the ban signal through so the
+// client can render the banned screen.
+export function toSafeMe(user: UserDoc) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, isAdmin, ...safeUser } = user
+  return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
+}
+
 // Public: returns safe user profile — strips ALL token fields.
 // Auth: resolves the session token server-side; never accepts a userId from the client.
+// NOTE: resolves via resolveSession (not requireAuth) so a banned user gets an
+// isBanned signal instead of null — otherwise the client would loop back to LinkedIn.
 export const getMe = query({
   args: { sessionToken: v.optional(v.string()) },
   handler: async (ctx, { sessionToken }) => {
-    if (!sessionToken) return null
-    let user: UserDoc
-    try {
-      user = (await requireAuth(ctx, sessionToken)) as UserDoc
-    } catch {
-      return null
-    }
-    // IMPORTANT: Strip tokens and isAdmin before returning to client
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, isAdmin, ...safeUser } = user
-    // Only include isAdmin if the user IS an admin (needed for frontend route guard)
-    return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
+    const user = (await resolveSession(ctx, sessionToken)) as UserDoc | null
+    if (!user) return null
+    return toSafeMe(user)
   }
 })
 
