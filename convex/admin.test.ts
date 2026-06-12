@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateLimitArgs } from './admin'
+import { validateLimitArgs, assertNotSelfBan } from './admin'
 
 describe('validateLimitArgs', () => {
   it('passes with valid positive values', () => {
@@ -16,5 +16,15 @@ describe('validateLimitArgs', () => {
   it('throws when postsPerWeek < 1', () => {
     expect(() => validateLimitArgs(25, 0)).toThrow('>= 1')
     expect(() => validateLimitArgs(25, -5)).toThrow('>= 1')
+  })
+})
+
+describe('assertNotSelfBan', () => {
+  it('throws when an admin targets their own id', () => {
+    expect(() => assertNotSelfBan('admin1', 'admin1')).toThrow("can't ban yourself")
+  })
+
+  it('does not throw when targeting a different user', () => {
+    expect(() => assertNotSelfBan('admin1', 'user2')).not.toThrow()
   })
 })

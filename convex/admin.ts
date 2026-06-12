@@ -12,6 +12,13 @@ function assertAdmin(user: Doc<'users'>): void {
   }
 }
 
+// Pure guardrail: an admin may not ban their own account. (Banning OTHER admins
+// is intentionally allowed — self-ban being blocked guarantees at least one admin
+// always remains.)
+export function assertNotSelfBan(adminId: string, targetId: string): void {
+  if (adminId === targetId) throw new Error("You can't ban yourself")
+}
+
 // Returns global app settings (creates default if missing)
 async function getOrCreateSettings(db: DatabaseWriter): Promise<Doc<'appSettings'>> {
   const existing = await db.query('appSettings').first()
@@ -226,6 +233,7 @@ export const listUsers = query({
       headline: u.headline,
       tier: u.tier,
       subscriptionStatus: u.subscriptionStatus,
+      isBanned: u.isBanned,
       createdAt: u._creationTime,
     }))
   },
@@ -280,6 +288,54 @@ export const setUserTier = mutation({
         }
       }
     }
+  },
+})
+
+// Bans a user — hard lockout enforced centrally in requireAuth. Admin-only.
+// reason is optional and user-visible (shown on the banned screen).
+export const banUser = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id('users'),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, { sessionToken, userId, reason }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+    assertNotSelfBan(admin._id, userId)
+
+    const targetUser = await ctx.db.get(userId)
+    if (!targetUser) throw new Error('User not found')
+
+    const trimmed = reason?.trim()
+    await ctx.db.patch(userId, {
+      isBanned: true,
+      bannedAt: Date.now(),
+      bannedBy: admin._id,
+      ...(trimmed ? { bannedReason: trimmed } : {}),
+    })
+  },
+})
+
+// Unbans a user — clears all ban fields. Admin-only.
+export const unbanUser = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id('users'),
+  },
+  handler: async (ctx, { sessionToken, userId }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+
+    const targetUser = await ctx.db.get(userId)
+    if (!targetUser) throw new Error('User not found')
+
+    await ctx.db.patch(userId, {
+      isBanned: false,
+      bannedAt: undefined,
+      bannedBy: undefined,
+      bannedReason: undefined,
+    })
   },
 })
 
