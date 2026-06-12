@@ -11,12 +11,12 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 const http = httpRouter();
 http.route({
-    path: "/echo",
-    method: "POST",
-    handler: httpAction(async (ctx, req) => {
+  path: "/echo",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
     const body = await req.bytes();
     return new Response(body, { status: 200 });
-    }),
+  }),
 });
 ```
 
@@ -32,12 +32,12 @@ import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 
 export default mutation({
-args: {
+  args: {
     simpleArray: v.array(v.union(v.string(), v.number())),
-},
-handler: async (ctx, args) => {
+  },
+  handler: async (ctx, args) => {
     //...
-},
+  },
 });
 ```
 
@@ -48,47 +48,43 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-    results: defineTable(
-        v.union(
-            v.object({
-                kind: v.literal("error"),
-                errorMessage: v.string(),
-            }),
-            v.object({
-                kind: v.literal("success"),
-                value: v.number(),
-            }),
-        ),
-    )
+  results: defineTable(
+    v.union(
+      v.object({
+        kind: v.literal("error"),
+        errorMessage: v.string(),
+      }),
+      v.object({
+        kind: v.literal("success"),
+        value: v.number(),
+      }),
+    ),
+  ),
 });
 ```
 
 - Here are the valid Convex types along with their respective validators:
   Convex Type | TS/JS type | Example Usage | Validator for argument validation and schemas | Notes |
   | ----------- | ------------| -----------------------| -----------------------------------------------| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-  | Id | string | `doc._id`              | `v.id(tableName)`                              | |
-  | Null | null | `null`                 | `v.null()`                                     | JavaScript's `undefined` is
-  not a valid Convex value. Functions the return `undefined` or do not return will return `null` when called from a
-  client. Use `null` instead. |
-  | Int64 | bigint | `3n`                   | `v.int64()`                                    | Int64s only support
-  BigInts between -2^63 and 2^63-1. Convex supports `bigint`s in most modern browsers. |
-  | Float64 | number | `3.1`                  | `v.number()`                                   | Convex supports all
-  IEEE-754 double-precision floating point numbers (such as NaNs). Inf and NaN are JSON serialized as strings. |
-  | Boolean | boolean | `true`                 | `v.boolean()`                                  |
-  | String | string | `"abc"`                | `v.string()`                                   | Strings are stored as
-  UTF-8 and must be valid Unicode sequences. Strings must be smaller than the 1MB total size limit when encoded as
-  UTF-8. |
-  | Bytes | ArrayBuffer | `new ArrayBuffer(8)`   | `v.bytes()`                                    | Convex supports
-  first class bytestrings, passed in as `ArrayBuffer`s. Bytestrings must be smaller than the 1MB total size limit for
-  Convex types. |
-  | Array | Array | `[1, 3.2, "abc"]`      | `v.array(values)`                              | Arrays can have at most
-  8192 values. |
-  | Object | Object | `{a: "abc"}`           | `v.object({property: value})`                  | Convex only supports "
-  plain old JavaScript objects" (objects that do not have a custom prototype). Objects can have at most 1024 entries.
-  Field names must be nonempty and not start with "$" or "_". |
+  | Id | string | `doc._id` | `v.id(tableName)` | |
+  | Null | null | `null` | `v.null()` | JavaScript's `undefined` is not a valid Convex value. Functions the return
+  `undefined` or do not return will return `null` when called from a client. Use `null` instead. |
+  | Int64 | bigint | `3n` | `v.int64()` | Int64s only support BigInts between -2^63 and 2^63-1. Convex supports `bigint`
+  s in most modern browsers. |
+  | Float64 | number | `3.1` | `v.number()` | Convex supports all IEEE-754 double-precision floating point numbers (such
+  as NaNs). Inf and NaN are JSON serialized as strings. |
+  | Boolean | boolean | `true` | `v.boolean()` |
+  | String | string | `"abc"` | `v.string()` | Strings are stored as UTF-8 and must be valid Unicode sequences. Strings
+  must be smaller than the 1MB total size limit when encoded as UTF-8. |
+  | Bytes | ArrayBuffer | `new ArrayBuffer(8)` | `v.bytes()` | Convex supports first class bytestrings, passed in as
+  `ArrayBuffer`s. Bytestrings must be smaller than the 1MB total size limit for Convex types. |
+  | Array | Array | `[1, 3.2, "abc"]` | `v.array(values)` | Arrays can have at most 8192 values. |
+  | Object | Object | `{a: "abc"}` | `v.object({property: value})` | Convex only supports "plain old JavaScript
+  objects" (objects that do not have a custom prototype). Objects can have at most 1024 entries. Field names must be
+  nonempty and not start with "$" or "_". |
   | Record | Record | `{"a": "1", "b": "2"}` |
   `v.record(keys, values)`                       | Records are objects at runtime, but can have dynamic keys. Keys must be only ASCII characters, nonempty, and not start with "$"
-  or "_". |
+  or "\_". |
 
 ### Function registration
 
@@ -154,14 +150,14 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 export const listWithExtraArg = query({
-    args: { paginationOpts: paginationOptsValidator, author: v.string() },
-    handler: async (ctx, args) => {
-        return await ctx.db
-        .query("messages")
-        .withIndex("by_author", (q) => q.eq("author", args.author))
-        .order("desc")
-        .paginate(args.paginationOpts);
-    },
+  args: { paginationOpts: paginationOptsValidator, author: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_author", (q) => q.eq("author", args.author))
+      .order("desc")
+      .paginate(args.paginationOpts);
+  },
 });
 ```
 
@@ -242,7 +238,7 @@ when authentication is needed — it will not send tokens with requests.
 
 ## Typescript guidelines
 
-- You can use the helper typescript type `Id` imported from './_generated/dataModel' to get the type of the id for a
+- You can use the helper typescript type `Id` imported from './\_generated/dataModel' to get the type of the id for a
   given table. For example if there is a table called 'users' you can use `Id<'users'>` to get the type of the id for
   that table.
 - Use `Doc<"tableName">` from `./_generated/dataModel` to get the full document type for a table.
@@ -257,18 +253,18 @@ import { query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 
 export const exampleQuery = query({
-    args: { userIds: v.array(v.id("users")) },
-    handler: async (ctx, args) => {
-        const idToUsername: Record<Id<"users">, string> = {};
-        for (const userId of args.userIds) {
-            const user = await ctx.db.get("users", userId);
-            if (user) {
-                idToUsername[user._id] = user.username;
-            }
-        }
+  args: { userIds: v.array(v.id("users")) },
+  handler: async (ctx, args) => {
+    const idToUsername: Record<Id<"users">, string> = {};
+    for (const userId of args.userIds) {
+      const user = await ctx.db.get("users", userId);
+      if (user) {
+        idToUsername[user._id] = user.username;
+      }
+    }
 
-        return idToUsername;
-    },
+    return idToUsername;
+  },
 });
 ```
 
@@ -334,11 +330,11 @@ q.search("body", "hello hi").eq("channel", "#general"),
 import { action } from "./_generated/server";
 
 export const exampleAction = action({
-    args: {},
-    handler: async (ctx, args) => {
-        console.log("This action does not return anything");
-        return null;
-    },
+  args: {},
+  handler: async (ctx, args) => {
+    console.log("This action does not return anything");
+    return null;
+  },
 });
 ```
 
@@ -353,9 +349,9 @@ export const exampleAction = action({
   For example,
 
 ```ts
-import {cronJobs} from "convex/server";
-import {internal} from "./_generated/api";
-import {internalAction} from "./_generated/server";
+import { cronJobs } from "convex/server";
+import { internal } from "./_generated/api";
+import { internalAction } from "./_generated/server";
 
 const empty = internalAction({
   args: {},
@@ -367,13 +363,13 @@ const empty = internalAction({
 const crons = cronJobs();
 
 // Run `internal.crons.empty` every two hours.
-crons.interval("delete inactive users", {hours: 2}, internal.crons.empty, {});
+crons.interval("delete inactive users", { hours: 2 }, internal.crons.empty, {});
 
 export default crons;
 ```
 
 - You can register Convex functions within `crons.ts` just like any other file.
-- If a cron calls an internal function, always import the `internal` object from '_generated/api', even if the internal
+- If a cron calls an internal function, always import the `internal` object from '\_generated/api', even if the internal
   function is registered in the same file.
 
 ## Testing guidelines
@@ -433,5 +429,3 @@ export const exampleQuery = query({
 ```
 
 - Convex storage stores items as `Blob` objects. You must convert all items to/from a `Blob` when using Convex storage.
-
-
