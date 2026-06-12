@@ -1,0 +1,32 @@
+import { render, screen, fireEvent } from '@testing-library/react'
+import { vi } from 'vitest'
+import BannedScreen from './BannedScreen'
+
+describe('BannedScreen', () => {
+  it('shows the suspension heading and a support mailto link', () => {
+    render(<BannedScreen />)
+    expect(screen.getByText(/account has been suspended/i)).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: /contact support/i })
+    expect(link).toHaveAttribute('href', 'mailto:contact@email.com')
+  })
+
+  it('shows the reason block when a reason is provided', () => {
+    render(<BannedScreen reason="Repeated TOS violations" />)
+    expect(screen.getByText('Repeated TOS violations')).toBeInTheDocument()
+  })
+
+  it('omits the reason block when no reason is given', () => {
+    render(<BannedScreen />)
+    expect(screen.queryByText(/^reason$/i)).not.toBeInTheDocument()
+  })
+
+  it('clears the session token on sign out', () => {
+    const remove = vi.spyOn(Storage.prototype, 'removeItem')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).location = { assign: vi.fn(), href: '/', origin: window.location.origin }
+    render(<BannedScreen />)
+    fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
+    expect(remove).toHaveBeenCalledWith('sessionToken')
+    remove.mockRestore()
+  })
+})
