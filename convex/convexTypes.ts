@@ -97,6 +97,10 @@ export interface UserDoc extends ConvexDocument {
   tokenExpiresAt?: number
   linkedinPublicIdentifier?: string
   isAdmin?: boolean
+  isBanned?: boolean
+  bannedAt?: number
+  bannedBy?: string
+  bannedReason?: string
   createdAt: number
 }
 

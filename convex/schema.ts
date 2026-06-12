@@ -29,6 +29,12 @@ export default defineSchema({
     // Admin flag — MUST only be set directly in the database.
     // All application code (upsertUser, setPublicIdentifier, etc.) must ignore this field.
     isAdmin: v.optional(v.boolean()),
+    // Ban state — set/cleared only by the admin banUser/unbanUser mutations.
+    // bannedReason is user-visible (shown on the banned screen).
+    isBanned: v.optional(v.boolean()),
+    bannedAt: v.optional(v.number()),
+    bannedBy: v.optional(v.id('users')),
+    bannedReason: v.optional(v.string()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
