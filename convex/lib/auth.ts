@@ -13,35 +13,57 @@ import { internal } from '../_generated/api'
 import type { Doc } from '../_generated/dataModel'
 
 /**
- * Resolves a session token to an authenticated user document.
- * For use in queries and mutations (which have ctx.db access).
- * Throws "Unauthorized" if the token is missing, expired, or invalid.
+ * Resolves a session token to a user document WITHOUT enforcing ban state.
+ * Returns null when the token is missing, expired, or invalid.
+ * Used by getMe (which must distinguish "banned" from "logged out").
  */
-export async function requireAuth(
+export async function resolveSession(
   ctx: QueryCtx | MutationCtx,
   sessionToken: string | undefined
-): Promise<Doc<'users'>> {
-  if (!sessionToken) throw new Error('Unauthorized')
+): Promise<Doc<'users'> | null> {
+  if (!sessionToken) return null
 
   const session = await (ctx as QueryCtx).db
     .query('sessions')
     .withIndex('by_token', q => q.eq('token', sessionToken))
     .unique()
 
-  if (!session || session.expiresAt < Date.now()) {
-    throw new Error('Unauthorized')
-  }
+  if (!session || session.expiresAt < Date.now()) return null
 
   const user = await (ctx as QueryCtx).db.get(session.userId)
-  if (!user) throw new Error('Unauthorized')
+  return user ?? null
+}
 
+/**
+ * Throws if the user is banned. Pure guard — the single definition of "what a
+ * ban blocks". Called by requireAuth/requireAuthAction so every protected
+ * endpoint is covered automatically.
+ */
+export function assertNotBanned(user: { isBanned?: boolean }): void {
+  if (user.isBanned) throw new Error('Account suspended')
+}
+
+/**
+ * Resolves a session token to an authenticated, non-banned user document.
+ * For use in queries and mutations (which have ctx.db access).
+ * Throws "Unauthorized" if the token is missing/expired/invalid, or
+ * "Account suspended" if the user is banned.
+ */
+export async function requireAuth(
+  ctx: QueryCtx | MutationCtx,
+  sessionToken: string | undefined
+): Promise<Doc<'users'>> {
+  const user = await resolveSession(ctx, sessionToken)
+  if (!user) throw new Error('Unauthorized')
+  assertNotBanned(user)
   return user
 }
 
 /**
- * Resolves a session token to an authenticated user document (with tokens).
+ * Resolves a session token to an authenticated, non-banned user document (with tokens).
  * For use in actions (which must use ctx.runQuery instead of ctx.db).
- * Throws "Unauthorized" if the token is missing, expired, or invalid.
+ * Throws "Unauthorized" if the token is missing/expired/invalid, or
+ * "Account suspended" if the user is banned.
  */
 export async function requireAuthAction(ctx: ActionCtx, sessionToken: string | undefined): Promise<Doc<'users'>> {
   if (!sessionToken) throw new Error('Unauthorized')
@@ -53,6 +75,7 @@ export async function requireAuthAction(ctx: ActionCtx, sessionToken: string | u
 
   const user = await ctx.runQuery(internal.users.getWithTokens, { userId: session.userId })
   if (!user) throw new Error('Unauthorized')
+  assertNotBanned(user)
 
   return user
 }
