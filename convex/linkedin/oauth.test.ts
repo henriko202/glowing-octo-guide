@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { buildAuthUrl } from './oauth'
 
 describe('buildAuthUrl', () => {
@@ -27,8 +27,11 @@ describe('buildAuthUrl', () => {
     expect(scope).toContain('profile')
     expect(scope).toContain('email')
     expect(scope).toContain('w_member_social')
-    // Deprecated scopes are no longer requested
+    // Deprecated / unusable scopes are no longer requested
     expect(scope).not.toContain('r_liteprofile')
     expect(scope).not.toContain('r_emailaddress')
+    // r_profile_basicinfo only authorized /rest/identityMe, which needs Partner/MDP
+    // access we don't have — removed so we don't request an unusable permission.
+    expect(scope).not.toContain('r_profile_basicinfo')
   })
 })

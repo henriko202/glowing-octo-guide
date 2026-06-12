@@ -4,12 +4,7 @@ import { httpRouter } from 'convex/server'
 import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
-import {
-  buildAuthUrl,
-  exchangeCodeForTokens,
-  fetchLinkedInPublicIdentifier,
-  fetchLinkedInUserInfo
-} from './linkedin/oauth.js'
+import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
 
 const http = httpRouter()
 
@@ -68,14 +63,13 @@ http.route({
       }
 
       const tokens = await exchangeCodeForTokens(code)
-      // Run userInfo and publicIdentifier fetches concurrently — independent requests
-      const [userInfo, publicIdentifier] = await Promise.all([
-        fetchLinkedInUserInfo(tokens.access_token),
-        fetchLinkedInPublicIdentifier(tokens.access_token)
-      ])
+      const userInfo = await fetchLinkedInUserInfo(tokens.access_token)
 
       const tokenExpiresAt = Date.now() + tokens.expires_in * 1000
 
+      // Note: linkedinPublicIdentifier is set manually by the user in Settings
+      // (users.setPublicIdentifier). LinkedIn's identity endpoints require Partner/MDP
+      // access we don't have, so we no longer attempt to auto-fetch it during OAuth.
       const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
         linkedinId: userInfo.sub,
         name: userInfo.name,
@@ -83,9 +77,7 @@ http.route({
         profilePictureUrl: userInfo.picture,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        tokenExpiresAt,
-        // May be null if identityMe is unavailable — upsertUser handles null-safety
-        linkedinPublicIdentifier: publicIdentifier ?? undefined
+        tokenExpiresAt
       })
 
       // Issue a cryptographically random session token — never expose the raw userId.

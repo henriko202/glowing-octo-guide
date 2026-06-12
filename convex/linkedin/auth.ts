@@ -1,7 +1,7 @@
 // convex/linkedin/auth.ts
-import { internalMutationGeneric as internalMutation } from 'convex/server'
-import { v } from 'convex/values'
-import type { UpsertDb } from '../convexTypes.js'
+import {internalMutationGeneric as internalMutation} from 'convex/server'
+import {v} from 'convex/values'
+import type {UpsertDb} from '../convexTypes.js'
 
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000
 
@@ -13,7 +13,6 @@ export interface UpsertUserArgs {
   accessToken: string
   refreshToken?: string // LinkedIn standard OAuth may omit refresh_token
   tokenExpiresAt: number
-  linkedinPublicIdentifier?: string // vanityName from /rest/identityMe — null-safe
 }
 
 // Plain handler function — used by the registered mutation and testable in isolation
@@ -33,10 +32,6 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
       linkedinRefreshToken: args.refreshToken,
       tokenExpiresAt: args.tokenExpiresAt
     }
-    // Only update publicIdentifier if we have a fresh value — preserves manually-set values
-    if (args.linkedinPublicIdentifier) {
-      patch.linkedinPublicIdentifier = args.linkedinPublicIdentifier
-    }
     await db.patch(existing._id, patch)
     return existing._id
   }
@@ -48,7 +43,6 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     name: args.name,
     headline: args.headline,
     profilePictureUrl: args.profilePictureUrl,
-    linkedinPublicIdentifier: args.linkedinPublicIdentifier,
     tier: 'starter' as const,
     subscriptionStatus: 'trialing' as const,
     trialEndsAt,
@@ -68,8 +62,7 @@ export const upsertUser = internalMutation({
     profilePictureUrl: v.optional(v.string()),
     accessToken: v.string(),
     refreshToken: v.optional(v.string()), // optional — LinkedIn may not return it
-    tokenExpiresAt: v.number(),
-    linkedinPublicIdentifier: v.optional(v.string())
+    tokenExpiresAt: v.number()
   },
   handler: async (ctx, args) => upsertUserHandler(ctx.db as unknown as UpsertDb, args as UpsertUserArgs)
 })
