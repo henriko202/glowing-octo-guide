@@ -22,11 +22,13 @@ beforeEach(() => {
   mockBan = vi.fn().mockResolvedValue(undefined)
   mockUnban = vi.fn().mockResolvedValue(undefined)
   mockSetTier = vi.fn().mockResolvedValue(undefined)
-  // UsersTab calls useMutation in source order: setUserTier, banUser, unbanUser
+  // UsersTab calls useMutation 3x per render in a fixed order: setUserTier, banUser, unbanUser.
+  // Map by position-within-render (modulo 3) so the mapping stays correct across re-renders.
   let n = 0
   vi.mocked(useMutation).mockImplementation(() => {
+    const slot = n % 3
     n++
-    return (n === 1 ? mockSetTier : n === 2 ? mockBan : mockUnban) as never
+    return (slot === 0 ? mockSetTier : slot === 1 ? mockBan : mockUnban) as never
   })
   vi.mocked(useQuery).mockReturnValue(mockUsers)
 })

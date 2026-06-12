@@ -4,7 +4,7 @@ import LoadingSpinner from './LoadingSpinner'
 import RowActionsMenu, { type RowAction } from './RowActionsMenu'
 import BanUserDialog from './BanUserDialog'
 import Modal from './Modal'
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
@@ -60,13 +60,6 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
   const banUser = useMutation(api.admin.banUser)
   const unbanUser = useMutation(api.admin.unbanUser)
 
-  // Capture stable refs so handlers always call the mutation from the first
-  // render — matches how Convex's useMutation returns a stable reference in
-  // production; also makes the positional mock in tests work correctly.
-  const setUserTierRef = useRef(setUserTier)
-  const banUserRef = useRef(banUser)
-  const unbanUserRef = useRef(unbanUser)
-
   const [filter, setFilter] = useState<TierFilter>('all')
   const [pendingId, setPendingId] = useState<Id<'users'> | null>(null)
   const [nameSearch, setNameSearch] = useState('')
@@ -89,7 +82,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
     if (!sessionToken) return
     setPendingId(userId)
     try {
-      await setUserTierRef.current({ sessionToken, userId, tier: 'contact' })
+      await setUserTier({ sessionToken, userId, tier: 'contact' })
     } finally {
       setPendingId(null)
     }
@@ -99,7 +92,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
     if (!sessionToken || !banTarget) return
     setPendingId(banTarget._id)
     try {
-      await banUserRef.current({ sessionToken, userId: banTarget._id, reason })
+      await banUser({ sessionToken, userId: banTarget._id, reason })
       setBanTarget(null)
     } finally {
       setPendingId(null)
@@ -110,7 +103,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
     if (!sessionToken || !unbanTarget) return
     setPendingId(unbanTarget._id)
     try {
-      await unbanUserRef.current({ sessionToken, userId: unbanTarget._id })
+      await unbanUser({ sessionToken, userId: unbanTarget._id })
       setUnbanTarget(null)
     } finally {
       setPendingId(null)
