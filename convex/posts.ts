@@ -7,6 +7,7 @@ import { parseLinkedInPostUrl } from './linkedin/parsePostUrl'
 import { verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { getPlanLimitsHelper } from './lib/planLimits'
+import { parsePostContent, appendMediaLinks } from './linkedin/parsePostContent'
 
 export const getMyPosts = query({
   args: {
@@ -149,15 +150,24 @@ export const submitPost = action({
     const storedIdentifier = user.linkedinPublicIdentifier ?? null
     const ownership = await verifyPostOwnership(token, urn, user.linkedinId, parsed.vanityName, storedIdentifier)
 
+    // 4b. Extract full content + media from the page HTML we already fetched
+    // above. Best-effort and non-fatal — empty results degrade gracefully to
+    // whatever the ownership step returned. The media is appended to `content`
+    // as labeled links and also stored structured in `mediaUrls` for future use.
+    const parsedContent = parsePostContent(rawLinkedinText)
+    const baseText = ownership.content || parsedContent.text
+    const composedContent = appendMediaLinks(baseText, parsedContent.media)
+    const mediaUrls = parsedContent.media.map(m => m.url)
+
     // 5. Upsert the post — returns the post _id
     const postId = await ctx.runMutation(internal.jobs.syncPosts.upsertPost, {
       linkedinPostUrn: urn,
       authorId: user._id,
-      content: ownership.content,
+      content: composedContent,
       publishedAt: ownership.publishedAt,
       likeCount: 0,
       commentCount: 0,
-      mediaUrls: [],
+      mediaUrls,
       isFeatured: false,
       visibilityIndustries: [],
       visibilityCountries: [],
