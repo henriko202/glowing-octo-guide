@@ -1,5 +1,4 @@
 import { internalMutation } from '../_generated/server'
-import { v } from 'convex/values'
 
 // One-time seed mutation to populate the default planLimits rows for each tier.
 // Run once via the Convex dashboard or CLI:

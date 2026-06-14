@@ -6,7 +6,7 @@ import { vi, beforeEach } from 'vitest'
 let queryCallCount = 0
 
 vi.mock('convex/react', () => ({
-  useQuery: vi.fn((query: unknown, args: unknown) => {
+  useQuery: vi.fn((_query: unknown, _args: unknown) => {
     queryCallCount += 1
     const mod = queryCallCount % 3
     if (mod === 1) {
