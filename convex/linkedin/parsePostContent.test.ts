@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendMediaLinks, type PostMedia } from './parsePostContent'
-import { parsePostContent } from './parsePostContent'
+import { appendMediaLinks, parsePostContent, type PostMedia } from './parsePostContent'
 
 describe('appendMediaLinks', () => {
   const media: PostMedia[] = [
@@ -74,5 +73,19 @@ describe('parsePostContent', () => {
   it('returns empty text and no media for HTML with nothing recognizable', () => {
     expect(parsePostContent('<html><body>nothing here</body></html>')).toEqual({ text: '', media: [] })
     expect(parsePostContent('')).toEqual({ text: '', media: [] })
+  })
+
+  it('preserves query-string tokens on document PDF links', () => {
+    const html = `<a href="https://media.licdn.com/dms/document/slides.pdf?e=1&amp;t=TOKEN">Doc</a>`
+    const result = parsePostContent(html)
+    expect(result.media).toEqual([
+      { type: 'document', url: 'https://media.licdn.com/dms/document/slides.pdf?e=1&t=TOKEN' }
+    ])
+  })
+
+  it('ignores non-pdf URLs that merely contain .pdf earlier in the path', () => {
+    const html = `<a href="https://example.com/file.pdf.zip">x</a>`
+    const result = parsePostContent(html)
+    expect(result.media).toEqual([])
   })
 })

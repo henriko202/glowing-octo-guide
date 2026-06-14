@@ -64,7 +64,8 @@ function extractJsonLd(html: string): Record<string, unknown>[] {
 }
 
 function findPdfLinks(html: string): string[] {
-  return (html.match(/https?:\/\/[^\s"'<>]+\.pdf\b/gi) ?? []).map(decodeEntities)
+  const urls = html.match(/https?:\/\/[^\s"'<>]+/gi) ?? []
+  return urls.map(decodeEntities).filter(u => /\.pdf$/i.test(u.split(/[?#]/)[0]))
 }
 
 function isArticleType(type: unknown): boolean {
