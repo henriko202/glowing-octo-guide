@@ -69,12 +69,14 @@ export default function PostCard({
         footer={
           <div className="flex h-[52px] items-center gap-4 border-t border-slate-200 bg-white px-4">
             <button
+              type="button"
               onClick={() => onReact(post._id)}
               className="flex cursor-pointer items-center gap-1 border-none bg-none text-[13px] text-slate-500 outline-none"
             >
               👍 {post.likeCount} {t('feed.like')}
             </button>
             <button
+              type="button"
               onClick={() => onComment(post._id)}
               className="flex cursor-pointer items-center gap-1 border-none bg-none text-[13px] text-slate-500 outline-none"
             >

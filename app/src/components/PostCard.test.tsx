@@ -48,4 +48,17 @@ describe('PostCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /comment/i }))
     expect(onComment).toHaveBeenCalledWith(mockPost._id)
   })
+
+  it('still renders the embed and action buttons when author is null', () => {
+    render(<PostCard post={{ ...mockPost, author: null }} onComment={() => {}} onReact={() => {}} />)
+    expect(screen.getByTitle('LinkedIn post')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /like/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
+  })
+
+  it('shows the like and comment counts in the action bar', () => {
+    render(<PostCard post={mockPost} onComment={() => {}} onReact={() => {}} />)
+    expect(screen.getByRole('button', { name: /10.*like/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /3.*comment/i })).toBeInTheDocument()
+  })
 })
