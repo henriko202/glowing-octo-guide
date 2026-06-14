@@ -158,8 +158,8 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
       </p>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="grid grid-cols-[1fr_100px_90px_56px] border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className="rounded-lg border border-slate-200 bg-white">
+        <div className="grid grid-cols-[1fr_100px_90px_56px] rounded-t-lg border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           <div>Name</div>
           <div>Tier</div>
           <div>Status</div>
