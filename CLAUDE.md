@@ -5,3 +5,7 @@ When working on Convex code, **always read `convex/_generated/ai/guidelines.md` 
 
 Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
 <!-- convex-ai-end -->
+
+## Git
+
+**NEVER commit to git.** Do not run `git commit` or `git push` under any circumstances — not even after finishing a task, fixing a bug, or when a skill/workflow suggests committing. Make and save file changes only; the user (Henriko) makes **all** commits themselves. If a change is ready, say so and let the user commit it.
