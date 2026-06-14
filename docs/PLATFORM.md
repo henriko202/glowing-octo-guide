@@ -703,9 +703,23 @@ the UGC API (works when `w_member_social`/`r_member_social` is approved); **Step
 comparison of the post's author against the user's stored `linkedinPublicIdentifier` / `vanityName`
 (no API call). This lets the product work **without LinkedIn Partner/MDP access**.
 
-**Content extraction** (`linkedin/parsePostContent.ts`) is best‑effort and non‑fatal: it parses the
-already‑fetched HTML into text + media; media is appended to `content` as labeled links and also
-stored structured in `mediaUrls`.
+**Content extraction** (`linkedin/parsePostContent.ts`) is best‑effort and non‑fatal (unrecognized
+HTML yields `{ text: '', media: [] }`). From the already‑fetched page HTML it parses:
+
+- **Text** — from JSON‑LD blocks (`articleBody` → `description` → `text`), falling back to the
+  `og:description` meta tag.
+- **Media** — typed as `image | article | document` (`PostMedia`), de‑duplicated, gathered from:
+  `og:image` meta tags and JSON‑LD `image` (→ image); JSON‑LD `@type=Article` `url` and
+  `sharedContent.url` (→ article); JSON‑LD `associatedMedia.contentUrl` and **direct `.pdf` links
+  found in the page** (→ document). `findPdfLinks` tests only the path segment (before `?`/`#`) for
+  the `.pdf` extension but **returns the full URL including its query string**, so signed/expiring
+  document tokens are preserved (the `4603f40` fix).
+
+`appendMediaLinks(text, media)` composes the stored `content`: the trimmed body, then (if any media)
+a blank line, then one `[type] url` line per media item — self‑describing for future use. The
+structured `mediaUrls` array (the bare URLs) is **persisted but not currently displayed** anywhere;
+the feed/My Posts UI shows the post via the LinkedIn embed, not this stored text (see
+[§11](#11-feed--engagement) / [§14](#14-frontend--authenticated-app-app)).
 
 ### Apify sync + queue pipeline
 
@@ -956,11 +970,12 @@ flowchart TD
 
 - **AuthSuccessPage** — stores `?session` token in `sessionStorage`, navigates to `/feed`. No Convex
   calls.
-- **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); a list of `PostCard`s; reactions
-  via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card.
+- **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); a list of `PostCard`s, each
+  rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
+  shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card.
 - **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getMyPosts` + `submitPost`. Usage pill ("N of M
   posts this week") turns **amber** at the cap and disables the composer (`atLimit`). Renders each
-  post as a clipped LinkedIn embed with an app footer (stats, relative time, "View on LinkedIn").
+  post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
 - **SettingsPage** — `getMe` + `setPublicIdentifier`. Shows synced `industry`/`country` (read‑only),
   lets the user save/verify their LinkedIn vanity name (parsed from a URL or `@handle`). Pro/contact
   see a **stubbed** "who can see your posts" card ("Coming in next task").
@@ -973,14 +988,29 @@ flowchart TD
 
 ### Reusable components
 `AppNav` (feed/my‑posts/settings/billing links + language `<select>` + sign‑out; **no admin link**),
-`PostCard`, `PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`),
-`LinkedInEmbed` (clipped iframe + `buildEmbedUrl` that **preserves the URN namespace** —
-`share`/`ugcPost`/`activity`), `Modal`, `BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search +
-`setUserTier`/`banUser`/`unbanUser`), `PlanLimitsTab` (tier defaults + debounced contact override
-editor), `RowActionsMenu`, `LoadingSpinner`.
+`PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`), `Modal`,
+`BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + `setUserTier`/`banUser`/`unbanUser`),
+`PlanLimitsTab` (tier defaults + debounced contact override editor), `RowActionsMenu`,
+`LoadingSpinner`, plus the two LinkedIn‑embed components:
 
-> **Embed‑URL inconsistency:** `MyPostsPage` has a *local* `buildEmbedUrl` that normalizes everything
-> to `urn:li:activity:{id}`, differing from the canonical namespace‑preserving `LinkedInEmbed.buildEmbedUrl`.
+- **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
+  and **My Posts**. Renders a LinkedIn post in an iframe that is intentionally taller
+  (`iframeHeight` 480) than its `overflow:hidden` container (`containerHeight` 420) so LinkedIn's
+  native action bar is clipped, then overlays an optional opaque `footer` (the app's own controls)
+  over that strip. `iframe` is sandboxed (`allow-scripts allow-same-origin`) and lazy‑loaded. Its
+  exported `buildEmbedUrl(urn)` **preserves the stored URN namespace** (`urn:li:activity|share|ugcPost`)
+  with raw (un‑encoded) colons as LinkedIn requires; only bare/legacy ids fall back to wrapping as
+  `activity`.
+- **`PostCard`** — the Feed's post renderer (**Option B layout**): an app‑owned header (Featured
+  badge via `feed.featured` + author avatar/name/headline) **above** a `LinkedInEmbed`, whose
+  `footer` is the app's in‑app **Like/Comment bar** (`type="button"` actions calling `onReact` /
+  `onComment`) overlaying the clipped native bar. **`PostCard` does not render `post.content` or
+  `mediaUrls`** — the post body comes entirely from the embed.
+
+> As of `1fcc123`, `MyPostsPage` uses this shared `LinkedInEmbed` directly (its old local
+> `buildEmbedUrl` that force‑normalized to `activity` was removed, eliminating the previous
+> duplicate). `MyPostsPage` keeps only `buildLinkedInUrl` (prefers the stored `sourceUrl`, falls back
+> to a `/feed/update/<urn>/` link) and `timeAgo` for its embed footer's "View on LinkedIn ↗" link.
 
 ### i18n (`i18n/index.ts`)
 `i18next` + `react-i18next` + browser language detector. Resources `en`/`pt`/`es`, fallback `en`.
@@ -1232,4 +1262,7 @@ a flow chart (Mermaid) if it introduces a multi‑step flow.
 ---
 
 *Last updated: 2026‑06‑14. Generated from a full read of the codebase at branch
-`feat/initial-setup`.*
+`feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature
+(commits `d1b40a2` → `1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
+(Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`,
+and `buildEmbedUrl` preserves the URN namespace.*
