@@ -5,6 +5,7 @@ import { api } from '../convex'
 
 import LoadingSpinner from '../components/LoadingSpinner'
 import PostComposer from '../components/PostComposer'
+import LinkedInEmbed from '../components/LinkedInEmbed'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -21,14 +22,6 @@ interface MyPost {
 interface WeeklyUsage {
   postsThisWeek: number
   postsPerWeek: number
-}
-
-/** Build a LinkedIn embed iframe URL from a ugcPost URN */
-function buildEmbedUrl(urn: string): string {
-  // Extract numeric ID: urn:li:ugcPost:{id} → urn:li:activity:{id}
-  // LinkedIn embed requires activity URN format; colons must NOT be URL-encoded.
-  const id = urn.split(':').pop() ?? ''
-  return `https://www.linkedin.com/embed/feed/update/urn:li:activity:${id}/`
 }
 
 /**
@@ -125,43 +118,28 @@ export default function MyPostsPage() {
               key={post._id}
               className="overflow-hidden rounded-lg border border-slate-200 bg-white"
             >
-              {/* LinkedIn embed — clipped to hide the Like/Comment/Share button bar */}
-              <div className="relative h-[420px] overflow-hidden">
-                <iframe
-                  src={buildEmbedUrl(post.linkedinPostUrn)}
-                  title="LinkedIn post"
-                  width="100%"
-                  // Render taller than the container so content is visible;
-                  // the container's overflow:hidden clips the button bar below.
-                  height={480}
-                  className="block border-none"
-                  // sandbox: explicit permission whitelist — prevents the iframe from
-                  // navigating the top window, opening popups, or submitting forms.
-                  // allow-scripts: needed for LinkedIn's embed JS to render the post.
-                  // allow-same-origin: needed so LinkedIn's cookies work (avoids sign-in wall).
-                  sandbox="allow-scripts allow-same-origin"
-                  loading="lazy"
-                />
-                {/* Opaque overlay covering the bottom action buttons strip.
-                    Positioned absolute so it sits over the iframe without shifting layout. */}
-                <div className="absolute bottom-0 left-0 right-0 flex h-[52px] items-center justify-between border-t border-slate-200 bg-white px-[14px]">
-                  {/* Engagement stats from our own tracking data */}
-                  <span className="text-xs text-slate-500">
-                    👍 {post.likeCount} · 💬 {post.commentCount}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {timeAgo(post.publishedAt)} ·{' '}
-                    <a
-                      href={buildLinkedInUrl(post)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500 no-underline"
-                    >
-                      View on LinkedIn ↗
-                    </a>
-                  </span>
-                </div>
-              </div>
+              <LinkedInEmbed
+                urn={post.linkedinPostUrn}
+                footer={
+                  <div className="flex h-[52px] items-center justify-between border-t border-slate-200 bg-white px-[14px]">
+                    {/* Engagement stats from our own tracking data */}
+                    <span className="text-xs text-slate-500">
+                      👍 {post.likeCount} · 💬 {post.commentCount}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {timeAgo(post.publishedAt)} ·{' '}
+                      <a
+                        href={buildLinkedInUrl(post)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 no-underline"
+                      >
+                        View on LinkedIn ↗
+                      </a>
+                    </span>
+                  </div>
+                }
+              />
             </div>
           ))}
         </div>
