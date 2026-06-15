@@ -945,8 +945,9 @@ A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `c
 (fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent from the
 payload) — it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
 
-- on `users.setPublicIdentifier`, but only when the identifier **changes** and only within the
-  shared 2/day budget (charged on the same `profile_refresh` counter as the button), and
+- on `users.setPublicIdentifier`, but only when the identifier **changes**, the scrape is
+  **enabled**, and the shared 2/day budget allows it (charged on the same `profile_refresh` counter
+  as the button — and the flag is checked *before* the budget, so a disabled scrape never charges it), and
 - on the user-pressed **"Refresh from LinkedIn"** button (`refreshProfileFromLinkedIn`, ≤ 2/day).
 
 Both schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails if the
@@ -959,8 +960,8 @@ reactive `getMe`, which also seeds the UI language once.
 
 ```mermaid
 flowchart TD
-  T1["setPublicIdentifier (vanity saved)"] --> CHG{"identifier changed & within 2/day budget?"}
-  CHG -->|no| SKIP["skip auto-scrape"]
+  T1["setPublicIdentifier (vanity saved)"] --> CHG{"changed & scrape enabled & within 2/day budget?"}
+  CHG -->|no| SKIP["skip auto-scrape (no budget charged)"]
   CHG -->|yes| SCH["scheduler.runAfter(0)"]
   T2["Settings: Refresh from LinkedIn"] --> RF["refreshProfileFromLinkedIn"]
   RF --> G0{"public identifier set?"}
@@ -1168,33 +1169,54 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 The codebase follows a consistent, defensible security model:
 
-- **Secrets never reach clients.** `linkedinAccessToken`/`refreshToken`/`tokenExpiresAt` are stripped
-  by both `toSafeMe` (`users.getMe`) and the feed's author projection (`feed.ts`).
+- **Secrets & internal fields never reach clients.** `toSafeMe` (`users.getMe`) strips tokens **and**
+  `stripeCustomerId`/`bannedBy`/`bannedAt`/raw `isAdmin`. The feed sends authors through an
+  **allow‑list** projection (`toFeedAuthor` — only `_id`/name/headline/picture/industry/country/tier),
+  so other users' `isAdmin`, Stripe id, `linkedinId`, ban state, etc. are never exposed.
   `users.getWithTokens` is an `internalQuery` (server‑only). The OAuth client secret lives only in
   Convex env and is used only in server‑side token exchange.
 - **Clients never pass a `userId`.** Identity is always resolved server‑side from an **opaque UUID
   session token** via `lib/auth.ts`. The only thing a client can do is present a valid token.
 - **CSRF protection** on OAuth: a single‑use `state` nonce (10‑min TTL) stored before redirect and
   **deleted before** the expiry check on callback (replay‑safe).
-- **Sessions:** random UUID, 30‑day TTL, stored in **`sessionStorage`** (cleared on tab close);
-  `logout` invalidates one session, `forceLogoutAll` invalidates all; expired sessions are purged by
-  cron.
-- **Generic client‑facing errors.** Every LinkedIn/OAuth/Stripe failure logs the real error
+- **Sessions:** random UUID, 30‑day TTL, stored in **`sessionStorage`** (cleared on tab close).
+  The token is delivered to the SPA in the OAuth redirect's **URL fragment** (`#session=…`, never a
+  query string), and `AuthSuccessPage` scrubs it from history after reading — so it can't leak via
+  server/proxy access logs or the `Referer` header. `logout` invalidates one session,
+  `forceLogoutAll` invalidates all; expired sessions are purged by cron.
+- **Generic client‑facing errors.** Every LinkedIn/OAuth/Stripe/Apify failure logs the real error
   server‑side (`console.error`) and returns a sanitized message — no stack traces or upstream bodies
   leak to clients.
-- **Rate limiting** (fixed window per `userId+action`): submitPost 10/h, comment 20/h, react 30/h.
+- **SSRF guard on outbound fetches.** `submitPost` fetches a user‑supplied URL, so
+  `parseLinkedInPostUrl` rejects any non‑`https` scheme or non‑`linkedin.com` host **before** the
+  fetch, and the URN scraped from the returned page is format‑validated before any downstream use.
+- **Payments fail safe.** The Stripe webhook signature is verified by `@convex-dev/stripe` before any
+  handler runs; checkout/portal require auth and an allow‑listed price id; `toSubscriptionStatus`
+  maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a
+  half‑finished or lapsed subscription never grants access; `getTierFromPriceId` fails to `starter`.
+- **Rate limiting** (fixed window per `userId+action`): submitPost 10/h, comment 20/h, react 30/h,
+  profile scrape 2/day (shared by manual Refresh + auto‑scrape on identifier change).
 - **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path
   (`upsertUser`, `setPublicIdentifier`, etc.). Admin endpoints re‑check `assertAdmin` on the
   server‑resolved user, never on a client‑supplied id. `banUser` cannot self‑ban (always leaves ≥ 1
   admin).
 - **Input validation:** `setPublicIdentifier` validates the vanity‑name format; `commentOnPost`
-  caps text at 3000 chars; `reactToPost` constrains the reaction enum; checkout validates the price
-  id against an allowlist before any work.
-- **CSP** (`app/index.html`) restricts script/style/frame/connect sources.
+  caps text at 3000 chars; `reactToPost` constrains the reaction enum; `commentOnPost`/`reactToPost`
+  reject `hidden`/interaction‑limit‑reached posts; `banUser` caps the reason at 500 chars; checkout
+  validates the price id against an allowlist before any work.
+- **CSP** (`app/index.html`) restricts script/style/frame/connect sources and adds
+  `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`. `script-src`/`style-src` keep
+  `'unsafe-inline'` because the Vite dev server injects inline scripts/styles — tightening that needs
+  a **prod‑only nonce/hash CSP served as an HTTP header** at the hosting layer (which is also where
+  `frame-ancestors`/HSTS belong, since a `<meta>` CSP ignores `frame-ancestors`).
 
-> **Open security‑relevant gaps:** no LinkedIn token‑refresh flow (tokens silently expire ~60 days);
-> the ban is reactive (a banned user's in‑flight reads still resolve until the next protected call /
-> reactive push). See [§19](#19-known-discrepancies-dead-code--roadmap).
+> **Open security‑relevant gaps / hardening backlog:** no LinkedIn token‑refresh flow (tokens
+> silently expire ~60 days); the ban is reactive (a banned user's in‑flight reads still resolve until
+> the next protected call / reactive push); `getFeed` scans up to `FEED_SCAN_LIMIT` posts in‑memory
+> (bounded, but wants real cursor pagination at scale); `linkedinPublicIdentifier` is
+> **self‑attributed** (format‑validated only — LinkedIn actions still use the user's own token, so it
+> can't be used to act as someone else); and prod CSP / `frame-ancestors` / HSTS headers should be
+> set at the hosting layer. See [§19](#19-known-discrepancies-dead-code--roadmap).
 
 ---
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildFeedFilter } from './feed'
+import { buildFeedFilter, toFeedAuthor } from './feed'
 
 describe('buildFeedFilter', () => {
   it('starter: no filters applied', () => {
@@ -46,5 +46,55 @@ describe('buildFeedFilter', () => {
     })
     expect(filter.applyIndustry).toBe(true)
     expect(filter.applyCountry).toBe(false)
+  })
+})
+
+describe('toFeedAuthor', () => {
+  it('returns only display fields and strips secrets/internal fields', () => {
+    const author = {
+      _id: 'u1',
+      _creationTime: 0,
+      name: 'Jordan',
+      headline: 'Engineer',
+      profilePictureUrl: 'https://x/y.jpg',
+      industry: '4',
+      country: 'BR',
+      tier: 'pro',
+      linkedinId: 'li1',
+      linkedinAccessToken: 'secret',
+      linkedinRefreshToken: 'secret2',
+      tokenExpiresAt: 1,
+      isAdmin: true,
+      isBanned: true,
+      bannedReason: 'x',
+      bannedBy: 'admin1',
+      bannedAt: 2,
+      stripeCustomerId: 'cus_1',
+      subscriptionStatus: 'active',
+      trialEndsAt: 3,
+      linkedinPublicIdentifier: 'jordan'
+    } as any
+    const safe = toFeedAuthor(author) as Record<string, unknown>
+    expect(safe).toEqual({
+      _id: 'u1',
+      name: 'Jordan',
+      headline: 'Engineer',
+      profilePictureUrl: 'https://x/y.jpg',
+      industry: '4',
+      country: 'BR',
+      tier: 'pro'
+    })
+    for (const k of [
+      'isAdmin',
+      'stripeCustomerId',
+      'linkedinId',
+      'linkedinAccessToken',
+      'isBanned',
+      'bannedBy',
+      'subscriptionStatus',
+      'linkedinPublicIdentifier'
+    ]) {
+      expect(k in safe).toBe(false)
+    }
   })
 })

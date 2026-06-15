@@ -138,8 +138,9 @@ export const submitPost = action({
     const rawLinkedinText = await rawLinkedinResponse.text()
     const urn = rawLinkedinText.match(/data-attributed-urn="([^"]+)"/)?.[1]
 
-    if (!urn) {
-      throw new Error('Could not find data-attributed-urn in LinkedIn post')
+    // Validate the URN shape before using it downstream (ownership check, DB, later API calls).
+    if (!urn || !/^urn:li:(ugcPost|activity|share):\d+$/.test(urn)) {
+      throw new Error('Could not find a valid LinkedIn post URN')
     }
 
     const token = user.linkedinAccessToken

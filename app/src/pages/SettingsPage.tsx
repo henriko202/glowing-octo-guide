@@ -19,7 +19,6 @@ interface MeProfile {
   tier: 'starter' | 'growth' | 'pro' | 'contact'
   subscriptionStatus: 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
   trialEndsAt?: number
-  stripeCustomerId?: string
   linkedinPublicIdentifier?: string
   createdAt: number
 }
@@ -34,7 +33,7 @@ function extractVanityName(input: string): string | null {
   } catch {
     // Also accept bare vanityNames like "henriko202" or "@henriko202"
     const bare = trimmed.replace(/^@/, '')
-    return /^[a-zA-Z0-9-]+$/.test(bare) ? bare.toLowerCase() : null
+    return /^[a-zA-Z0-9_-]+$/.test(bare) ? bare.toLowerCase() : null
   }
 }
 

@@ -81,6 +81,8 @@ export const commentOnPost = action({
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
     if (!post) throw new Error('Post not found')
+    if (post.hidden) throw new Error('This post is not available.')
+    if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
 
     const res = await fetch(
       `https://api.linkedin.com/v2/socialActions/${encodeURIComponent(post.linkedinPostUrn)}/comments`,
@@ -136,6 +138,8 @@ export const reactToPost = action({
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
     if (!post) throw new Error('Post not found')
+    if (post.hidden) throw new Error('This post is not available.')
+    if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
 
     const res = await fetch(
       `https://api.linkedin.com/rest/reactions?actor=${encodeURIComponent(`urn:li:person:${user.linkedinId}`)}`,

@@ -5,6 +5,7 @@ import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
+import { getTierFromPriceId } from './stripe'
 
 const http = httpRouter()
 
@@ -91,7 +92,7 @@ http.route({
 
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appUrl}/auth/success?session=${sessionToken}` }
+        headers: { Location: `${appUrl}/auth/success#session=${sessionToken}` }
       })
     } catch (err) {
       // Log the real error server-side; send only a generic message to the client
@@ -108,15 +109,7 @@ http.route({
 // ─── Stripe Webhooks (via @convex-dev/stripe component) ─────────────────────
 // The component auto-syncs customers, subscriptions, payments, and invoices.
 // Custom handlers below keep our app's users + subscriptions tables in sync.
-
-function getTierFromPriceId(priceId: string): 'starter' | 'growth' | 'pro' {
-  const map: Record<string, 'starter' | 'growth' | 'pro'> = {
-    [process.env.STRIPE_STARTER_PRICE_ID ?? '']: 'starter',
-    [process.env.STRIPE_GROWTH_PRICE_ID ?? '']: 'growth',
-    [process.env.STRIPE_PRO_PRICE_ID ?? '']: 'pro'
-  }
-  return map[priceId] ?? 'starter'
-}
+// getTierFromPriceId is imported from ./stripe (single source of truth).
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
 type StripeEvent = any

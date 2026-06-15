@@ -49,7 +49,8 @@ export async function runApifyTask(
 
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`Apify task run failed: ${res.status} — ${body}`)
+    console.error(`Apify task run failed: ${res.status}`, body)
+    throw new Error(`Apify task run failed: ${res.status}`)
   }
 
   return (await res.json()) as unknown[] | undefined

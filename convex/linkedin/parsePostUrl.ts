@@ -14,16 +14,26 @@ export interface ParsedPostUrl {
  *
  * Returns null for unrecognized formats.
  */
+// SSRF guard: the path checks below are NOT sufficient on their own — the caller fetch()es
+// this URL server-side, so scheme + host MUST be restricted. Allows linkedin.com + subdomains.
+const ALLOWED_LINKEDIN_HOST = /^([a-z0-9-]+\.)?linkedin\.com$/
+
 export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
   if (!url) return null
 
-  let pathname: string
+  let parsed: URL
   try {
-    const parsed = new URL(url)
-    pathname = parsed.pathname
+    parsed = new URL(url)
   } catch {
     return null
   }
+
+  // Reject anything that isn't an https LinkedIn URL before it can be fetched.
+  if (parsed.protocol !== 'https:' || !ALLOWED_LINKEDIN_HOST.test(parsed.hostname.toLowerCase())) {
+    return null
+  }
+
+  const pathname = parsed.pathname
 
   // Format 2: /feed/update/urn:li:activity:{id}
   const format2Match = pathname.match(/\/feed\/update\/urn:li:activity:(\d+)/)

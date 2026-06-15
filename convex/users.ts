@@ -31,8 +31,19 @@ export const getActiveSubscribers = internalQuery({
 // (needed by the frontend route guard); passes the ban signal through so the
 // client can render the banned screen.
 export function toSafeMe(user: UserDoc) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, isAdmin, ...safeUser } = user
+  // Strip secrets + internal fields. bannedReason stays (shown on the banned screen).
+  /* eslint-disable @typescript-eslint/no-unused-vars -- destructure-and-discard sensitive fields */
+  const {
+    linkedinAccessToken,
+    linkedinRefreshToken,
+    tokenExpiresAt,
+    stripeCustomerId,
+    bannedBy,
+    bannedAt,
+    isAdmin,
+    ...safeUser
+  } = user
+  /* eslint-enable @typescript-eslint/no-unused-vars */
   return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
 }
 
@@ -162,6 +173,10 @@ export const setPublicIdentifier = mutation({
   },
   handler: async (ctx, { sessionToken, publicIdentifier }) => {
     const user = await requireAuth(ctx, sessionToken)
+    // Trust model: we validate FORMAT only — we do NOT verify the vanity name actually belongs
+    // to the signed-in member. This is self-attribution; the post-ownership fallback
+    // (verifyPostOwnership Step B) trusts it, but every real LinkedIn action (comment/react) still
+    // uses the user's own OAuth token, so it cannot be used to act as someone else. See PLATFORM.md §17.
     // Validate LinkedIn vanity name format: alphanumeric, hyphens, underscores, 3-100 chars
     const trimmed = publicIdentifier.trim().toLowerCase()
     if (!/^[a-zA-Z0-9\-_]{3,100}$/.test(trimmed)) {
@@ -170,15 +185,19 @@ export const setPublicIdentifier = mutation({
     const changed = user.linkedinPublicIdentifier !== trimmed
     // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
     await ctx.db.patch(user._id, { linkedinPublicIdentifier: trimmed })
-    // Auto-scrape only when the identifier actually changed, and only within the shared
-    // profile-scrape budget (the same 2/day counter the Refresh button uses) — so repeatedly
-    // changing the URL can't run unlimited paid scrapes. Use the non-throwing budget check so an
-    // exhausted budget never blocks saving the identifier; the user can still scrape later via Refresh.
-    // The action itself also bails if the profile-scrape flag is off.
+    // Auto-scrape only when the identifier actually changed AND the profile scrape is enabled,
+    // and only within the shared 2/day budget (the same `profile_refresh` counter the Refresh
+    // button uses) — so repeatedly changing the URL can't run unlimited paid scrapes. The flag is
+    // checked BEFORE consuming the budget, so a disabled scrape never wastes the user's daily
+    // budget (and we avoid scheduling a no-op action). The non-throwing budget check means an
+    // exhausted budget never blocks saving the identifier; the user can scrape later via Refresh.
     if (changed) {
-      const allowed = await tryConsumeRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000)
-      if (allowed) {
-        await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
+      const settings = await ctx.db.query('appSettings').first()
+      if (isApifyProfileScrapeEnabled(settings as ApifyFlags)) {
+        const allowed = await tryConsumeRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000)
+        if (allowed) {
+          await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
+        }
       }
     }
   }

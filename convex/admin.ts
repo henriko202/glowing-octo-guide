@@ -183,12 +183,7 @@ export const removeContactUserLimit = mutation({
 export const updateTierDefault = mutation({
   args: {
     sessionToken: v.string(),
-    tier: v.union(
-      v.literal('starter'),
-      v.literal('growth'),
-      v.literal('pro'),
-      v.literal('contact')
-    ),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     interactionsPerPost: v.number(),
     postsPerWeek: v.number()
   },
@@ -217,7 +212,7 @@ export const updateTierDefault = mutation({
 export const searchContactUsers = query({
   args: {
     sessionToken: v.string(),
-    nameQuery: v.string(),
+    nameQuery: v.string()
   },
   handler: async (ctx, { sessionToken, nameQuery }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -235,7 +230,7 @@ export const searchContactUsers = query({
       .filter(u => u.name.toLowerCase().includes(q))
       .slice(0, 10)
       .map(u => ({ _id: u._id, name: u.name }))
-  },
+  }
 })
 
 // Returns all users sorted by most recently created, with fields needed for admin management.
@@ -256,9 +251,9 @@ export const listUsers = query({
       tier: u.tier,
       subscriptionStatus: u.subscriptionStatus,
       isBanned: u.isBanned,
-      createdAt: u._creationTime,
+      createdAt: u._creationTime
     }))
-  },
+  }
 })
 
 // Sets a user's tier. Can be used to promote to 'contact' or change between any tiers.
@@ -269,12 +264,7 @@ export const setUserTier = mutation({
   args: {
     sessionToken: v.string(),
     userId: v.id('users'),
-    tier: v.union(
-      v.literal('starter'),
-      v.literal('growth'),
-      v.literal('pro'),
-      v.literal('contact')
-    ),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))
   },
   handler: async (ctx, { sessionToken, userId, tier }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -305,12 +295,12 @@ export const setUserTier = mutation({
             tier: 'contact',
             userId,
             interactionsPerPost: contactDefault.interactionsPerPost,
-            postsPerWeek: contactDefault.postsPerWeek,
+            postsPerWeek: contactDefault.postsPerWeek
           })
         }
       }
     }
-  },
+  }
 })
 
 // Bans a user — hard lockout enforced centrally in requireAuth. Admin-only.
@@ -319,7 +309,7 @@ export const banUser = mutation({
   args: {
     sessionToken: v.string(),
     userId: v.id('users'),
-    reason: v.optional(v.string()),
+    reason: v.optional(v.string())
   },
   handler: async (ctx, { sessionToken, userId, reason }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -330,20 +320,23 @@ export const banUser = mutation({
     if (!targetUser) throw new Error('User not found')
 
     const trimmed = reason?.trim()
+    if (trimmed && trimmed.length > 500) {
+      throw new Error('Ban reason must be 500 characters or fewer.')
+    }
     await ctx.db.patch(userId, {
       isBanned: true,
       bannedAt: Date.now(),
       bannedBy: admin._id,
-      ...(trimmed ? { bannedReason: trimmed } : {}),
+      ...(trimmed ? { bannedReason: trimmed } : {})
     })
-  },
+  }
 })
 
 // Unbans a user — clears all ban fields. Admin-only.
 export const unbanUser = mutation({
   args: {
     sessionToken: v.string(),
-    userId: v.id('users'),
+    userId: v.id('users')
   },
   handler: async (ctx, { sessionToken, userId }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -356,9 +349,9 @@ export const unbanUser = mutation({
       isBanned: false,
       bannedAt: undefined,
       bannedBy: undefined,
-      bannedReason: undefined,
+      bannedReason: undefined
     })
-  },
+  }
 })
 
 // ─── Internal functions (for cron/action use — no admin check) ───────────────

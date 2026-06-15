@@ -47,6 +47,28 @@ export function buildFeedFilter(params: FeedFilterParams): FeedFilter {
   }
 }
 
+// Max posts scanned per feed read — bounds the query so a growing table can't blow the
+// Convex read limit. Generous vs. current volume; swap for cursor pagination at scale.
+const FEED_SCAN_LIMIT = 1000
+// Hard cap on the page size a client can request.
+const MAX_FEED_PAGE = 100
+
+/**
+ * Allow-list projection of an author for client responses. Returns ONLY display fields —
+ * never tokens, isAdmin, ban state, Stripe IDs, linkedinId, or subscription details.
+ * Allow-list (not deny-list) so new schema fields never leak by default.
+ */
+export function toFeedAuthor(author: Doc<'users'>) {
+  return {
+    _id: author._id,
+    name: author.name,
+    headline: author.headline,
+    profilePictureUrl: author.profilePictureUrl,
+    industry: author.industry,
+    country: author.country,
+    tier: author.tier
+  }
+}
 
 export const getFeed = query({
   args: {
@@ -57,6 +79,7 @@ export const getFeed = query({
   },
   handler: async (ctx, { sessionToken, limit = 20, filterIndustries, filterCountries }) => {
     if (!sessionToken) return { posts: [], hasMore: false }
+    const pageLimit = Math.min(Math.max(1, limit), MAX_FEED_PAGE)
     let viewer: Doc<'users'>
     try {
       viewer = await requireAuth(ctx, sessionToken)
@@ -77,7 +100,7 @@ export const getFeed = query({
       .query('posts')
       .withIndex('by_published', q => q.eq('hidden', false))
       .order('desc')
-      .collect()
+      .take(FEED_SCAN_LIMIT)
 
     // Filter out posts that have reached their interaction limit
     allPosts = allPosts.filter(post => post.interactionLimitReached !== true)
@@ -128,9 +151,7 @@ export const getFeed = query({
     })
 
     // Sort: featured first (by publishedAt desc) → authorTierRank desc → publishedAt desc
-    const featured = allPosts
-      .filter(p => p.isFeatured)
-      .sort((a, b) => b.publishedAt - a.publishedAt)
+    const featured = allPosts.filter(p => p.isFeatured).sort((a, b) => b.publishedAt - a.publishedAt)
 
     const regular = allPosts
       .filter(p => !p.isFeatured)
@@ -142,17 +163,15 @@ export const getFeed = query({
       })
 
     const sorted = [...featured, ...regular]
-    const paginated = sorted.slice(0, limit)
-    const hasMore = sorted.length > limit
+    const paginated = sorted.slice(0, pageLimit)
+    const hasMore = sorted.length > pageLimit
 
     // Enrich with author info (safe — no tokens returned)
     const enriched = await Promise.all(
       paginated.map(async post => {
         const author = allAuthorMap.get(post.authorId)
         if (!author) return { ...post, author: null }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { linkedinAccessToken, linkedinRefreshToken, tokenExpiresAt, ...safeAuthor } = author
-        return { ...post, author: safeAuthor }
+        return { ...post, author: toFeedAuthor(author) }
       })
     )
 

@@ -46,7 +46,8 @@ export async function fetchUserPosts(accessToken: string, linkedinPersonId: stri
   }
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`Posts fetch failed: ${res.status} — ${body}`)
+    console.error(`Posts fetch failed: ${res.status}`, body)
+    throw new Error(`Posts fetch failed: ${res.status}`)
   }
   const data = (await res.json()) as LinkedInUGCPostsResponse
   return (data.elements ?? []).map(parseLinkedInPost)

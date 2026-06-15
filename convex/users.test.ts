@@ -37,4 +37,15 @@ describe('toSafeMe', () => {
     expect(safe.isBanned).toBe(true)
     expect(safe.bannedReason).toBe('Spam')
   })
+
+  it('strips stripeCustomerId and ban audit fields but keeps bannedReason', () => {
+    const safe = toSafeMe(
+      makeUser({ stripeCustomerId: 'cus_1', isBanned: true, bannedAt: 123, bannedBy: 'admin1', bannedReason: 'Spam' })
+    ) as Record<string, unknown>
+    expect(safe.stripeCustomerId).toBeUndefined()
+    expect(safe.bannedBy).toBeUndefined()
+    expect(safe.bannedAt).toBeUndefined()
+    expect(safe.isBanned).toBe(true)
+    expect(safe.bannedReason).toBe('Spam')
+  })
 })

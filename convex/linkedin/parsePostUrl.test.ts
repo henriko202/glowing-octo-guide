@@ -39,4 +39,21 @@ describe('parseLinkedInPostUrl', () => {
     expect(result!.activityId).toBe('7999999999999999999')
     expect(result!.vanityName).toBe('bob-smith')
   })
+
+  it('rejects non-LinkedIn hosts (SSRF guard) even with a valid post path', () => {
+    expect(parseLinkedInPostUrl('https://evil.com/posts/x_y-7234567890123456789-Abcd/')).toBeNull()
+    expect(parseLinkedInPostUrl('http://169.254.169.254/posts/x_y-7234567890123456789-Abcd/')).toBeNull()
+    expect(parseLinkedInPostUrl('https://linkedin.com.evil.com/posts/x_y-7234567890123456789-Abcd/')).toBeNull()
+    expect(parseLinkedInPostUrl('https://evil-linkedin.com/posts/x_y-7234567890123456789-Abcd/')).toBeNull()
+  })
+
+  it('rejects non-https schemes for LinkedIn hosts', () => {
+    expect(parseLinkedInPostUrl('http://www.linkedin.com/posts/x_y-7234567890123456789-Abcd/')).toBeNull()
+  })
+
+  it('accepts linkedin.com subdomains over https', () => {
+    const r = parseLinkedInPostUrl('https://de.linkedin.com/posts/x_y-7234567890123456789-Abcd/')
+    expect(r).not.toBeNull()
+    expect(r!.activityId).toBe('7234567890123456789')
+  })
 })

@@ -9,32 +9,43 @@ import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { tierToRank } from './lib/planLimits'
 
-const VALID_SUBSCRIPTION_STATUSES: ReadonlySet<Doc<'users'>['subscriptionStatus']> = new Set([
-  'trialing',
-  'active',
-  'canceled',
-  'past_due',
-  'none'
-])
-
-function toSubscriptionStatus(raw: string): Doc<'users'>['subscriptionStatus'] {
-  if (VALID_SUBSCRIPTION_STATUSES.has(raw as Doc<'users'>['subscriptionStatus'])) {
-    return raw as Doc<'users'>['subscriptionStatus']
+// Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
+// any status that does not clearly grant access (incomplete, unpaid, paused, unknown)
+// resolves to a non-active state, so a half-finished or lapsed subscription never grants access.
+export function toSubscriptionStatus(raw: string): Doc<'users'>['subscriptionStatus'] {
+  switch (raw) {
+    case 'active':
+    case 'trialing':
+    case 'past_due':
+    case 'canceled':
+      return raw
+    case 'unpaid':
+      return 'past_due'
+    case 'incomplete':
+    case 'incomplete_expired':
+    case 'paused':
+      return 'none'
+    default:
+      console.warn(`Unknown Stripe subscription status "${raw}" — defaulting to "none"`)
+      return 'none'
   }
-  console.warn(`Unknown Stripe subscription status "${raw}" — defaulting to "active"`)
-  return 'active'
 }
 
 // These internal mutations are called from webhook callbacks registered in http.ts
 // to keep our users table in sync with Stripe subscription state.
 
 function getTierFromPriceId(priceId: string): 'starter' | 'growth' | 'pro' {
-  const map: Record<string, 'starter' | 'growth' | 'pro'> = {
-    [process.env.STRIPE_STARTER_PRICE_ID ?? '']: 'starter',
-    [process.env.STRIPE_GROWTH_PRICE_ID ?? '']: 'growth',
-    [process.env.STRIPE_PRO_PRICE_ID ?? '']: 'pro'
+  // Build the map skipping unset env vars, so a missing var can't collapse into an
+  // empty-string key that a blank priceId would match. Unknown/blank → 'starter' (safe default).
+  const map: Record<string, 'starter' | 'growth' | 'pro'> = {}
+  if (process.env.STRIPE_STARTER_PRICE_ID) map[process.env.STRIPE_STARTER_PRICE_ID] = 'starter'
+  if (process.env.STRIPE_GROWTH_PRICE_ID) map[process.env.STRIPE_GROWTH_PRICE_ID] = 'growth'
+  if (process.env.STRIPE_PRO_PRICE_ID) map[process.env.STRIPE_PRO_PRICE_ID] = 'pro'
+  if (!priceId || !(priceId in map)) {
+    console.error(`getTierFromPriceId: unknown/blank priceId "${priceId}" — defaulting to starter`)
+    return 'starter'
   }
-  return map[priceId] ?? 'starter'
+  return map[priceId]
 }
 
 /** Sync user tier and subscription status after Stripe subscription changes */
@@ -56,9 +67,10 @@ export const syncUserSubscription = internalMutation({
       return
     }
 
+    const status = toSubscriptionStatus(args.status)
     await ctx.db.patch(user._id, {
       tier: args.tier,
-      subscriptionStatus: toSubscriptionStatus(args.status),
+      subscriptionStatus: status,
       trialEndsAt: undefined
     })
 
@@ -71,14 +83,14 @@ export const syncUserSubscription = internalMutation({
     await Promise.all(userPosts.map(p => ctx.db.patch(p._id, { authorTierRank: newRank })))
 
     // Trigger immediate post fetch when subscription becomes active
-    if (args.status === 'active') {
+    if (status === 'active') {
       await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncUserPostsViaApify, {
         userId: user._id
       })
     }
 
     // Un-hide posts when subscription becomes active
-    if (args.status === 'active') {
+    if (status === 'active') {
       const posts = await ctx.db
         .query('posts')
         .withIndex('by_author', q => q.eq('authorId', user._id))
