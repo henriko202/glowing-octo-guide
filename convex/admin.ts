@@ -53,6 +53,8 @@ export const getSettings = query({
     return (
       settings ?? {
         apifySyncEnabled: false,
+        apifyEnabled: true,
+        apifyProfileScrapeEnabled: false,
         lastApifySyncAt: undefined,
         lastApifySyncError: undefined
       }
@@ -67,6 +69,26 @@ export const toggleApifySync = mutation({
     assertAdmin(user)
     const settings = await getOrCreateSettings(ctx.db)
     await ctx.db.patch(settings._id, { apifySyncEnabled: enabled })
+  }
+})
+
+export const toggleApifyEnabled = mutation({
+  args: { sessionToken: v.string(), enabled: v.boolean() },
+  handler: async (ctx, { sessionToken, enabled }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    assertAdmin(user)
+    const settings = await getOrCreateSettings(ctx.db)
+    await ctx.db.patch(settings._id, { apifyEnabled: enabled })
+  }
+})
+
+export const toggleApifyProfileScrape = mutation({
+  args: { sessionToken: v.string(), enabled: v.boolean() },
+  handler: async (ctx, { sessionToken, enabled }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    assertAdmin(user)
+    const settings = await getOrCreateSettings(ctx.db)
+    await ctx.db.patch(settings._id, { apifyProfileScrapeEnabled: enabled })
   }
 })
 

@@ -88,6 +88,8 @@ export interface UserDoc extends ConvexDocument {
   profilePictureUrl?: string
   industry?: string
   country?: string
+  location?: string
+  primaryLocale?: string
   tier: 'starter' | 'growth' | 'pro' | 'contact'
   subscriptionStatus: 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
   trialEndsAt?: number
@@ -132,6 +134,8 @@ export interface SubscriptionDoc extends ConvexDocument {
 /** AppSettings document shape (mirrors schema.ts) */
 export interface AppSettingsDoc extends ConvexDocument {
   apifySyncEnabled: boolean
+  apifyEnabled?: boolean
+  apifyProfileScrapeEnabled?: boolean
   lastApifySyncAt?: number
   lastApifySyncError?: string
 }

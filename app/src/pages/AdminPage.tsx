@@ -12,7 +12,11 @@ export default function AdminPage() {
   const isAdmin = useQuery(api.admin.checkIsAdmin, { sessionToken })
   const settings = useQuery(api.admin.getSettings, sessionToken && isAdmin ? { sessionToken } : 'skip')
   const toggleSync = useMutation(api.admin.toggleApifySync)
+  const toggleMaster = useMutation(api.admin.toggleApifyEnabled)
+  const toggleProfileScrape = useMutation(api.admin.toggleApifyProfileScrape)
   const [toggling, setToggling] = useState(false)
+  const [togglingMaster, setTogglingMaster] = useState(false)
+  const [togglingProfile, setTogglingProfile] = useState(false)
   const [tab, setTab] = useState<'settings' | 'planLimits' | 'users'>('settings')
 
   if (isAdmin === undefined) {
@@ -30,6 +34,26 @@ export default function AdminPage() {
       await toggleSync({ sessionToken, enabled: !settings.apifySyncEnabled })
     } finally {
       setToggling(false)
+    }
+  }
+
+  async function handleToggleMaster() {
+    if (!sessionToken || !settings) return
+    setTogglingMaster(true)
+    try {
+      await toggleMaster({ sessionToken, enabled: settings.apifyEnabled === false })
+    } finally {
+      setTogglingMaster(false)
+    }
+  }
+
+  async function handleToggleProfile() {
+    if (!sessionToken || !settings) return
+    setTogglingProfile(true)
+    try {
+      await toggleProfileScrape({ sessionToken, enabled: !settings.apifyProfileScrapeEnabled })
+    } finally {
+      setTogglingProfile(false)
     }
   }
 
@@ -73,31 +97,69 @@ export default function AdminPage() {
 
       {/* Settings tab */}
       {tab === 'settings' && (
-        <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="m-0 text-base font-semibold text-slate-900">Apify Post Sync</h2>
-              <p className="mt-1 text-[13px] text-slate-500">
-                Scrapes LinkedIn posts for all active users every hour via Apify.
-              </p>
+        <>
+          <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="m-0 text-base font-semibold text-slate-900">Apify Post Sync</h2>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Scrapes LinkedIn posts for all active users every hour via Apify.
+                </p>
+              </div>
+              <button
+                onClick={handleToggle}
+                disabled={toggling || !settings}
+                className={`rounded-md border-none px-5 py-2 text-[13px] font-semibold text-white ${toggling ? 'cursor-wait' : 'cursor-pointer'} ${settings?.apifySyncEnabled ? 'bg-red-500' : 'bg-green-500'}`}
+              >
+                {toggling ? '…' : settings?.apifySyncEnabled ? 'Disable' : 'Enable'}
+              </button>
             </div>
-            <button
-              onClick={handleToggle}
-              disabled={toggling || !settings}
-              className={`rounded-md border-none px-5 py-2 text-[13px] font-semibold text-white ${toggling ? 'cursor-wait' : 'cursor-pointer'} ${settings?.apifySyncEnabled ? 'bg-red-500' : 'bg-green-500'}`}
-            >
-              {toggling ? '…' : settings?.apifySyncEnabled ? 'Disable' : 'Enable'}
-            </button>
+            {settings?.lastApifySyncAt && (
+              <div className="mt-3 text-xs text-slate-400">
+                Last sync: {new Date(settings.lastApifySyncAt).toLocaleString()}
+                {settings.lastApifySyncError && (
+                  <span className="ml-2 text-red-500">— {settings.lastApifySyncError}</span>
+                )}
+              </div>
+            )}
           </div>
-          {settings?.lastApifySyncAt && (
-            <div className="mt-3 text-xs text-slate-400">
-              Last sync: {new Date(settings.lastApifySyncAt).toLocaleString()}
-              {settings.lastApifySyncError && (
-                <span className="ml-2 text-red-500">— {settings.lastApifySyncError}</span>
-              )}
+
+          <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="m-0 text-base font-semibold text-slate-900">Apify (master)</h2>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Global kill-switch. Turns off ALL Apify integration (post sync and profile scrape).
+                </p>
+              </div>
+              <button
+                onClick={handleToggleMaster}
+                disabled={togglingMaster || !settings}
+                className={`rounded-md border-none px-5 py-2 text-[13px] font-semibold text-white ${togglingMaster ? 'cursor-wait' : 'cursor-pointer'} ${settings?.apifyEnabled !== false ? 'bg-red-500' : 'bg-green-500'}`}
+              >
+                {togglingMaster ? '…' : settings?.apifyEnabled !== false ? 'Disable' : 'Enable'}
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="m-0 text-base font-semibold text-slate-900">Apify Profile Scrape</h2>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Scrapes profile country/location/locale when a user sets or refreshes their LinkedIn URL.
+                </p>
+              </div>
+              <button
+                onClick={handleToggleProfile}
+                disabled={togglingProfile || !settings}
+                className={`rounded-md border-none px-5 py-2 text-[13px] font-semibold text-white ${togglingProfile ? 'cursor-wait' : 'cursor-pointer'} ${settings?.apifyProfileScrapeEnabled ? 'bg-red-500' : 'bg-green-500'}`}
+              >
+                {togglingProfile ? '…' : settings?.apifyProfileScrapeEnabled ? 'Disable' : 'Enable'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Plan Limits tab */}

@@ -29,6 +29,7 @@
 11. [Feed & Engagement](#11-feed--engagement)
 12. [Admin & Moderation](#12-admin--moderation)
 13. [Scheduled Jobs (Crons)](#13-scheduled-jobs-crons)
+13A. [Profile Enrichment (LinkedIn Profile Scrape)](#13a-profile-enrichment-linkedin-profile-scrape)
 14. [Frontend — Authenticated App (`app/`)](#14-frontend--authenticated-app-app)
 15. [Frontend — Landing Site (`landing/`)](#15-frontend--landing-site-landing)
 16. [Environment Variables](#16-environment-variables)
@@ -301,6 +302,8 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `profilePictureUrl` | string | – | Avatar URL. |
 | `industry` | string | – | Drives feed targeting (Growth/Pro). |
 | `country` | string | – | Drives feed targeting (Growth/Pro). |
+| `location` | string | – | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only). |
+| `primaryLocale` | string | – | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable. |
 | `tier` | `'starter'\|'growth'\|'pro'\|'contact'` | – | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index. |
 | `subscriptionStatus` | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓ | Stripe‑mirrored status. |
 | `trialEndsAt` | number | – | Trial expiry (ms). |
@@ -407,7 +410,7 @@ Single‑use OAuth `state` values; ~10‑minute TTL; deleted on validation.
 | Field | Type | Req | Meaning |
 |---|---|:--:|---|
 | `userId` | `id('users')` | ✓ | Subject. |
-| `action` | string | ✓ | Action name (`submitPost`, `commentOnPost`, `reactToPost`). |
+| `action` | string | ✓ | Action name (`submitPost`, `commentOnPost`, `reactToPost`, `profile_refresh`). |
 | `windowStart` | number | ✓ | Window start (ms). |
 | `count` | number | ✓ | Calls in window. |
 
@@ -419,6 +422,8 @@ Accessed via `.first()` (treated as a singleton; no index).
 | Field | Type | Req | Meaning |
 |---|---|:--:|---|
 | `apifySyncEnabled` | boolean | ✓ | Master toggle for the Apify post‑sync cron. |
+| `apifyEnabled` | boolean | – | **Master Apify kill-switch.** Absent ⇒ enabled. When false, all Apify (post sync + profile scrape) halts. |
+| `apifyProfileScrapeEnabled` | boolean | – | Gates the LinkedIn profile scrape. Absent ⇒ disabled (opt-in; paid actor). |
 | `lastApifySyncAt` | number | – | Last sync timestamp. |
 | `lastApifySyncError` | string | – | Last sync error message. |
 
@@ -548,6 +553,9 @@ flowchart TD
 | `users.getActiveSubscribers` | internalQuery | All users with `subscriptionStatus === 'active'` (full‑table scan). |
 | `users.getSubscriptionInfo` | query (public) | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`. |
 | `users.setPublicIdentifier` | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased). |
+| `users.updateProfile` | mutation (public) | User edits their own `industry`/`country` (validated against canonical lists; empty string clears). |
+| `users.refreshProfileFromLinkedIn` | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action. |
+| `users.applyScrapedProfile` | internalMutation | Writes scraped fields: `country` **fill-when-empty**; `location`/`primaryLocale` always refresh. |
 | `users.logout` | mutation (public) | Deletes the current session token. |
 | `users.forceLogoutAll` | mutation (public) | Deletes **all** sessions for the user (compromise response). |
 | `sessions.create` / `getByToken` / `deleteByToken` | internal | Session lifecycle. |
@@ -858,8 +866,12 @@ sequenceDiagram
 ### Rate limiting (`lib/rateLimit.ts`)
 A **fixed window** keyed on `(userId, action)`: `WINDOW_MS = 3,600,000` (1h). On each call it reads
 the current window row; if `windowStart` is older than the window it resets, otherwise it increments
-and throws when `count` would exceed `maxPerHour`. (The header comment says "sliding window" but the
-implementation is fixed‑window.) Limits: `submitPost` 10/h, `commentOnPost` 20/h, `reactToPost` 30/h.
+and throws once `count` reaches the limit (`maxPerWindow`). (The header comment says "sliding window" but the
+implementation is fixed‑window.) `checkRateLimit` now accepts an optional `windowMs` + `windowLabel`
+(defaults to 1h / "hour") so callers can specify non-hourly windows. Limits: `submitPost` 10/h,
+`commentOnPost` 20/h, `reactToPost` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget is
+**shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the
+non-throwing `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier.
 
 ---
 
@@ -874,8 +886,10 @@ edit** — no application code writes it. Every admin function calls `assertAdmi
 | Function | Kind | Purpose |
 |---|---|---|
 | `checkIsAdmin` | query | `true/false` (soft‑fails to `false`) — drives the client route guard. |
-| `getSettings` | query | App settings (Apify toggle + last‑sync status). |
+| `getSettings` | query | App settings (3 Apify flags + last‑sync status). |
 | `toggleApifySync(enabled)` | mutation | Master switch for the Apify post‑sync cron. |
+| `toggleApifyEnabled(enabled)` | mutation | Master Apify kill-switch. |
+| `toggleApifyProfileScrape(enabled)` | mutation | Toggle the LinkedIn profile scrape. |
 | `listUsers` | query | Up to 1000 users (newest first), **without** tokens/Stripe IDs. |
 | `setUserTier(userId, tier)` | mutation | Change tier; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults. |
 | `searchContactUsers(nameQuery)` | query | Up to 10 contact‑tier users matching a name (uses `by_tier`). |
@@ -922,6 +936,50 @@ flowchart TD
 | `process post queue` | every **25h** | `jobs/processQueue.processPostQueue` | Promote queued posts when authors regain weekly capacity. |
 | `cleanup expired sessions` | every **6h** | `sessions.deleteExpiredSessions` | Purge expired sessions (≤ 200/run). |
 | `cleanup expired oauth states` | every **1h** | `sessions.deleteExpiredOAuthStates` | Purge expired CSRF nonces (≤ 200/run). |
+
+---
+
+## 13A. Profile Enrichment (LinkedIn Profile Scrape)
+
+A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `country`
+(fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent from the
+payload) — it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
+
+- on `users.setPublicIdentifier`, but only when the identifier **changes** and only within the
+  shared 2/day budget (charged on the same `profile_refresh` counter as the button), and
+- on the user-pressed **"Refresh from LinkedIn"** button (`refreshProfileFromLinkedIn`, ≤ 2/day).
+
+Both schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails if the
+Apify env vars (`APIFY_API_TOKEN`/`APIFY_TASK_ID_PROFILE_SCRAPE`) are unset, or unless
+`apifyEnabled && apifyProfileScrapeEnabled` (gate helpers in `lib/apify.ts`). It calls the Apify
+actor, parses `location.countryCode` → `country`, `location.linkedinText` → `location`,
+`primaryLocale.language` → `primaryLocale`, and writes via `users.applyScrapedProfile` (country only
+if the user has none; location/locale always refresh). Results propagate to Settings via the
+reactive `getMe`, which also seeds the UI language once.
+
+```mermaid
+flowchart TD
+  T1["setPublicIdentifier (vanity saved)"] --> CHG{"identifier changed & within 2/day budget?"}
+  CHG -->|no| SKIP["skip auto-scrape"]
+  CHG -->|yes| SCH["scheduler.runAfter(0)"]
+  T2["Settings: Refresh from LinkedIn"] --> RF["refreshProfileFromLinkedIn"]
+  RF --> G0{"public identifier set?"}
+  G0 -->|no| ERRP["throw: set your LinkedIn URL first"]
+  G0 -->|yes| GF{"apifyEnabled && profileScrapeEnabled?"}
+  GF -->|no| ERR["throw: refresh unavailable"]
+  GF -->|yes| RL{"<= 2 refreshes today?"}
+  RL -->|no| ERRL["throw: rate limit"]
+  RL -->|yes| SCH
+  SCH --> ACT["scrapeUserProfile (internal action)"]
+  ACT --> GATE{"apifyEnabled && profileScrapeEnabled?"}
+  GATE -->|no| STOP["return (no-op)"]
+  GATE -->|yes| PID{"has linkedinPublicIdentifier?"}
+  PID -->|no| STOP
+  PID -->|yes| API["Apify run-sync-get-dataset-items (queries=[vanity])"]
+  API --> PARSE["parseProfileScrapeResult -> {country?, location?, primaryLocale?}"]
+  PARSE --> APPLY["applyScrapedProfile: country fill-when-empty; location/locale refresh"]
+  APPLY --> REACT["reactive getMe -> Settings updates + i18n seed"]
+```
 
 ---
 
@@ -976,15 +1034,18 @@ flowchart TD
 - **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getMyPosts` + `submitPost`. Usage pill ("N of M
   posts this week") turns **amber** at the cap and disables the composer (`atLimit`). Renders each
   post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
-- **SettingsPage** — `getMe` + `setPublicIdentifier`. Shows synced `industry`/`country` (read‑only),
-  lets the user save/verify their LinkedIn vanity name (parsed from a URL or `@handle`). Pro/contact
-  see a **stubbed** "who can see your posts" card ("Coming in next task").
+- **SettingsPage** — `getMe` + `setPublicIdentifier` + `updateProfile` + `refreshProfileFromLinkedIn`.
+  Industry and country are editable canonical dropdowns (country names rendered via `Intl.DisplayNames`);
+  a read-only **Location** row appears when `me.location` is present (populated by the profile scrape);
+  a **"Refresh from LinkedIn"** button re-scrapes the profile (disabled without a public identifier;
+  shows the server error inline when the scrape flag is off). Pro/contact see a **stubbed** "who can
+  see your posts" card ("Coming in next task").
 - **BillingPage** — `getMe` + `getSubscriptionInfo` + `createCheckoutSession` + `createPortalSession`.
   Trial/expired banners; per‑plan Subscribe CTAs (disabled if the plan's `VITE_STRIPE_*_PRICE_ID` is
   missing); "Manage Subscription" → Stripe portal; Enterprise → `mailto:`.
 - **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Three tabs:
-  **Settings** (Apify toggle + last‑sync status), **Plan Limits** (`PlanLimitsTab`), **Users**
-  (`UsersTab`).
+  **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync
+  status), **Plan Limits** (`PlanLimitsTab`), **Users** (`UsersTab`).
 
 ### Reusable components
 `AppNav` (feed/my‑posts/settings/billing links + language `<select>` + sign‑out; **no admin link**),
@@ -1015,7 +1076,9 @@ flowchart TD
 ### i18n (`i18n/index.ts`)
 `i18next` + `react-i18next` + browser language detector. Resources `en`/`pt`/`es`, fallback `en`.
 **Detection order:** `localStorage` → `?lang=` querystring → `navigator`. The `AppNav` language
-selector persists the choice to `localStorage`.
+selector persists the choice to `localStorage`. On the first authenticated load, if no
+`localStorage` `i18nextLng` key is present, the UI language is seeded once from `me.primaryLocale`
+(the scraped LinkedIn language); the `AppNav` switcher still overrides it thereafter.
 
 ---
 
@@ -1076,7 +1139,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `STRIPE_WEBHOOK_SECRET` | ✓ (billing) | *(read by `@convex-dev/stripe`)* | Verifies webhook signatures at `/stripe/webhook`. |
 | `APIFY_API_TOKEN` | ✓ (sync) | `jobs/syncPostsApify.ts` | Bearer token for Apify REST. If unset, sync no‑ops. |
 | `APIFY_TASK_ID` | ✓ (sync) | `jobs/syncPostsApify.ts` | Apify actor (`harvestapi~linkedin-profile-posts`). |
-| `APIFY_TASK_ID_PROFILE_SCRAPE` | ✗ (planned) | *(none yet)* | Intended profile‑enrichment scraper; documented but not yet consumed. |
+| `APIFY_TASK_ID_PROFILE_SCRAPE` | ✓ (profile scrape) | `jobs/scrapeProfileApify.ts` | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment). |
 | `CONVEX_DEPLOYMENT` | ✓ (CLI) | Convex CLI | Selects the deployment for `convex dev`/`deploy`. |
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
@@ -1205,15 +1268,13 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   but there's no UI to set them).
 - **AI comment generator** — `CommentBox` advertises "AI suggestions coming soon"; no integration.
 - **Featured posts quota** — `featuredPostUsage` table exists but is unwired.
-- **Profile enrichment** (country/location/industry/locale via `APIFY_TASK_ID_PROFILE_SCRAPE`) —
-  planned; the env var is documented but unconsumed.
 - **LinkedIn token refresh** — needed before tokens hit their ~60‑day expiry.
 - **Placeholder constants** — `BannedScreen.SUPPORT_EMAIL = 'contact@email.com'` (TODO);
   `STRIPE_WEBHOOK_SECRET=whsec_your_secret` in the committed `.env.local`.
 
 ### Roadmap (from README + specs in `docs/`)
 AI comment generator (Pro+), LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs),
-SSI‑trend analytics dashboard, proactive token‑refresh cron, profile enrichment.
+SSI‑trend analytics dashboard, proactive token‑refresh cron.
 
 ---
 
@@ -1265,4 +1326,8 @@ a flow chart (Mermaid) if it introduces a multi‑step flow.
 `feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature
 (commits `d1b40a2` → `1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
 (Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`,
-and `buildEmbedUrl` preserves the URN namespace.*
+and `buildEmbedUrl` preserves the URN namespace. Also reflects the Profile Enrichment feature
+(Task 14): Apify-driven LinkedIn profile scrape populating `location`, `primaryLocale`, and
+`country` on the `users` table; user-editable `industry`/`country` dropdowns in Settings;
+admin toggles for the master Apify kill-switch and profile scrape; and i18n seeding from
+`me.primaryLocale` on first authenticated load.*

@@ -29,12 +29,19 @@
     "profile": "Tu Perfil",
     "industry": "Sector",
     "country": "País",
+    "location": "Ubicación",
     "notSet": "No definido",
-    "profileNote": "Los datos del perfil se sincronizan automáticamente desde LinkedIn.",
+    "selectPlaceholder": "Selecciona…",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado ✓",
+    "refresh": "Actualizar desde LinkedIn",
+    "refreshing": "Actualizando…",
+    "profileNote": "Edita tu sector y país abajo. La ubicación se sincroniza desde LinkedIn.",
     "visibility": "Quién puede ver tus publicaciones",
-    "visibilityNote": "Restringe qué sectores y países pueden ver tus publicaciones en el feed. Déjalo vacío para mostrarlo a todos los usuarios.",
+    "visibilityNote": "Restringe qué sectores y países pueden ver tus publicaciones en el feed. Déjalo vacío para mostrar a todos.",
     "visibilityComingSoon": "Próximamente",
-    "upgradePrompt": "Actualiza a Pro para controlar quién ve tus publicaciones."
+    "upgradePrompt": "Mejora a Pro para controlar quién ve tus publicaciones."
   },
   "billing": {
     "title": "Suscripción",

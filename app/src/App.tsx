@@ -2,6 +2,8 @@ import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from './convex'
+import i18n from './i18n'
+import { pickSeedLanguage } from './i18n/seedLanguage'
 import FeedPage from './pages/FeedPage'
 import SettingsPage from './pages/SettingsPage'
 import BillingPage from './pages/BillingPage'
@@ -23,6 +25,14 @@ function RequireAuth({ children }: { children: ReactNode }) {
     if (me === null) {
       // Redirect directly to LinkedIn auth
       window.location.href = AUTH_URL
+    }
+  }, [me])
+
+  useEffect(() => {
+    if (me && !me.isBanned) {
+      const hasStoredPref = localStorage.getItem('i18nextLng') !== null
+      const seed = pickSeedLanguage(me.primaryLocale, ['en', 'pt', 'es'], hasStoredPref)
+      if (seed) void i18n.changeLanguage(seed)
     }
   }, [me])
 

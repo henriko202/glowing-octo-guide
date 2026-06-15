@@ -9,6 +9,11 @@ export default defineSchema({
     profilePictureUrl: v.optional(v.string()),
     industry: v.optional(v.string()),
     country: v.optional(v.string()),
+    // Scraped LinkedIn profile location, e.g. "Curitiba, Paraná, Brazil". Read-only display
+    // (set only by the profile scrape). Distinct from `country` (geographic ISO alpha-2 code).
+    location: v.optional(v.string()),
+    // Scraped LinkedIn primary-locale language code (e.g. "en"). Drives the UI i18n seed only.
+    primaryLocale: v.optional(v.string()),
     tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))),
     subscriptionStatus: v.union(
       v.literal('trialing'),
@@ -91,6 +96,11 @@ export default defineSchema({
 
   appSettings: defineTable({
     apifySyncEnabled: v.boolean(),
+    // Master Apify kill-switch. Absent ⇒ treated as enabled (true). When false, ALL Apify
+    // integration halts (post sync AND profile scrape).
+    apifyEnabled: v.optional(v.boolean()),
+    // Gates the LinkedIn profile scrape. Absent ⇒ disabled (false) — opt-in (paid actor).
+    apifyProfileScrapeEnabled: v.optional(v.boolean()),
     lastApifySyncAt: v.optional(v.number()),
     lastApifySyncError: v.optional(v.string())
   }),

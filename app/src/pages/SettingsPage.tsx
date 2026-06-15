@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { COUNTRY_CODES, INDUSTRIES, countryLabel } from '../../../convex/lib/profileOptions'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -13,6 +14,8 @@ interface MeProfile {
   profilePictureUrl?: string
   industry?: string
   country?: string
+  location?: string
+  primaryLocale?: string
   tier: 'starter' | 'growth' | 'pro' | 'contact'
   subscriptionStatus: 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
   trialEndsAt?: number
@@ -36,14 +39,30 @@ function extractVanityName(input: string): string | null {
 }
 
 export default function SettingsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken }) as MeProfile | null | undefined
   const setPublicIdentifier = useMutation(api.users.setPublicIdentifier)
+  const updateProfile = useMutation(api.users.updateProfile)
+  const refreshProfile = useMutation(api.users.refreshProfileFromLinkedIn)
 
   const [profileUrl, setProfileUrl] = useState('')
   const [identifierSaving, setIdentifierSaving] = useState(false)
   const [identifierSaved, setIdentifierSaved] = useState(false)
+  const [industry, setIndustry] = useState<string>('')
+  const [country, setCountry] = useState<string>('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (me) {
+      setIndustry(me.industry ?? '')
+      setCountry(me.country ?? '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?._id])
 
   if (!me) {
     return <LoadingSpinner />
@@ -51,6 +70,36 @@ export default function SettingsPage() {
 
   const isPro = me.tier === 'pro' || me.tier === 'contact'
   const extractedVanity = extractVanityName(profileUrl)
+
+  const lang = i18n.language?.split('-')[0] ?? 'en'
+  const countryOptions = COUNTRY_CODES.map(code => ({ code, name: countryLabel(code, lang) })).sort((a, b) =>
+    a.name.localeCompare(b.name)
+  )
+
+  async function handleSaveProfile() {
+    if (!sessionToken) return
+    setProfileSaving(true)
+    try {
+      await updateProfile({ sessionToken, industry, country })
+      setProfileSaved(true)
+      setTimeout(() => setProfileSaved(false), 3000)
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  async function handleRefresh() {
+    if (!sessionToken) return
+    setRefreshing(true)
+    setRefreshError(null)
+    try {
+      await refreshProfile({ sessionToken })
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : 'Refresh failed')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function handleSaveIdentifier() {
     if (!sessionToken || !extractedVanity) return
@@ -71,12 +120,78 @@ export default function SettingsPage() {
 
       <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-3 mt-0 text-base font-semibold text-slate-900">{t('settings.profile')}</h2>
-        <p className="my-1 text-sm text-slate-500">
-          {t('settings.industry')}: {me.industry ?? t('settings.notSet')}
-        </p>
-        <p className="my-1 text-sm text-slate-500">
-          {t('settings.country')}: {me.country ?? t('settings.notSet')}
-        </p>
+
+        <label
+          htmlFor="industry-select"
+          className="mb-1 block text-sm font-medium text-slate-700"
+        >
+          {t('settings.industry')}
+        </label>
+        <select
+          id="industry-select"
+          aria-label={t('settings.industry')}
+          value={industry}
+          onChange={e => setIndustry(e.target.value)}
+          className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
+        >
+          <option value="">{t('settings.notSet')}</option>
+          {INDUSTRIES.map(i => (
+            <option
+              key={i.code}
+              value={i.code}
+            >
+              {i.label}
+            </option>
+          ))}
+        </select>
+
+        <label
+          htmlFor="country-select"
+          className="mb-1 block text-sm font-medium text-slate-700"
+        >
+          {t('settings.country')}
+        </label>
+        <select
+          id="country-select"
+          aria-label={t('settings.country')}
+          value={country}
+          onChange={e => setCountry(e.target.value)}
+          className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
+        >
+          <option value="">{t('settings.notSet')}</option>
+          {countryOptions.map(c => (
+            <option
+              key={c.code}
+              value={c.code}
+            >
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        {me.location && (
+          <p className="my-1 text-sm text-slate-500">
+            {t('settings.location')}: <span className="text-slate-700">{me.location}</span>
+          </p>
+        )}
+
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            onClick={handleSaveProfile}
+            disabled={profileSaving}
+            className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${profileSaved ? 'bg-green-500' : 'bg-blue-500'} ${profileSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
+          >
+            {profileSaved ? t('settings.saved') : profileSaving ? t('settings.saving') : t('settings.save')}
+          </button>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || !me.linkedinPublicIdentifier}
+            className={`rounded-md border border-slate-300 bg-white px-4 py-[7px] text-[13px] text-slate-700 ${refreshing || !me.linkedinPublicIdentifier ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          >
+            {refreshing ? t('settings.refreshing') : t('settings.refresh')}
+          </button>
+        </div>
+        {refreshError && <p className="mb-0 mt-2 text-xs text-red-500">{refreshError}</p>}
         <p className="mb-0 mt-2 text-xs text-slate-400">{t('settings.profileNote')}</p>
       </section>
 

@@ -50,4 +50,10 @@ describe('AdminPage tabs', () => {
     fireEvent.click(screen.getByRole('button', { name: /plan limits/i }))
     expect(screen.queryByText(/apify post sync/i)).not.toBeInTheDocument()
   })
+
+  it('renders the master and profile-scrape Apify toggles', () => {
+    render(<AdminPage />)
+    expect(screen.getByText(/apify \(master\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/apify profile scrape/i)).toBeInTheDocument()
+  })
 })

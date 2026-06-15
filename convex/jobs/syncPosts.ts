@@ -3,6 +3,7 @@ import { internalAction, internalMutation } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
+import { isApifyPostSyncEnabled, type ApifyFlags } from '../lib/apify'
 
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
@@ -47,8 +48,7 @@ export const upsertPost = internalMutation({
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
     const recentPosts = await ctx.db
       .query('posts')
-      .withIndex('by_author_and_publishedAt', q =>
-        q.eq('authorId', args.authorId).gte('publishedAt', sevenDaysAgo))
+      .withIndex('by_author_and_publishedAt', q => q.eq('authorId', args.authorId).gte('publishedAt', sevenDaysAgo))
       .take(limits.postsPerWeek)
     const recentCount = recentPosts.length
 
@@ -98,7 +98,9 @@ export const syncAllPosts = internalAction({
   handler: async ctx => {
     const settings = await ctx.runQuery(internal.admin.getSettingsInternal, {})
 
-    if ((settings as Record<string, unknown> | null)?.apifySyncEnabled) {
+    // Honor the master kill-switch here too (the delegate re-checks, but gating early
+    // avoids an unnecessary action hop when Apify is disabled).
+    if (isApifyPostSyncEnabled(settings as ApifyFlags)) {
       await ctx.runAction(internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
       return
     }

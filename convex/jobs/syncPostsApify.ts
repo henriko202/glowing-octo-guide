@@ -3,8 +3,7 @@ import { internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
 import type { ActionCtx } from '../convexTypes.js'
-
-const APIFY_BASE = 'https://api.apify.com/v2'
+import { runApifyTask, isApifyPostSyncEnabled } from '../lib/apify.js'
 
 // ─── Types for Apify LinkedIn post scraper output ────────────────────────────
 
@@ -55,31 +54,6 @@ function apifyPostToUpsertArgs(post: ApifyPostResult, authorId: string, hidden: 
   }
 }
 
-// ─── Apify REST API helpers ──────────────────────────────────────────────────
-
-async function runApifyTask(
-  actorId: string,
-  token: string,
-  input: Record<string, unknown>
-): Promise<ApifyPostResult[] | undefined> {
-  // Start the task run and wait for it to finish (synchronous run)
-  const res = await fetch(`${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(input)
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Apify task run failed: ${res.status} — ${body}`)
-  }
-
-  return await res.json()
-}
-
 // ─── Sync posts for one user via Apify ───────────────────────────────────────
 
 export const syncUserPostsViaApify = internalAction({
@@ -111,7 +85,7 @@ export const syncUserPostsViaApify = internalAction({
       targetUrls: [`https://www.linkedin.com/in/${user.linkedinPublicIdentifier as string}`]
     }
 
-    const items = await runApifyTask(actorId, token, input)
+    const items = (await runApifyTask(actorId, token, input)) as ApifyPostResult[] | undefined
 
     if (!items?.length) {
       return console.log(`[Apify] No posts found for user ${userId} (${user.linkedinPublicIdentifier as string})`)
@@ -143,7 +117,7 @@ export const syncAllPostsViaApify = internalAction({
       string,
       unknown
     > | null
-    if (!settings?.apifySyncEnabled) {
+    if (!isApifyPostSyncEnabled(settings)) {
       console.log('[Apify] Sync is disabled — skipping')
       return
     }

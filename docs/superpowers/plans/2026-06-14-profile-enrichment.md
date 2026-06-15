@@ -12,8 +12,11 @@
 
 **Spec:** [docs/superpowers/specs/2026-06-14-profile-enrichment-design.md](../specs/2026-06-14-profile-enrichment-design.md)
 
-**Testing conventions (follow these — they match the codebase):**
-- Convex logic is tested by extracting **pure handler functions** (e.g. `upsertUserHandler`) and testing them with a **hand-rolled mock db**, exactly like [`convex/linkedin/auth.test.ts`](../../../convex/linkedin/auth.test.ts). There is **no** convex-test harness.
+**Before any Convex work:** read `convex/_generated/ai/guidelines.md` first (per `CLAUDE.md`). This plan already conforms (arg validators on every function; no `.filter()`/`.collect()` added; actions use `ctx.runQuery`/`ctx.runMutation`, never `ctx.db`; `fetch` needs no `"use node"`).
+
+**Testing conventions (follow these — they match the codebase, and intentionally diverge from the guidelines' `convex-test` suggestion):**
+- This repo does **not** use `convex-test`. `convex/vitest.config.ts` aliases `convex/server` → the `convex-mocks` shim, so backend logic is tested as **plain functions**. Keep this pattern.
+- Convex logic is tested by extracting **pure handler functions** (e.g. `upsertUserHandler`) and testing them with a **hand-rolled mock db**, exactly like [`convex/linkedin/auth.test.ts`](../../../convex/linkedin/auth.test.ts).
 - Pure validators/helpers are exported and unit-tested directly (e.g. `validateLimitArgs` in `admin.ts`).
 - Components use `@testing-library/react` with `vi.mock('convex/react')` and `vi.mock('react-router-dom')`, like [`app/src/pages/AdminPage.test.tsx`](../../../app/src/pages/AdminPage.test.tsx).
 - Run a single backend test: `npx vitest run convex/path/to/file.test.ts`
@@ -1715,7 +1718,116 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
 
 ---
 
-## Task 14: Full verification + manual end-to-end
+## Task 14: Update `docs/PLATFORM.md` (canonical docs — required by CLAUDE.md)
+
+**Files:**
+- Modify: `docs/PLATFORM.md`
+
+> `CLAUDE.md` makes `docs/PLATFORM.md` part of "done": the feature is not complete until the docs reflect it. Apply every edit below in this one task. No automated test — verification is a grep check (Step 9) + a Mermaid sanity read.
+
+- [ ] **Step 1: §5 Data Model**
+
+  - In the **`users`** table reference, add two rows after `country`:
+    - `location` | string | – | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).
+    - `primaryLocale` | string | – | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.
+  - In the **`appSettings`** table reference, add two rows after `apifySyncEnabled`:
+    - `apifyEnabled` | boolean | – | **Master Apify kill-switch.** Absent ⇒ treated as enabled. When `false`, all Apify (post sync + profile scrape) halts.
+    - `apifyProfileScrapeEnabled` | boolean | – | Gates the LinkedIn profile scrape. Absent ⇒ disabled (opt-in; paid actor).
+  - In the **`rateLimits`** table, update the `action` row to add `profile_refresh` to the example action names.
+
+- [ ] **Step 2: §7 Authentication & Identity — identity functions table**
+
+  Add three rows:
+  - `users.updateProfile` | mutation (public) | User edits their own `industry`/`country` (validated against canonical lists; empty string clears).
+  - `users.refreshProfileFromLinkedIn` | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited **2/day**; schedules the scrape action.
+  - `users.applyScrapedProfile` | internalMutation | Writes scraped fields: `country` **fill-when-empty**; `location`/`primaryLocale` always refresh.
+
+- [ ] **Step 3: §11 Feed & Engagement — rate limiting paragraph**
+
+  Note that `checkRateLimit` now accepts an optional **window size + label** (defaults 1h/"hour"), and add `profile_refresh` **2/day** to the list of limits.
+
+- [ ] **Step 4: §12 Admin & Moderation — admin functions table**
+
+  - Update `getSettings` description to "App settings (3 Apify flags + last-sync status)".
+  - Add: `toggleApifyEnabled(enabled)` | mutation | Master Apify kill-switch.
+  - Add: `toggleApifyProfileScrape(enabled)` | mutation | Toggle the LinkedIn profile scrape.
+
+- [ ] **Step 5: §14 Frontend — Authenticated App**
+
+  - Rewrite the **SettingsPage** bullet: `getMe` + `setPublicIdentifier` + `updateProfile` + `refreshProfileFromLinkedIn`. Industry/country are now **editable canonical dropdowns** (country names via `Intl.DisplayNames`); a read-only **Location** row shows when `me.location` is present; a **"Refresh from LinkedIn"** button re-scrapes (disabled without a public identifier; surfaces the server error when scrape is off).
+  - Update the **AdminPage** bullet: the **Settings** tab now has **three** Apify toggles (master, post sync, profile scrape).
+  - In the **i18n** subsection, add: on first authenticated load the UI language is **seeded once** from `me.primaryLocale` (when no `localStorage` `i18nextLng` exists); the AppNav switcher still overrides.
+
+- [ ] **Step 6: §16 Environment Variables**
+
+  Change the `APIFY_TASK_ID_PROFILE_SCRAPE` row to: Required **✓ (profile scrape)**, Consumed in **`jobs/scrapeProfileApify.ts`**, Purpose "LinkedIn **profile** scraper actor (country/location/primary-locale enrichment)."
+
+- [ ] **Step 7: §19 Known Discrepancies, Dead Code & Roadmap**
+
+  - Remove the **"Profile enrichment …"** bullet from **Stubs / planned** (it's now implemented).
+  - Update the roadmap line so it no longer lists profile enrichment as pending.
+
+- [ ] **Step 8: Add a new numbered section + ToC entry + Mermaid flow**
+
+  Add a Table-of-Contents entry **`13A. Profile Enrichment (LinkedIn Profile Scrape)`** (right after item 13), and a matching section after §13. (Using "13A" deliberately avoids renumbering §14–§21 and their anchor links.) Content:
+
+  ```markdown
+  ## 13A. Profile Enrichment (LinkedIn Profile Scrape)
+
+  A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `country`
+  (fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent from the
+  payload) — it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
+
+  - on `users.setPublicIdentifier` (first time we have the vanity name), and
+  - on the user-pressed **"Refresh from LinkedIn"** button (`refreshProfileFromLinkedIn`, ≤ 2/day).
+
+  Both schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails unless
+  `apifyEnabled && apifyProfileScrapeEnabled` (see the gate helpers in `lib/apify.ts`). It calls the
+  Apify actor, parses `location.countryCode` → `country`, `location.linkedinText` → `location`,
+  `primaryLocale.language` → `primaryLocale`, and writes via `users.applyScrapedProfile`
+  (country only if the user has none; location/locale always refresh). Results propagate to Settings
+  via the reactive `getMe`, which also seeds the UI language once.
+
+  ```mermaid
+  flowchart TD
+    T1["setPublicIdentifier (vanity saved)"] --> SCH["scheduler.runAfter(0)"]
+    T2["Settings: Refresh from LinkedIn"] --> RF["refreshProfileFromLinkedIn"]
+    RF --> G0{"public identifier set?"}
+    G0 -->|no| ERRP["throw: set your LinkedIn URL first"]
+    G0 -->|yes| GF{"apifyEnabled && profileScrapeEnabled?"}
+    GF -->|no| ERR["throw: refresh unavailable"]
+    GF -->|yes| RL{"≤ 2 refreshes today?"}
+    RL -->|no| ERRL["throw: rate limit"]
+    RL -->|yes| SCH
+    SCH --> ACT["scrapeUserProfile (internal action)"]
+    ACT --> GATE{"apifyEnabled && profileScrapeEnabled?"}
+    GATE -->|no| STOP["return (no-op)"]
+    GATE -->|yes| PID{"has linkedinPublicIdentifier?"}
+    PID -->|no| STOP
+    PID -->|yes| API["Apify run-sync-get-dataset-items (queries=[vanity])"]
+    API --> PARSE["parseProfileScrapeResult → {country?, location?, primaryLocale?}"]
+    PARSE --> APPLY["applyScrapedProfile: country fill-when-empty; location/locale refresh"]
+    APPLY --> REACT["reactive getMe → Settings updates + i18n seed"]
+  ```
+  ```
+
+- [ ] **Step 9: Footer + verification grep**
+
+  Update the *Last updated* footer line to mention the profile-enrichment feature. Then verify the key tokens are present:
+
+  Run: `npx rg -n "primaryLocale|apifyProfileScrapeEnabled|scrapeProfileApify|refreshProfileFromLinkedIn|13A" docs/PLATFORM.md`
+  Expected: matches in §5, §7, §12/§14, §16, and the new §13A.
+
+- [ ] **Step 10: Checkpoint (user commits)**
+
+```bash
+git add docs/PLATFORM.md
+```
+Pause for review/commit (suggested: `docs(platform): profile enrichment subsystem + flags`).
+
+---
+
+## Task 15: Full verification + manual end-to-end
 
 **Files:** none (verification only)
 
@@ -1755,7 +1867,8 @@ Stage any remaining generated files and pause for Henriko's final review/commit.
 
 ## Self-review notes (for the planner)
 
-- **Spec coverage:** schema (T1), 3-flag gating + shared runner (T2, T9, T13), canonical lists (T3), 2/day rate limit (T4), fill-when-empty apply (T5), parser + action (T6), setPublicIdentifier trigger (T7), updateProfile + refresh + assertCanRefresh (T8), i18n keys (T10), Settings UI incl. location-on-presence + refresh-via-server-throw (T11), language seeding (T12), admin toggles (T13), env var + E2E (T14). All spec sections map to a task.
+- **Spec coverage:** schema (T1), 3-flag gating + shared runner (T2, T9, T13), canonical lists (T3), 2/day rate limit (T4), fill-when-empty apply (T5), parser + action (T6), setPublicIdentifier trigger (T7), updateProfile + refresh + assertCanRefresh (T8), i18n keys (T10), Settings UI incl. location-on-presence + refresh-via-server-throw (T11), language seeding (T12), admin toggles (T13), **PLATFORM.md sync incl. new §13A + Mermaid (T14)**, env var + E2E (T15). All spec sections map to a task.
+- **CLAUDE.md compliance:** never commit (every task ends in a stage-and-pause Checkpoint); `docs/PLATFORM.md` updated in-feature (T14); Convex guidelines read before backend work (header note).
 - **No client flag read:** confirmed — no `getPublicSettings`; location gates on `me.location`; refresh feedback comes from the mutation throwing (T8/T11).
 - **Type consistency:** `applyScrapedProfileHandler`, `updateProfileHandler`, `assertCanRefresh`, `parseProfileScrapeResult`, `pickSeedLanguage`, `isApify*`, `runApifyTask`, `COUNTRY_CODES`/`INDUSTRIES`/`isValidCountry`/`isValidIndustry`/`countryLabel` are named identically where defined and consumed.
 - **Known data task:** the industry list (T3) is populated from the cited LinkedIn reference and guarded by a completeness test — not a silent placeholder.

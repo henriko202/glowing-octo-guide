@@ -26,15 +26,22 @@
   },
   "settings": {
     "title": "Configurações",
-    "profile": "O Seu Perfil",
+    "profile": "Seu Perfil",
     "industry": "Setor",
     "country": "País",
+    "location": "Localização",
     "notSet": "Não definido",
-    "profileNote": "Os dados do perfil são sincronizados automaticamente com o LinkedIn.",
-    "visibility": "Quem pode ver as suas publicações",
-    "visibilityNote": "Restrinja quais os setores e países que podem ver as suas publicações no feed. Deixe vazio para mostrar a todos os utilizadores.",
-    "visibilityComingSoon": "Disponível em breve",
-    "upgradePrompt": "Faça upgrade para Pro para controlar quem vê as suas publicações."
+    "selectPlaceholder": "Selecione…",
+    "save": "Salvar",
+    "saving": "Salvando…",
+    "saved": "Salvo ✓",
+    "refresh": "Atualizar do LinkedIn",
+    "refreshing": "Atualizando…",
+    "profileNote": "Edite seu setor e país abaixo. A localização é sincronizada do LinkedIn.",
+    "visibility": "Quem pode ver suas publicações",
+    "visibilityNote": "Restrinja quais setores e países podem ver suas publicações no feed. Deixe vazio para mostrar a todos.",
+    "visibilityComingSoon": "Em breve",
+    "upgradePrompt": "Faça upgrade para o Pro para controlar quem vê suas publicações."
   },
   "billing": {
     "title": "Assinatura",
