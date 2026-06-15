@@ -99,5 +99,26 @@
     "enable": "Enable",
     "disable": "Disable",
     "lastSync": "Last sync"
+  },
+  "privacy": {
+    "title": "Privacy & Data",
+    "exportTitle": "Export your data",
+    "exportNote": "Download a machine-readable copy of your account data. We'll prepare it and the download link will be available here (valid for 7 days).",
+    "exportButton": "Request my data",
+    "requesting": "Requesting…",
+    "exportPending": "Preparing your export…",
+    "download": "Download",
+    "exportExpired": "Your previous export link has expired. Request a new one.",
+    "deleteTitle": "Delete your account",
+    "deleteNote": "Permanently delete your account and personal data after a 30-day grace period. You can cancel within those 30 days by signing in again. Required billing records are kept in anonymized form as the law requires.",
+    "deleteButton": "Delete my account",
+    "confirmTitle": "Delete your account?",
+    "confirmBody": "This schedules permanent deletion of your account in 30 days. Type DELETE to confirm.",
+    "confirmInputLabel": "Type DELETE to confirm",
+    "cancel": "Cancel",
+    "deleting": "Scheduling…",
+    "confirmDeleteButton": "Schedule deletion",
+    "deletionScheduledTitle": "Account scheduled for deletion",
+    "deletionScheduledBody": "Your account will be permanently deleted on {{date}}. You've been signed out. Sign in again before then to cancel. We've emailed you a confirmation."
   }
 }

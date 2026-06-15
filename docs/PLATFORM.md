@@ -992,6 +992,7 @@ flowchart TD
 | `process post queue` | every **25h** | `jobs/processQueue.processPostQueue` | Promote queued posts when authors regain weekly capacity. |
 | `cleanup expired sessions` | every **6h** | `sessions.deleteExpiredSessions` | Purge expired sessions (≤ 200/run). |
 | `cleanup expired oauth states` | every **1h** | `sessions.deleteExpiredOAuthStates` | Purge expired CSRF nonces (≤ 200/run). |
+| `process account deletions` | every **24h** | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Batched, self-rescheduling. |
 
 ---
 
@@ -1071,6 +1072,55 @@ flowchart TD
   production, the privacy‑policy disclosure, the legal basis, and a sub‑processor entry must be added
   in the same change.
 
+### Data-Subject Rights (Phase 2a)
+
+Backend for self-service **access/portability** and **erasure**. Both resolve identity with
+`resolveSession` (NOT `requireAuth`) so a **banned user can still exercise their rights**.
+
+**Data export (right of access / portability)** — `convex/privacy/export.ts`:
+- `requestDataExport` (mutation, rate-limited 1/day) inserts a `dataExportRequests` row and schedules
+  `generateExport`.
+- `generateExport` (action) gathers the user's own rows (`gatherUserData`), assembles a JSON bundle
+  via the pure `buildExportBundle` — which **strips token secrets** and **redacts other actors** from
+  audit entries — stores it in Convex file storage, marks the row `ready` with a **7-day** `expiresAt`,
+  and emails the user (`exportReadyEmail`).
+- `getExportStatus` / `getExportDownloadUrl` return the status and a short-lived **owner-only** download
+  URL (`ctx.storage.getUrl`); expired links return null.
+
+**Account deletion (right to erasure)** — `convex/privacy/deletion.ts`:
+- `requestAccountDeletion` (mutation, idempotent) sets `deletionRequestedAt` + `deletionScheduledAt`
+  (+30 days) + `deletionReason='user_request'`, **revokes all sessions**, audits, and schedules
+  `onDeletionRequested` (cancels the user's Stripe subscriptions immediately via the Stripe SDK —
+  stop billing during grace — and sends `deletionScheduledEmail`).
+- The shared feed **excludes pending-deletion authors** via the pure `isAuthorFeedEligible` helper
+  (`feed.ts`) — their posts disappear immediately and **reappear automatically on cancel**, with no
+  post mutation.
+- `cancelAccountDeletion` clears the deletion fields (the user must re-subscribe for paid features).
+- `processAccountDeletions` (daily cron, batched) runs the pure `cascadeDeleteUser` for accounts past
+  their grace window: deletes every owned row (posts, postQueue, subscriptions, sessions, rateLimits,
+  featuredPostUsage, planLimits, consentRecords, dataExportRequests + their storage files),
+  **pseudonymizes `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata), writes an
+  `account.deleted` system audit entry, deletes the `users` row **last**, then emails
+  `deletionCompletedEmail`. **Billing invoices are retained inside Stripe** for tax/accounting law.
+- A schema-derived completeness test asserts the cascade covers every user-referencing table, so a
+  future table cannot silently orphan personal data.
+
+```mermaid
+flowchart TD
+  R["User: Delete my account"] --> REQ["requestAccountDeletion (resolveSession — banned OK)"]
+  REQ --> S1["set deletionRequestedAt, deletionScheduledAt=+30d, reason=user_request"]
+  REQ --> S2["revoke ALL sessions"]
+  REQ --> SCH["schedule onDeletionRequested"]
+  SCH --> ST["cancel Stripe subs (SDK) + deletion-scheduled email"]
+  S1 --> FEED["feed excludes author via isAuthorFeedEligible (no post mutation)"]
+  S1 --> GRACE{"within 30 days?"}
+  GRACE -->|"re-auth (Phase 2b screen)"| CANCELSCR["cancelAccountDeletion"]
+  CANCELSCR --> RESTORE["clear fields → feed auto-restores"]
+  GRACE -->|"elapsed"| CRON["processAccountDeletions cron"]
+  CRON --> CASCADE["cascadeDeleteUser: delete owned rows + export files; pseudonymize auditLogs; delete user last"]
+  CASCADE --> DONE["deletion-completed email; Stripe retains invoices"]
+```
+
 ---
 
 ## 14. Frontend — Authenticated App (`app/`)
@@ -1096,11 +1146,16 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 | `/settings` | `SettingsPage` | ✓ |
 | `/billing` | `BillingPage` | ✓ |
 | `/admin` | `AdminPage` | ✓ (server‑gated via `checkIsAdmin`; not linked in nav) |
+| `/privacy-data` | `PrivacyDataPage` | ✓ |
 | `*` | → `/feed` | – |
 
-`RequireAuth` calls `getMe`; if `null` it **hard‑redirects** to
-`${VITE_CONVEX_SITE}/auth/linkedin` (straight into OAuth — there's no login page); if loading shows
-`<LoadingSpinner>`; if `isBanned` shows `<BannedScreen>`; otherwise renders `<AppNav>` + the page.
+`RequireAuth` calls `getMe`; the interception order is:
+
+1. **loading** (`getMe` undefined) → `<LoadingSpinner>`
+2. **`me === null`** → hard‑redirect to `${VITE_CONVEX_SITE}/auth/linkedin` (straight into OAuth — there's no login page)
+3. **`isBanned`** → `<BannedScreen>`
+4. **`me.deletionScheduledAt` set** (account pending deletion, within grace window) → `<CancelDeletionScreen>`
+5. **user ok** → `<AppNav>` + the requested page
 
 ```mermaid
 flowchart TD
@@ -1111,6 +1166,7 @@ flowchart TD
   RA -->|undefined loading| SP["LoadingSpinner"]
   RA -->|null| OAUTH["window.location = VITE_CONVEX_SITE/auth/linkedin"]
   RA -->|isBanned| BAN["BannedScreen"]
+  RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
   RA -->|user ok| SHELL["AppNav + page → page issues Convex queries"]
 ```
 
@@ -1137,13 +1193,26 @@ flowchart TD
 - **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Three tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync
   status), **Plan Limits** (`PlanLimitsTab`), **Users** (`UsersTab`).
+- **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b).
+  Two sections: (1) **Data export**: "Request export" button calls
+  `api.privacy.export.requestDataExport`; polls status via `api.privacy.export.getExportStatus`;
+  shows a download link via `api.privacy.export.getExportDownloadUrl` once ready. (2) **Delete
+  account**: a type‑`DELETE` confirm `Modal` wrapping `api.privacy.deletion.requestAccountDeletion`;
+  on success replaces the section with a "scheduled for {date}" info panel. Cross‑reference: §13B
+  (backend mutations/actions these calls hit).
 
 ### Reusable components
-`AppNav` (feed/my‑posts/settings/billing links + language `<select>` + sign‑out; **no admin link**),
+`AppNav` (feed/my‑posts/settings/billing/**privacy** links + language `<select>` + sign‑out; **no
+admin link**; the **"Privacy"** link navigates to `/privacy-data`),
 `PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`), `Modal`,
 `BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + `setUserTier`/`banUser`/`unbanUser`),
 `PlanLimitsTab` (tier defaults + debounced contact override editor), `RowActionsMenu`,
-`LoadingSpinner`, plus the two LinkedIn‑embed components:
+`LoadingSpinner`,
+`CancelDeletionScreen` (grace‑window full‑screen interstitial shown by `RequireAuth` when
+`me.deletionScheduledAt` is set; "Keep my account" button calls
+`api.privacy.deletion.cancelAccountDeletion` then `window.location.reload()`; also offers a Sign
+out link — mirrors the `BannedScreen` layout),
+plus the two LinkedIn‑embed components:
 
 - **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
   and **My Posts**. Renders a LinkedIn post in an iframe that is intentionally taller
@@ -1170,6 +1239,10 @@ flowchart TD
 selector persists the choice to `localStorage`. On the first authenticated load, if no
 `localStorage` `i18nextLng` key is present, the UI language is seeded once from `me.primaryLocale`
 (the scraped LinkedIn language); the `AppNav` switcher still overrides it thereafter.
+
+**Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and
+confirmation copy used by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
+`es` translation files.
 
 ---
 
@@ -1449,4 +1522,16 @@ admin toggles for the master Apify kill-switch and profile scrape; and i18n seed
 (Foundations)**: email capture from LinkedIn OIDC (stored + forwarded to Stripe), `lastLoginAt` and
 `acknowledgedPolicyVersion` on `users`, the new `consentRecords`/`dataExportRequests`/`auditLogs`
 tables, the `lib/policy.ts`/`lib/audit.ts`/`lib/email.ts` modules, and the `RESEND_API_KEY`/
-`EMAIL_FROM` env vars — see [§13B](#13b-privacy--compliance).*
+`EMAIL_FROM` env vars — see [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance
+Phase 2a (Backend DSR)**: self-service data export (`convex/privacy/export.ts` — rate-limited
+`requestDataExport` mutation + `generateExport` action, 7-day signed download URL) and the 30-day
+account-deletion lifecycle (`convex/privacy/deletion.ts` — `requestAccountDeletion` / `cancelAccountDeletion` /
+`processAccountDeletions` daily cron; feed exclusion via `isAuthorFeedEligible`; `cascadeDeleteUser`
+with auditLog pseudonymization; Stripe subscription cancellation during grace period). The
+`process account deletions` cron is documented in [§13](#13-scheduled-jobs-crons). Also reflects
+**Privacy & Compliance Phase 2b (Frontend DSR)**: the new guarded `/privacy-data` route
+(`PrivacyDataPage` — export request/status/download + delete-with-confirm modal calling
+`api.privacy.*`), `CancelDeletionScreen` (grace-window interstitial wired into `RequireAuth`),
+the updated `RequireAuth` interception order (loading → null → isBanned → deletionScheduledAt →
+app), the **"Privacy"** link added to `AppNav`, and the new `privacy.*` i18n namespace (en/pt/es)
+— see [§14](#14-frontend--authenticated-app-app).*

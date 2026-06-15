@@ -70,6 +70,21 @@ export function toFeedAuthor(author: Doc<'users'>) {
   }
 }
 
+/**
+ * Author eligibility for the shared feed. Excludes trialing authors (their posts are hidden
+ * until they activate) AND authors pending account deletion (their content disappears from the
+ * feed the moment they request erasure, and reappears automatically if they cancel — no post
+ * mutation needed).
+ */
+export function isAuthorFeedEligible(
+  author: { subscriptionStatus?: string; deletionScheduledAt?: number } | null
+): boolean {
+  if (!author) return false
+  if (author.subscriptionStatus === 'trialing') return false
+  if (author.deletionScheduledAt) return false
+  return true
+}
+
 export const getFeed = query({
   args: {
     sessionToken: v.optional(v.string()),
@@ -144,11 +159,8 @@ export const getFeed = query({
     const allAuthors = await Promise.all(uniqueAllAuthorIds.map(id => ctx.db.get(id)))
     const allAuthorMap = new Map(allAuthors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
 
-    // Filter out posts from trialing users
-    allPosts = allPosts.filter(post => {
-      const author = allAuthorMap.get(post.authorId)
-      return author?.subscriptionStatus !== 'trialing'
-    })
+    // Filter out posts whose author is trialing or pending account deletion
+    allPosts = allPosts.filter(post => isAuthorFeedEligible(allAuthorMap.get(post.authorId) ?? null))
 
     // Sort: featured first (by publishedAt desc) → authorTierRank desc → publishedAt desc
     const featured = allPosts.filter(p => p.isFeatured).sort((a, b) => b.publishedAt - a.publishedAt)

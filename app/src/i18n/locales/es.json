@@ -99,5 +99,26 @@
     "enable": "Activar",
     "disable": "Desactivar",
     "lastSync": "Última sincronización"
+  },
+  "privacy": {
+    "title": "Privacidad y Datos",
+    "exportTitle": "Exporta tus datos",
+    "exportNote": "Descarga una copia legible por máquina de los datos de tu cuenta. La prepararemos y el enlace de descarga estará disponible aquí (válido por 7 días).",
+    "exportButton": "Solicitar mis datos",
+    "requesting": "Solicitando…",
+    "exportPending": "Preparando tu exportación…",
+    "download": "Descargar",
+    "exportExpired": "Tu enlace de exportación anterior caducó. Solicita uno nuevo.",
+    "deleteTitle": "Eliminar tu cuenta",
+    "deleteNote": "Elimina permanentemente tu cuenta y tus datos personales tras un período de gracia de 30 días. Puedes cancelar dentro de esos 30 días volviendo a iniciar sesión. Los registros de facturación exigidos por ley se conservan de forma anonimizada.",
+    "deleteButton": "Eliminar mi cuenta",
+    "confirmTitle": "¿Eliminar tu cuenta?",
+    "confirmBody": "Esto programa la eliminación permanente de tu cuenta en 30 días. Escribe DELETE para confirmar.",
+    "confirmInputLabel": "Escribe DELETE para confirmar",
+    "cancel": "Cancelar",
+    "deleting": "Programando…",
+    "confirmDeleteButton": "Programar eliminación",
+    "deletionScheduledTitle": "Cuenta programada para eliminación",
+    "deletionScheduledBody": "Tu cuenta se eliminará permanentemente el {{date}}. Se ha cerrado tu sesión. Vuelve a iniciar sesión antes de esa fecha para cancelar. Te enviamos una confirmación por correo."
   }
 }

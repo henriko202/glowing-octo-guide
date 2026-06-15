@@ -99,5 +99,26 @@
     "enable": "Ativar",
     "disable": "Desativar",
     "lastSync": "Última sincronização"
+  },
+  "privacy": {
+    "title": "Privacidade e Dados",
+    "exportTitle": "Exportar seus dados",
+    "exportNote": "Baixe uma cópia legível por máquina dos dados da sua conta. Vamos prepará-la e o link de download ficará disponível aqui (válido por 7 dias).",
+    "exportButton": "Solicitar meus dados",
+    "requesting": "Solicitando…",
+    "exportPending": "Preparando sua exportação…",
+    "download": "Baixar",
+    "exportExpired": "Seu link de exportação anterior expirou. Solicite um novo.",
+    "deleteTitle": "Excluir sua conta",
+    "deleteNote": "Exclua permanentemente sua conta e seus dados pessoais após um período de carência de 30 dias. Você pode cancelar dentro desses 30 dias entrando novamente. Registros de cobrança exigidos por lei são mantidos de forma anonimizada.",
+    "deleteButton": "Excluir minha conta",
+    "confirmTitle": "Excluir sua conta?",
+    "confirmBody": "Isso agenda a exclusão permanente da sua conta em 30 dias. Digite DELETE para confirmar.",
+    "confirmInputLabel": "Digite DELETE para confirmar",
+    "cancel": "Cancelar",
+    "deleting": "Agendando…",
+    "confirmDeleteButton": "Agendar exclusão",
+    "deletionScheduledTitle": "Conta agendada para exclusão",
+    "deletionScheduledBody": "Sua conta será excluída permanentemente em {{date}}. Você foi desconectado. Entre novamente antes dessa data para cancelar. Enviamos uma confirmação por e-mail."
   }
 }

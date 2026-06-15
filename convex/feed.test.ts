@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildFeedFilter, toFeedAuthor } from './feed'
+import { buildFeedFilter, toFeedAuthor, isAuthorFeedEligible } from './feed'
 
 describe('buildFeedFilter', () => {
   it('starter: no filters applied', () => {
@@ -96,5 +96,21 @@ describe('toFeedAuthor', () => {
     ]) {
       expect(k in safe).toBe(false)
     }
+  })
+})
+
+describe('isAuthorFeedEligible', () => {
+  it('includes an active author', () => {
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'active' })).toBe(true)
+  })
+  it('excludes a trialing author', () => {
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: undefined })).toBe(true)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'trialing' })).toBe(false)
+  })
+  it('excludes an author pending deletion', () => {
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: 123 })).toBe(false)
+  })
+  it('excludes a missing author', () => {
+    expect(isAuthorFeedEligible(null)).toBe(false)
   })
 })

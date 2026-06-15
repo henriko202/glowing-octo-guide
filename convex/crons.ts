@@ -1,8 +1,8 @@
 // convex/crons.ts
 // THIS IS THE ONLY FILE Convex reads for scheduled jobs.
 // Cron definitions in other files are silently ignored.
-import {cronJobs} from 'convex/server'
-import {internal} from './_generated/api.js'
+import { cronJobs } from 'convex/server'
+import { internal } from './_generated/api.js'
 
 const crons = cronJobs()
 
@@ -21,5 +21,9 @@ crons.interval('cleanup expired sessions', { hours: 6 }, internal.sessions.delet
 
 // Purge expired OAuth state tokens every hour (they have a 10-minute TTL).
 crons.interval('cleanup expired oauth states', { hours: 1 }, internal.sessions.deleteExpiredOAuthStates, {})
+
+// Hard-delete accounts whose 30-day deletion grace window has elapsed (self-service erasure).
+// Batched; reschedules itself when a run fills the batch.
+crons.interval('process account deletions', { hours: 24 }, internal.privacy.deletion.processAccountDeletions, {})
 
 export default crons

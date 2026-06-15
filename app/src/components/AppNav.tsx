@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { path: '/feed', label: 'Feed' },
   { path: '/my-posts', label: 'My Posts' },
   { path: '/settings', label: 'Settings' },
+  { path: '/privacy-data', label: 'Privacy' },
   { path: '/billing', label: 'Billing' }
 ]
 
