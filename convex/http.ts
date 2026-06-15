@@ -78,7 +78,9 @@ http.route({
         profilePictureUrl: userInfo.picture,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        tokenExpiresAt
+        tokenExpiresAt,
+        email: userInfo.email,
+        emailVerified: userInfo.email_verified
       })
 
       // Issue a cryptographically random session token — never expose the raw userId.

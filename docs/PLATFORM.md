@@ -30,6 +30,7 @@
 12. [Admin & Moderation](#12-admin--moderation)
 13. [Scheduled Jobs (Crons)](#13-scheduled-jobs-crons)
 13A. [Profile Enrichment (LinkedIn Profile Scrape)](#13a-profile-enrichment-linkedin-profile-scrape)
+13B. [Privacy & Compliance](#13b-privacy--compliance)
 14. [Frontend — Authenticated App (`app/`)](#14-frontend--authenticated-app-app)
 15. [Frontend — Landing Site (`landing/`)](#15-frontend--landing-site-landing)
 16. [Environment Variables](#16-environment-variables)
@@ -109,7 +110,7 @@ flowchart LR
     direction TB
     Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
     Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-    DB[("Convex DB<br/>10 tables")]
+    DB[("Convex DB<br/>13 tables")]
     Crons["Cron scheduler"]
     Cloud --- DB
     Site --- DB
@@ -192,7 +193,7 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │       └── i18n/                # i18next init + locales/{en,pt,es}.json
 │
 ├── convex/                      # Convex backend (shared by both apps)
-│   ├── schema.ts                # 10-table database schema
+│   ├── schema.ts                # 13-table database schema
 │   ├── convex.config.ts         # registers @convex-dev/stripe component
 │   ├── crons.ts                 # the ONLY file Convex reads for scheduled jobs
 │   ├── http.ts                  # LinkedIn OAuth + Stripe webhook HTTP routes
@@ -235,7 +236,7 @@ the app. This is the backbone of the [security model](#17-security-posture).
 
 ## 5. Data Model
 
-All state lives in **Convex** (`convex/schema.ts`). There are **10 tables**. Every document also
+All state lives in **Convex** (`convex/schema.ts`). There are **13 tables**. Every document also
 carries Convex‑managed `_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
 
 Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential
@@ -253,6 +254,9 @@ erDiagram
   users ||--o{ featuredPostUsage : "quota (unused)"
   users ||--o| planLimits : "contact override"
   users ||--o| users : "bannedBy (self-ref)"
+  users ||--o{ consentRecords : "consent log"
+  users ||--o{ dataExportRequests : "DSR exports"
+  users ||--o{ auditLogs : "audit target"
 
   users {
     string linkedinId
@@ -264,6 +268,8 @@ erDiagram
     string linkedinPublicIdentifier "vanity name"
     boolean isAdmin "DB-edit only"
     boolean isBanned
+    string email "OIDC email claim - privacy use only"
+    string deletionReason "user_request|dormancy"
   }
   posts {
     string linkedinPostUrn "dedupe key"
@@ -319,6 +325,13 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `bannedAt` | number | – | Ban timestamp. |
 | `bannedBy` | `id('users')` | – | Admin who banned (self‑reference). |
 | `bannedReason` | string | – | User‑visible reason on the banned screen. |
+| `email` | string | – | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing. |
+| `emailVerified` | boolean | – | Whether LinkedIn verified the email address. |
+| `deletionRequestedAt` | number | – | When the user requested account deletion (ms). |
+| `deletionScheduledAt` | number | – | When the hard-delete cron will purge this account (ms). Presence signals pending erasure. |
+| `deletionReason` | `'user_request'\|'dormancy'` | – | Why the deletion was scheduled. |
+| `lastLoginAt` | number | – | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check. |
+| `acknowledgedPolicyVersion` | string | – | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version. |
 | `createdAt` | number | ✓ | Creation timestamp (ms). |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`.
@@ -432,6 +445,46 @@ Accessed via `.first()` (treated as a singleton; no index).
 #### `featuredPostUsage` — per‑user monthly featured quota **(defined but unused)**
 `userId`, `month` (`"YYYY-MM"`), `usedCount`; index `by_user_month`. **No read/write call sites
 exist** — the featured‑post quota feature is not yet implemented.
+
+#### `consentRecords` — append-only consent/withdrawal log (GDPR)
+One row per consent event. Current effective consent for a given `(userId, purpose)` pair is the **most recent** row for that pair. Queried via `by_user_and_purpose` index. The `purpose` union is intentionally narrow at launch (`'marketing' | 'analytics'`); `'location_enrichment'` is reserved for a future Apify profile-scrape opt-in that is disabled at launch.
+
+| Field | Type | Req | Meaning |
+|---|---|:--:|---|
+| `userId` | `id('users')` | ✓ | User who granted or withdrew consent. |
+| `purpose` | `'marketing'\|'analytics'` | ✓ | Consent purpose. |
+| `granted` | boolean | ✓ | `true` = consent granted; `false` = consent withdrawn. |
+| `policyVersion` | string | ✓ | Policy version in effect at time of consent event. |
+| `createdAt` | number | ✓ | Event timestamp (ms). |
+
+Indexes: `by_user [userId]`, `by_user_and_purpose [userId, purpose]`.
+
+#### `dataExportRequests` — asynchronous data-export (Subject Access Request)
+Tracks the lifecycle of data-export jobs. The generated bundle is stored in Convex file storage (`fileStorageId`); the download link is short-lived (`expiresAt`). A retention cron purges expired records and their associated storage objects.
+
+| Field | Type | Req | Meaning |
+|---|---|:--:|---|
+| `userId` | `id('users')` | ✓ | Requesting user (`by_user`). |
+| `status` | `'pending'\|'ready'\|'failed'\|'expired'` | ✓ | Job state. |
+| `requestedAt` | number | ✓ | When the request was received (ms). |
+| `fileStorageId` | `id('_storage')` | – | Convex storage id for the generated export bundle. Set when `status = 'ready'`. |
+| `expiresAt` | number | – | When the download link/bundle expires (ms). |
+
+Index: `by_user [userId]`.
+
+#### `auditLogs` — accountability log (GDPR Art. 5(2))
+Append-only record of DSR actions, consent changes, and admin access to personal data. A pseudonymized subset is retained past account deletion (actorId and targetUserId nulled out, action/metadata preserved).
+
+| Field | Type | Req | Meaning |
+|---|---|:--:|---|
+| `actor` | `'user'\|'admin'\|'system'` | ✓ | Who triggered the action. |
+| `actorId` | `id('users')` | – | Convex user id of the actor (absent for system-triggered events or after pseudonymization). |
+| `action` | string | ✓ | Structured action name (e.g. `'consent.granted'`, `'dsr.export_requested'`, `'admin.view_user'`). |
+| `targetUserId` | `id('users')` | – | The user this action was performed on, if applicable. |
+| `metadata` | string | – | JSON-encoded additional context (e.g. `purpose`, `policyVersion`). Stored as string to avoid schema coupling. |
+| `createdAt` | number | ✓ | Event timestamp (ms). |
+
+Indexes: `by_target [targetUserId]`, `by_created [createdAt]`.
 
 ---
 
@@ -990,6 +1043,36 @@ flowchart TD
 
 ---
 
+## 13B. Privacy & Compliance
+
+> Implements the design spec `docs/superpowers/specs/2026-06-15-privacy-compliance-design.md`.
+> **Phase 1 (Foundations)** is in place; later phases (DSR export/deletion, consent & retention,
+> data minimization & retention, and legal/transparency artifacts) extend this section.
+
+### Foundations (Phase 1)
+
+- **Email capture.** `linkedin/auth.upsertUser` now stores `email`/`emailVerified` from the OIDC
+  userinfo (previously fetched and discarded) and forwards the address to Stripe (`billing.ts`
+  `getOrCreateCustomer`). Email is stored under legitimate interest / legal obligation — a contact
+  channel for data‑subject rights and breach notification — **not** marketing consent.
+- **Login + policy stamping.** `upsertUser` sets `lastLoginAt` on every login and stamps new users
+  with the current `POLICY_VERSION` (`lib/policy.ts`) in `acknowledgedPolicyVersion`, so newly
+  created accounts are never immediately re‑prompted to re‑accept the policy.
+- **New tables** (see [§5](#5-data-model)): `consentRecords` (append‑only consent log),
+  `dataExportRequests` (asynchronous Subject‑Access‑Request jobs), `auditLogs` (accountability —
+  `lib/audit.ts` exposes `writeAuditLog` for in‑mutation use and the `logAudit` internal mutation
+  for actions).
+- **Transactional email.** `lib/email.ts` wraps Resend via `sendEmail` and **no‑ops when
+  `RESEND_API_KEY`/`EMAIL_FROM` are unset**, so privacy flows never fail merely because email is not
+  configured. See [§16](#16-environment-variables).
+- **Apify stays disabled at launch.** The LinkedIn scrape (post sync + profile enrichment) remains
+  **off in production** (kill‑switches in `appSettings`; `APIFY_*` env vars unset). It is therefore
+  **not** disclosed as a processing activity. **Hard gate:** the day Apify is switched on in
+  production, the privacy‑policy disclosure, the legal basis, and a sub‑processor entry must be added
+  in the same change.
+
+---
+
 ## 14. Frontend — Authenticated App (`app/`)
 
 React 19 + Vite 6 SPA. Dev server runs on **port 5174**. Convex reactivity via `convex/react`.
@@ -1148,6 +1231,8 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `APIFY_API_TOKEN` | ✓ (sync) | `jobs/syncPostsApify.ts` | Bearer token for Apify REST. If unset, sync no‑ops. |
 | `APIFY_TASK_ID` | ✓ (sync) | `jobs/syncPostsApify.ts` | Apify actor (`harvestapi~linkedin-profile-posts`). |
 | `APIFY_TASK_ID_PROFILE_SCRAPE` | ✓ (profile scrape) | `jobs/scrapeProfileApify.ts` | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment). |
+| `RESEND_API_KEY` | – (email no‑ops if unset) | `lib/email.ts` | Resend API key for transactional email (DSR confirmations + breach notices). |
+| `EMAIL_FROM` | – (email no‑ops if unset) | `lib/email.ts` | From‑address for transactional email (e.g. `noreply@linkintothessi.com`). |
 | `CONVEX_DEPLOYMENT` | ✓ (CLI) | Convex CLI | Selects the deployment for `convex dev`/`deploy`. |
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
@@ -1352,7 +1437,7 @@ a flow chart (Mermaid) if it introduces a multi‑step flow.
 
 ---
 
-*Last updated: 2026‑06‑14. Generated from a full read of the codebase at branch
+*Last updated: 2026‑06‑15. Generated from a full read of the codebase at branch
 `feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature
 (commits `d1b40a2` → `1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
 (Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`,
@@ -1360,4 +1445,8 @@ and `buildEmbedUrl` preserves the URN namespace. Also reflects the Profile Enric
 (Task 14): Apify-driven LinkedIn profile scrape populating `location`, `primaryLocale`, and
 `country` on the `users` table; user-editable `industry`/`country` dropdowns in Settings;
 admin toggles for the master Apify kill-switch and profile scrape; and i18n seeding from
-`me.primaryLocale` on first authenticated load.*
+`me.primaryLocale` on first authenticated load. Also reflects **Privacy & Compliance Phase 1
+(Foundations)**: email capture from LinkedIn OIDC (stored + forwarded to Stripe), `lastLoginAt` and
+`acknowledgedPolicyVersion` on `users`, the new `consentRecords`/`dataExportRequests`/`auditLogs`
+tables, the `lib/policy.ts`/`lib/audit.ts`/`lib/email.ts` modules, and the `RESEND_API_KEY`/
+`EMAIL_FROM` env vars — see [§13B](#13b-privacy--compliance).*

@@ -2,6 +2,7 @@
 import { internalMutationGeneric as internalMutation } from 'convex/server'
 import { v } from 'convex/values'
 import type { UpsertDb } from '../convexTypes.js'
+import { POLICY_VERSION } from '../lib/policy.js'
 
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000
 
@@ -13,6 +14,8 @@ export interface UpsertUserArgs {
   accessToken: string
   refreshToken?: string // LinkedIn standard OAuth may omit refresh_token
   tokenExpiresAt: number
+  email?: string
+  emailVerified?: boolean
 }
 
 // Plain handler function — used by the registered mutation and testable in isolation
@@ -30,7 +33,10 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
       profilePictureUrl: args.profilePictureUrl,
       linkedinAccessToken: args.accessToken,
       linkedinRefreshToken: args.refreshToken,
-      tokenExpiresAt: args.tokenExpiresAt
+      tokenExpiresAt: args.tokenExpiresAt,
+      email: args.email,
+      emailVerified: args.emailVerified,
+      lastLoginAt: Date.now()
     }
     await db.patch(existing._id, patch)
     return existing._id
@@ -49,6 +55,10 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     linkedinAccessToken: args.accessToken,
     linkedinRefreshToken: args.refreshToken,
     tokenExpiresAt: args.tokenExpiresAt,
+    email: args.email,
+    emailVerified: args.emailVerified,
+    lastLoginAt: Date.now(),
+    acknowledgedPolicyVersion: POLICY_VERSION,
     createdAt: Date.now()
   })
 }
@@ -62,7 +72,9 @@ export const upsertUser = internalMutation({
     profilePictureUrl: v.optional(v.string()),
     accessToken: v.string(),
     refreshToken: v.optional(v.string()), // optional — LinkedIn may not return it
-    tokenExpiresAt: v.number()
+    tokenExpiresAt: v.number(),
+    email: v.optional(v.string()),
+    emailVerified: v.optional(v.boolean())
   },
   handler: async (ctx, args) => upsertUserHandler(ctx.db as unknown as UpsertDb, args as UpsertUserArgs)
 })

@@ -11,4 +11,11 @@ describe('schema', () => {
     expect(tables).toHaveProperty('planLimits')
     expect(tables).toHaveProperty('postQueue')
   })
+
+  it('defines the privacy & compliance tables', () => {
+    const tables = schema.tables
+    expect(tables).toHaveProperty('consentRecords')
+    expect(tables).toHaveProperty('dataExportRequests')
+    expect(tables).toHaveProperty('auditLogs')
+  })
 })

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { upsertUserHandler, type UpsertUserArgs } from './auth'
+import { POLICY_VERSION } from '../lib/policy'
 
 // Minimal in-memory mock for Convex db context
 function createMockDb(existingUser?: any) {
@@ -55,5 +56,23 @@ describe('upsertUserHandler', () => {
     expect(db._patches).toHaveLength(1)
     expect(db._patches[0].data.linkedinAccessToken).toBe('new-token')
     expect(db._inserts).toHaveLength(0)
+  })
+
+  it('stores email, lastLoginAt, and acknowledged policy version for a new user', async () => {
+    const db = createMockDb()
+    await upsertUserHandler(db, { ...BASE_ARGS, email: 'jane@example.com', emailVerified: true })
+    const inserted = db._inserts[0]
+    expect(inserted.email).toBe('jane@example.com')
+    expect(inserted.emailVerified).toBe(true)
+    expect(inserted.lastLoginAt).toBeGreaterThan(0)
+    expect(inserted.acknowledgedPolicyVersion).toBe(POLICY_VERSION)
+  })
+
+  it('refreshes lastLoginAt and email on an existing-user login', async () => {
+    const existing = { _id: 'existing-id', linkedinId: 'li-123', tier: 'pro', subscriptionStatus: 'active' }
+    const db = createMockDb(existing)
+    await upsertUserHandler(db, { ...BASE_ARGS, email: 'new@example.com' })
+    expect(db._patches[0].data.lastLoginAt).toBeGreaterThan(0)
+    expect(db._patches[0].data.email).toBe('new@example.com')
   })
 })

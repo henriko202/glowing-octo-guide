@@ -29,7 +29,7 @@ export const createCheckoutSession = action({
     // Get or create Stripe customer via the component
     const customer = await stripeClient.getOrCreateCustomer(ctx, {
       userId: user._id,
-      email: undefined,
+      email: user.email,
       name: user.name
     })
 

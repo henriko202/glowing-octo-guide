@@ -40,6 +40,21 @@ export default defineSchema({
     bannedAt: v.optional(v.number()),
     bannedBy: v.optional(v.id('users')),
     bannedReason: v.optional(v.string()),
+    // ─── Privacy & compliance ────────────────────────────────────────────────
+    // Contact channel captured from the LinkedIn OIDC `email` claim (previously discarded).
+    // Used for DSR confirmations and breach notification. Stored under legitimate interest /
+    // legal obligation, NOT marketing consent.
+    email: v.optional(v.string()),
+    emailVerified: v.optional(v.boolean()),
+    // Account-deletion lifecycle (self-service erasure + dormancy). Presence of
+    // `deletionScheduledAt` means the account is pending hard-deletion by the cron.
+    deletionRequestedAt: v.optional(v.number()),
+    deletionScheduledAt: v.optional(v.number()),
+    deletionReason: v.optional(v.union(v.literal('user_request'), v.literal('dormancy'))),
+    // Set on each login (in upsertUser); powers the dormancy retention check.
+    lastLoginAt: v.optional(v.number()),
+    // The privacy-policy version this user last acknowledged (drives the re-consent prompt).
+    acknowledgedPolicyVersion: v.optional(v.string()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
@@ -160,5 +175,41 @@ export default defineSchema({
     queuedAt: v.number()
   })
     .index('by_author', ['authorId'])
-    .index('by_urn', ['linkedinPostUrn'])
+    .index('by_urn', ['linkedinPostUrn']),
+
+  // Append-only consent/withdrawal log. Current effective consent for a purpose is the
+  // latest record for (userId, purpose). 'location_enrichment' is reserved for future use
+  // (the Apify profile scrape is disabled at launch).
+  consentRecords: defineTable({
+    userId: v.id('users'),
+    purpose: v.union(v.literal('marketing'), v.literal('analytics')),
+    granted: v.boolean(),
+    policyVersion: v.string(),
+    createdAt: v.number()
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_and_purpose', ['userId', 'purpose']),
+
+  // Tracks asynchronous data-export jobs. The generated bundle is held in Convex file
+  // storage; the link expires (fileStorageId/expiresAt) and is purged by the retention cron.
+  dataExportRequests: defineTable({
+    userId: v.id('users'),
+    status: v.union(v.literal('pending'), v.literal('ready'), v.literal('failed'), v.literal('expired')),
+    requestedAt: v.number(),
+    fileStorageId: v.optional(v.id('_storage')),
+    expiresAt: v.optional(v.number())
+  }).index('by_user', ['userId']),
+
+  // Accountability log (GDPR Art. 5(2)) for DSR actions, consent changes, and admin access
+  // to personal data. A pseudonymized subset is retained past account deletion.
+  auditLogs: defineTable({
+    actor: v.union(v.literal('user'), v.literal('admin'), v.literal('system')),
+    actorId: v.optional(v.id('users')),
+    action: v.string(),
+    targetUserId: v.optional(v.id('users')),
+    metadata: v.optional(v.string()),
+    createdAt: v.number()
+  })
+    .index('by_target', ['targetUserId'])
+    .index('by_created', ['createdAt'])
 })
