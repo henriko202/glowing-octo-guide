@@ -36,10 +36,10 @@ API.
    library if the feature does not need isolated tables, backend functions, or
    reusable persistent state.
 4. Make a short plan for:
-    - what tables the component owns
-    - what public functions it exposes
-    - what data must be passed in from the app (auth, env vars, parent IDs)
-    - what stays in the app as wrappers or HTTP mounts
+   - what tables the component owns
+   - what public functions it exposes
+   - what data must be passed in from the app (auth, env vars, parent IDs)
+   - what stays in the app as wrappers or HTTP mounts
 5. Create the component structure with `convex.config.ts`, `schema.ts`, and
    function files.
 6. Implement functions using the component's own `./_generated/server` imports,
@@ -58,7 +58,7 @@ API.
 Ask the user, then pick one path:
 
 | Goal                                              | Shape            | Reference                           |
-|---------------------------------------------------|------------------|-------------------------------------|
+| ------------------------------------------------- | ---------------- | ----------------------------------- |
 | Component for this app only                       | Local            | `references/local-components.md`    |
 | Publish or share across apps                      | Packaged         | `references/packaged-components.md` |
 | User explicitly needs local + shared library code | Hybrid           | `references/hybrid-components.md`   |
@@ -317,7 +317,7 @@ Official docs:
 - [ ] Confirmed a component is the right abstraction
 - [ ] Planned tables, public API, boundaries, and app wrappers
 - [ ] Component lives under `convex/components/<name>/` (or package layout if
-  publishing)
+      publishing)
 - [ ] Component imports from its own `./_generated/server`
 - [ ] Auth, env access, and HTTP routes stay in the app
 - [ ] Parent app IDs cross the boundary as `v.string()`

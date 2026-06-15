@@ -176,10 +176,10 @@ instead.
 - [ ] Asked whether the user wants local-only setup or production-ready setup
 - [ ] Used the official provider docs for provider-specific wiring
 - [ ] Used the official Convex docs for shared auth behavior and authorization
-  patterns
+      patterns
 - [ ] Only added app-level user storage if the app actually needs it
 - [ ] Did not invent a cross-provider `users` table or `storeUser` flow for
-  Convex Auth
+      Convex Auth
 - [ ] Added authentication checks in protected backend functions
 - [ ] Added authorization checks where the app actually needs them
 - [ ] Clear error messages ("Not authenticated", "Unauthorized")

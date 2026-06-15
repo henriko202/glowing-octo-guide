@@ -45,7 +45,7 @@ frontend framework, Convex backend, and all config wired together.
 ### Pick a template
 
 | Template                   | Stack                                     |
-|----------------------------|-------------------------------------------|
+| -------------------------- | ----------------------------------------- |
 | `react-vite-shadcn`        | React + Vite + Tailwind + shadcn/ui       |
 | `nextjs-shadcn`            | Next.js App Router + Tailwind + shadcn/ui |
 | `react-vite-clerk-shadcn`  | React + Vite + Clerk auth + shadcn/ui     |
@@ -307,7 +307,7 @@ matching quickstart guide:
 The env var name depends on the framework:
 
 | Framework    | Variable                 |
-|--------------|--------------------------|
+| ------------ | ------------------------ |
 | Vite         | `VITE_CONVEX_URL`        |
 | Next.js      | `NEXT_PUBLIC_CONVEX_URL` |
 | Remix        | `CONVEX_URL`             |
@@ -440,12 +440,12 @@ This pushes to the production deployment, which is separate from dev. Do not use
 
 - [ ] Determined starting point: new project or existing app
 - [ ] If new project: scaffolded with `npm create convex@latest` using
-  appropriate template
+      appropriate template
 - [ ] If existing app: installed `convex` and wired up the provider
 - [ ] Agent ran `npx convex dev --once`: deployment provisioned, code pushed,
-  typecheck clean
+      typecheck clean
 - [ ] `npm run dev` (or `npx convex dev` for the watcher alone) is running —
-  user-launched terminal, or background for cloud agents
+      user-launched terminal, or background for cloud agents
 - [ ] `convex/_generated/` directory exists with types
 - [ ] `.env.local` has the deployment URL
 - [ ] Verified a basic query/mutation round-trip works

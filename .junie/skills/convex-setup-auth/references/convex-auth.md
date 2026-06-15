@@ -10,23 +10,23 @@ a third-party provider.
 
 1. Confirm the user wants Convex Auth specifically
 2. Determine which sign-in methods the app needs:
-    - magic links or OTPs
-    - OAuth providers
-    - passwords and password reset
+   - magic links or OTPs
+   - OAuth providers
+   - passwords and password reset
 3. Ask whether the user wants local-only setup or production-ready setup now
 4. Read the Convex Auth setup guide before writing code
 5. Make sure the project has a configured Convex deployment:
-    - run `npx convex dev` first if `CONVEX_DEPLOYMENT` is not set
-    - if CLI configuration requires interactive human input, stop and ask the
-      user to complete that step before continuing
+   - run `npx convex dev` first if `CONVEX_DEPLOYMENT` is not set
+   - if CLI configuration requires interactive human input, stop and ask the
+     user to complete that step before continuing
 6. Install the auth packages:
-    - `npm install @convex-dev/auth @auth/core@0.37.0`
+   - `npm install @convex-dev/auth @auth/core@0.37.0`
 7. Run the initialization command:
-    - `npx @convex-dev/auth`
+   - `npx @convex-dev/auth`
 8. Confirm the initializer created:
-    - `convex/auth.config.ts`
-    - `convex/auth.ts`
-    - `convex/http.ts`
+   - `convex/auth.config.ts`
+   - `convex/auth.ts`
+   - `convex/http.ts`
 9. Add the required `authTables` to `convex/schema.ts`
 10. Replace plain `ConvexProvider` wiring with `ConvexAuthProvider`
 11. Configure at least one auth method in `convex/auth.ts`
@@ -64,9 +64,9 @@ a third-party provider.
    finish configuring the Convex deployment
 4. Run `npx @convex-dev/auth`
 5. Confirm the generated auth setup is present before continuing:
-    - `convex/auth.config.ts`
-    - `convex/auth.ts`
-    - `convex/http.ts`
+   - `convex/auth.config.ts`
+   - `convex/auth.ts`
+   - `convex/http.ts`
 6. Add `authTables` to `convex/schema.ts`
 7. Replace `ConvexProvider` with `ConvexAuthProvider` in the app entry
 8. Configure the selected auth methods in `convex/auth.ts`
@@ -92,9 +92,9 @@ a third-party provider.
 - For a new app, prefer the official starter flow instead of rebuilding setup by
   hand
 - Decide which auth methods the app needs:
-    - magic links or OTPs
-    - OAuth providers
-    - passwords
+  - magic links or OTPs
+  - OAuth providers
+  - passwords
 - Decide whether the user wants local-only setup or production-ready setup now
 - Decide whether the app actually needs a `users` table inside Convex, or
   whether provider identity alone is enough
@@ -169,12 +169,12 @@ If `npx convex dev` or deployment setup requires human input:
 - [ ] Confirm the user wants Convex Auth specifically
 - [ ] Ask whether the user wants local-only setup or production-ready setup
 - [ ] Ensure a Convex deployment is configured before running auth
-  initialization
+      initialization
 - [ ] Install `@convex-dev/auth` and `@auth/core@0.37.0`
 - [ ] Run `npx convex dev` first if needed
 - [ ] Run `npx @convex-dev/auth`
 - [ ] Confirm `convex/auth.config.ts`, `convex/auth.ts`, and `convex/http.ts`
-  were created
+      were created
 - [ ] Follow the setup guide for package install and wiring
 - [ ] Add `authTables` to `convex/schema.ts`
 - [ ] Replace `ConvexProvider` with `ConvexAuthProvider`
@@ -182,7 +182,7 @@ If `npx convex dev` or deployment setup requires human input:
 - [ ] Run `npx convex dev --once` or the normal dev flow after setup changes
 - [ ] Confirm which sign-in methods the app needs
 - [ ] Verify the client can sign in and the backend receives authenticated
-  identity
+      identity
 - [ ] Offer end-to-end validation of sign up, sign out, and sign back in
 - [ ] If requested, configure the production deployment too
 - [ ] Only add extra `users` table sync if the app needs app-level user records

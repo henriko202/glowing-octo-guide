@@ -16,7 +16,7 @@ These are the current values from the
 that page for the latest numbers.
 
 | Resource                          | Limit                                                 |
-|-----------------------------------|-------------------------------------------------------|
+| --------------------------------- | ----------------------------------------------------- |
 | Query/mutation execution time     | 1 second (user code only, excludes DB operations)     |
 | Action execution time             | 10 minutes                                            |
 | Data read per transaction         | 16 MiB                                                |

@@ -170,7 +170,7 @@ covering:
 - [ ] Define migration using the `@convex-dev/migrations` component
 - [ ] Test with `npx convex run migrations:myMigration '{"dryRun": true}'`
 - [ ] Run migration directly with `npx convex run migrations:myMigration` and
-  monitor status
+      monitor status
 - [ ] Verify all documents are migrated
 - [ ] Update schema to require new format only
 - [ ] Clean up code that handled old format
