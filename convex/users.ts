@@ -194,7 +194,9 @@ export const setPublicIdentifier = mutation({
     if (changed) {
       const settings = await ctx.db.query('appSettings').first()
       if (isApifyProfileScrapeEnabled(settings as ApifyFlags)) {
-        const allowed = await tryConsumeRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000)
+        // Admins bypass the daily budget; everyone else consumes one (non-throwing) slot.
+        const allowed =
+          user.isAdmin || (await tryConsumeRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000))
         if (allowed) {
           await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
         }
@@ -257,7 +259,10 @@ export const refreshProfileFromLinkedIn = mutation({
     const user = await requireAuth(ctx, sessionToken)
     const settings = await ctx.db.query('appSettings').first()
     assertCanRefresh(user, settings as ApifyFlags)
-    await checkRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000, 'day')
+    // Admins are exempt from the daily refresh budget.
+    if (!user.isAdmin) {
+      await checkRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000, 'day')
+    }
     await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
   }
 })

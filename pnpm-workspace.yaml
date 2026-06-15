@@ -2,3 +2,6 @@ packages:
   - 'landing'
   - 'app'
   - 'convex'
+allowBuilds:
+  esbuild: true
+  sharp: true

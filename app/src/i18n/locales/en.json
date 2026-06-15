@@ -32,6 +32,7 @@
     "location": "Location",
     "notSet": "Not set",
     "selectPlaceholder": "Select…",
+    "noResults": "No results.",
     "save": "Save",
     "saving": "Saving…",
     "saved": "Saved ✓",

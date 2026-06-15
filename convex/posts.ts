@@ -109,12 +109,14 @@ export const submitPost = action({
       throw new Error('No LinkedIn access token. Please sign in again.')
     }
 
-    // 3. Rate limit: max 10 post submissions per hour per user
-    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
-      userId: user._id,
-      action: 'submitPost',
-      maxPerHour: 10
-    })
+    // 3. Rate limit: max 10 post submissions per hour per user (admins are exempt)
+    if (!user.isAdmin) {
+      await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+        userId: user._id,
+        action: 'submitPost',
+        maxPerHour: 10
+      })
+    }
 
     // Posts per week limit check
     const effectiveTier = user.tier ?? 'starter'

@@ -73,6 +73,13 @@ export const syncUserPostsViaApify = internalAction({
       return
     }
 
+    // Enrich the profile (country/location/locale) when we don't have a country yet. The scrape
+    // action self-guards on the profile-scrape flag; gating on missing country bounds the (paid)
+    // scrape to ~once per user instead of every sync.
+    if (!user.country) {
+      await actionCtx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId })
+    }
+
     const input = {
       includeQuotePosts: false,
       includeReposts: false,

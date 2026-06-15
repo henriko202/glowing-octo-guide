@@ -78,6 +78,9 @@ export interface ActionCtx {
   runQuery<T>(ref: unknown, args: Record<string, unknown>): Promise<T>
   runMutation(ref: unknown, args: Record<string, unknown>): Promise<unknown>
   runAction(ref: unknown, args: Record<string, unknown>): Promise<unknown>
+  scheduler: {
+    runAfter(delayMs: number, ref: unknown, args: Record<string, unknown>): Promise<unknown>
+  }
 }
 
 /** User document shape (mirrors schema.ts) */

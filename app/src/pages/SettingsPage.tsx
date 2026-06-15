@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { COUNTRY_CODES, INDUSTRIES, countryLabel } from '../../../convex/lib/profileOptions'
+import { VirtualizedCombobox } from '../components/VirtualizedCombobox'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -50,18 +51,23 @@ export default function SettingsPage() {
   const [identifierSaved, setIdentifierSaved] = useState(false)
   const [industry, setIndustry] = useState<string>('')
   const [country, setCountry] = useState<string>('')
+  const [industryDirty, setIndustryDirty] = useState(false)
+  const [countryDirty, setCountryDirty] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
 
+  // Mirror the server value for each field so a backend scrape that fills country/industry shows up
+  // live — but stop mirroring a field once the user edits it (their unsaved edit wins until save).
+  const meIndustry = me?.industry
+  const meCountry = me?.country
   useEffect(() => {
-    if (me) {
-      setIndustry(me.industry ?? '')
-      setCountry(me.country ?? '')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me?._id])
+    if (!industryDirty) setIndustry(meIndustry ?? '')
+  }, [meIndustry, industryDirty])
+  useEffect(() => {
+    if (!countryDirty) setCountry(meCountry ?? '')
+  }, [meCountry, countryDirty])
 
   if (!me) {
     return <LoadingSpinner />
@@ -71,8 +77,9 @@ export default function SettingsPage() {
   const extractedVanity = extractVanityName(profileUrl)
 
   const lang = i18n.language?.split('-')[0] ?? 'en'
-  const countryOptions = COUNTRY_CODES.map(code => ({ code, name: countryLabel(code, lang) })).sort((a, b) =>
-    a.name.localeCompare(b.name)
+  const industryOptions = INDUSTRIES.map(i => ({ value: i.code, label: i.label }))
+  const countryOptions = COUNTRY_CODES.map(code => ({ value: code, label: countryLabel(code, lang) })).sort((a, b) =>
+    a.label.localeCompare(b.label)
   )
 
   async function handleSaveProfile() {
@@ -80,6 +87,9 @@ export default function SettingsPage() {
     setProfileSaving(true)
     try {
       await updateProfile({ sessionToken, industry, country })
+      // Saved values are now the server truth — resume mirroring the reactive `me`.
+      setIndustryDirty(false)
+      setCountryDirty(false)
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 3000)
     } finally {
@@ -120,53 +130,37 @@ export default function SettingsPage() {
       <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-3 mt-0 text-base font-semibold text-slate-900">{t('settings.profile')}</h2>
 
-        <label
-          htmlFor="industry-select"
-          className="mb-1 block text-sm font-medium text-slate-700"
-        >
-          {t('settings.industry')}
-        </label>
-        <select
-          id="industry-select"
-          aria-label={t('settings.industry')}
-          value={industry}
-          onChange={e => setIndustry(e.target.value)}
-          className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
-        >
-          <option value="">{t('settings.notSet')}</option>
-          {INDUSTRIES.map(i => (
-            <option
-              key={i.code}
-              value={i.code}
-            >
-              {i.label}
-            </option>
-          ))}
-        </select>
+        <div className="mb-1 text-sm font-medium text-slate-700">{t('settings.industry')}</div>
+        <div className="mb-3">
+          <VirtualizedCombobox
+            options={industryOptions}
+            value={industry}
+            onChange={value => {
+              setIndustry(value)
+              setIndustryDirty(true)
+            }}
+            ariaLabel={t('settings.industry')}
+            placeholder={t('settings.notSet')}
+            searchPlaceholder={t('settings.selectPlaceholder')}
+            emptyText={t('settings.noResults')}
+          />
+        </div>
 
-        <label
-          htmlFor="country-select"
-          className="mb-1 block text-sm font-medium text-slate-700"
-        >
-          {t('settings.country')}
-        </label>
-        <select
-          id="country-select"
-          aria-label={t('settings.country')}
-          value={country}
-          onChange={e => setCountry(e.target.value)}
-          className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
-        >
-          <option value="">{t('settings.notSet')}</option>
-          {countryOptions.map(c => (
-            <option
-              key={c.code}
-              value={c.code}
-            >
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div className="mb-1 text-sm font-medium text-slate-700">{t('settings.country')}</div>
+        <div className="mb-3">
+          <VirtualizedCombobox
+            options={countryOptions}
+            value={country}
+            onChange={value => {
+              setCountry(value)
+              setCountryDirty(true)
+            }}
+            ariaLabel={t('settings.country')}
+            placeholder={t('settings.notSet')}
+            searchPlaceholder={t('settings.selectPlaceholder')}
+            emptyText={t('settings.noResults')}
+          />
+        </div>
 
         {me.location && (
           <p className="my-1 text-sm text-slate-500">

@@ -71,13 +71,14 @@ export const commentOnPost = action({
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
 
-    // Rate limit: TODO — set the max comments per hour appropriate for your use case
-    // e.g. 20/hr to prevent spam while allowing active engagement
-    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
-      userId: user._id,
-      action: 'commentOnPost',
-      maxPerHour: 20
-    })
+    // Rate limit: 20 comments/hour (admins are exempt)
+    if (!user.isAdmin) {
+      await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+        userId: user._id,
+        action: 'commentOnPost',
+        maxPerHour: 20
+      })
+    }
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
     if (!post) throw new Error('Post not found')
@@ -128,13 +129,14 @@ export const reactToPost = action({
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
 
-    // Rate limit: TODO — set the max reactions per hour appropriate for your use case
-    // e.g. 30/hr to allow active engagement without overwhelming LinkedIn API
-    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
-      userId: user._id,
-      action: 'reactToPost',
-      maxPerHour: 30
-    })
+    // Rate limit: 30 reactions/hour (admins are exempt)
+    if (!user.isAdmin) {
+      await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+        userId: user._id,
+        action: 'reactToPost',
+        maxPerHour: 30
+      })
+    }
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
     if (!post) throw new Error('Post not found')

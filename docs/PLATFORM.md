@@ -147,7 +147,9 @@ the app. This is the backbone of the [security model](#17-security-posture).
   Queries (reactive reads), mutations (transactional writes), actions (side‑effects/external
   fetch), HTTP actions, and cron jobs. Stripe via the official `@convex-dev/stripe` component.
 - **App (`app/`):** React **19**, Vite **6**, TypeScript (strict), Tailwind CSS **4**,
-  `react-router-dom` **7**, `convex/react` client, `i18next` **25** (en/pt/es).
+  `react-router-dom` **7**, `convex/react` client, `i18next` **25** (en/pt/es), plus **shadcn/ui**
+  primitives (`cmdk`, `@radix-ui/react-popover`, `lucide-react`) + `@tanstack/react-virtual` for the
+  searchable industry/country comboboxes (`@/*` alias → `app/src`; theme tokens in `index.css`).
 - **Landing (`landing/`):** Next.js **15** (App Router), React **19**, Tailwind CSS **3.4**,
   TypeScript.
 - **Payments:** Stripe (Checkout + Customer Portal + webhooks).
@@ -872,6 +874,7 @@ implementation is fixed‑window.) `checkRateLimit` now accepts an optional `win
 `commentOnPost` 20/h, `reactToPost` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget is
 **shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the
 non-throwing `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier.
+**Admins (`user.isAdmin`) bypass every rate limit** — each call site skips the check for admins.
 
 ---
 
@@ -948,7 +951,10 @@ payload) — it's user-edited in Settings. The scrape is **triggered**, not cron
 - on `users.setPublicIdentifier`, but only when the identifier **changes**, the scrape is
   **enabled**, and the shared 2/day budget allows it (charged on the same `profile_refresh` counter
   as the button — and the flag is checked *before* the budget, so a disabled scrape never charges it), and
-- on the user-pressed **"Refresh from LinkedIn"** button (`refreshProfileFromLinkedIn`, ≤ 2/day).
+- on the user-pressed **"Refresh from LinkedIn"** button (`refreshProfileFromLinkedIn`, ≤ 2/day), and
+- on the **post sync** (`syncUserPostsViaApify` — subscription activation + hourly cron) **when the
+  user has no `country` yet**, which bounds the (paid) scrape to ~once per user even though posts
+  sync repeatedly.
 
 Both schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails if the
 Apify env vars (`APIFY_API_TOKEN`/`APIFY_TASK_ID_PROFILE_SCRAPE`) are unset, or unless
@@ -1036,7 +1042,8 @@ flowchart TD
   posts this week") turns **amber** at the cap and disables the composer (`atLimit`). Renders each
   post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
 - **SettingsPage** — `getMe` + `setPublicIdentifier` + `updateProfile` + `refreshProfileFromLinkedIn`.
-  Industry and country are editable canonical dropdowns (country names rendered via `Intl.DisplayNames`);
+  Industry and country are **searchable, virtualized comboboxes** (`VirtualizedCombobox`, built on the
+  shadcn `command`/`popover` primitives + `@tanstack/react-virtual`; country names via `Intl.DisplayNames`);
   a read-only **Location** row appears when `me.location` is present (populated by the profile scrape);
   a **"Refresh from LinkedIn"** button re-scrapes the profile (disabled without a public identifier;
   shows the server error inline when the scrape flag is off). Pro/contact see a **stubbed** "who can
@@ -1195,7 +1202,8 @@ The codebase follows a consistent, defensible security model:
   maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a
   half‑finished or lapsed subscription never grants access; `getTierFromPriceId` fails to `starter`.
 - **Rate limiting** (fixed window per `userId+action`): submitPost 10/h, comment 20/h, react 30/h,
-  profile scrape 2/day (shared by manual Refresh + auto‑scrape on identifier change).
+  profile scrape 2/day (shared by manual Refresh + auto‑scrape on identifier change). **Admins are
+  exempt** from every rate limit.
 - **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path
   (`upsertUser`, `setPublicIdentifier`, etc.). Admin endpoints re‑check `assertAdmin` on the
   server‑resolved user, never on a client‑supplied id. `banUser` cannot self‑ban (always leaves ≥ 1
