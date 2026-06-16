@@ -4,7 +4,10 @@ export interface OwnershipResult {
   confirmed: boolean
   content: string
   publishedAt: number
-  strategy: 'ugc-api' | 'vanity-heuristic'
+  // 'admin-override' is never produced by verifyPostOwnership itself — it is the
+  // strategy submitPost stamps onto a synthesized result when an admin bypasses
+  // the ownership check entirely. Kept in the union so that result is well-typed.
+  strategy: 'ugc-api' | 'vanity-heuristic' | 'admin-override'
 }
 
 /**

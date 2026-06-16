@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { parseLinkedInPostUrl } from './linkedin/parsePostUrl'
-import { verifyPostOwnership } from './linkedin/verifyPostOwnership'
+import { verifyPostOwnership, type OwnershipResult } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { parsePostContent, appendMediaLinks } from './linkedin/parsePostContent'
@@ -109,30 +109,33 @@ export const submitPost = action({
       throw new Error('No LinkedIn access token. Please sign in again.')
     }
 
-    // 3. Rate limit: max 10 post submissions per hour per user (admins are exempt)
+    // 3. Posting throttles — admins are exempt. Admins curate the shared feed
+    //    and may submit any post in any volume, so both the hourly rate limit
+    //    and the weekly per-plan limit are skipped for them.
     if (!user.isAdmin) {
+      // Rate limit: max 10 post submissions per hour per user
       await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
         userId: user._id,
         action: 'submitPost',
         maxPerHour: 10
       })
-    }
 
-    // Posts per week limit check
-    const effectiveTier = user.tier ?? 'starter'
-    const planLimits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, {
-      userId: user._id,
-      tier: effectiveTier
-    })
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-    const recentPostCount = await ctx.runQuery(internal.posts.countRecentPosts, {
-      authorId: user._id,
-      since: sevenDaysAgo
-    })
-    if (recentPostCount >= planLimits.postsPerWeek) {
-      throw new Error(
-        `Weekly post limit reached. Your plan allows ${planLimits.postsPerWeek} post${planLimits.postsPerWeek === 1 ? '' : 's'} per week.`
-      )
+      // Weekly post limit (per plan tier)
+      const effectiveTier = user.tier ?? 'starter'
+      const planLimits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, {
+        userId: user._id,
+        tier: effectiveTier
+      })
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+      const recentPostCount = await ctx.runQuery(internal.posts.countRecentPosts, {
+        authorId: user._id,
+        since: sevenDaysAgo
+      })
+      if (recentPostCount >= planLimits.postsPerWeek) {
+        throw new Error(
+          `Weekly post limit reached. Your plan allows ${planLimits.postsPerWeek} post${planLimits.postsPerWeek === 1 ? '' : 's'} per week.`
+        )
+      }
     }
 
     // fetch the URL and try to get data-attributed-urn
@@ -145,13 +148,21 @@ export const submitPost = action({
       throw new Error('Could not find a valid LinkedIn post URN')
     }
 
-    const token = user.linkedinAccessToken
-
-    // 4. Verify ownership (Step A → Step B fallback)
-    // Step A: UGC API (works when r_member_social is approved)
-    // Step B: local comparison against stored publicIdentifier (no API call needed)
-    const storedIdentifier = user.linkedinPublicIdentifier ?? null
-    const ownership = await verifyPostOwnership(token, urn, user.linkedinId, parsed.vanityName, storedIdentifier)
+    // 4. Verify ownership — admins are exempt and may share ANY post, so we
+    //    skip the "does this post belong to you?" check for them.
+    //    Non-admins: Step A (UGC API, works when r_member_social is approved) →
+    //    Step B (local comparison against stored publicIdentifier, no API call).
+    //    Admins: synthesize a confirmed result. content stays empty (it falls
+    //    back to the HTML-parsed text below) and publishedAt defaults to now —
+    //    identical to the vanity-heuristic fallback's degraded shape.
+    let ownership: OwnershipResult
+    if (user.isAdmin) {
+      ownership = { confirmed: true, content: '', publishedAt: Date.now(), strategy: 'admin-override' }
+    } else {
+      const token = user.linkedinAccessToken
+      const storedIdentifier = user.linkedinPublicIdentifier ?? null
+      ownership = await verifyPostOwnership(token, urn, user.linkedinId, parsed.vanityName, storedIdentifier)
+    }
 
     // 4b. Extract full content + media from the page HTML we already fetched
     // above. Best-effort and non-fatal — empty results degrade gracefully to

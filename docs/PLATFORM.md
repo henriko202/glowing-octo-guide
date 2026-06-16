@@ -786,14 +786,18 @@ flowchart TD
   P -->|unrecognized| X1["throw 'Unrecognized LinkedIn post URL'"]
   P -->|ok| AU["requireAuthAction → user (+ token)"]
   AU -->|no token| X2["throw 'No LinkedIn access token'"]
-  AU --> RL["rateLimit submitPost: 10/hour"]
+  AU --> ADM{"user.isAdmin?"}
+  ADM -->|yes: skip throttles| F["fetch(postUrl) HTML → extract data-attributed-urn"]
+  ADM -->|no| RL["rateLimit submitPost: 10/hour"]
   RL --> WL{"recent posts (7d) ≥ postsPerWeek?"}
   WL -->|yes| X3["throw 'Weekly post limit reached'"]
-  WL -->|no| F["fetch(postUrl) HTML → extract data-attributed-urn"]
+  WL -->|no| F
   F -->|no urn| X4["throw 'Could not find urn'"]
-  F --> V["verifyPostOwnership(token, urn, linkedinId, vanityName, publicIdentifier)"]
-  V --> PC["parsePostContent(html) → text + media; appendMediaLinks"]
-  PC --> UP["upsertPost(hidden = subscriptionStatus=='trialing', sourceUrl=postUrl)"]
+  F --> OWN{"user.isAdmin?"}
+  OWN -->|yes: share ANY post| PC["parsePostContent(html) → text + media; appendMediaLinks"]
+  OWN -->|no| V["verifyPostOwnership(token, urn, linkedinId, vanityName, publicIdentifier)"]
+  V --> PC
+  PC --> UP["upsertPost(authorId = submitter, hidden = subscriptionStatus=='trialing', sourceUrl=postUrl)"]
   UP --> R["return { postId }"]
 ```
 
@@ -801,6 +805,14 @@ flowchart TD
 the UGC API (works when `w_member_social`/`r_member_social` is approved); **Step B** a local
 comparison of the post's author against the user's stored `linkedinPublicIdentifier` / `vanityName`
 (no API call). This lets the product work **without LinkedIn Partner/MDP access**.
+
+**Admin exemption.** When the submitter is an admin (`user.isAdmin`), `submitPost` skips **both** the
+posting throttles (hourly rate limit + weekly per‑plan limit) **and** the ownership check entirely —
+an admin may share **any** post in any volume to curate the shared feed. The ownership step is
+replaced by a synthesized `OwnershipResult` with `strategy: 'admin-override'`, empty `content` (it
+falls back to the HTML‑parsed text), and `publishedAt = now`. Note the post is still attributed to
+the **admin** (`authorId = submitter`), because `posts.authorId` must reference a real `users` row;
+the original LinkedIn author — who typically has no account — cannot be the `authorId`.
 
 **Content extraction** (`linkedin/parsePostContent.ts`) is best‑effort and non‑fatal (unrecognized
 HTML yields `{ text: '', media: [] }`). From the already‑fetched page HTML it parses:
@@ -967,6 +979,9 @@ implementation is fixed‑window.) `checkRateLimit` now accepts an optional `win
 **shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the
 non-throwing `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier.
 **Admins (`user.isAdmin`) bypass every rate limit** — each call site skips the check for admins.
+Beyond rate limits, `submitPost` also exempts admins from the **weekly per‑plan post limit** and from
+**post‑ownership verification**, so an admin can share any post in any volume (see
+[§10 — Manual post submission](#manual-post-submission-postssubmitpost-action)).
 
 ---
 
