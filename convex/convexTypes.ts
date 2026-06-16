@@ -114,6 +114,7 @@ export interface UserDoc extends ConvexDocument {
   deletionReason?: 'user_request' | 'dormancy'
   lastLoginAt?: number
   acknowledgedPolicyVersion?: string
+  consentPromptedAt?: number
   createdAt: number
 }
 

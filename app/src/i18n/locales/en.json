@@ -102,6 +102,12 @@
   },
   "privacy": {
     "title": "Privacy & Data",
+    "consentPrompt": {
+      "title": "Set your preferences",
+      "intro": "Before you continue, choose how we may contact you. These are optional and off by default — you can change them anytime in Settings → Privacy & Data.",
+      "save": "Save & continue",
+      "note": "Service, security, and legal processing happens regardless of these choices."
+    },
     "consent": {
       "title": "Communication & analytics preferences",
       "note": "These are optional and off by default. Change them anytime.",

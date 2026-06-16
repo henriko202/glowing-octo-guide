@@ -15,6 +15,7 @@ import LoadingSpinner from './components/LoadingSpinner'
 import BannedScreen from './components/BannedScreen'
 import CancelDeletionScreen from './components/CancelDeletionScreen'
 import PolicyUpdateScreen from './components/PolicyUpdateScreen'
+import ConsentPromptScreen from './components/ConsentPromptScreen'
 import PrivacyDataPage from './pages/PrivacyDataPage'
 import { POLICY_VERSION } from '../../convex/lib/policy'
 
@@ -47,6 +48,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (me.deletionScheduledAt) return <CancelDeletionScreen deletionScheduledAt={me.deletionScheduledAt} />
 
   if (me.acknowledgedPolicyVersion !== POLICY_VERSION) return <PolicyUpdateScreen />
+
+  if (!me.consentPromptedAt) return <ConsentPromptScreen />
 
   return (
     <>

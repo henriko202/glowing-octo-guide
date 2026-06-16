@@ -102,6 +102,12 @@
   },
   "privacy": {
     "title": "Privacidade e Dados",
+    "consentPrompt": {
+      "title": "Defina suas preferências",
+      "intro": "Antes de continuar, escolha como podemos contatá-lo. São opcionais e desativadas por padrão — você pode alterá-las quando quiser em Configurações → Privacidade e Dados.",
+      "save": "Salvar e continuar",
+      "note": "O processamento de serviço, segurança e obrigações legais ocorre independentemente dessas escolhas."
+    },
     "consent": {
       "title": "Preferências de comunicação e análise",
       "note": "São opcionais e desativadas por padrão. Altere quando quiser.",

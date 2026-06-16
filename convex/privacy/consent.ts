@@ -79,3 +79,35 @@ export const acknowledgePolicy = mutation({
     })
   }
 })
+
+// One-time consent prompt completion: records the user's marketing + analytics choices and stamps
+// `consentPromptedAt` so the first-login ConsentPromptScreen is shown only once.
+export const completeConsentPrompt = mutation({
+  args: { sessionToken: v.string(), marketing: v.boolean(), analytics: v.boolean() },
+  handler: async (ctx, { sessionToken, marketing, analytics }) => {
+    const user = await resolveSession(ctx, sessionToken)
+    if (!user) throw new Error('Unauthorized')
+    const now = Date.now()
+    const choices: ReadonlyArray<readonly [ConsentPurpose, boolean]> = [
+      ['marketing', marketing],
+      ['analytics', analytics]
+    ]
+    for (const [purpose, granted] of choices) {
+      await ctx.db.insert('consentRecords', {
+        userId: user._id,
+        purpose,
+        granted,
+        policyVersion: POLICY_VERSION,
+        createdAt: now
+      })
+    }
+    await ctx.db.patch(user._id, { consentPromptedAt: now })
+    await writeAuditLog(ctx.db as unknown as AuditDb, {
+      actor: 'user',
+      actorId: user._id,
+      action: 'consent.prompt_completed',
+      targetUserId: user._id,
+      metadata: JSON.stringify({ marketing, analytics })
+    })
+  }
+})

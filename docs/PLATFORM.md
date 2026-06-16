@@ -332,6 +332,7 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `deletionReason` | `'user_request'\|'dormancy'` | – | Why the deletion was scheduled. |
 | `lastLoginAt` | number | – | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check. |
 | `acknowledgedPolicyVersion` | string | – | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version. |
+| `consentPromptedAt` | number | – | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login. |
 | `createdAt` | number | ✓ | Creation timestamp (ms). |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`.
@@ -1140,12 +1141,20 @@ and [§15](#15-frontend--landing-site-landing).
 - Purposes at launch: `marketing` and `analytics` — both **off by default** (no row = no
   consent; the pure helper returns `false` for absent purposes).
 
+**One-time new-user consent prompt** — `convex/privacy/consent.ts`:
+- `completeConsentPrompt` (mutation, `resolveSession`) is called once when a new user completes
+  the first-login `ConsentPromptScreen`. It records both `marketing` and `analytics` consent
+  choices (each as an append-only `consentRecords` row), stamps `users.consentPromptedAt` with the
+  current timestamp, and writes a `consent.prompt_completed` audit log entry. An unset
+  `consentPromptedAt` field is the signal that causes `RequireAuth` to show `ConsentPromptScreen`
+  on the next login — see [§14](#14-frontend--authenticated-app-app).
+
 **Re-consent / policy acknowledgement**:
 - `acknowledgePolicy` (mutation, `resolveSession`) stamps `users.acknowledgedPolicyVersion` with
   the current `POLICY_VERSION` constant (from `lib/policy.ts`) and writes an audit log entry.
   This allows the backend to detect users who have not yet acknowledged an updated policy.
-- `getMe` already exposes `acknowledgedPolicyVersion` so the Phase 3b frontend can prompt
-  re-acceptance via a `PolicyUpdateModal` without a separate query.
+- `getMe` already exposes `acknowledgedPolicyVersion` (and `consentPromptedAt`) so the Phase 3b
+  frontend can prompt re-acceptance or the one-time consent prompt without a separate query.
 
 **Data retention & dormancy** — `convex/privacy/retention.ts`:
 
@@ -1218,7 +1227,8 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 3. **`isBanned`** → `<BannedScreen>`
 4. **`me.deletionScheduledAt` set** (account pending deletion, within grace window) → `<CancelDeletionScreen>`
 5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
-6. **user ok** → `<AppNav>` + the requested page
+6. **`!me.consentPromptedAt`** (new user who has not yet completed the one-time consent prompt) → `<ConsentPromptScreen>`
+7. **user ok** → `<AppNav>` + the requested page
 
 ```mermaid
 flowchart TD
@@ -1231,6 +1241,7 @@ flowchart TD
   RA -->|isBanned| BAN["BannedScreen"]
   RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
   RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
+  RA -->|"!consentPromptedAt"| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
   RA -->|user ok| SHELL["AppNav + page → page issues Convex queries"]
 ```
 
@@ -1288,6 +1299,13 @@ toggle change; cross-reference: §13B for the append-only backend),
 `api.privacy.consent.acknowledgePolicy` then `window.location.reload()`; ensures every existing
 user re-accepts after a policy update before reaching the app — see the `RequireAuth` interception
 order above and §13B),
+`ConsentPromptScreen` (first-login full-screen prompt shown by `RequireAuth` when
+`me.consentPromptedAt` is unset; presents **Communication & analytics preferences** — marketing
+and analytics toggles, both **OFF by default** — and a "Save & continue" button that calls
+`api.privacy.consent.completeConsentPrompt({ sessionToken, marketing, analytics })` then
+`window.location.reload()`; new users whose `acknowledgedPolicyVersion` is pre-stamped at signup
+but `consentPromptedAt` is unset hit this prompt on first login — see the `RequireAuth`
+interception order above and §13B),
 plus the two LinkedIn‑embed components:
 
 - **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
@@ -1323,6 +1341,10 @@ confirmation copy used by `PrivacyDataPage` and `CancelDeletionScreen`; present 
 **Keys added in Phase 3b:** `privacy.consent.*` (toggle labels, descriptions, and status copy for
 `ConsentToggles`) and `privacy.policyUpdate.*` (heading, body, and button copy for
 `PolicyUpdateScreen`); all three locales (`en`/`pt`/`es`).
+
+**Keys added with new-user consent prompt:** `privacy.consentPrompt.*` (heading, body, toggle
+labels, and "Save & continue" button copy for `ConsentPromptScreen`); all three locales
+(`en`/`pt`/`es`).
 
 ---
 
@@ -1675,4 +1697,10 @@ documents created under `docs/compliance/` (`DATA-INVENTORY.md` ROPA, `SUBPROCES
 `RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`, `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`) with an index
 and consolidated human/legal to-do list in `docs/compliance/README.md`; `/privacy` and `/terms`
 landing pages rewritten as full GDPR/LGPD/US-state DRAFT notices (pending legal review);
-§17 updated with compliance documentation table; §15 updated to reflect the rewritten legal pages.*
+§17 updated with compliance documentation table; §15 updated to reflect the rewritten legal pages.
+Also reflects **new-user consent prompt** (`ConsentPromptScreen` + `completeConsentPrompt` +
+`users.consentPromptedAt`): one-time first-login full-screen prompt for Communication & analytics
+preferences (marketing + analytics toggles, OFF by default); `RequireAuth` interception order
+extended with step 6 (`!consentPromptedAt → ConsentPromptScreen`); `consentPromptedAt` field
+added to the `users` table (§5); `completeConsentPrompt` mutation documented in §13B; new
+`privacy.consentPrompt.*` i18n keys in all three locales.*
