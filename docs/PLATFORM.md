@@ -319,7 +319,7 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `linkedinAccessToken` | string | – | **Secret.** Used to act as the user on LinkedIn. Never sent to clients. |
 | `linkedinRefreshToken` | string | – | **Secret.** (No refresh flow is implemented — see §19.) |
 | `tokenExpiresAt` | number | – | Access‑token expiry (ms). |
-| `linkedinPublicIdentifier` | string | – | LinkedIn vanity name; set by the user in Settings, used for post‑ownership verification without Partner API. |
+| `linkedinPublicIdentifier` | string | – | LinkedIn vanity name; captured via the first‑login `PublicIdentifierPromptScreen` or set in Settings, used for post‑ownership verification without Partner API. |
 | `isAdmin` | boolean | – | **Set only by direct DB edit.** No application write path touches it. |
 | `isBanned` | boolean | – | Ban flag; set/cleared by `banUser`/`unbanUser`. |
 | `bannedAt` | number | – | Ban timestamp. |
@@ -333,6 +333,7 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `lastLoginAt` | number | – | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check. |
 | `acknowledgedPolicyVersion` | string | – | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version. |
 | `consentPromptedAt` | number | – | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login. |
+| `publicIdentifierPromptedAt` | number | – | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login. |
 | `createdAt` | number | ✓ | Creation timestamp (ms). |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`.
@@ -554,6 +555,22 @@ server‑side. After OAuth the app uses its **own opaque session tokens**.
   single‑use validated on callback (deleted before the expiry check → replay‑safe).
 - **Session token:** a random UUID stored in `sessions` (30‑day TTL); returned to the app in the
   redirect URL `?session=…`. The app keeps it in **`sessionStorage`** (key `sessionToken`).
+- **Sign‑out:** the app auto‑starts OAuth for any unauthenticated visit (see `RequireAuth`, §14), and
+  LinkedIn keeps its own SSO session — so a naive sign‑out is silently re‑authenticated. Sign‑out
+  therefore sets a **persistent `signedOut` marker** (`localStorage`, `lib/session.ts`) *before*
+  calling `users.logout`, drops the local `sessionToken`, and redirects to the **marketing/landing
+  site** (`VITE_LANDING_URL` — the separate Next.js app at its own origin, see §15). The marker does
+  two jobs: **(1)** it wins the race against the **reactive** `getMe → null` that `users.logout`
+  triggers while the SPA is still mounted (which would otherwise trip `RequireAuth`'s auto‑OAuth and
+  silently re‑log the user in via LinkedIn SSO → `/auth/success` → `/feed`); and **(2)** it
+  **persists across the return visit**, so when a signed‑out user navigates back to the app
+  `RequireAuth` bounces them to the landing site instead of auto‑logging them in. It is cleared on the
+  next successful login (`AuthSuccessPage`), so "auto‑redirect for login" resumes for fresh/expired
+  sessions. To log back in, the landing site's CTAs point **straight at OAuth**
+  (`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, §15) — not the app root — so a signed‑out visitor
+  doesn't ping‑pong between the landing site and the app. All three sign‑out buttons (`AppNav`,
+  `BannedScreen`, `CancelDeletionScreen`) route through the shared `signOut()` helper; `AppNav` also
+  `await`s `users.logout` to invalidate the session server‑side.
 
 ### OAuth login flow
 
@@ -609,6 +626,7 @@ flowchart TD
 | `users.getActiveSubscribers` | internalQuery | All users with `subscriptionStatus === 'active'` (full‑table scan). |
 | `users.getSubscriptionInfo` | query (public) | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`. |
 | `users.setPublicIdentifier` | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased). |
+| `users.dismissPublicIdentifierPrompt` | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path). |
 | `users.updateProfile` | mutation (public) | User edits their own `industry`/`country` (validated against canonical lists; empty string clears). |
 | `users.refreshProfileFromLinkedIn` | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action. |
 | `users.applyScrapedProfile` | internalMutation | Writes scraped fields: `country` **fill-when-empty**; `location`/`primaryLocale` always refresh. |
@@ -1223,12 +1241,13 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 `RequireAuth` calls `getMe`; the interception order is:
 
 1. **loading** (`getMe` undefined) → `<LoadingSpinner>`
-2. **`me === null`** → hard‑redirect to `${VITE_CONVEX_SITE}/auth/linkedin` (straight into OAuth — there's no login page)
+2. **`me === null`** → if the user explicitly signed out (`isSignedOut()` / persistent `localStorage.signedOut`) → redirect to the **landing site** (`VITE_LANDING_URL`, §7) so sign‑out sticks; otherwise hard‑redirect to `${VITE_CONVEX_SITE}/auth/linkedin` (auto‑OAuth; LinkedIn's SSO makes it a one‑hop login).
 3. **`isBanned`** → `<BannedScreen>`
 4. **`me.deletionScheduledAt` set** (account pending deletion, within grace window) → `<CancelDeletionScreen>`
 5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
 6. **`!me.consentPromptedAt`** (new user who has not yet completed the one-time consent prompt) → `<ConsentPromptScreen>`
-7. **user ok** → `<AppNav>` + the requested page
+7. **`!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt`** (first login, LinkedIn profile URL not yet captured) → `<PublicIdentifierPromptScreen>`
+8. **user ok** → `<AppNav>` + the requested page
 
 ```mermaid
 flowchart TD
@@ -1242,13 +1261,14 @@ flowchart TD
   RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
   RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
   RA -->|"!consentPromptedAt"| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
+  RA -->|"no public identifier & not prompted"| PID["PublicIdentifierPromptScreen → setPublicIdentifier / dismiss → reload"]
   RA -->|user ok| SHELL["AppNav + page → page issues Convex queries"]
 ```
 
 ### Pages
 
-- **AuthSuccessPage** — stores `?session` token in `sessionStorage`, navigates to `/feed`. No Convex
-  calls.
+- **AuthSuccessPage** — stores `?session` token in `sessionStorage`, clears the persistent
+  `signedOut` marker (§7), and navigates to `/feed`. No Convex calls.
 - **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); a list of `PostCard`s, each
   rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
   shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card.
@@ -1306,6 +1326,13 @@ and analytics toggles, both **OFF by default** — and a "Save & continue" butto
 `window.location.reload()`; new users whose `acknowledgedPolicyVersion` is pre-stamped at signup
 but `consentPromptedAt` is unset hit this prompt on first login — see the `RequireAuth`
 interception order above and §13B),
+`PublicIdentifierPromptScreen` (first-login full-screen prompt shown by `RequireAuth` when the user
+has no `linkedinPublicIdentifier` **and** `publicIdentifierPromptedAt` is unset; asks for the LinkedIn
+profile URL — reusing `extractVanityName` from `app/src/lib/linkedinProfile.ts` — and either saves it
+via `api.users.setPublicIdentifier` or stamps `publicIdentifierPromptedAt` via
+`api.users.dismissPublicIdentifierPrompt` ("Skip for now"), then `window.location.reload()`. LinkedIn's
+OIDC login does **not** expose the vanityName, so this prompt is how it's captured at login — see §7
+and the `RequireAuth` interception order above),
 plus the two LinkedIn‑embed components:
 
 - **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
@@ -1394,8 +1421,12 @@ before they are regulator-ready. `/cookies` documents the essential-storage-only
 to-do list.
 
 ### CTAs → app
-Every conversion CTA (Nav "Join free", Hero, paid Pricing buttons, FinalCTA) is a plain
-`<a href={NEXT_PUBLIC_APP_URL}>` to the product app. Internal nav (logo, footer, section anchors,
+Every conversion CTA (Nav "Join free", Hero, paid Pricing buttons, FinalCTA) is a plain `<a>` whose
+`href` is the shared **`SIGN_IN_URL`** (`landing/lib/links.ts`) — i.e.
+`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, sending visitors **straight into LinkedIn OAuth** (it
+falls back to `NEXT_PUBLIC_APP_URL` if the Convex site URL is unset). Going directly to OAuth (rather
+than the app root) is what lets a previously‑signed‑out visitor — whom the app bounces back to this
+site (§7) — actually log in instead of ping‑ponging. Internal nav (logo, footer, section anchors,
 `/pricing`) uses Next `<Link>`.
 
 ### Styling
@@ -1436,6 +1467,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 |---|:--:|---|---|
 | `VITE_CONVEX_URL` | ✓ | `main.tsx` | `.convex.cloud` URL for `ConvexReactClient` (data transport). |
 | `VITE_CONVEX_SITE` | ✓ | `App.tsx` | `.convex.site` base for the `/auth/linkedin` sign‑in redirect. |
+| `VITE_LANDING_URL` | – (default `http://localhost:3000`) | `lib/session.ts` | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin). |
 | `VITE_STRIPE_STARTER_PRICE_ID` | ✓ (billing UI) | `BillingPage.tsx` | Starter price id for checkout. |
 | `VITE_STRIPE_GROWTH_PRICE_ID` | ✓ (billing UI) | `BillingPage.tsx` | Growth price id. |
 | `VITE_STRIPE_PRO_PRICE_ID` | ✓ (billing UI) | `BillingPage.tsx` | Pro price id (missing → that plan's button disabled). |
@@ -1444,7 +1476,8 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 | Variable | Required | Consumed in | Purpose |
 |---|:--:|---|---|
-| `NEXT_PUBLIC_APP_URL` | – (default `http://localhost:5173`) | `Nav.tsx`, `Hero.tsx`, `Pricing.tsx`, `FinalCTA.tsx` | Base URL of the app for all CTA links. |
+| `NEXT_PUBLIC_APP_URL` | – (default `http://localhost:5173`) | `lib/links.ts` | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset. |
+| `NEXT_PUBLIC_CONVEX_SITE` | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts` | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly. |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
 > default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the

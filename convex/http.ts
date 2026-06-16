@@ -68,9 +68,10 @@ http.route({
 
       const tokenExpiresAt = Date.now() + tokens.expires_in * 1000
 
-      // Note: linkedinPublicIdentifier is set manually by the user in Settings
-      // (users.setPublicIdentifier). LinkedIn's identity endpoints require Partner/MDP
-      // access we don't have, so we no longer attempt to auto-fetch it during OAuth.
+      // Note: linkedinPublicIdentifier is NOT available from the OIDC userinfo response — LinkedIn's
+      // identity/vanityName endpoints require Partner/MDP access we don't have. Instead we capture it
+      // from the user via the one-time first-login prompt (PublicIdentifierPromptScreen) and Settings
+      // (users.setPublicIdentifier).
       const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
         linkedinId: userInfo.sub,
         name: userInfo.name,

@@ -17,19 +17,20 @@ import CancelDeletionScreen from './components/CancelDeletionScreen'
 import PolicyUpdateScreen from './components/PolicyUpdateScreen'
 import ConsentPromptScreen from './components/ConsentPromptScreen'
 import PrivacyDataPage from './pages/PrivacyDataPage'
+import PublicIdentifierPromptScreen from './components/PublicIdentifierPromptScreen'
 import { POLICY_VERSION } from '../../convex/lib/policy'
-
-const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE as string
-const AUTH_URL = `${CONVEX_SITE_URL}/auth/linkedin`
+import { AUTH_URL, LANDING_URL, isSignedOut } from './lib/session'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
 
   useEffect(() => {
+    // Not authenticated. A user who explicitly signed out is sent back to the landing site so the
+    // sign-out sticks (the persistent signedOut marker survives the return visit); everyone else
+    // auto-starts LinkedIn OAuth (one-hop via LinkedIn's SSO).
     if (me === null) {
-      // Redirect directly to LinkedIn auth
-      window.location.href = AUTH_URL
+      window.location.href = isSignedOut() ? LANDING_URL : AUTH_URL
     }
   }, [me])
 
@@ -50,6 +51,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (me.acknowledgedPolicyVersion !== POLICY_VERSION) return <PolicyUpdateScreen />
 
   if (!me.consentPromptedAt) return <ConsentPromptScreen />
+
+  if (!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt) return <PublicIdentifierPromptScreen />
 
   return (
     <>

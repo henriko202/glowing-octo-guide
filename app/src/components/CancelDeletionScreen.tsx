@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '../convex'
+import { signOut } from '../lib/session'
 
 type Props = {
   deletionScheduledAt?: number
-}
-
-function signOut() {
-  sessionStorage.removeItem('sessionToken')
-  window.location.assign('/')
 }
 
 export default function CancelDeletionScreen({ deletionScheduledAt }: Props) {

@@ -115,6 +115,7 @@ export interface UserDoc extends ConvexDocument {
   lastLoginAt?: number
   acknowledgedPolicyVersion?: string
   consentPromptedAt?: number
+  publicIdentifierPromptedAt?: number
   createdAt: number
 }
 

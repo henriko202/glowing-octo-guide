@@ -23,14 +23,14 @@ describe('sendEmail', () => {
   it('POSTs to Resend with auth + from header when configured', async () => {
     vi.stubEnv('RESEND_API_KEY', 'key_123')
     vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'e1' }) }))
+    const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>' })
 
     expect(result.sent).toBe(true)
     expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, opts] = fetchMock.mock.calls[0] as [string, any]
+    const [url, opts] = fetchMock.mock.calls[0]
     expect(url).toBe('https://api.resend.com/emails')
     expect(opts.headers.Authorization).toBe('Bearer key_123')
     const body = JSON.parse(opts.body)

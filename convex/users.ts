@@ -205,6 +205,17 @@ export const setPublicIdentifier = mutation({
   }
 })
 
+// Public: marks the one-time "confirm your LinkedIn profile URL" onboarding prompt as shown, so
+// RequireAuth stops displaying PublicIdentifierPromptScreen even when the user skipped it. The user
+// can still set their identifier later in Settings (setPublicIdentifier).
+export const dismissPublicIdentifierPrompt = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await ctx.db.patch(user._id, { publicIdentifierPromptedAt: Date.now() })
+  }
+})
+
 // Public: invalidates the session token server-side on sign out.
 export const logout = mutation({
   args: { sessionToken: v.string() },

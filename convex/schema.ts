@@ -57,6 +57,9 @@ export default defineSchema({
     acknowledgedPolicyVersion: v.optional(v.string()),
     // When the user completed the one-time consent prompt (marketing/analytics). Unset ⇒ prompt on login.
     consentPromptedAt: v.optional(v.number()),
+    // When the user was shown the one-time "confirm your LinkedIn profile URL" onboarding prompt.
+    // Unset AND no linkedinPublicIdentifier ⇒ show the prompt on login (see App RequireAuth).
+    publicIdentifierPromptedAt: v.optional(v.number()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])

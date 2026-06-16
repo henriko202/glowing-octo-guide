@@ -5,6 +5,7 @@ import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { COUNTRY_CODES, INDUSTRIES, countryLabel } from '../../../convex/lib/profileOptions'
 import { VirtualizedCombobox } from '../components/VirtualizedCombobox'
+import { extractVanityName } from '../lib/linkedinProfile'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -22,20 +23,6 @@ interface MeProfile {
   trialEndsAt?: number
   linkedinPublicIdentifier?: string
   createdAt: number
-}
-
-/** Extract LinkedIn vanityName from a profile URL or bare username */
-function extractVanityName(input: string): string | null {
-  const trimmed = input.trim()
-  try {
-    const u = new URL(trimmed)
-    const m = u.pathname.match(/^\/in\/([^/?#]+)/)
-    return m ? m[1].toLowerCase() : null
-  } catch {
-    // Also accept bare vanityNames like "henriko202" or "@henriko202"
-    const bare = trimmed.replace(/^@/, '')
-    return /^[a-zA-Z0-9_-]+$/.test(bare) ? bare.toLowerCase() : null
-  }
 }
 
 export default function SettingsPage() {

@@ -10,6 +10,17 @@
     "tagline": "Aumente o seu SSI no LinkedIn interagindo com a sua comunidade.",
     "signInButton": "Entrar com LinkedIn"
   },
+  "onboarding": {
+    "linkedinIdentifier": {
+      "title": "Confirme o seu perfil do LinkedIn",
+      "intro": "Cole o URL do seu perfil do LinkedIn para podermos verificar que as publicações que envia lhe pertencem. Pode alterar isto mais tarde em Configurações.",
+      "placeholder": "https://www.linkedin.com/in/seu-nome",
+      "willSaveAs": "Será guardado como: {{vanity}}",
+      "invalid": "Não foi possível ler um nome de utilizador desse URL. Tente https://www.linkedin.com/in/seu-nome",
+      "save": "Salvar e continuar",
+      "skip": "Ignorar por agora"
+    }
+  },
   "feed": {
     "title": "O Seu Feed",
     "loading": "A carregar feed...",

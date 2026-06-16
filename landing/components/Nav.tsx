@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { SIGN_IN_URL } from '../lib/links'
 
 export default function Nav() {
   const [scrolled, setScrolled] = useState(false)
@@ -9,8 +10,6 @@ export default function Nav() {
     window.addEventListener('scroll', handler, { passive: true })
     return () => window.removeEventListener('scroll', handler)
   }, [])
-
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173'
 
   return (
     <header
@@ -51,7 +50,7 @@ export default function Nav() {
         </div>
 
         <a
-          href={`${APP_URL}`}
+          href={SIGN_IN_URL}
           className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold transition-all duration-200 hover:bg-gold hover:text-ink"
         >
           Join free

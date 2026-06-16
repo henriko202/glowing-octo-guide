@@ -1,12 +1,9 @@
+import { signOut } from '../lib/session'
+
 const SUPPORT_EMAIL = 'contact@email.com' // TODO: replace with the real support address
 
 type Props = {
   reason?: string
-}
-
-function handleSignOut() {
-  sessionStorage.removeItem('sessionToken')
-  window.location.assign('/')
 }
 
 export default function BannedScreen({ reason }: Props) {
@@ -42,7 +39,7 @@ export default function BannedScreen({ reason }: Props) {
           </a>
           <button
             type="button"
-            onClick={handleSignOut}
+            onClick={signOut}
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Sign out

@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from 'convex/react'
 import { api } from '../convex'
+import { beginSignOut, signOut } from '../lib/session'
 
 const LANGUAGES = [
   { code: 'en', label: 'EN' },
@@ -25,7 +26,9 @@ export default function AppNav() {
 
   async function handleSignOut() {
     const token = sessionStorage.getItem('sessionToken')
-    sessionStorage.removeItem('sessionToken')
+    // Set the guard BEFORE logout: logout makes getMe reactively return null, which would otherwise
+    // trip RequireAuth's auto-OAuth and silently re-log us in before the landing redirect lands.
+    beginSignOut()
     if (token) {
       try {
         await logout({ sessionToken: token })
@@ -33,7 +36,8 @@ export default function AppNav() {
         /* ignore */
       }
     }
-    window.location.href = '/'
+    // Drop the local token and leave the SPA for the marketing/landing site.
+    signOut()
   }
 
   return (

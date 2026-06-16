@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { clearSignedOut } from '../lib/session'
 
 export default function AuthSuccessPage() {
   const navigate = useNavigate()
@@ -12,6 +13,8 @@ export default function AuthSuccessPage() {
     const session = new URLSearchParams(hash).get('session')
     if (session) {
       sessionStorage.setItem('sessionToken', session)
+      // A successful login clears the explicit-sign-out marker, so normal auto-redirect resumes.
+      clearSignedOut()
       // Scrub the token from the URL bar / history.
       window.history.replaceState(null, '', window.location.pathname)
     }

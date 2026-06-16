@@ -1,5 +1,6 @@
+import { SIGN_IN_URL } from '../lib/links'
+
 export default function FinalCTA() {
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173'
   return (
     <section className="relative overflow-hidden bg-ink px-6 py-32 text-center">
       <div
@@ -25,7 +26,7 @@ export default function FinalCTA() {
         </h2>
         <p className="text-base text-cream/50">Start your 3-day free trial. See your first SSI gains within a week.</p>
         <a
-          href={`${APP_URL}`}
+          href={SIGN_IN_URL}
           className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-ink shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
         >
           Sign in with LinkedIn — it&apos;s free
