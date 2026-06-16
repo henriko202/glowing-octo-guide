@@ -2,7 +2,7 @@
 // Right of access / data portability. buildExportBundle is pure (assembles + redacts);
 // gatherUserData reads the user's own rows; the action stores the JSON bundle in Convex
 // file storage behind a 7-day owner-only link and emails the user.
-import { action, internalMutation, internalQuery, mutation, query } from '../_generated/server'
+import { internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { resolveSession } from '../lib/auth'
@@ -87,7 +87,7 @@ export const requestDataExport = mutation({
   }
 })
 
-export const generateExport = action({
+export const generateExport = internalAction({
   args: { requestId: v.id('dataExportRequests'), userId: v.id('users') },
   handler: async (ctx, { requestId, userId }) => {
     try {

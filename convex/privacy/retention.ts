@@ -2,7 +2,7 @@
 // Data minimization / storage limitation. A daily cron expires LinkedIn tokens, purges old export
 // files + audit logs, and flags dormant accounts for deletion (feeding the Phase 2a deletion cron).
 // The predicates are pure + unit-tested; the cron orchestrates with bounded batches.
-import { action, internalMutation } from '../_generated/server'
+import { internalAction, internalMutation } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { sendEmail } from '../lib/email'
@@ -120,7 +120,7 @@ export const enforceDataRetention = internalMutation({
   }
 })
 
-export const sendDormancyWarning = action({
+export const sendDormancyWarning = internalAction({
   args: { email: v.string(), deletionDate: v.string() },
   handler: async (_ctx, { email, deletionDate }) => {
     const m = dormancyWarningEmail(deletionDate)

@@ -106,6 +106,14 @@ export interface UserDoc extends ConvexDocument {
   bannedAt?: number
   bannedBy?: string
   bannedReason?: string
+  // Privacy & compliance fields (mirror schema.ts; read by getMe → toSafeMe → the app's me object)
+  email?: string
+  emailVerified?: boolean
+  deletionRequestedAt?: number
+  deletionScheduledAt?: number
+  deletionReason?: 'user_request' | 'dormancy'
+  lastLoginAt?: number
+  acknowledgedPolicyVersion?: string
   createdAt: number
 }
 

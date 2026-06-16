@@ -1,7 +1,7 @@
 // convex/privacy/deletion.ts
 // Right to erasure. cascadeDeleteUser is pure (operates on a narrow db + storage interface) so the
 // full multi-table deletion is unit-tested. The registered request/cancel/cron wrappers follow below.
-import { action, internalMutation, internalQuery, mutation } from '../_generated/server'
+import { internalAction, internalMutation, internalQuery, mutation } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import Stripe from 'stripe'
@@ -130,7 +130,7 @@ export const cancelAccountDeletion = mutation({
 
 // Internal: cancel the user's Stripe subscriptions immediately (stop billing during grace) and
 // send the "deletion scheduled" email. Best-effort; failures are logged, never block the flow.
-export const onDeletionRequested = action({
+export const onDeletionRequested = internalAction({
   args: { userId: v.id('users'), scheduledAt: v.number() },
   handler: async (ctx, { userId, scheduledAt }) => {
     const subs = await ctx.runQuery(internal.privacy.deletion.listUserSubscriptions, { userId })
@@ -192,7 +192,7 @@ export const processAccountDeletions = internalMutation({
   }
 })
 
-export const sendDeletionCompleted = action({
+export const sendDeletionCompleted = internalAction({
   args: { email: v.string() },
   handler: async (_ctx, { email }) => {
     const m = deletionCompletedEmail()
