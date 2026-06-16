@@ -1,0 +1,47 @@
+> **DRAFT — requires legal review.**
+>
+> Last updated: 2026-06-16
+
+# Data Retention Policy
+
+**Controller:** [LEGAL_ENTITY_NAME]
+**Service:** Link Into The SSI
+
+This document states the retention period for each category of personal data processed by Link Into The SSI, the legal or business justification for that period, and the enforcement mechanism. It should be read alongside the ROPA (`DATA-INVENTORY.md`) and the Sub-Processor List (`SUBPROCESSORS.md`).
+
+> **Implementation note:** Retention periods are configurable constants in `convex/privacy/retention.ts`. The cron schedules that drive automated enforcement are in `convex/crons.ts` and documented in `docs/PLATFORM.md` §13 and §13B.
+
+---
+
+## Retention Schedule
+
+| Data category | Retention period | Justification | Enforcement mechanism |
+|---|---|---|---|
+| **LinkedIn OAuth tokens** (`linkedinAccessToken`, `linkedinRefreshToken`, `tokenExpiresAt`, `tokenScope` on the `users` table) | Nulled (fields set to `null`) automatically once the timestamp in `tokenExpiresAt` has passed — i.e., immediately upon expiry | Tokens beyond their validity period serve no purpose and represent an unnecessary risk; data minimisation (GDPR Art. 5(1)(e)) | `enforceDataRetention` cron (daily sweep — Sweep 1: `isTokenExpired` predicate) |
+| **Data-export files** (`dataExportRequests` file storage + status field) | 7 days from the `expiresAt` timestamp set at file generation (status transitions to `expired`; underlying file deleted from Convex storage) | Limits the exposure window of the user's exported personal data; portability obligation fulfilled on generation | `enforceDataRetention` cron (daily sweep — Sweep 2: `isExportExpired` predicate) |
+| **`dataExportRequests` job metadata** (row in the `dataExportRequests` table, excluding the storage file) | Life of account; deleted in the account-deletion cascade | Job records provide an accountability trail of DSR requests | `processAccountDeletions` cron (cascade deletion) |
+| **`auditLogs`** | 24 months from creation; on deletion, `actorId` and `targetUserId` are pseudonymized (nulled) — the anonymised record may be retained beyond the 24-month window where needed for ongoing accountability | Accountability obligation (GDPR Art. 5(2)); legal and compliance evidence; 24-month window balances accountability against data minimisation | `enforceDataRetention` cron (daily sweep — Sweep 3: `isAuditExpired` predicate, >24 months) |
+| **`consentRecords`** | Life of account (consent records must remain demonstrable for as long as the account exists); deleted in the account-deletion cascade | Legal obligation (GDPR Art. 7(1) requires the controller to demonstrate consent was obtained) | `processAccountDeletions` cron (cascade deletion); no earlier automatic purge |
+| **`posts` and `postQueue`** | Life of account; deleted in the account-deletion cascade | Core user-generated content required to deliver the service (performance of contract) | `processAccountDeletions` cron (cascade deletion); users can also delete individual posts at any time |
+| **Inactive (dormant) accounts** (non-subscribers, no login for 24 months) | 24 months of inactivity triggers scheduling for deletion (30-day grace period, then hard deletion) | Data minimisation (GDPR Art. 5(1)(e)); no ongoing legitimate purpose for retaining data of persistently inactive non-subscribers | `enforceDataRetention` cron (daily sweep — Sweep 4: `isDormant` predicate — `lastLoginAt` or `_creationTime` >24 months ago and no active/trialing subscription) sets `deletionScheduledAt` (+30 days) + sends dormancy warning email; followed by `processAccountDeletions` cron after grace window |
+| **Account deletion (user-requested)** | 30-day grace period from `deletionRequestedAt`; hard deletion after grace window expires | Allows the user to cancel an accidental deletion request; after 30 days the right to erasure (GDPR Art. 17) is fulfilled by cascade deletion | `processAccountDeletions` cron (daily, batched — `cascadeDeleteUser` for accounts past grace window); cascade covers: `posts`, `postQueue`, `subscriptions`, `sessions`, `rateLimits`, `featuredPostUsage`, `planLimits`, `consentRecords`, `dataExportRequests` + storage files; `auditLogs` pseudonymized; `users` row deleted last; Stripe billing records **retained by Stripe** (see below) |
+| **Billing records** (`stripeCustomerId`, `subscriptions` table, Stripe-side invoice and payment records) | `stripeCustomerId` and internal subscription records are deleted in the account-deletion cascade. **Stripe retains invoice and payment records on its own systems pursuant to applicable tax and accounting law**, even after the user's Link Into The SSI account is deleted | Legal obligation (GDPR Art. 6(1)(c), tax and accounting laws); Link Into The SSI does not control Stripe's retention of financial records | Account-deletion cascade removes internal fields; Stripe's own retention policies govern financial records held by Stripe |
+| **`sessions`** | Retained until the session `expiresAt` timestamp; expired sessions purged automatically | Security of processing (GDPR Art. 32); session tokens beyond expiry serve no purpose | `cleanup expired sessions` cron (every 6 hours, ≤ 200 rows/run) |
+| **`oauthStates`** (CSRF nonces) | ~10-minute TTL (`expiresAt`); deleted immediately on callback use (replay protection); abandoned entries purged by cron | Security of processing; CSRF protection (single-use, short-lived nonces); data minimisation | `cleanup expired oauth states` cron (every 1 hour, ≤ 200 rows/run) |
+| **`rateLimits`** | Stale rate-limit windows purged by cron | Data minimisation; no ongoing purpose after the rate window has elapsed | `enforceDataRetention` cron / cron-based cleanup of stale windows |
+| **Host and server logs** (Convex platform logs, Vercel request logs, Railway request logs, Cloudflare network logs) | Per-provider default retention policies | Operational and security monitoring | Managed by each sub-processor per their default settings; review sub-processor agreements for specifics. Convex: [bracketed — check Convex docs]. Vercel: [bracketed — check Vercel docs]. Railway: [bracketed — check Railway docs]. Cloudflare: [bracketed — check Cloudflare docs]. |
+
+---
+
+## User Rights and Overrides
+
+- Users can request hard deletion of their account at any time (Settings → Privacy & Data → Delete Account), triggering the 30-day grace-period flow described above.
+- Users can request a data export at any time (Settings → Privacy & Data → Export My Data); the export file is available for 7 days.
+- Dormant users who log in within the 30-day grace window see the cancellation screen and can cancel scheduled deletion via `cancelAccountDeletion`.
+
+---
+
+> **Human action required:**
+> - Fill `[bracketed]` provider-specific log-retention periods by reviewing each sub-processor's data-processing agreement or documentation.
+> - Confirm that the 24-month dormancy and audit-log periods are appropriate under applicable law, particularly for Brazilian (LGPD) and UK users.
+> - Legal review required before publishing this policy externally.

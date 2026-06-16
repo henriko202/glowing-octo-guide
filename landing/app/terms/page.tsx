@@ -1,31 +1,194 @@
+{
+  /* DRAFT — requires legal review. */
+}
 export default function TermsPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-24 text-cream/70">
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Terms of Service</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Last updated:</strong> March 2026
+          <strong className="text-cream">Last updated:</strong> June 2026 &mdash; draft pending legal review.
+        </p>
+
+        {/* 1. Acceptance */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">1. Acceptance</h2>
+        <p>
+          By accessing or using Link Into The SSI (&ldquo;the Service&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) you
+          agree to be bound by these Terms of Service. If you do not agree, do not use the Service.
         </p>
         <p>
-          By using Link Into The SSI you agree to use the platform in accordance with LinkedIn&apos;s User Agreement and
-          professional conduct standards.
+          <strong className="text-cream">Age requirement.</strong> By using the Service you confirm that you are{' '}
+          <strong className="text-cream">16 years of age or older</strong>. If you are under 16 you may not create an
+          account or use the Service.
         </p>
+
+        {/* 2. The service */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">2. The Service</h2>
         <p>
-          You grant Link Into The SSI permission to read your LinkedIn posts and publish comments and reactions on your
-          behalf, as authorized through LinkedIn OAuth.
+          Link Into The SSI is a LinkedIn-connected SaaS platform that provides a shared feed of member posts and
+          enables real LinkedIn engagement &mdash; comments and reactions &mdash; on your behalf. Its purpose is to help
+          professionals grow their LinkedIn Social Selling Index (SSI) through authentic, mutual engagement within the
+          community.
         </p>
-        <p>Subscription fees are billed monthly. Cancellations take effect at the end of the current billing period.</p>
+
+        {/* 3. Your LinkedIn account & authorization */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">
+          3. Your LinkedIn Account &amp; Authorization
+        </h2>
         <p>
-          We reserve the right to suspend accounts that misuse the platform, including spamming or automated activity.
+          To use the Service you must connect your LinkedIn account via LinkedIn OAuth. By doing so you grant Link Into
+          The SSI permission to:
         </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>read the LinkedIn posts associated with your account; and</li>
+          <li>publish comments and reactions on LinkedIn on your behalf.</li>
+        </ul>
         <p>
-          Questions:{' '}
+          You remain fully responsible for all activity that occurs under your LinkedIn account, including any comments
+          or reactions published through the Service. You may revoke this authorization at any time through your
+          LinkedIn account settings or by deleting your account.
+        </p>
+
+        {/* 4. Acceptable use */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">4. Acceptable Use</h2>
+        <p>You agree not to use the Service to:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>send spam or unsolicited messages;</li>
+          <li>harass, abuse, or harm other members;</li>
+          <li>
+            run automated or bot activity beyond the features expressly provided by the Service (e.g. scripted
+            engagement outside the platform);
+          </li>
+          <li>violate any applicable local, national, or international law or regulation; or</li>
+          <li>
+            circumvent or attempt to circumvent any technical measures or security controls of the Service or LinkedIn.
+          </li>
+        </ul>
+        <p>
+          You must also comply with{' '}
           <a
-            href="mailto:hello@linkintothessi.com"
+            href="https://www.linkedin.com/legal/user-agreement"
+            className="text-gold hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            LinkedIn&rsquo;s User Agreement
+          </a>{' '}
+          at all times.
+        </p>
+
+        {/* 5. Subscriptions & billing */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">5. Subscriptions &amp; Billing</h2>
+        <p>
+          Access to the Service requires an active paid subscription. Subscriptions are billed on a{' '}
+          <strong className="text-cream">monthly</strong> basis via Stripe. By subscribing you authorise Stripe to
+          charge the payment method you provide on a recurring monthly basis until you cancel.
+        </p>
+        <p>
+          <strong className="text-cream">Cancellation.</strong> You may cancel your subscription at any time through
+          your account settings. Cancellation takes effect at the{' '}
+          <strong className="text-cream">end of the current billing period</strong>; you retain access to the Service
+          until that date and no partial refunds are issued for unused time.
+        </p>
+        <p>
+          <strong className="text-cream">Account deletion.</strong> Requesting account deletion automatically cancels
+          any active subscription. Billing records are retained as required by law (see the{' '}
+          <a
+            href="/privacy"
             className="text-gold hover:underline"
           >
-            hello@linkintothessi.com
+            Privacy Policy
           </a>
+          ).
+        </p>
+
+        {/* 6. Suspension, ban & account deletion */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">
+          6. Suspension, Ban &amp; Account Deletion
+        </h2>
+        <p>
+          We may suspend or permanently ban accounts that violate these Terms, engage in misuse, or otherwise harm the
+          community or the Service, without prior notice where necessary to protect members or the platform.
+        </p>
+        <p>
+          <strong className="text-cream">Self-deletion.</strong> You may delete your account at any time from your
+          account settings. A <strong className="text-cream">30-day grace period</strong> applies, during which your
+          account can be recovered. After 30 days your personal data is permanently purged, except for billing records
+          that must be retained for tax or financial compliance purposes (see our{' '}
+          <a
+            href="/privacy"
+            className="text-gold hover:underline"
+          >
+            Privacy Policy
+          </a>
+          ).
+        </p>
+
+        {/* 7. Disclaimers & limitation of liability */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">
+          7. Disclaimers &amp; Limitation of Liability
+        </h2>
+        <p>
+          <strong className="text-cream">[standard clauses &mdash; to be completed by legal counsel]</strong>
+        </p>
+        <p>
+          This section, including any warranty disclaimers, indemnification provisions, and caps on liability, will be
+          drafted and inserted by qualified legal counsel prior to the Service launching publicly. Until these terms are
+          finalised no binding limitation of liability applies in either direction.
+        </p>
+
+        {/* 8. LinkedIn User Agreement */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">8. LinkedIn User Agreement</h2>
+        <p>
+          You must independently comply with{' '}
+          <a
+            href="https://www.linkedin.com/legal/user-agreement"
+            className="text-gold hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            LinkedIn&rsquo;s User Agreement
+          </a>{' '}
+          and all LinkedIn policies. Link Into The SSI is an independent product and is{' '}
+          <strong className="text-cream">not affiliated with, endorsed by, or sponsored by LinkedIn Corporation</strong>{' '}
+          or any of its affiliates.
+        </p>
+
+        {/* 9. Governing law */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">9. Governing Law</h2>
+        <p>
+          These Terms are governed by and construed in accordance with the laws of{' '}
+          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>. Any disputes arising from or relating to
+          these Terms shall be subject to the exclusive jurisdiction of the courts of{' '}
+          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>.
+        </p>
+
+        {/* 10. Changes & contact */}
+        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">10. Changes &amp; Contact</h2>
+        <p>
+          We may update these Terms from time to time. Material changes will be communicated by email or in-app notice
+          before they take effect. Continued use of the Service after the effective date of a change constitutes
+          acceptance of the revised Terms.
+        </p>
+        <p>
+          Questions about these Terms? Contact us at{' '}
+          <a
+            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            className="text-gold hover:underline"
+          >
+            [PRIVACY_CONTACT_EMAIL]
+          </a>
+          .
+        </p>
+        <p>
+          For information about how we handle your personal data, please read our{' '}
+          <a
+            href="/privacy"
+            className="text-gold hover:underline"
+          >
+            Privacy Policy
+          </a>
+          .
         </p>
       </div>
     </main>

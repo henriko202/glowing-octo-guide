@@ -1363,6 +1363,14 @@ an app that reads a user's posts and publishes comments/reactions on their behal
 tokens are stored securely server‑side and never exposed; `/terms` records the user's grant of
 permission to act on their behalf and the monthly‑billing/cancellation policy.
 
+As of Phase 4, `/privacy` and `/terms` have been rewritten as full **GDPR / LGPD / US-state**
+drafts (covering lawful basis, data-subject rights, international transfers, and CCPA/CPRA
+disclosures). Both pages are **DRAFTs pending legal review** — bracketed placeholders
+(`[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, etc.) must be filled and a lawyer must sign off
+before they are regulator-ready. `/cookies` documents the essential-storage-only cookie policy
+(Phase 3b). See [`docs/compliance/README.md`](compliance/README.md) for the consolidated legal
+to-do list.
+
 ### CTAs → app
 Every conversion CTA (Nav "Join free", Hero, paid Pricing buttons, FinalCTA) is a plain
 `<a href={NEXT_PUBLIC_APP_URL}>` to the product app. Internal nav (logo, footer, section anchors,
@@ -1475,6 +1483,24 @@ The codebase follows a consistent, defensible security model:
 > **self‑attributed** (format‑validated only — LinkedIn actions still use the user's own token, so it
 > can't be used to act as someone else); and prod CSP / `frame-ancestors` / HSTS headers should be
 > set at the hosting layer. See [§19](#19-known-discrepancies-dead-code--roadmap).
+
+### Compliance Documentation
+
+The `docs/compliance/` folder contains six **DRAFT** documents (pending legal review) that
+accompany the technical controls described in [§13B](#13b-privacy--compliance):
+
+| File | Contents |
+|---|---|
+| [`DATA-INVENTORY.md`](compliance/DATA-INVENTORY.md) | Record of Processing Activities (ROPA) — GDPR Art. 30 |
+| [`SUBPROCESSORS.md`](compliance/SUBPROCESSORS.md) | Sub-processor list (Convex, Stripe, LinkedIn, Resend; Apify hard-gate noted) |
+| [`RETENTION-POLICY.md`](compliance/RETENTION-POLICY.md) | Retention windows per data category and automated-enforcement references |
+| [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md) | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA) |
+| [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md) | Personal data breach incident-response runbook (72-hour notification) |
+| [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md) | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37) |
+
+See [`docs/compliance/README.md`](compliance/README.md) for the index and the consolidated human /
+legal to-do list (bracketed placeholders, lawyer sign-off, sub-processor DPA signing, DPO/rep
+assessment, and the Apify hard gate).
 
 ---
 
@@ -1643,4 +1669,10 @@ analytics toggles, off by default, inside `PrivacyDataPage`) and `PolicyUpdateSc
 `CookiesPage` (`/cookies` route, essential-storage-only policy) and `CookieNotice` (dismissible
 first-visit banner, `localStorage`-persisted, SSR-safe via `useSyncExternalStore`) in the landing
 site, with `Footer` updated to link `/cookies` — see [§15](#15-frontend--landing-site-landing);
-new i18n keys `privacy.consent.*` and `privacy.policyUpdate.*` in all three locales (en/pt/es).*
+new i18n keys `privacy.consent.*` and `privacy.policyUpdate.*` in all three locales (en/pt/es).
+Also reflects **Privacy & Compliance Phase 4 (Legal / Transparency Docs)**: six DRAFT compliance
+documents created under `docs/compliance/` (`DATA-INVENTORY.md` ROPA, `SUBPROCESSORS.md`,
+`RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`, `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`) with an index
+and consolidated human/legal to-do list in `docs/compliance/README.md`; `/privacy` and `/terms`
+landing pages rewritten as full GDPR/LGPD/US-state DRAFT notices (pending legal review);
+§17 updated with compliance documentation table; §15 updated to reflect the rewritten legal pages.*
