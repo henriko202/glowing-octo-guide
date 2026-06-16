@@ -55,22 +55,22 @@ Upon any detection signal, [INCIDENT_OWNER] must:
 
 Evaluate the incident against the following factors:
 
-| Factor | Questions to answer |
-|---|---|
-| **Nature of breach** | Confidentiality (unauthorised access), integrity (data altered), or availability (data destroyed/unavailable)? |
-| **Types of personal data** | Names, email addresses, LinkedIn tokens, profile data, Stripe customer IDs, usage logs? |
-| **Volume** | How many data subjects and records are potentially affected? |
-| **Sensitivity** | Does the data include special-category data, financial data, or credentials with access to third-party accounts (LinkedIn OAuth tokens)? |
-| **Consequences** | Could affected individuals suffer identity theft, financial loss, reputational damage, discrimination, or loss of control over their LinkedIn presence? |
-| **Mitigating factors** | Was the data encrypted at rest and in transit? Are tokens already rotated? Is Convex field-level encryption in use for the affected data? |
+| Factor                     | Questions to answer                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Nature of breach**       | Confidentiality (unauthorised access), integrity (data altered), or availability (data destroyed/unavailable)?                                          |
+| **Types of personal data** | Names, email addresses, LinkedIn tokens, profile data, Stripe customer IDs, usage logs?                                                                 |
+| **Volume**                 | How many data subjects and records are potentially affected?                                                                                            |
+| **Sensitivity**            | Does the data include special-category data, financial data, or credentials with access to third-party accounts (LinkedIn OAuth tokens)?                |
+| **Consequences**           | Could affected individuals suffer identity theft, financial loss, reputational damage, discrimination, or loss of control over their LinkedIn presence? |
+| **Mitigating factors**     | Was the data encrypted at rest and in transit? Are tokens already rotated? Is Convex field-level encryption in use for the affected data?               |
 
 ### 2.2 Severity Levels
 
-| Severity | Criteria | Default Notification Threshold |
-|---|---|---|
-| **LOW** | Affects a small number of records, no sensitive data, no apparent harm to data subjects, fully contained. | Internal record only; no regulatory notification required unless risk rises on review. |
-| **MEDIUM** | Affects a meaningful number of data subjects or includes data types that could enable harm (e.g., email addresses at scale, LinkedIn profile data); harm is possible but not probable. | Evaluate authority notification; notify supervisory authority if in doubt. |
-| **HIGH** | Involves credentials (LinkedIn OAuth tokens, API keys), financial data, special-category data, or a large number of data subjects; harm to rights and freedoms is likely. | **Notify supervisory authority within 72 hours (Art. 33 GDPR / LGPD Art. 48). Notify affected data subjects without undue delay (Art. 34 GDPR).** |
+| Severity   | Criteria                                                                                                                                                                               | Default Notification Threshold                                                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LOW**    | Affects a small number of records, no sensitive data, no apparent harm to data subjects, fully contained.                                                                              | Internal record only; no regulatory notification required unless risk rises on review.                                                            |
+| **MEDIUM** | Affects a meaningful number of data subjects or includes data types that could enable harm (e.g., email addresses at scale, LinkedIn profile data); harm is possible but not probable. | Evaluate authority notification; notify supervisory authority if in doubt.                                                                        |
+| **HIGH**   | Involves credentials (LinkedIn OAuth tokens, API keys), financial data, special-category data, or a large number of data subjects; harm to rights and freedoms is likely.              | **Notify supervisory authority within 72 hours (Art. 33 GDPR / LGPD Art. 48). Notify affected data subjects without undue delay (Art. 34 GDPR).** |
 
 If severity cannot be conclusively determined within 2 hours of awareness, treat the incident as HIGH until evidence to the contrary is established.
 
@@ -99,13 +99,13 @@ LinkedIn access tokens stored in Convex (e.g., on user documents) grant direct a
 
 Rotate all secrets that may have been exposed, in this order of priority:
 
-| Secret | Rotation Action |
-|---|---|
-| **LinkedIn Client Secret** | Regenerate in the LinkedIn Developer Portal; update `LINKEDIN_CLIENT_SECRET` environment variable in Convex and Vercel. |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Roll keys in the Stripe Dashboard; update `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in Convex and Vercel. |
-| `RESEND_API_KEY` | Regenerate in the Resend dashboard; update in Convex and Vercel. |
-| **Convex deploy key** | Rotate via the Convex dashboard (Project Settings → Deploy Keys); update in CI/CD pipelines and Vercel. |
-| **Apify API token** | Rotate in the Apify console; update `APIFY_API_TOKEN` in Convex and Vercel. |
+| Secret                                        | Rotation Action                                                                                                         |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **LinkedIn Client Secret**                    | Regenerate in the LinkedIn Developer Portal; update `LINKEDIN_CLIENT_SECRET` environment variable in Convex and Vercel. |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Roll keys in the Stripe Dashboard; update `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in Convex and Vercel.         |
+| `RESEND_API_KEY`                              | Regenerate in the Resend dashboard; update in Convex and Vercel.                                                        |
+| **Convex deploy key**                         | Rotate via the Convex dashboard (Project Settings → Deploy Keys); update in CI/CD pipelines and Vercel.                 |
+| **Apify API token**                           | Rotate in the Apify console; update `APIFY_API_TOKEN` in Convex and Vercel.                                             |
 
 After rotating, redeploy the Convex backend and Vercel frontend to pick up the new values.
 
@@ -169,6 +169,7 @@ Under **GDPR Article 34**, [LEGAL_ENTITY_NAME] must notify affected data subject
 Under **LGPD Article 48**, affected data subjects must be notified when the breach may cause relevant harm to them.
 
 Notification is not required if:
+
 - The personal data was rendered unintelligible (e.g., encrypted with keys not compromised).
 - [LEGAL_ENTITY_NAME] has taken subsequent measures that ensure high risk is no longer likely to materialise.
 - Notification would involve disproportionate effort (in which case a public communication or equivalent measure may be substituted — confirm with legal counsel).
@@ -231,7 +232,7 @@ Yours sincerely,
 
 ---
 
-*(This message was sent to [AFFECTED_USER_EMAIL] because you hold an account with [LEGAL_ENTITY_NAME].)*
+_(This message was sent to [AFFECTED_USER_EMAIL] because you hold an account with [LEGAL_ENTITY_NAME].)_
 
 ---
 
@@ -245,21 +246,21 @@ Yours sincerely,
 
 Maintain a breach log document (stored securely and accessible only to authorised staff). Each entry must include:
 
-| Field | Description |
-|---|---|
-| **Incident ID** | Unique reference (e.g., `BREACH-YYYY-NNN`). |
-| **Date/time of awareness** | When [LEGAL_ENTITY_NAME] first became aware. |
-| **Date/time of occurrence** | When the breach occurred or is estimated to have occurred. |
-| **Description** | Nature of the breach (confidentiality, integrity, availability), how it was discovered, and affected systems. |
-| **Data types affected** | Categories of personal data involved (e.g., email, LinkedIn tokens, Stripe IDs). |
-| **Approximate number of data subjects** | Best available estimate. |
-| **Approximate number of records** | Best available estimate. |
-| **Severity level** | LOW / MEDIUM / HIGH (per Section 2.2). |
-| **Containment actions taken** | Summary of actions and timestamps (Section 3). |
-| **Authority notification** | Date submitted, authority notified, reference number received, whether phased notifications were filed. |
-| **Data-subject notification** | Whether required; date sent; method used. |
-| **Outcome & lessons learned** | Root cause, whether fully remediated, process improvements identified. |
-| **Record owner** | Name of [INCIDENT_OWNER] who managed this incident. |
+| Field                                   | Description                                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Incident ID**                         | Unique reference (e.g., `BREACH-YYYY-NNN`).                                                                   |
+| **Date/time of awareness**              | When [LEGAL_ENTITY_NAME] first became aware.                                                                  |
+| **Date/time of occurrence**             | When the breach occurred or is estimated to have occurred.                                                    |
+| **Description**                         | Nature of the breach (confidentiality, integrity, availability), how it was discovered, and affected systems. |
+| **Data types affected**                 | Categories of personal data involved (e.g., email, LinkedIn tokens, Stripe IDs).                              |
+| **Approximate number of data subjects** | Best available estimate.                                                                                      |
+| **Approximate number of records**       | Best available estimate.                                                                                      |
+| **Severity level**                      | LOW / MEDIUM / HIGH (per Section 2.2).                                                                        |
+| **Containment actions taken**           | Summary of actions and timestamps (Section 3).                                                                |
+| **Authority notification**              | Date submitted, authority notified, reference number received, whether phased notifications were filed.       |
+| **Data-subject notification**           | Whether required; date sent; method used.                                                                     |
+| **Outcome & lessons learned**           | Root cause, whether fully remediated, process improvements identified.                                        |
+| **Record owner**                        | Name of [INCIDENT_OWNER] who managed this incident.                                                           |
 
 ### 6.2 Retention
 
@@ -269,19 +270,19 @@ Breach log entries must be retained for a minimum of **5 years** from the date o
 
 ## 7. Roles & Contacts
 
-| Role | Contact |
-|---|---|
-| **Incident Owner** (primary responder, accountable for runbook execution and regulatory notifications) | [INCIDENT_OWNER] |
-| **Privacy Contact** (DPO or equivalent; named in regulatory notifications) | [PRIVACY_CONTACT_EMAIL] |
-| **Supervisory Authority** (GDPR) | [SUPERVISORY_AUTHORITY] |
-| **ANPD** (LGPD — Brazil) | https://www.gov.br/anpd |
-| **Convex support** | https://www.convex.dev/support |
-| **LinkedIn Developer Support** | https://developer.linkedin.com/support |
-| **Stripe support** | https://support.stripe.com |
-| **Resend support** | https://resend.com/support |
-| **Apify support** | https://apify.com/contact |
-| **Vercel support** | https://vercel.com/support |
+| Role                                                                                                   | Contact                                |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| **Incident Owner** (primary responder, accountable for runbook execution and regulatory notifications) | [INCIDENT_OWNER]                       |
+| **Privacy Contact** (DPO or equivalent; named in regulatory notifications)                             | [PRIVACY_CONTACT_EMAIL]                |
+| **Supervisory Authority** (GDPR)                                                                       | [SUPERVISORY_AUTHORITY]                |
+| **ANPD** (LGPD — Brazil)                                                                               | https://www.gov.br/anpd                |
+| **Convex support**                                                                                     | https://www.convex.dev/support         |
+| **LinkedIn Developer Support**                                                                         | https://developer.linkedin.com/support |
+| **Stripe support**                                                                                     | https://support.stripe.com             |
+| **Resend support**                                                                                     | https://resend.com/support             |
+| **Apify support**                                                                                      | https://apify.com/contact              |
+| **Vercel support**                                                                                     | https://vercel.com/support             |
 
 ---
 
-*This runbook must be reviewed and updated at least annually, and after every significant breach event. Updates require sign-off from [INCIDENT_OWNER] and, where available, legal counsel.*
+_This runbook must be reviewed and updated at least annually, and after every significant breach event. Updates require sign-off from [INCIDENT_OWNER] and, where available, legal counsel._

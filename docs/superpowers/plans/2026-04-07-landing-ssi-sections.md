@@ -17,7 +17,7 @@ system and bg-ink / bg-ink-800 alternation pattern. No new dependencies.
 ## File Map
 
 | Action | Path                                  | Responsibility                                                     |
-|--------|---------------------------------------|--------------------------------------------------------------------|
+| ------ | ------------------------------------- | ------------------------------------------------------------------ |
 | Create | `landing/components/SSIExplainer.tsx` | SSI education: definition, 4 pillars, impact stats, in-section CTA |
 | Create | `landing/components/StatsBar.tsx`     | Compact platform stats belt with shimmer animation on numbers      |
 | Create | `landing/components/Testimonials.tsx` | 3 social proof quote cards                                         |
@@ -50,7 +50,7 @@ const PILLARS = [
   {
     icon: '🔍',
     title: 'Find the Right People',
-    body: 'Connecting with decision-makers and peers in your field using LinkedIn\'s search and recommendations.',
+    body: "Connecting with decision-makers and peers in your field using LinkedIn's search and recommendations.",
     pts: 25
   },
   {
@@ -87,20 +87,22 @@ const IMPACT = [
 
 export default function SSIExplainer() {
   return (
-    <section id="what-is-ssi" className="bg-ink px-6 py-28">
+    <section
+      id="what-is-ssi"
+      className="bg-ink px-6 py-28"
+    >
       <div className="mx-auto max-w-5xl">
-
         {/* Header */}
         <div className="mb-16 text-center">
           <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">Understanding SSI</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
             Your LinkedIn SSI —
-            <br/>
+            <br />
             <span className="italic text-gold">the score that determines who finds you</span>
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-cream/60">
-            LinkedIn gives every profile a Social Selling Index score from 0–100. It measures how actively
-            you build your brand, find the right people, engage with insights, and develop relationships.
+            LinkedIn gives every profile a Social Selling Index score from 0–100. It measures how actively you build
+            your brand, find the right people, engage with insights, and develop relationships.
           </p>
         </div>
 
@@ -127,7 +129,10 @@ export default function SSIExplainer() {
         <div className="rounded-2xl bg-ink-800 px-8 py-12">
           <div className="grid grid-cols-1 gap-10 text-center md:grid-cols-3 md:gap-0 md:divide-x md:divide-gold/20">
             {IMPACT.map(stat => (
-              <div key={stat.value} className="px-6">
+              <div
+                key={stat.value}
+                className="px-6"
+              >
                 <p className="font-display text-6xl font-semibold text-gold">{stat.value}</p>
                 <p className="mx-auto mt-3 max-w-[180px] text-sm leading-relaxed text-cream/60">{stat.label}</p>
                 <p className="mt-2 text-xs text-cream/25">{stat.source}</p>
@@ -146,7 +151,6 @@ export default function SSIExplainer() {
             <span className="ml-1.5 inline-block text-gold transition-transform group-hover:translate-x-1">→</span>
           </a>
         </div>
-
       </div>
     </section>
   )
@@ -181,19 +185,25 @@ Compact belt section between SSIExplainer and HowItWorks. Uses the `animate-shim
 
 ```tsx
 const STATS = [
-  {value: '10,000+', label: 'Engagements facilitated'},
-  {value: '+8 pts', label: 'Avg. SSI gain in 30 days'},
-  {value: '3 min/day', label: 'Average session time'},
-  {value: '3 languages', label: 'English · Portuguese · Spanish'}
+  { value: '10,000+', label: 'Engagements facilitated' },
+  { value: '+8 pts', label: 'Avg. SSI gain in 30 days' },
+  { value: '3 min/day', label: 'Average session time' },
+  { value: '3 languages', label: 'English · Portuguese · Spanish' }
 ]
 
 export default function StatsBar() {
   return (
-    <section id="our-numbers" className="bg-ink-800 px-6 py-16">
+    <section
+      id="our-numbers"
+      className="bg-ink-800 px-6 py-16"
+    >
       <div className="mx-auto max-w-5xl">
         <div className="grid grid-cols-2 gap-y-10 md:grid-cols-4 md:gap-0 md:divide-x md:divide-gold/20">
           {STATS.map(stat => (
-            <div key={stat.value} className="text-center">
+            <div
+              key={stat.value}
+              className="text-center"
+            >
               <p
                 className="animate-shimmer font-display text-4xl font-semibold"
                 style={{
@@ -238,7 +248,7 @@ from the name at render time — no hardcoded strings to maintain.
 const TESTIMONIALS = [
   {
     quote:
-      "Since my SSI crossed 70, I have 2 recruiters reaching out to me every single day. I stopped applying for jobs — they come to me now.",
+      'Since my SSI crossed 70, I have 2 recruiters reaching out to me every single day. I stopped applying for jobs — they come to me now.',
     name: 'Ana R.',
     role: 'Senior Product Manager',
     location: 'Lisbon'
@@ -251,8 +261,7 @@ const TESTIMONIALS = [
     location: 'São Paulo'
   },
   {
-    quote:
-      "Finally a tool that doesn't feel like gaming the system — it's smart, deliberate networking.",
+    quote: "Finally a tool that doesn't feel like gaming the system — it's smart, deliberate networking.",
     name: 'Sophie L.',
     role: 'Marketing Lead',
     location: 'London'
@@ -263,7 +272,6 @@ export default function Testimonials() {
   return (
     <section className="bg-ink-800 px-6 py-28">
       <div className="mx-auto max-w-5xl">
-
         <div className="mb-16 text-center">
           <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">From the circle</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
@@ -283,8 +291,7 @@ export default function Testimonials() {
                 className="group flex flex-col rounded-2xl border border-cream/[0.08] bg-ink-600 p-8 transition-all duration-300 hover:-translate-y-1 hover:border-cream/15 hover:shadow-[0_8px_40px_rgba(0,0,0,0.4)]"
               >
                 {/* Quotation mark accent */}
-                <span
-                  className="font-display text-6xl leading-none text-gold/50 transition-colors group-hover:text-gold/80">
+                <span className="font-display text-6xl leading-none text-gold/50 transition-colors group-hover:text-gold/80">
                   &ldquo;
                 </span>
 
@@ -293,8 +300,7 @@ export default function Testimonials() {
 
                 {/* Author */}
                 <div className="mt-7 flex items-center gap-3">
-                  <div
-                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-ink-400 text-xs font-semibold text-cream/70">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-ink-400 text-xs font-semibold text-cream/70">
                     {initials}
                   </div>
                   <div>
@@ -308,7 +314,6 @@ export default function Testimonials() {
             )
           })}
         </div>
-
       </div>
     </section>
   )
@@ -336,7 +341,7 @@ with Pricing (`bg-ink-800`).
 
 ```tsx
 'use client'
-import {useState} from 'react'
+import { useState } from 'react'
 
 const FAQS = [
   {
@@ -369,14 +374,14 @@ export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   return (
-    <section id="faq" className="bg-ink px-6 py-28">
+    <section
+      id="faq"
+      className="bg-ink px-6 py-28"
+    >
       <div className="mx-auto max-w-3xl">
-
         <div className="mb-16 text-center">
           <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">Questions</p>
-          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
-            Everything you need to know
-          </h2>
+          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">Everything you need to know</h2>
         </div>
 
         <div className="divide-y divide-ink-600">
@@ -388,22 +393,22 @@ export default function FAQ() {
                 aria-expanded={openIndex === i}
               >
                 <span className="text-base font-medium text-cream">{faq.q}</span>
-                <span className="flex-shrink-0 font-display text-2xl text-gold transition-transform duration-200"
-                      style={{transform: openIndex === i ? 'rotate(45deg)' : 'rotate(0deg)'}}
+                <span
+                  className="flex-shrink-0 font-display text-2xl text-gold transition-transform duration-200"
+                  style={{ transform: openIndex === i ? 'rotate(45deg)' : 'rotate(0deg)' }}
                 >
                   +
                 </span>
               </button>
               <div
                 className="overflow-hidden transition-all duration-300 ease-in-out"
-                style={{maxHeight: openIndex === i ? '400px' : '0px'}}
+                style={{ maxHeight: openIndex === i ? '400px' : '0px' }}
               >
                 <p className="pb-6 text-sm leading-relaxed text-cream/50">{faq.a}</p>
               </div>
             </div>
           ))}
         </div>
-
       </div>
     </section>
   )
@@ -445,17 +450,17 @@ import Footer from '../components/Footer'
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-ink">
-      <Nav/>
-      <Hero/>
-      <SSIExplainer/>
-      <StatsBar/>
-      <HowItWorks/>
-      <Features/>
-      <Testimonials/>
-      <Pricing/>
-      <FAQ/>
-      <FinalCTA/>
-      <Footer/>
+      <Nav />
+      <Hero />
+      <SSIExplainer />
+      <StatsBar />
+      <HowItWorks />
+      <Features />
+      <Testimonials />
+      <Pricing />
+      <FAQ />
+      <FinalCTA />
+      <Footer />
     </div>
   )
 }
@@ -481,7 +486,7 @@ Change the CTA button text from `"Join the circle"` to `"Join free"`.
 Find this line (currently line 57):
 
 ```tsx
-          Join
+Join
 the
 circle
 ```
@@ -489,14 +494,14 @@ circle
 Replace with:
 
 ```tsx
-          Join
+Join
 free
 ```
 
 The full button element after the change:
 
 ```tsx
-        <a
+<a
   href={`${APP_URL}`}
   className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold transition-all duration-200 hover:bg-gold hover:text-ink"
 >
@@ -525,7 +530,7 @@ currently line 102). Insert it between the CTAs block and the existing trial cop
 Find the existing trial copy line (around line 102):
 
 ```tsx
-        <p className="text-xs tracking-wide text-cream/30">3-day free trial · No credit card required</p>
+<p className="text-xs tracking-wide text-cream/30">3-day free trial · No credit card required</p>
 ```
 
 Replace with:
@@ -558,9 +563,9 @@ Two copy changes: headline and subheading.
 **Headline** — find (lines 22–25):
 
 ```tsx
-        <h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
+<h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
   Ready to join
-  <br/>
+  <br />
   <span className="italic text-gold">the circle?</span>
 </h2>
 ```
@@ -568,9 +573,9 @@ Two copy changes: headline and subheading.
 Replace with:
 
 ```tsx
-        <h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
+<h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
   Ready to start
-  <br/>
+  <br />
   <span className="italic text-gold">climbing?</span>
 </h2>
 ```
@@ -578,13 +583,13 @@ Replace with:
 **Subheading** — find (line 26):
 
 ```tsx
-        <p className="text-base text-cream/50">Start your 3-day free trial. No credit card required.</p>
+<p className="text-base text-cream/50">Start your 3-day free trial. No credit card required.</p>
 ```
 
 Replace with:
 
 ```tsx
-        <p className="text-base text-cream/50">Start your 3-day free trial. See your first SSI gains within a week.</p>
+<p className="text-base text-cream/50">Start your 3-day free trial. See your first SSI gains within a week.</p>
 ```
 
 - [ ] **Step 2: Commit**

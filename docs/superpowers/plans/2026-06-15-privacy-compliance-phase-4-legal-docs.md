@@ -28,6 +28,7 @@ toggles, 30-day deletion + dormancy, export, retention crons, audit log, email v
 billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §4.4 hard gate).
 
 ## Conventions
+
 - Each `docs/compliance/*.md` opens with `> **DRAFT — requires legal review.**` and the date.
 - Legal pages mirror `landing/app/privacy/page.tsx` structure/styling; mark DRAFT in a comment + a visible "Last updated" line.
 - Use the `[BRACKETED]` inputs verbatim so a human can find/replace them.
@@ -38,18 +39,18 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `docs/compliance/DATA-INVENTORY.md` (create) | ROPA (GDPR Art. 30) — every processing activity |
-| `docs/compliance/SUBPROCESSORS.md` (create) | Sub-processor list + transfer mechanisms |
-| `docs/compliance/RETENTION-POLICY.md` (create) | Retention schedule (mirrors the implemented crons) |
-| `docs/compliance/GAP-ASSESSMENT.md` (create) | Framework requirements vs current state + residual gaps |
-| `docs/compliance/BREACH-RUNBOOK.md` (create) | Incident response + notification templates |
-| `docs/compliance/DPA-TEMPLATE.md` (create) | Data Processing Agreement template |
-| `docs/compliance/README.md` (create) | Index of the compliance docs + the human/legal to-do list |
-| `landing/app/privacy/page.tsx` (rewrite) | Full GDPR/LGPD/US privacy notice (DRAFT) |
-| `landing/app/terms/page.tsx` (rewrite) | Terms of Service (DRAFT) + age (16+) affirmation |
-| `docs/PLATFORM.md` (modify) | Reference §17/§ new "Compliance Documentation" + §15 legal pages |
+| File                                           | Responsibility                                                   |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| `docs/compliance/DATA-INVENTORY.md` (create)   | ROPA (GDPR Art. 30) — every processing activity                  |
+| `docs/compliance/SUBPROCESSORS.md` (create)    | Sub-processor list + transfer mechanisms                         |
+| `docs/compliance/RETENTION-POLICY.md` (create) | Retention schedule (mirrors the implemented crons)               |
+| `docs/compliance/GAP-ASSESSMENT.md` (create)   | Framework requirements vs current state + residual gaps          |
+| `docs/compliance/BREACH-RUNBOOK.md` (create)   | Incident response + notification templates                       |
+| `docs/compliance/DPA-TEMPLATE.md` (create)     | Data Processing Agreement template                               |
+| `docs/compliance/README.md` (create)           | Index of the compliance docs + the human/legal to-do list        |
+| `landing/app/privacy/page.tsx` (rewrite)       | Full GDPR/LGPD/US privacy notice (DRAFT)                         |
+| `landing/app/terms/page.tsx` (rewrite)         | Terms of Service (DRAFT) + age (16+) affirmation                 |
+| `docs/PLATFORM.md` (modify)                    | Reference §17/§ new "Compliance Documentation" + §15 legal pages |
 
 ---
 
@@ -58,20 +59,19 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
 **Files:** Create `docs/compliance/DATA-INVENTORY.md`
 
 - [ ] **Step 1: Write the ROPA.** A Record of Processing Activities (GDPR Art. 30). For **each**
-  processing activity below, document: **data categories · data subjects · purpose · legal basis ·
-  recipients/sub-processors · retention · international transfers · security measures.** Use a table or
-  per-activity subsections. Activities (derived from the actual code — be accurate):
-
+      processing activity below, document: **data categories · data subjects · purpose · legal basis ·
+      recipients/sub-processors · retention · international transfers · security measures.** Use a table or
+      per-activity subsections. Activities (derived from the actual code — be accurate):
   1. **Authentication & account** — `linkedinId`, `name`, `headline`, `profilePictureUrl`, `email`,
      `emailVerified` (from LinkedIn OIDC). Subjects: users. Purpose: provide + secure the service.
      Basis: **contract**. Recipients: Convex (hosting). Retention: life of account. Transfer: US (SCCs).
   2. **Profile attributes** — `industry`, `country`, `location`, `primaryLocale`. Purpose: feed
-     targeting + UI locale. Basis: **legitimate interest / contract**. *Note: `location`/`primaryLocale`
-     enrichment is via the Apify profile scrape, which is **DISABLED at launch** (see §"Dormant" below).*
+     targeting + UI locale. Basis: **legitimate interest / contract**. _Note: `location`/`primaryLocale`
+     enrichment is via the Apify profile scrape, which is **DISABLED at launch** (see §"Dormant" below)._
   3. **Posts** — `content`, `mediaUrls`, `linkedinPostUrn`, `publishedAt` (via **manual user
      submission**). Purpose: shared engagement feed. Basis: **legitimate interest + the user's own
-     action**. *Note: post content may contain third parties' personal data the user published on
-     LinkedIn; documented LIA below.*
+     action**. _Note: post content may contain third parties' personal data the user published on
+     LinkedIn; documented LIA below._
   4. **Engagement** — comments/reactions performed via the user's LinkedIn token. Basis: **contract /
      user action**.
   5. **LinkedIn OAuth tokens** — `linkedinAccessToken`, `linkedinRefreshToken`, `tokenExpiresAt`
@@ -105,7 +105,7 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
     a platform/contract risk, separate from data-protection law.
 
 - [ ] **Step 2: Self-check** — every `users`/`posts`/etc. field in `convex/schema.ts` maps to an
-  activity above (no personal-data field undocumented). Open with `> **DRAFT — requires legal review.**`
+      activity above (no personal-data field undocumented). Open with `> **DRAFT — requires legal review.**`
 
 - [ ] **Step 3: Checkpoint (NO COMMIT).**
 
@@ -116,15 +116,15 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
 **Files:** Create `docs/compliance/SUBPROCESSORS.md`, `RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`
 
 - [ ] **Step 1: `SUBPROCESSORS.md`** — a table: **Sub-processor · Purpose · Data shared · Location ·
-  Transfer mechanism · DPA**. Rows: **LinkedIn** (OAuth + posting — note it's the source platform/the
-  user's own actions, not a classic processor), **Stripe** (payments; US; SCCs; Stripe DPA), **Convex**
-  (backend/DB hosting; US; SCCs; Convex DPA), **Vercel** (landing hosting; US; SCCs), **Railway** (app
-  hosting), **Cloudflare** (DNS/CDN; US; SCCs), **Resend** (transactional email; US; SCCs). Add a note:
-  **Apify is NOT a current sub-processor** (dormant/disabled); add it here only if it is enabled (per
-  the §4.4 hard gate). Leave `[links to each provider's DPA]` as bracketed inputs.
+      Transfer mechanism · DPA**. Rows: **LinkedIn** (OAuth + posting — note it's the source platform/the
+      user's own actions, not a classic processor), **Stripe** (payments; US; SCCs; Stripe DPA), **Convex**
+      (backend/DB hosting; US; SCCs; Convex DPA), **Vercel** (landing hosting; US; SCCs), **Railway** (app
+      hosting), **Cloudflare** (DNS/CDN; US; SCCs), **Resend** (transactional email; US; SCCs). Add a note:
+      **Apify is NOT a current sub-processor** (dormant/disabled); add it here only if it is enabled (per
+      the §4.4 hard gate). Leave `[links to each provider's DPA]` as bracketed inputs.
 
 - [ ] **Step 2: `RETENTION-POLICY.md`** — a table mirroring the implemented crons + schema:
-  | Data | Retention | Enforcement |
+      | Data | Retention | Enforcement |
   - LinkedIn tokens → nulled once past `tokenExpiresAt` → `enforceDataRetention`.
   - `dataExportRequests` files → 7 days → `enforceDataRetention`.
   - `auditLogs` → 24 months → `enforceDataRetention`.
@@ -139,15 +139,15 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
     as `[bracketed]` where unknown.
 
 - [ ] **Step 3: `GAP-ASSESSMENT.md`** — a matrix of **requirement → frameworks (GDPR / UK GDPR / LGPD /
-  CCPA-CPRA + comparable US state acts) → current state → gap**. Rows: lawful basis & transparency,
-  right of access/portability (✓ export), erasure (✓ 30-day + cascade), rectification (✓ Settings +
-  LinkedIn refresh), restriction/objection (✓ consent withdrawal), consent + records (✓), breach
-  notification (✓ runbook + email channel), retention/minimization (✓ crons), security of processing
-  (✓ strong posture), records of processing (✓ ROPA), cookies/ePrivacy (✓ essential-only + notice),
-  CCPA "do not sell/share" (✓ — we don't sell; statement only), age (✓ 16+ affirmation).
-  **Residual gaps / human to-dos:** lawyer review of all DRAFTs; appoint privacy contact/DPO if
-  required; sign each sub-processor's DPA; assess EU/UK representative + ANPD (Brazil) obligations;
-  the LinkedIn-ToS scraping risk (Apify dormant); fill the `[BRACKETED]` business inputs.
+      CCPA-CPRA + comparable US state acts) → current state → gap**. Rows: lawful basis & transparency,
+      right of access/portability (✓ export), erasure (✓ 30-day + cascade), rectification (✓ Settings +
+      LinkedIn refresh), restriction/objection (✓ consent withdrawal), consent + records (✓), breach
+      notification (✓ runbook + email channel), retention/minimization (✓ crons), security of processing
+      (✓ strong posture), records of processing (✓ ROPA), cookies/ePrivacy (✓ essential-only + notice),
+      CCPA "do not sell/share" (✓ — we don't sell; statement only), age (✓ 16+ affirmation).
+      **Residual gaps / human to-dos:** lawyer review of all DRAFTs; appoint privacy contact/DPO if
+      required; sign each sub-processor's DPA; assess EU/UK representative + ANPD (Brazil) obligations;
+      the LinkedIn-ToS scraping risk (Apify dormant); fill the `[BRACKETED]` business inputs.
 
 - [ ] **Step 4:** Each file opens with `> **DRAFT — requires legal review.**` + date. **Checkpoint (NO COMMIT).**
 
@@ -172,10 +172,10 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
      `[SUPERVISORY_AUTHORITY]`.
 
 - [ ] **Step 2: `DPA-TEMPLATE.md`** — a Data Processing Agreement template (for B2B customers / records):
-  parties, subject-matter & duration, nature/purpose, data types & subjects, controller vs processor
-  obligations, sub-processor terms, security measures, breach-assistance, DSR-assistance,
-  deletion/return on termination, audit rights, international-transfer clauses (SCCs). Mark clearly as a
-  **template** requiring legal completion; use `[BRACKETED]` party fields.
+      parties, subject-matter & duration, nature/purpose, data types & subjects, controller vs processor
+      obligations, sub-processor terms, security measures, breach-assistance, DSR-assistance,
+      deletion/return on termination, audit rights, international-transfer clauses (SCCs). Mark clearly as a
+      **template** requiring legal completion; use `[BRACKETED]` party fields.
 
 - [ ] **Step 3:** Both open with `> **DRAFT — requires legal review.**`. **Checkpoint (NO COMMIT).**
 
@@ -186,9 +186,8 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
 **Files:** Rewrite `landing/app/privacy/page.tsx` (mirror the existing page's component shape + Tailwind classes)
 
 - [ ] **Step 1: Rewrite the page** as a comprehensive privacy notice. Keep the existing visual structure
-  (`<main className="mx-auto max-w-2xl px-6 py-24 text-cream/70">`, `<h1 className="... text-cream">`,
-  `space-y-6 text-sm`), add section subheadings. Required sections (each must contain the specifics noted):
-
+      (`<main className="mx-auto max-w-2xl px-6 py-24 text-cream/70">`, `<h1 className="... text-cream">`,
+      `space-y-6 text-sm`), add section subheadings. Required sections (each must contain the specifics noted):
   1. **Who we are** — controller `[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, contact
      `[PRIVACY_CONTACT_EMAIL]`, `[DPO_OR_REP_CONTACT]`. "Last updated" + policy version (`2026-06-15`).
   2. **Data we collect & sources** — from LinkedIn OIDC (member id, name, headline, picture, email);
@@ -214,7 +213,7 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
   12. **Changes** — we notify + re-prompt for acknowledgment when the policy materially changes.
 
 - [ ] **Step 2:** Add a code comment `{/* DRAFT — requires legal review. */}` at the top of the
-  component, and a visible "Last updated: June 2026 — draft pending legal review" line.
+      component, and a visible "Last updated: June 2026 — draft pending legal review" line.
 
 - [ ] **Step 3: Verify** — `pnpm lint`, `pnpm --filter landing build`, `npx prettier --check "landing/app/privacy/page.tsx"`.
 
@@ -252,34 +251,37 @@ billing; **Apify is dormant/disabled** (do NOT disclose it as active — spec §
 **Files:** Create `docs/compliance/README.md`; modify `docs/PLATFORM.md`
 
 - [ ] **Step 1: `docs/compliance/README.md`** — index the six compliance docs with one-line summaries +
-  the consolidated **human/legal to-do list** (lawyer review; fill `[BRACKETED]` inputs; sign
-  sub-processor DPAs; appoint DPO/representative if required; ANPD/EU-rep assessment; keep the ROPA +
-  sub-processor list in sync; the Apify §4.4 hard gate).
+      the consolidated **human/legal to-do list** (lawyer review; fill `[BRACKETED]` inputs; sign
+      sub-processor DPAs; appoint DPO/representative if required; ANPD/EU-rep assessment; keep the ROPA +
+      sub-processor list in sync; the Apify §4.4 hard gate).
 
 - [ ] **Step 2: `docs/PLATFORM.md`** — add a short **"Compliance Documentation"** note (in §17 Security/
-  Privacy or a new subsection) pointing to `docs/compliance/`; update §15 to note the `/privacy` and
-  `/terms` pages are the full GDPR/LGPD/US drafts (pending legal review) and link `/cookies`. Extend the
-  footer "Last updated" with Phase 4.
+      Privacy or a new subsection) pointing to `docs/compliance/`; update §15 to note the `/privacy` and
+      `/terms` pages are the full GDPR/LGPD/US drafts (pending legal review) and link `/cookies`. Extend the
+      footer "Last updated" with Phase 4.
 
 - [ ] **Step 3: Verify + Checkpoint (NO COMMIT).**
 
 ---
 
 ## Phase 4 completion check
+
 - [ ] `docs/compliance/` has all 7 files, each headed **DRAFT — requires legal review**, with
-  `[BRACKETED]` inputs intact (not invented).
+      `[BRACKETED]` inputs intact (not invented).
 - [ ] `landing/app/privacy/page.tsx` + `terms/page.tsx` rewritten (DRAFT); `pnpm --filter landing build`
-  succeeds; `pnpm lint` clean; prettier clean on the two pages.
+      succeeds; `pnpm lint` clean; prettier clean on the two pages.
 - [ ] ROPA covers every personal-data field in `convex/schema.ts`; nothing describes Apify as active.
 - [ ] `docs/PLATFORM.md` references the compliance docs.
 - [ ] **Nothing committed.**
 
 ## Human / legal follow-ups (carried from spec §10 — restate in README)
+
 Fill business inputs; legal review of all DRAFTs; sign each sub-processor DPA; confirm lawful-basis
 posture; assess DPO + EU/UK representative + ANPD; keep ROPA/sub-processors current; honor the Apify
 hard gate.
 
 ## Self-Review (performed during authoring)
+
 - **Spec coverage:** A = ROPA (Task 1) + sub-processors/retention/gap (Task 2); F = breach runbook +
   DPA (Task 3) + privacy/terms rewrite + age affirmation (Tasks 4–5); index + PLATFORM (Task 6).
   `/cookies` was delivered in Phase 3b.
@@ -289,4 +291,7 @@ hard gate.
 - **Accuracy:** docs describe the **implemented** system (Phases 1–3); Apify is documented as
   **dormant/disabled**, never as active processing.
 - **No-commit rule:** every task ends in a no-commit checkpoint.
+
+```
+
 ```

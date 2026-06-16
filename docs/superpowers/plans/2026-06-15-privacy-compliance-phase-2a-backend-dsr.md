@@ -54,18 +54,18 @@ convex dependency), Resend via `convex/lib/email.ts` (Phase 1), `convex/lib/audi
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `convex/privacy/emails.ts` (create) | Pure email-template builders (`exportReadyEmail`, `deletionScheduledEmail`, `deletionCompletedEmail`) |
-| `convex/privacy/emails.test.ts` (create) | Template tests |
-| `convex/privacy/export.ts` (create) | `buildExportBundle` (pure) + `gatherUserData` (internalQuery) + `requestDataExport`/`generateExport`/`getExportStatus`/`getExportDownloadUrl` |
-| `convex/privacy/export.test.ts` (create) | `buildExportBundle` tests (secret-stripping, audit redaction, owner-scoping) |
-| `convex/privacy/deletion.ts` (create) | `cascadeDeleteUser` (pure) + `requestAccountDeletion`/`cancelAccountDeletion`/`onDeletionRequested`/`processAccountDeletions` |
-| `convex/privacy/deletion.test.ts` (create) | `cascadeDeleteUser` tests (every table covered, audit pseudonymized, storage files deleted) |
-| `convex/feed.ts` (modify) | Extract `isAuthorFeedEligible` pure helper; use it in the eligibility filter |
-| `convex/feed.test.ts` (modify) | `isAuthorFeedEligible` tests |
-| `convex/crons.ts` (modify) | Register `processAccountDeletions` (daily) |
-| `docs/PLATFORM.md` (modify) | Extend §13B (export + deletion) + add cron to §13 + deletion Mermaid |
+| File                                       | Responsibility                                                                                                                                |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `convex/privacy/emails.ts` (create)        | Pure email-template builders (`exportReadyEmail`, `deletionScheduledEmail`, `deletionCompletedEmail`)                                         |
+| `convex/privacy/emails.test.ts` (create)   | Template tests                                                                                                                                |
+| `convex/privacy/export.ts` (create)        | `buildExportBundle` (pure) + `gatherUserData` (internalQuery) + `requestDataExport`/`generateExport`/`getExportStatus`/`getExportDownloadUrl` |
+| `convex/privacy/export.test.ts` (create)   | `buildExportBundle` tests (secret-stripping, audit redaction, owner-scoping)                                                                  |
+| `convex/privacy/deletion.ts` (create)      | `cascadeDeleteUser` (pure) + `requestAccountDeletion`/`cancelAccountDeletion`/`onDeletionRequested`/`processAccountDeletions`                 |
+| `convex/privacy/deletion.test.ts` (create) | `cascadeDeleteUser` tests (every table covered, audit pseudonymized, storage files deleted)                                                   |
+| `convex/feed.ts` (modify)                  | Extract `isAuthorFeedEligible` pure helper; use it in the eligibility filter                                                                  |
+| `convex/feed.test.ts` (modify)             | `isAuthorFeedEligible` tests                                                                                                                  |
+| `convex/crons.ts` (modify)                 | Register `processAccountDeletions` (daily)                                                                                                    |
+| `docs/PLATFORM.md` (modify)                | Extend §13B (export + deletion) + add cron to §13 + deletion Mermaid                                                                          |
 
 ---
 
@@ -188,7 +188,9 @@ describe('isAuthorFeedEligible', () => {
  * feed the moment they request erasure, and reappears automatically if they cancel — no post
  * mutation needed).
  */
-export function isAuthorFeedEligible(author: { subscriptionStatus?: string; deletionScheduledAt?: number } | null): boolean {
+export function isAuthorFeedEligible(
+  author: { subscriptionStatus?: string; deletionScheduledAt?: number } | null
+): boolean {
   if (!author) return false
   if (author.subscriptionStatus === 'trialing') return false
   if (author.deletionScheduledAt) return false
@@ -199,18 +201,18 @@ export function isAuthorFeedEligible(author: { subscriptionStatus?: string; dele
 Then replace the trial-filter block (currently lines ~147-151):
 
 ```ts
-    // Filter out posts from trialing users
-    allPosts = allPosts.filter(post => {
-      const author = allAuthorMap.get(post.authorId)
-      return author?.subscriptionStatus !== 'trialing'
-    })
+// Filter out posts from trialing users
+allPosts = allPosts.filter(post => {
+  const author = allAuthorMap.get(post.authorId)
+  return author?.subscriptionStatus !== 'trialing'
+})
 ```
 
 with:
 
 ```ts
-    // Filter out posts whose author is trialing or pending account deletion
-    allPosts = allPosts.filter(post => isAuthorFeedEligible(allAuthorMap.get(post.authorId) ?? null))
+// Filter out posts whose author is trialing or pending account deletion
+allPosts = allPosts.filter(post => isAuthorFeedEligible(allAuthorMap.get(post.authorId) ?? null))
 ```
 
 - [ ] **Step 4: Run, confirm PASS** — `pnpm --filter convex test feed` (new + existing feed tests pass).
@@ -269,7 +271,9 @@ describe('buildExportBundle', () => {
       posts: [],
       subscriptions: [],
       consents: [],
-      audits: [{ _id: 'a1', action: 'consent.granted', actor: 'admin', actorId: 'admin99', targetUserId: 'u1', metadata: 'x' }]
+      audits: [
+        { _id: 'a1', action: 'consent.granted', actor: 'admin', actorId: 'admin99', targetUserId: 'u1', metadata: 'x' }
+      ]
     })
     expect(bundle.auditLog[0].action).toBe('consent.granted')
     expect('actorId' in bundle.auditLog[0]).toBe(false)
@@ -277,7 +281,14 @@ describe('buildExportBundle', () => {
   })
 
   it('stamps an exportedAt and a format version', () => {
-    const bundle = buildExportBundle({ user: USER, posts: [], subscriptions: [], consents: [], audits: [], exportedAt: 42 })
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      exportedAt: 42
+    })
     expect(bundle.exportedAt).toBe(42)
     expect(bundle.formatVersion).toBe(1)
   })
@@ -336,10 +347,22 @@ export const gatherUserData = internalQuery({
   handler: async (ctx, { userId }) => {
     const user = await ctx.db.get(userId)
     if (!user) return null
-    const posts = await ctx.db.query('posts').withIndex('by_author', q => q.eq('authorId', userId)).collect()
-    const subscriptions = await ctx.db.query('subscriptions').withIndex('by_user', q => q.eq('userId', userId)).collect()
-    const consents = await ctx.db.query('consentRecords').withIndex('by_user', q => q.eq('userId', userId)).collect()
-    const audits = await ctx.db.query('auditLogs').withIndex('by_target', q => q.eq('targetUserId', userId)).collect()
+    const posts = await ctx.db
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', userId))
+      .collect()
+    const subscriptions = await ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .collect()
+    const consents = await ctx.db
+      .query('consentRecords')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .collect()
+    const audits = await ctx.db
+      .query('auditLogs')
+      .withIndex('by_target', q => q.eq('targetUserId', userId))
+      .collect()
     return { user, posts, subscriptions, consents, audits }
   }
 })
@@ -440,7 +463,7 @@ export const getExportDownloadUrl = query({
 ```
 
 - [ ] **Step 4: Run, confirm PASS** — `pnpm --filter convex test export` (the `buildExportBundle`
-  tests pass). Then `pnpm --filter convex test` (whole suite green) and `pnpm lint`.
+      tests pass). Then `pnpm --filter convex test` (whole suite green) and `pnpm lint`.
 
 - [ ] **Step 5: Checkpoint (NO COMMIT).**
 
@@ -472,23 +495,40 @@ function createMockDb(seed: Record<string, any[]>) {
         collect: async () => tables[table] ?? []
       })
     }),
-    get: async (id: string) => Object.values(tables).flat().find((r: any) => r._id === id) ?? null,
-    patch: async (id: string, data: any) => { patched.push({ id, data }) },
-    insert: async (table: string, doc: any) => { inserted.push({ table, doc }); return `${table}-new` },
+    get: async (id: string) =>
+      Object.values(tables)
+        .flat()
+        .find((r: any) => r._id === id) ?? null,
+    patch: async (id: string, data: any) => {
+      patched.push({ id, data })
+    },
+    insert: async (table: string, doc: any) => {
+      inserted.push({ table, doc })
+      return `${table}-new`
+    },
     delete: async (id: string) => {
       for (const t of Object.keys(tables)) {
         const i = tables[t].findIndex((r: any) => r._id === id)
-        if (i >= 0) { deleted.push({ table: t, id }); tables[t].splice(i, 1); return }
+        if (i >= 0) {
+          deleted.push({ table: t, id })
+          tables[t].splice(i, 1)
+          return
+        }
       }
       deleted.push({ table: '?', id })
     },
-    _deleted: deleted, _patched: patched, _inserted: inserted
+    _deleted: deleted,
+    _patched: patched,
+    _inserted: inserted
   }
 }
 
 const SEED = {
   users: [{ _id: 'u1', email: 'j@x.com' }],
-  posts: [{ _id: 'p1', authorId: 'u1' }, { _id: 'p2', authorId: 'u1' }],
+  posts: [
+    { _id: 'p1', authorId: 'u1' },
+    { _id: 'p2', authorId: 'u1' }
+  ],
   postQueue: [{ _id: 'pq1', authorId: 'u1' }],
   subscriptions: [{ _id: 's1', userId: 'u1' }],
   sessions: [{ _id: 'se1', userId: 'u1' }],
@@ -506,7 +546,18 @@ describe('cascadeDeleteUser', () => {
     const storage = { delete: async (_id: string) => {} }
     await cascadeDeleteUser(db, storage, 'u1')
     const deletedTables = db._deleted.map(d => d.table)
-    for (const t of ['users', 'posts', 'postQueue', 'subscriptions', 'sessions', 'rateLimits', 'featuredPostUsage', 'planLimits', 'consentRecords', 'dataExportRequests']) {
+    for (const t of [
+      'users',
+      'posts',
+      'postQueue',
+      'subscriptions',
+      'sessions',
+      'rateLimits',
+      'featuredPostUsage',
+      'planLimits',
+      'consentRecords',
+      'dataExportRequests'
+    ]) {
       expect(deletedTables).toContain(t)
     }
     expect(db._deleted.filter(d => d.table === 'posts')).toHaveLength(2)
@@ -521,7 +572,15 @@ describe('cascadeDeleteUser', () => {
   it('deletes stored export files', async () => {
     const db = createMockDb(SEED)
     const storageDeletes: string[] = []
-    await cascadeDeleteUser(db, { delete: async (id: string) => { storageDeletes.push(id) } }, 'u1')
+    await cascadeDeleteUser(
+      db,
+      {
+        delete: async (id: string) => {
+          storageDeletes.push(id)
+        }
+      },
+      'u1'
+    )
     expect(storageDeletes).toContain('stor1')
   })
 
@@ -553,7 +612,12 @@ describe('cascadeDeleteUser', () => {
 import { writeAuditLog } from './lib/audit'
 
 interface CascadeDb {
-  query(table: string): { withIndex(name: string, fn: (q: unknown) => unknown): { collect(): Promise<Array<Record<string, unknown> & { _id: string }>> } }
+  query(table: string): {
+    withIndex(
+      name: string,
+      fn: (q: unknown) => unknown
+    ): { collect(): Promise<Array<Record<string, unknown> & { _id: string }>> }
+  }
   get(id: string): Promise<(Record<string, unknown> & { _id: string }) | null>
   patch(id: string, fields: Record<string, unknown>): Promise<void>
   insert(table: string, doc: Record<string, unknown>): Promise<string>
@@ -657,7 +721,12 @@ export const requestAccountDeletion = mutation({
       deletionReason: 'user_request'
     })
     await ctx.runMutation(internal.sessions.deleteAllForUser, { userId: user._id }) // revoke access now
-    await writeAuditLog(ctx.db as unknown as CascadeDb, { actor: 'user', actorId: user._id, action: 'dsr.deletion_requested', targetUserId: user._id })
+    await writeAuditLog(ctx.db as unknown as CascadeDb, {
+      actor: 'user',
+      actorId: user._id,
+      action: 'dsr.deletion_requested',
+      targetUserId: user._id
+    })
     await ctx.scheduler.runAfter(0, internal.privacy.deletion.onDeletionRequested, { userId: user._id, scheduledAt })
     return { deletionScheduledAt: scheduledAt }
   }
@@ -668,8 +737,17 @@ export const cancelAccountDeletion = mutation({
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken)
     if (!user) throw new Error('Unauthorized')
-    await ctx.db.patch(user._id, { deletionRequestedAt: undefined, deletionScheduledAt: undefined, deletionReason: undefined })
-    await writeAuditLog(ctx.db as unknown as CascadeDb, { actor: 'user', actorId: user._id, action: 'dsr.deletion_cancelled', targetUserId: user._id })
+    await ctx.db.patch(user._id, {
+      deletionRequestedAt: undefined,
+      deletionScheduledAt: undefined,
+      deletionReason: undefined
+    })
+    await writeAuditLog(ctx.db as unknown as CascadeDb, {
+      actor: 'user',
+      actorId: user._id,
+      action: 'dsr.deletion_cancelled',
+      targetUserId: user._id
+    })
   }
 })
 
@@ -703,7 +781,10 @@ export const onDeletionRequested = action({
 export const listUserSubscriptions = internalQuery({
   args: { userId: v.id('users') },
   handler: async (ctx, { userId }) =>
-    ctx.db.query('subscriptions').withIndex('by_user', q => q.eq('userId', userId)).collect()
+    ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .collect()
 })
 
 export const getUserEmail = internalQuery({
@@ -717,7 +798,7 @@ export const getUserEmail = internalQuery({
 // Daily cron: hard-delete accounts past their grace window. Batched + self-rescheduling.
 export const processAccountDeletions = internalMutation({
   args: {},
-  handler: async (ctx) => {
+  handler: async ctx => {
     const now = Date.now()
     const due = await ctx.db
       .query('users')
@@ -755,7 +836,7 @@ crons.interval('process account deletions', { hours: 24 }, internal.privacy.dele
 ```
 
 - [ ] **Step 3: Run + verify** — `pnpm --filter convex test` (the Task 4 cascade tests still pass;
-  no new unit tests for the thin wrappers). Then `pnpm lint`. Then `npx prettier --check "convex/privacy/*.ts" "convex/crons.ts" "convex/feed.ts"`.
+      no new unit tests for the thin wrappers). Then `pnpm lint`. Then `npx prettier --check "convex/privacy/*.ts" "convex/crons.ts" "convex/feed.ts"`.
 
 > Coverage note: the cascade (Task 4) and feed eligibility (Task 2) — the logic with real
 > branching — are unit-tested. `requestAccountDeletion`/`cancelAccountDeletion`/`onDeletionRequested`/
@@ -807,7 +888,7 @@ describe('deletion cascade completeness', () => {
 > from `OWNED`, then restore it.
 
 - [ ] **Step 2: Run, confirm PASS** — `pnpm --filter convex test deletion`. Temporarily delete the
-  `posts` entry from `OWNED` and confirm this test FAILS; restore it and confirm PASS.
+      `posts` entry from `OWNED` and confirm this test FAILS; restore it and confirm PASS.
 
 - [ ] **Step 3: Checkpoint (NO COMMIT).**
 
@@ -824,12 +905,12 @@ describe('deletion cascade completeness', () => {
 ```
 
 - [ ] **Step 2: Extend §13B** with a "Data-Subject Rights (Phase 2a)" subsection covering: export
-  (`requestDataExport` → `generateExport` → 7-day storage link → `getExportDownloadUrl`; bundle strips
-  secrets, redacts other actors from audit entries), and the deletion lifecycle (`requestAccountDeletion`
-  → revoke sessions + immediate Stripe cancel + `deletion-scheduled` email; feed excludes pending-deletion
-  authors via `isAuthorFeedEligible`; `cancelAccountDeletion` restores; `processAccountDeletions` cron
-  runs `cascadeDeleteUser` after 30 days, pseudonymizing `auditLogs` and retaining billing in Stripe).
-  Note deletion auth uses `resolveSession` so **banned users can still erase**.
+      (`requestDataExport` → `generateExport` → 7-day storage link → `getExportDownloadUrl`; bundle strips
+      secrets, redacts other actors from audit entries), and the deletion lifecycle (`requestAccountDeletion`
+      → revoke sessions + immediate Stripe cancel + `deletion-scheduled` email; feed excludes pending-deletion
+      authors via `isAuthorFeedEligible`; `cancelAccountDeletion` restores; `processAccountDeletions` cron
+      runs `cascadeDeleteUser` after 30 days, pseudonymizing `auditLogs` and retaining billing in Stripe).
+      Note deletion auth uses `resolveSession` so **banned users can still erase**.
 
 - [ ] **Step 3: Add a Mermaid deletion-lifecycle flow** to §13B (mirror the spec §3.2 diagram).
 
@@ -842,11 +923,11 @@ describe('deletion cascade completeness', () => {
 ## Phase 2a completion check
 
 - [ ] `pnpm --filter convex test` — all green (new: emails, feed eligibility, export bundle, cascade,
-  completeness).
+      completeness).
 - [ ] `pnpm lint` — zero warnings.
 - [ ] `npx prettier --check "convex/privacy/*.ts" "convex/crons.ts" "convex/feed.ts"` — clean.
 - [ ] Deliverables present: `convex/privacy/{emails,export,deletion}.ts` (+ tests), feed eligibility
-  helper, `processAccountDeletions` cron, `docs/PLATFORM.md` updated.
+      helper, `processAccountDeletions` cron, `docs/PLATFORM.md` updated.
 - [ ] **Nothing committed.**
 
 ## Self-Review (performed during authoring)
@@ -863,4 +944,7 @@ describe('deletion cascade completeness', () => {
   names match `convex/schema.ts` indexes (`by_author`, `by_user`, `by_userId`, `by_user_and_action`,
   `by_user_month`).
 - **No-commit rule:** every task ends in a no-commit checkpoint.
+
+```
+
 ```

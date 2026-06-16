@@ -28,7 +28,7 @@ TypeScript
 ## File Map
 
 | File                                        | Action | Responsibility                                                        |
-|---------------------------------------------|--------|-----------------------------------------------------------------------|
+| ------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | `convex/admin.ts`                           | Modify | Add `searchContactUsers` query                                        |
 | `app/src/components/PlanLimitsTab.tsx`      | Modify | Remove Edit from tier rows; add search form + new-override modal flow |
 | `app/src/components/PlanLimitsTab.test.tsx` | Modify | Update tests to match new behaviour                                   |
@@ -58,7 +58,7 @@ Add this export:
 export const searchContactUsers = query({
   args: {
     sessionToken: v.string(),
-    nameQuery: v.string(),
+    nameQuery: v.string()
   },
   handler: async (ctx, { sessionToken, nameQuery }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -71,7 +71,7 @@ export const searchContactUsers = query({
       .filter(u => u.tier === 'contact' && (u.name ?? '').toLowerCase().includes(q))
       .slice(0, 10)
       .map(u => ({ _id: u._id, name: u.name ?? '' }))
-  },
+  }
 })
 ```
 
@@ -136,7 +136,7 @@ type EditTarget = {
   userName: string
   interactionsPerPost: number
   postsPerWeek: number
-  isNew?: boolean  // true when opened from search (no existing row)
+  isNew?: boolean // true when opened from search (no existing row)
 }
 ```
 
@@ -163,7 +163,7 @@ function handleSelectUser(user: { _id: Id<'users'>; name: string }) {
     userName: user.name,
     interactionsPerPost: contactDefault?.interactionsPerPost ?? 200,
     postsPerWeek: contactDefault?.postsPerWeek ?? 5,
-    isNew: true,
+    isNew: true
   })
   setSearchQuery('')
 }
@@ -173,9 +173,7 @@ function handleSelectUser(user: { _id: Id<'users'>; name: string }) {
 
 ```tsx
 <div className="mt-4">
-  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-    Add contact override
-  </p>
+  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add contact override</p>
   <input
     type="text"
     placeholder="Search contact users..."
@@ -303,20 +301,25 @@ const mockRows = [
   { _id: 'r2', tier: 'growth', interactionsPerPost: 50, postsPerWeek: 2 },
   { _id: 'r3', tier: 'pro', interactionsPerPost: 200, postsPerWeek: 5 },
   { _id: 'r4', tier: 'contact', interactionsPerPost: 200, postsPerWeek: 5 },
-  { _id: 'r5', tier: 'contact', userId: 'u1', userName: 'Bob Smith', interactionsPerPost: 500, postsPerWeek: 10 },
+  { _id: 'r5', tier: 'contact', userId: 'u1', userName: 'Bob Smith', interactionsPerPost: 500, postsPerWeek: 10 }
 ]
 
 // useMutation is called TWICE in PlanLimitsTab (setContactUserLimit, removeContactUserLimit)
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => mockRows),
-  useMutation: vi.fn(() => Object.assign(vi.fn(), { withOptimisticUpdate: vi.fn() })),
+  useMutation: vi.fn(() => Object.assign(vi.fn(), { withOptimisticUpdate: vi.fn() }))
 }))
 
 import PlanLimitsTab from './PlanLimitsTab'
 
 describe('PlanLimitsTab — table', () => {
   it('renders all four tier badge pills', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByText('starter')).toBeInTheDocument()
     expect(screen.getByText('growth')).toBeInTheDocument()
     expect(screen.getByText('pro')).toBeInTheDocument()
@@ -324,61 +327,99 @@ describe('PlanLimitsTab — table', () => {
   })
 
   it('renders limit values for tier default rows', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByTestId('row-r1-interactions')).toHaveTextContent('25')
     expect(screen.getByTestId('row-r1-posts')).toHaveTextContent('1')
   })
 
   it('renders contact override row with user name', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByText('Bob Smith')).toBeInTheDocument()
     expect(screen.getByTestId('row-r5-interactions')).toHaveTextContent('500')
   })
 
   it('shows no Edit button on tier default rows', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     // Only 1 Edit button total — for the contact override row (Bob Smith)
     expect(screen.getAllByRole('button', { name: /^edit$/i })).toHaveLength(1)
   })
 
   it('shows a Reset button only on the contact override row', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getAllByRole('button', { name: /reset/i })).toHaveLength(1)
   })
 
   it('shows loading spinner when query returns undefined', async () => {
     vi.mocked(useQuery).mockReturnValueOnce(undefined)
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
   })
 
   it('renders the search input for adding contact overrides', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByPlaceholderText(/search contact users/i)).toBeInTheDocument()
   })
 
   it('shows search results from the query when search input has text', () => {
     const mockSearchResults = [{ _id: 'u2', name: 'Alice Johnson' }]
     vi.mocked(useQuery)
-      .mockReturnValueOnce(mockRows)   // listPlanLimits
+      .mockReturnValueOnce(mockRows) // listPlanLimits
       .mockReturnValueOnce(mockSearchResults) // searchContactUsers
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.change(screen.getByPlaceholderText(/search contact users/i), {
-      target: { value: 'alice' },
+      target: { value: 'alice' }
     })
     expect(screen.getByText('Alice Johnson')).toBeInTheDocument()
   })
 
   it('opens modal titled "Add override for [name]" when a search result is clicked', () => {
     const mockSearchResults = [{ _id: 'u2', name: 'Alice Johnson' }]
-    vi.mocked(useQuery)
-      .mockReturnValueOnce(mockRows)
-      .mockReturnValueOnce(mockSearchResults)
+    vi.mocked(useQuery).mockReturnValueOnce(mockRows).mockReturnValueOnce(mockSearchResults)
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.change(screen.getByPlaceholderText(/search contact users/i), {
-      target: { value: 'alice' },
+      target: { value: 'alice' }
     })
     fireEvent.click(screen.getByText('Alice Johnson'))
     expect(screen.getByText(/add override for alice johnson/i)).toBeInTheDocument()
@@ -388,14 +429,17 @@ describe('PlanLimitsTab — table', () => {
 describe('PlanLimitsTab — edit modal (contact override)', () => {
   beforeEach(() => {
     vi.mocked(useMutation).mockReset()
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(vi.fn(), { withOptimisticUpdate: vi.fn() })
-    )
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(vi.fn(), { withOptimisticUpdate: vi.fn() }))
     vi.mocked(useQuery).mockReturnValue(mockRows)
   })
 
   it('opens modal with pre-filled values when Edit is clicked on a contact override row', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     expect(screen.getByText(/edit bob smith limits/i)).toBeInTheDocument()
     expect(screen.getByDisplayValue('500')).toBeInTheDocument()
@@ -403,7 +447,12 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
   })
 
   it('disables Save when interactions is set to 0', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     fireEvent.change(screen.getByDisplayValue('500'), { target: { value: '0' } })
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
@@ -411,11 +460,14 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
 
   it('calls setContactUserLimit with correct args when Save is clicked', async () => {
     const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() })
-    )
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() }))
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -425,7 +477,7 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
           sessionToken: 'tok',
           userId: 'u1',
           interactionsPerPost: 500,
-          postsPerWeek: 10,
+          postsPerWeek: 10
         })
       )
     })
@@ -435,36 +487,38 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
 
   it('calls removeContactUserLimit when Reset to default is clicked in modal', async () => {
     const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() })
-    )
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() }))
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     fireEvent.click(screen.getByRole('button', { name: /reset to default/i }))
 
     await waitFor(() => {
-      expect(mockMutate).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionToken: 'tok', userId: 'u1' })
-      )
+      expect(mockMutate).toHaveBeenCalledWith(expect.objectContaining({ sessionToken: 'tok', userId: 'u1' }))
     })
     expect(screen.queryByRole('heading', { name: /edit bob smith limits/i })).not.toBeInTheDocument()
   })
 
   it('calls setContactUserLimit when Save clicked on new-override modal (from search)', async () => {
     const mockMutate = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(useMutation).mockImplementation(
-      () => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() })
-    )
+    vi.mocked(useMutation).mockImplementation(() => Object.assign(mockMutate, { withOptimisticUpdate: vi.fn() }))
 
     const mockSearchResults = [{ _id: 'u2', name: 'Alice Johnson' }]
-    vi.mocked(useQuery)
-      .mockReturnValueOnce(mockRows)
-      .mockReturnValueOnce(mockSearchResults)
+    vi.mocked(useQuery).mockReturnValueOnce(mockRows).mockReturnValueOnce(mockSearchResults)
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.change(screen.getByPlaceholderText(/search contact users/i), {
-      target: { value: 'alice' },
+      target: { value: 'alice' }
     })
     fireEvent.click(screen.getByText('Alice Johnson'))
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -473,7 +527,7 @@ describe('PlanLimitsTab — edit modal (contact override)', () => {
       expect(mockMutate).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionToken: 'tok',
-          userId: 'u2',
+          userId: 'u2'
         })
       )
     })

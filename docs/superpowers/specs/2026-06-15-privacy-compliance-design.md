@@ -27,19 +27,19 @@
 
 ## 1. Decisions locked during brainstorming
 
-| Decision | Choice |
-|---|---|
-| **Program scope** | One coherent "Privacy Compliance" spec covering sub-projects **A** (data inventory / ROPA), **B** (data-subject rights), **C** (consent & preferences), **D** (retention & minimization), **F** (legal & transparency artifacts). Built in **4 phases** (§8). |
-| **Sub-project E (third-party / scraped data)** | **Removed from launch.** Apify scraping is a test-only integration, **disabled in production**. Its obligations therefore do not apply at launch — subject to the **hard gate** in §4.4. |
-| **Legal-basis posture** | **Hybrid by data type.** Core service processing = legitimate interest / contractual necessity (no consent UI). Explicit consent only for optional/sensitive purposes. |
-| **Account deletion** | **30-day grace period → hard-delete**, with legally-required billing records retained in **pseudonymized** form. **Self-service** in-app. |
-| **Stripe on deletion request** | **Cancel the subscription immediately** (no billing during grace). Cancelling a pending deletion requires **re-subscribing** for paid features. |
-| **DSR delivery** | **Self-service in-app** (replaces the current "email us" model). |
-| **Contact channel / notifications** | **Store the user's email** (already received from LinkedIn OIDC, currently discarded) + add a **transactional email** provider. Email is also passed to Stripe. |
-| **Cookies** | **No blocking consent banner** (only strictly-necessary + functional storage exists). Cookie Policy page + a lightweight informational notice. Consent plumbing is built so future analytics can be gated. |
-| **Inactive accounts** | **Dormancy auto-deletion enabled.** No login for **24 months** (active subscribers excluded) → 30-day email-warned window → deletion via the standard lifecycle. Threshold is an adjustable config constant. |
-| **Re-consent on policy change** | **In scope.** A `POLICY_VERSION` bump prompts users to re-acknowledge on next login; consent-based purposes are re-asked. |
-| **Business inputs** | Bracketed placeholders for now: `[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, `[GOVERNING_LAW_JURISDICTION]`, `[PRIVACY_CONTACT_EMAIL]`. |
+| Decision                                       | Choice                                                                                                                                                                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Program scope**                              | One coherent "Privacy Compliance" spec covering sub-projects **A** (data inventory / ROPA), **B** (data-subject rights), **C** (consent & preferences), **D** (retention & minimization), **F** (legal & transparency artifacts). Built in **4 phases** (§8). |
+| **Sub-project E (third-party / scraped data)** | **Removed from launch.** Apify scraping is a test-only integration, **disabled in production**. Its obligations therefore do not apply at launch — subject to the **hard gate** in §4.4.                                                                      |
+| **Legal-basis posture**                        | **Hybrid by data type.** Core service processing = legitimate interest / contractual necessity (no consent UI). Explicit consent only for optional/sensitive purposes.                                                                                        |
+| **Account deletion**                           | **30-day grace period → hard-delete**, with legally-required billing records retained in **pseudonymized** form. **Self-service** in-app.                                                                                                                     |
+| **Stripe on deletion request**                 | **Cancel the subscription immediately** (no billing during grace). Cancelling a pending deletion requires **re-subscribing** for paid features.                                                                                                               |
+| **DSR delivery**                               | **Self-service in-app** (replaces the current "email us" model).                                                                                                                                                                                              |
+| **Contact channel / notifications**            | **Store the user's email** (already received from LinkedIn OIDC, currently discarded) + add a **transactional email** provider. Email is also passed to Stripe.                                                                                               |
+| **Cookies**                                    | **No blocking consent banner** (only strictly-necessary + functional storage exists). Cookie Policy page + a lightweight informational notice. Consent plumbing is built so future analytics can be gated.                                                    |
+| **Inactive accounts**                          | **Dormancy auto-deletion enabled.** No login for **24 months** (active subscribers excluded) → 30-day email-warned window → deletion via the standard lifecycle. Threshold is an adjustable config constant.                                                  |
+| **Re-consent on policy change**                | **In scope.** A `POLICY_VERSION` bump prompts users to re-acknowledge on next login; consent-based purposes are re-asked.                                                                                                                                     |
+| **Business inputs**                            | Bracketed placeholders for now: `[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, `[GOVERNING_LAW_JURISDICTION]`, `[PRIVACY_CONTACT_EMAIL]`.                                                                                                                       |
 
 ---
 
@@ -76,15 +76,15 @@ docs/compliance/
 
 **New fields on `users`:**
 
-| Field | Type | Purpose |
-|---|---|---|
-| `email` | `v.optional(v.string())` | Captured from OIDC `email` claim; contact channel for DSR + breach notice |
-| `emailVerified` | `v.optional(v.boolean())` | From OIDC `email_verified` |
-| `deletionRequestedAt` | `v.optional(v.number())` | When the user requested deletion (audit + email) |
-| `deletionScheduledAt` | `v.optional(v.number())` | Hard-delete due time; **presence = "pending deletion"** |
-| `deletionReason` | `v.optional(v.union('user_request','dormancy'))` | Distinguishes user-requested vs dormancy deletion (adapts messaging + audit) |
-| `lastLoginAt` | `v.optional(v.number())` | Set on session creation; powers the dormancy check |
-| `acknowledgedPolicyVersion` | `v.optional(v.string())` | Last privacy-policy version the user acknowledged (re-consent) |
+| Field                       | Type                                             | Purpose                                                                      |
+| --------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `email`                     | `v.optional(v.string())`                         | Captured from OIDC `email` claim; contact channel for DSR + breach notice    |
+| `emailVerified`             | `v.optional(v.boolean())`                        | From OIDC `email_verified`                                                   |
+| `deletionRequestedAt`       | `v.optional(v.number())`                         | When the user requested deletion (audit + email)                             |
+| `deletionScheduledAt`       | `v.optional(v.number())`                         | Hard-delete due time; **presence = "pending deletion"**                      |
+| `deletionReason`            | `v.optional(v.union('user_request','dormancy'))` | Distinguishes user-requested vs dormancy deletion (adapts messaging + audit) |
+| `lastLoginAt`               | `v.optional(v.number())`                         | Set on session creation; powers the dormancy check                           |
+| `acknowledgedPolicyVersion` | `v.optional(v.string())`                         | Last privacy-policy version the user acknowledged (re-consent)               |
 
 **New tables:**
 
@@ -123,6 +123,7 @@ auditLogs                 # accountability (GDPR Art. 5(2))
 - `enforceDataRetention` — daily; token nulling, export-file expiry, audit-log purge, rate-limit housekeeping (§4.2).
 
 **Design rationale:**
+
 - Consent is an **append-only log**, not an overwritten boolean, so consent is provable (what, which
   policy version, when, including withdrawals). Current state = latest record per `(userId, purpose)`.
 - Deletion is a **scheduled field + cron**, not an inline action — gives the reversible 30-day window
@@ -147,8 +148,8 @@ auditLogs                 # accountability (GDPR Art. 5(2))
   The link self-expires; `enforceDataRetention` purges the file after 7 days (`status:'expired'`).
 - **Bundle contents**: profile (incl. `email`), posts, subscription mirror, consent history, and the
   user's **own** audit entries (`targetUserId == self`, with other actors' identifiers and internal
-  metadata redacted — the user is entitled to data *about them*, not the internal admin trail).
-  **Excludes** raw secrets (LinkedIn access/refresh tokens — they are the user's *credentials*;
+  metadata redacted — the user is entitled to data _about them_, not the internal admin trail).
+  **Excludes** raw secrets (LinkedIn access/refresh tokens — they are the user's _credentials_;
   exposing them is a security risk, not a transparency gain) and **any other user's data**.
 
 ### 3.2 Right to erasure — the 30-day deletion lifecycle
@@ -182,32 +183,35 @@ re-login**; only the explicit **Cancel** action clears them (and un-hides posts)
 **Hard-delete cron cascade (`processAccountDeletions`):** best-effort, idempotent, batched with
 self-reschedule (the `processQueue` pattern). For each user past `deletionScheduledAt`:
 
-| Table / target | Action |
-|---|---|
-| `users` | **Delete** (capture `email` first for the final notice) |
-| `posts`, `postQueue` | **Delete** (`by_author`) |
-| `subscriptions` | **Delete** our mirror (`by_user`); Stripe retains actual invoices for tax |
-| `sessions` | Delete stragglers (`by_userId`) |
-| `rateLimits`, `featuredPostUsage`, `planLimits` (contact override) | **Delete** (`by_user*`) |
-| `consentRecords`, `dataExportRequests` + stored files | **Delete** (+ `ctx.storage.delete`) |
-| `auditLogs` | **Retain, pseudonymized** — proof-of-deletion event, no PII |
-| **Stripe customer** | **External delete** (best-effort, audited); invoices retained by Stripe |
+| Table / target                                                     | Action                                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `users`                                                            | **Delete** (capture `email` first for the final notice)                   |
+| `posts`, `postQueue`                                               | **Delete** (`by_author`)                                                  |
+| `subscriptions`                                                    | **Delete** our mirror (`by_user`); Stripe retains actual invoices for tax |
+| `sessions`                                                         | Delete stragglers (`by_userId`)                                           |
+| `rateLimits`, `featuredPostUsage`, `planLimits` (contact override) | **Delete** (`by_user*`)                                                   |
+| `consentRecords`, `dataExportRequests` + stored files              | **Delete** (+ `ctx.storage.delete`)                                       |
+| `auditLogs`                                                        | **Retain, pseudonymized** — proof-of-deletion event, no PII               |
+| **Stripe customer**                                                | **External delete** (best-effort, audited); invoices retained by Stripe   |
 
 After the cascade, send the "deletion completed" email (using the captured address), then the local
 record is gone. External-call and email failures are logged + audited and **must not abort** the
 local cascade.
 
 ### 3.3 Right to rectification
+
 Already largely covered by `updateProfile` (industry/country) + `setPublicIdentifier`. LinkedIn-sourced
 fields (name/headline/picture) are corrected "at LinkedIn → Refresh"; this is **documented** rather
 than made editable, since the source of truth is LinkedIn.
 
 ### 3.4 Right to object / restrict
+
 Wired into consent (§4.1): withdrawing `marketing` stops marketing; future analytics likewise. Core
 legitimate-interest processing cannot be "objected away" without leaving the service — stated honestly
 in the privacy notice.
 
 ### 3.5 Dormancy-triggered deletion (retention)
+
 `lastLoginAt` is set on every session creation. The `enforceDataRetention` cron treats an account with
 `lastLoginAt` older than the dormancy threshold (**default 24 months**, a config constant) **and no
 active or trialing subscription** as dormant: it sets `deletionScheduledAt = +30d`,
@@ -230,12 +234,12 @@ as §3.2. The threshold and the active-subscriber exclusion are config constants
 A new **"Privacy & Data"** page in Settings consolidates export, delete, consent toggles, and links to
 the legal pages.
 
-| Processing | Legal basis | UI at launch |
-|---|---|---|
-| Profile, feed, engagement, manual post submission | Legitimate interest / contract | **No consent UI** — transparency + ROPA |
-| **Marketing email** (future) | **Consent** | Toggle, default **OFF** |
-| **Analytics** (future) | **Consent** | Toggle, default **OFF** |
-| ~~Location enrichment~~ | (Apify disabled at launch) | **Dropped at launch**; purpose reserved for future |
+| Processing                                        | Legal basis                    | UI at launch                                       |
+| ------------------------------------------------- | ------------------------------ | -------------------------------------------------- |
+| Profile, feed, engagement, manual post submission | Legitimate interest / contract | **No consent UI** — transparency + ROPA            |
+| **Marketing email** (future)                      | **Consent**                    | Toggle, default **OFF**                            |
+| **Analytics** (future)                            | **Consent**                    | Toggle, default **OFF**                            |
+| ~~Location enrichment~~                           | (Apify disabled at launch)     | **Dropped at launch**; purpose reserved for future |
 
 - Each toggle writes an append-only `consentRecords` row (`granted`, `policyVersion`, `createdAt`).
 - **`privacy/consent.ts`**: `recordConsent(purpose, granted)`, `getConsents(userId)`,
@@ -247,31 +251,35 @@ the legal pages.
   toggles activate with their features.
 
 ### 4.2 Cookies / local storage
+
 Only `sessionStorage.sessionToken` (auth = strictly necessary) and `localStorage.i18nextLng`
 (language = functional) are used — both exempt from consent under ePrivacy. Deliverables: a **Cookie
 Policy page** + a lightweight, dismissible first-visit **informational notice** (not accept/reject).
 The consent plumbing means analytics, if added later, can be gated before it loads.
 
 ### 4.3 Retention & minimization (D)
+
 Enforced by `enforceDataRetention` cron + config constants (the `planLimits` DEFAULTS pattern):
 
-| Data | Retention | Mechanism |
-|---|---|---|
-| Expired LinkedIn tokens | Null out once past `tokenExpiresAt` | cron clears `linkedinAccessToken`/`linkedinRefreshToken` |
-| `dataExportRequests` files | **7 days** | cron deletes file, marks `expired` |
-| `auditLogs` | **24 months** | cron purge |
-| Stale `rateLimits` rows | Housekeeping purge | cron |
-| `consentRecords` | Life of account (legal proof) | retained |
-| Posts | Life of account (they are the product) | deleted with account |
-| Host/server logs (Convex/Vercel/Railway) | Per-platform config | **documented** in ROPA |
-| **Inactive accounts** | **24 months** no login (active subscribers excluded) → 30-day warned window → deletion | dormancy branch of `enforceDataRetention` (§3.5); requires `lastLoginAt` |
+| Data                                     | Retention                                                                              | Mechanism                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Expired LinkedIn tokens                  | Null out once past `tokenExpiresAt`                                                    | cron clears `linkedinAccessToken`/`linkedinRefreshToken`                 |
+| `dataExportRequests` files               | **7 days**                                                                             | cron deletes file, marks `expired`                                       |
+| `auditLogs`                              | **24 months**                                                                          | cron purge                                                               |
+| Stale `rateLimits` rows                  | Housekeeping purge                                                                     | cron                                                                     |
+| `consentRecords`                         | Life of account (legal proof)                                                          | retained                                                                 |
+| Posts                                    | Life of account (they are the product)                                                 | deleted with account                                                     |
+| Host/server logs (Convex/Vercel/Railway) | Per-platform config                                                                    | **documented** in ROPA                                                   |
+| **Inactive accounts**                    | **24 months** no login (active subscribers excluded) → 30-day warned window → deletion | dormancy branch of `enforceDataRetention` (§3.5); requires `lastLoginAt` |
 
-Minimization notes: email is newly stored, but justified — it is the data needed to *honor* the other
+Minimization notes: email is newly stored, but justified — it is the data needed to _honor_ the other
 rights (breach notice, DSR confirmations). The export bundle excludes secrets. The ROPA records the
 minimization stance.
 
 ### 4.4 Apify — dormant integration **hard gate**
+
 Apify post-sync and profile-scrape are **test-only and disabled for launch**. The design requires:
+
 - `apifyEnabled`, `apifySyncEnabled`, `apifyProfileScrapeEnabled` **default OFF in production**;
   `APIFY_*` env vars unset in prod.
 - Posts enter **only** via manual submission (`submitPost`).
@@ -282,6 +290,7 @@ Apify post-sync and profile-scrape are **test-only and disabled for launch**. Th
   added in the same change.**
 
 ### 4.5 Re-consent on privacy-policy change
+
 A `POLICY_VERSION` constant identifies the current privacy policy; `users.acknowledgedPolicyVersion`
 records the version each user last acknowledged (set to the current version at signup, so new users
 are never prompted).
@@ -299,16 +308,17 @@ permanent lockout.
 
 ### 5.1 Documentation foundation (`docs/compliance/`)
 
-| Deliverable | Contents |
-|---|---|
-| `DATA-INVENTORY.md` | **ROPA** (Art. 30): per activity — data, data subjects, purpose, **legal basis**, sub-processors, retention, **international transfers**, security. Notes post content may contain third-party data (basis: user authored/published it publicly; legitimate interest). Records the Apify dormant status + the §4.4 hard gate, and the §3.5 dormancy-deletion policy. |
-| `GAP-ASSESSMENT.md` | Current-vs-required across GDPR / UK GDPR / LGPD / CCPA-CPRA + comparable US state laws; residual gaps (LinkedIn-ToS scraping risk). |
-| `SUBPROCESSORS.md` | LinkedIn, Stripe, Convex, Vercel, Railway, Cloudflare, **Resend** (Apify excluded while dormant) — data shared, location, **transfer mechanism (SCCs / adequacy)**, DPA link. |
-| `RETENTION-POLICY.md` | The §4.3 schedule incl. the §3.5 dormancy policy. |
-| `BREACH-RUNBOOK.md` | Detection → risk assessment → **72-hour authority notice** (Art. 33) → **data-subject notice** (Art. 34 / LGPD Art. 48) + notification templates. |
-| `DPA-TEMPLATE.md` | Processing-agreement template for records / B2B customers. |
+| Deliverable           | Contents                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATA-INVENTORY.md`   | **ROPA** (Art. 30): per activity — data, data subjects, purpose, **legal basis**, sub-processors, retention, **international transfers**, security. Notes post content may contain third-party data (basis: user authored/published it publicly; legitimate interest). Records the Apify dormant status + the §4.4 hard gate, and the §3.5 dormancy-deletion policy. |
+| `GAP-ASSESSMENT.md`   | Current-vs-required across GDPR / UK GDPR / LGPD / CCPA-CPRA + comparable US state laws; residual gaps (LinkedIn-ToS scraping risk).                                                                                                                                                                                                                                 |
+| `SUBPROCESSORS.md`    | LinkedIn, Stripe, Convex, Vercel, Railway, Cloudflare, **Resend** (Apify excluded while dormant) — data shared, location, **transfer mechanism (SCCs / adequacy)**, DPA link.                                                                                                                                                                                        |
+| `RETENTION-POLICY.md` | The §4.3 schedule incl. the §3.5 dormancy policy.                                                                                                                                                                                                                                                                                                                    |
+| `BREACH-RUNBOOK.md`   | Detection → risk assessment → **72-hour authority notice** (Art. 33) → **data-subject notice** (Art. 34 / LGPD Art. 48) + notification templates.                                                                                                                                                                                                                    |
+| `DPA-TEMPLATE.md`     | Processing-agreement template for records / B2B customers.                                                                                                                                                                                                                                                                                                           |
 
 ### 5.2 User-facing legal pages (`landing/app/`)
+
 - **`/privacy` (full rewrite)** — controller identity & contact `[placeholders]`; data + **sources**
   (LinkedIn OIDC incl. email, user-submitted post URLs, Stripe — **no scraping disclosure**);
   purposes + **legal bases** (hybrid); sub-processors; **international transfers**; retention; **all
@@ -324,6 +334,7 @@ permanent lockout.
 All legal text is generated as **DRAFT — requires legal review** with `[BRACKETED]` business inputs.
 
 ### 5.3 Email & breach infrastructure
+
 - **`convex/lib/email.ts`** — provider-agnostic wrapper, **Resend** implementation. New env:
   `RESEND_API_KEY`, `EMAIL_FROM`.
 - **Capture email**: `upsertUser` stores `email`/`emailVerified` from the OIDC userinfo it already
@@ -332,12 +343,14 @@ All legal text is generated as **DRAFT — requires legal review** with `[BRACKE
 - The stored email channel makes **Art. 34 breach notification** actually executable.
 
 ### 5.4 Why F comes last
+
 A privacy policy promising "export and delete in Settings" is false until B/C/D exist — and a false
 privacy statement is itself a violation. Build the machinery, then describe it.
 
 ---
 
 ## 6. Error handling
+
 - Reads soft-fail (`null`/`[]`), writes hard-fail (`throw Error`) — matches existing conventions.
 - Deletion cron: best-effort, **idempotent**, batched with self-reschedule; external Stripe + email
   calls are non-blocking (failure logged + audited, never aborts the cascade).
@@ -349,6 +362,7 @@ privacy statement is itself a violation. Build the machinery, then describe it.
 ---
 
 ## 7. Testing (Vitest — existing setup)
+
 - **convex**:
   - export — bundle completeness, **owner-scoping**, **no tokens/secrets leaked**, file expiry.
   - deletion — cascade covers every table, idempotency, **banned user can still delete**, grace
@@ -367,6 +381,7 @@ privacy statement is itself a violation. Build the machinery, then describe it.
 ---
 
 ## 8. Security
+
 - Export download links: short-lived, **owner-only**, auto-expiring; bundle excludes secrets; export
   rate-limited 1/day (anti-DoS on generation).
 - Deletion path allows banned users but still requires a valid session.
@@ -378,7 +393,7 @@ privacy statement is itself a violation. Build the machinery, then describe it.
 ## 9. Rollout phases (input to writing-plans)
 
 1. **Foundations** — schema changes (`users` fields + 3 tables); `lib/email.ts` + Resend; capture
-   email in `upsertUser` + pass to Stripe; `lib/audit.ts`. *Enables everything else.*
+   email in `upsertUser` + pass to Stripe; `lib/audit.ts`. _Enables everything else._
 2. **DSR (B)** — export (request + generate + download + 7-day expiry); deletion lifecycle
    (`requestAccountDeletion`, `cancelAccountDeletion`, `processAccountDeletions` cron); Privacy & Data
    page (export + delete); `CancelDeletionScreen` + `RequireAuth` interception; emails
@@ -396,6 +411,7 @@ privacy statement is itself a violation. Build the machinery, then describe it.
 ---
 
 ## 10. Human / legal to-dos (outside code)
+
 - Provide business inputs: `[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`,
   `[GOVERNING_LAW_JURISDICTION]`, `[PRIVACY_CONTACT_EMAIL]`.
 - Legal review of all DRAFT texts.
@@ -407,7 +423,11 @@ privacy statement is itself a violation. Build the machinery, then describe it.
 ---
 
 ## 11. Out of scope (this effort)
+
 - Active Apify scraping + its disclosures (gated by §4.4).
 - LinkedIn-ToS scraping risk (a platform/contract risk, not a data-protection control).
 - DPO appointment tooling and any external privacy-portal integrations.
+
+```
+
 ```

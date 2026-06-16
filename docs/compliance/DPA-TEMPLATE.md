@@ -5,7 +5,7 @@
 
 # Data Processing Agreement (DPA) Template
 
-*Pursuant to Article 28 of Regulation (EU) 2016/679 (GDPR) and, where applicable, Article 37 of Brazil's Lei Geral de Proteção de Dados (LGPD)*
+_Pursuant to Article 28 of Regulation (EU) 2016/679 (GDPR) and, where applicable, Article 37 of Brazil's Lei Geral de Proteção de Dados (LGPD)_
 
 ---
 
@@ -61,16 +61,16 @@ This Agreement is incorporated into and forms part of the [MASTER_SERVICE_AGREEM
 
 In this Agreement, the following terms have the meanings set out below. All other capitalised terms used but not defined here have the meanings given to them in the Principal Agreement or in the GDPR.
 
-| Term | Meaning |
-|---|---|
-| **GDPR** | Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data. |
-| **LGPD** | Lei Geral de Proteção de Dados (Brazilian Federal Law No. 13,709/2018), as amended. |
-| **Applicable Data Protection Law** | The GDPR, LGPD, and any other data protection or privacy laws applicable to the processing described in this Agreement. |
-| **Personal Data** | Any information relating to an identified or identifiable natural person, as defined under Applicable Data Protection Law. |
-| **Processing** | Any operation or set of operations performed on Personal Data, as defined under Applicable Data Protection Law. |
-| **Data Subject** | An identified or identifiable natural person whose Personal Data is processed under this Agreement. |
-| **Sub-Processor** | Any processor engaged by the Processor to carry out specific processing activities on behalf of the Controller. |
-| **Security Incident** | Any confirmed or reasonably suspected breach of security leading to the accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to, Personal Data. |
+| Term                                    | Meaning                                                                                                                                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **GDPR**                                | Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data.               |
+| **LGPD**                                | Lei Geral de Proteção de Dados (Brazilian Federal Law No. 13,709/2018), as amended.                                                                                                        |
+| **Applicable Data Protection Law**      | The GDPR, LGPD, and any other data protection or privacy laws applicable to the processing described in this Agreement.                                                                    |
+| **Personal Data**                       | Any information relating to an identified or identifiable natural person, as defined under Applicable Data Protection Law.                                                                 |
+| **Processing**                          | Any operation or set of operations performed on Personal Data, as defined under Applicable Data Protection Law.                                                                            |
+| **Data Subject**                        | An identified or identifiable natural person whose Personal Data is processed under this Agreement.                                                                                        |
+| **Sub-Processor**                       | Any processor engaged by the Processor to carry out specific processing activities on behalf of the Controller.                                                                            |
+| **Security Incident**                   | Any confirmed or reasonably suspected breach of security leading to the accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to, Personal Data.     |
 | **Standard Contractual Clauses (SCCs)** | The standard contractual clauses for the transfer of personal data to third countries adopted by the European Commission under GDPR Article 46(2)(c) or (d), as updated from time to time. |
 
 ---
@@ -175,16 +175,16 @@ Taking into account the state of the art, the costs of implementation, and the n
 
 The Processor's current technical and organisational security measures include, without limitation:
 
-| Measure | Implementation |
-|---|---|
-| Encryption in transit | TLS 1.2+ enforced across all platform endpoints and API calls. |
-| Encryption at rest | Convex database encryption at rest; field-level encryption for sensitive tokens where implemented. |
-| Access control | Role-based access control in Convex; principle of least privilege applied to all service accounts and API keys. |
-| Credential management | All API secrets (LinkedIn, Stripe, Resend, Apify, Convex deploy key) stored as environment variables; not hardcoded. |
-| SSRF and URL validation | Server-side URL validation guards against server-side request forgery. |
-| Session management | Session tokens stored in Convex `sessions` table; force-logout capability available via `users.forceLogoutAll`. |
-| Dependency security | Regular `npm audit` and Dependabot alerts; critical CVEs addressed before production deployment. |
-| Incident response | Personal data breach runbook maintained and tested at least annually. |
+| Measure                 | Implementation                                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Encryption in transit   | TLS 1.2+ enforced across all platform endpoints and API calls.                                                       |
+| Encryption at rest      | Convex database encryption at rest; field-level encryption for sensitive tokens where implemented.                   |
+| Access control          | Role-based access control in Convex; principle of least privilege applied to all service accounts and API keys.      |
+| Credential management   | All API secrets (LinkedIn, Stripe, Resend, Apify, Convex deploy key) stored as environment variables; not hardcoded. |
+| SSRF and URL validation | Server-side URL validation guards against server-side request forgery.                                               |
+| Session management      | Session tokens stored in Convex `sessions` table; force-logout capability available via `users.forceLogoutAll`.      |
+| Dependency security     | Regular `npm audit` and Dependabot alerts; critical CVEs addressed before production deployment.                     |
+| Incident response       | Personal data breach runbook maintained and tested at least annually.                                                |
 
 The Processor may update these measures from time to time, provided that any such updates do not materially reduce the overall level of security.
 
@@ -350,44 +350,44 @@ If any provision of this Agreement is found invalid or unenforceable, the remain
 
 ## 17. Signatures
 
-*Each Party's authorised representative confirms that they have the authority to enter into this Agreement on behalf of their respective organisation.*
+_Each Party's authorised representative confirms that they have the authority to enter into this Agreement on behalf of their respective organisation._
 
 **[CONTROLLER]**
 
-Signed: ___________________________
+Signed: ************\_\_\_************
 
-Name: ___________________________
+Name: ************\_\_\_************
 
-Title: ___________________________
+Title: ************\_\_\_************
 
-Date: ___________________________
+Date: ************\_\_\_************
 
 ---
 
 **[PROCESSOR] ([LEGAL_ENTITY_NAME])**
 
-Signed: ___________________________
+Signed: ************\_\_\_************
 
-Name: ___________________________
+Name: ************\_\_\_************
 
-Title: ___________________________
+Title: ************\_\_\_************
 
-Date: ___________________________
+Date: ************\_\_\_************
 
 ---
 
 ## Schedule A — Approved Sub-Processors
 
-*As of the Effective Date, the Controller authorises the following Sub-Processors:*
+_As of the Effective Date, the Controller authorises the following Sub-Processors:_
 
-| Sub-Processor | Registered Location | Processing Activity | Website |
-|---|---|---|---|
-| Convex, Inc. | United States | Backend database, serverless functions, real-time data synchronisation | https://convex.dev |
-| LinkedIn Corporation | United States | Profile data retrieval and enrichment via LinkedIn API (OAuth) | https://linkedin.com |
-| Stripe, Inc. | United States | Payment processing and subscription billing | https://stripe.com |
-| Resend, Inc. | United States | Transactional email delivery | https://resend.com |
-| Apify Technologies s.r.o. | Czech Republic | LinkedIn profile data enrichment via web scraping | https://apify.com |
-| Vercel, Inc. | United States | Frontend hosting and serverless edge functions | https://vercel.com |
+| Sub-Processor             | Registered Location | Processing Activity                                                    | Website              |
+| ------------------------- | ------------------- | ---------------------------------------------------------------------- | -------------------- |
+| Convex, Inc.              | United States       | Backend database, serverless functions, real-time data synchronisation | https://convex.dev   |
+| LinkedIn Corporation      | United States       | Profile data retrieval and enrichment via LinkedIn API (OAuth)         | https://linkedin.com |
+| Stripe, Inc.              | United States       | Payment processing and subscription billing                            | https://stripe.com   |
+| Resend, Inc.              | United States       | Transactional email delivery                                           | https://resend.com   |
+| Apify Technologies s.r.o. | Czech Republic      | LinkedIn profile data enrichment via web scraping                      | https://apify.com    |
+| Vercel, Inc.              | United States       | Frontend hosting and serverless edge functions                         | https://vercel.com   |
 
 The authoritative and up-to-date sub-processor list is maintained at `docs/compliance/SUBPROCESSORS.md`.
 
@@ -395,8 +395,8 @@ The authoritative and up-to-date sub-processor list is maintained at `docs/compl
 
 ## Schedule B — Standard Contractual Clauses
 
-*[TO BE COMPLETED: Attach the applicable European Commission Standard Contractual Clauses (Module 2: Controller-to-Processor, or Module 3: Processor-to-Processor) issued under Commission Implementing Decision (EU) 2021/914 of 4 June 2021. Complete all optional clauses and Annexes I, II, and III as required by the relevant module. Ensure the Appendix information reflects the processing described in this Agreement.]*
+_[TO BE COMPLETED: Attach the applicable European Commission Standard Contractual Clauses (Module 2: Controller-to-Processor, or Module 3: Processor-to-Processor) issued under Commission Implementing Decision (EU) 2021/914 of 4 June 2021. Complete all optional clauses and Annexes I, II, and III as required by the relevant module. Ensure the Appendix information reflects the processing described in this Agreement.]_
 
 ---
 
-*This template must be reviewed by qualified legal counsel before use. [LEGAL_ENTITY_NAME] accepts no liability for any reliance on this template in its unreviewed or incomplete form.*
+_This template must be reviewed by qualified legal counsel before use. [LEGAL_ENTITY_NAME] accepts no liability for any reliance on this template in its unreviewed or incomplete form._

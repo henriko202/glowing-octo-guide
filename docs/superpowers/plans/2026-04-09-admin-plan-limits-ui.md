@@ -14,18 +14,19 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|----------------|
-| `app/src/pages/AdminPage.tsx` | Modify | Add tab bar; route to Settings or Plan Limits tab |
-| `app/src/components/PlanLimitsTab.tsx` | Create | Table + edit modal; owns all plan-limits state, queries, mutations |
-| `app/src/components/PlanLimitsTab.test.tsx` | Create | Vitest tests for PlanLimitsTab |
-| `app/src/pages/AdminPage.test.tsx` | Create | Vitest test: tab bar renders and switches |
+| File                                        | Action | Responsibility                                                     |
+| ------------------------------------------- | ------ | ------------------------------------------------------------------ |
+| `app/src/pages/AdminPage.tsx`               | Modify | Add tab bar; route to Settings or Plan Limits tab                  |
+| `app/src/components/PlanLimitsTab.tsx`      | Create | Table + edit modal; owns all plan-limits state, queries, mutations |
+| `app/src/components/PlanLimitsTab.test.tsx` | Create | Vitest tests for PlanLimitsTab                                     |
+| `app/src/pages/AdminPage.test.tsx`          | Create | Vitest test: tab bar renders and switches                          |
 
 ---
 
 ## Task 1: Add tab bar to AdminPage
 
 **Files:**
+
 - Modify: `app/src/pages/AdminPage.tsx`
 - Create: `app/src/pages/AdminPage.test.tsx`
 
@@ -44,11 +45,11 @@ vi.mock('convex/react', () => ({
     if (name === 'admin:checkIsAdmin') return true
     return undefined
   }),
-  useMutation: vi.fn(() => vi.fn()),
+  useMutation: vi.fn(() => vi.fn())
 }))
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: vi.fn(() => vi.fn()),
+  useNavigate: vi.fn(() => vi.fn())
 }))
 
 import AdminPage from './AdminPage'
@@ -129,9 +130,7 @@ export default function AdminPage() {
         <button
           onClick={() => setTab('settings')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'settings'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'settings' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Settings
@@ -139,9 +138,7 @@ export default function AdminPage() {
         <button
           onClick={() => setTab('planLimits')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'planLimits'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'planLimits' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Plan Limits
@@ -179,7 +176,10 @@ export default function AdminPage() {
 
       {/* Plan Limits tab */}
       {tab === 'planLimits' && (
-        <PlanLimitsTab sessionToken={sessionToken} isAdmin={isAdmin} />
+        <PlanLimitsTab
+          sessionToken={sessionToken}
+          isAdmin={isAdmin}
+        />
       )}
     </div>
   )
@@ -206,6 +206,7 @@ git commit -m "feat(admin): add Settings/Plan Limits tab bar to AdminPage"
 ## Task 2: Add data-testid to LoadingSpinner (prerequisite)
 
 **Files:**
+
 - Modify: `app/src/components/LoadingSpinner.tsx` (only if `data-testid` is missing)
 
 - [ ] **Step 2.1: Read LoadingSpinner.tsx**
@@ -228,6 +229,7 @@ git commit -m "chore: add data-testid to LoadingSpinner for test targeting"
 ## Task 3: Create PlanLimitsTab — table with loading and data states
 
 **Files:**
+
 - Create: `app/src/components/PlanLimitsTab.tsx`
 - Create: `app/src/components/PlanLimitsTab.test.tsx`
 
@@ -245,19 +247,24 @@ const mockRows = [
   { _id: 'r2', tier: 'growth', interactionsPerPost: 50, postsPerWeek: 2 },
   { _id: 'r3', tier: 'pro', interactionsPerPost: 200, postsPerWeek: 5 },
   { _id: 'r4', tier: 'contact', interactionsPerPost: 200, postsPerWeek: 5 },
-  { _id: 'r5', tier: 'contact', userId: 'u1', userName: 'Bob Smith', interactionsPerPost: 500, postsPerWeek: 10 },
+  { _id: 'r5', tier: 'contact', userId: 'u1', userName: 'Bob Smith', interactionsPerPost: 500, postsPerWeek: 10 }
 ]
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => mockRows),
-  useMutation: vi.fn(() => vi.fn()),
+  useMutation: vi.fn(() => vi.fn())
 }))
 
 import PlanLimitsTab from './PlanLimitsTab'
 
 describe('PlanLimitsTab — table', () => {
   it('renders all four tier badge pills', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByText('starter')).toBeInTheDocument()
     expect(screen.getByText('growth')).toBeInTheDocument()
     expect(screen.getByText('pro')).toBeInTheDocument()
@@ -266,20 +273,35 @@ describe('PlanLimitsTab — table', () => {
   })
 
   it('renders limit values for tier default rows', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     // starter: 25 interactions, 1 post
     expect(screen.getByTestId('row-r1-interactions')).toHaveTextContent('25')
     expect(screen.getByTestId('row-r1-posts')).toHaveTextContent('1')
   })
 
   it('renders contact override row with user name', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByText('Bob Smith')).toBeInTheDocument()
     expect(screen.getByTestId('row-r5-interactions')).toHaveTextContent('500')
   })
 
   it('shows a Reset button only on contact override rows', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     // Only 1 contact override row (r5) should have a Reset button
     expect(screen.getAllByRole('button', { name: /reset/i })).toHaveLength(1)
   })
@@ -287,7 +309,12 @@ describe('PlanLimitsTab — table', () => {
   it('shows loading spinner when query returns undefined', async () => {
     const { useQuery } = await import('convex/react')
     vi.mocked(useQuery).mockReturnValueOnce(undefined)
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
   })
 })
@@ -331,16 +358,14 @@ const TIER_COLOURS: Record<Tier, string> = {
   starter: 'bg-slate-100 text-slate-600',
   growth: 'bg-blue-100 text-blue-700',
   pro: 'bg-green-100 text-green-700',
-  contact: 'bg-purple-100 text-purple-700',
+  contact: 'bg-purple-100 text-purple-700'
 }
 
 function sortRows(rows: PlanLimitRow[]): { defaults: PlanLimitRow[]; overrides: PlanLimitRow[] } {
   const defaults = TIER_ORDER.map(tier => rows.find(r => r.tier === tier && !r.userId)).filter(
     Boolean
   ) as PlanLimitRow[]
-  const overrides = rows
-    .filter(r => r.userId)
-    .sort((a, b) => (a.userName ?? '').localeCompare(b.userName ?? ''))
+  const overrides = rows.filter(r => r.userId).sort((a, b) => (a.userName ?? '').localeCompare(b.userName ?? ''))
   return { defaults, overrides }
 }
 
@@ -350,10 +375,9 @@ type Props = {
 }
 
 export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
-  const rows = useQuery(
-    api.admin.listPlanLimits,
-    sessionToken && isAdmin ? { sessionToken } : 'skip'
-  ) as PlanLimitRow[] | undefined
+  const rows = useQuery(api.admin.listPlanLimits, sessionToken && isAdmin ? { sessionToken } : 'skip') as
+    | PlanLimitRow[]
+    | undefined
 
   const updateTierDefault = useMutation(api.admin.updateTierDefault)
   const setContactUserLimit = useMutation(api.admin.setContactUserLimit)
@@ -474,7 +498,14 @@ type EditModalProps = {
   removeContactUserLimit: ReturnType<typeof useMutation<typeof api.admin.removeContactUserLimit>>
 }
 
-function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUserLimit, removeContactUserLimit }: EditModalProps) {
+function EditModal({
+  row,
+  sessionToken,
+  onClose,
+  updateTierDefault,
+  setContactUserLimit,
+  removeContactUserLimit
+}: EditModalProps) {
   const [interactions, setInteractions] = useState(String(row.interactionsPerPost))
   const [posts, setPosts] = useState(String(row.postsPerWeek))
   const [saving, setSaving] = useState(false)
@@ -498,14 +529,14 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
           sessionToken,
           userId: row.userId,
           interactionsPerPost: Number(interactions),
-          postsPerWeek: Number(posts),
+          postsPerWeek: Number(posts)
         })
       } else {
         await updateTierDefault({
           sessionToken,
           tier: row.tier,
           interactionsPerPost: Number(interactions),
-          postsPerWeek: Number(posts),
+          postsPerWeek: Number(posts)
         })
       }
       onClose()
@@ -530,9 +561,7 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
     }
   }
 
-  const title = isOverride
-    ? `Edit ${row.userName ?? 'user'} limits`
-    : `Edit ${row.tier} defaults`
+  const title = isOverride ? `Edit ${row.userName ?? 'user'} limits` : `Edit ${row.tier} defaults`
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
@@ -554,9 +583,7 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Posts per week
-            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Posts per week</span>
             <input
               type="number"
               min="1"
@@ -567,9 +594,7 @@ function EditModal({ row, sessionToken, onClose, updateTierDefault, setContactUs
           </label>
         </div>
 
-        {error && (
-          <p className="mt-2 text-xs text-red-500">{error}</p>
-        )}
+        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
 
         <div className="mt-4 flex gap-2">
           <button
@@ -630,6 +655,7 @@ git commit -m "feat(admin): add PlanLimitsTab with unified table and edit modal"
 ## Task 4: Test edit modal interactions (open, validate, save, reset)
 
 **Files:**
+
 - Modify: `app/src/components/PlanLimitsTab.test.tsx`
 
 These tests cover the edit modal — opening it, validation gating the Save button, Save calling the right mutation, and Reset calling `removeContactUserLimit`.
@@ -643,7 +669,12 @@ import { fireEvent, waitFor } from '@testing-library/react'
 
 describe('PlanLimitsTab — edit modal', () => {
   it('opens modal with pre-filled values when Edit is clicked on a tier row', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     // Click Edit on the starter row
     const editBtns = screen.getAllByRole('button', { name: /^edit$/i })
     fireEvent.click(editBtns[0]) // first Edit = starter row
@@ -653,7 +684,12 @@ describe('PlanLimitsTab — edit modal', () => {
   })
 
   it('disables Save when an input is set to 0', () => {
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0])
     const interactionsInput = screen.getByDisplayValue('25')
     fireEvent.change(interactionsInput, { target: { value: '0' } })
@@ -665,7 +701,12 @@ describe('PlanLimitsTab — edit modal', () => {
     const mockMutate = vi.fn().mockResolvedValue(undefined)
     vi.mocked(useMutation).mockReturnValue(mockMutate)
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]) // starter
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -675,7 +716,7 @@ describe('PlanLimitsTab — edit modal', () => {
           sessionToken: 'tok',
           tier: 'starter',
           interactionsPerPost: 25,
-          postsPerWeek: 1,
+          postsPerWeek: 1
         })
       )
     })
@@ -686,7 +727,12 @@ describe('PlanLimitsTab — edit modal', () => {
     const mockMutate = vi.fn().mockResolvedValue(undefined)
     vi.mocked(useMutation).mockReturnValue(mockMutate)
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     // The contact override row (Bob Smith) Edit button
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i, hidden: false }))
     // If there are multiple, select the one near "Bob Smith":
@@ -705,7 +751,7 @@ describe('PlanLimitsTab — edit modal', () => {
           sessionToken: 'tok',
           userId: 'u1',
           interactionsPerPost: 500,
-          postsPerWeek: 10,
+          postsPerWeek: 10
         })
       )
     })
@@ -716,15 +762,18 @@ describe('PlanLimitsTab — edit modal', () => {
     const mockMutate = vi.fn().mockResolvedValue(undefined)
     vi.mocked(useMutation).mockReturnValue(mockMutate)
 
-    render(<PlanLimitsTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <PlanLimitsTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     const allEdits = screen.getAllByRole('button', { name: /^edit$/i })
     fireEvent.click(allEdits[allEdits.length - 1]) // contact override
     fireEvent.click(screen.getByRole('button', { name: /reset to default/i }))
 
     await waitFor(() => {
-      expect(mockMutate).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionToken: 'tok', userId: 'u1' })
-      )
+      expect(mockMutate).toHaveBeenCalledWith(expect.objectContaining({ sessionToken: 'tok', userId: 'u1' }))
     })
   })
 })
@@ -736,7 +785,7 @@ describe('PlanLimitsTab — edit modal', () => {
 cd app && npx vitest run src/components/PlanLimitsTab.test.tsx
 ```
 
-Expected: all tests PASS. If a test around mutation mocking is fragile (because `useMutation` is called 3 times in the component), adjust the mock to use `vi.fn().mockReturnValue(mockMutate)` as shown — this returns the same mock fn for all three mutation calls, so `expect(mockMutate).toHaveBeenCalledWith(...)` will match regardless of which mutation was called. The test asserts the *arguments*, which uniquely identify which mutation fired.
+Expected: all tests PASS. If a test around mutation mocking is fragile (because `useMutation` is called 3 times in the component), adjust the mock to use `vi.fn().mockReturnValue(mockMutate)` as shown — this returns the same mock fn for all three mutation calls, so `expect(mockMutate).toHaveBeenCalledWith(...)` will match regardless of which mutation was called. The test asserts the _arguments_, which uniquely identify which mutation fired.
 
 - [ ] **Step 4.3: Run the full test suite**
 

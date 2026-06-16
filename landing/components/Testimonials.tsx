@@ -1,7 +1,7 @@
 const TESTIMONIALS = [
   {
     quote:
-      "Since my SSI crossed 70, I have 2 recruiters reaching out to me every single day. I stopped applying for jobs — they come to me now.",
+      'Since my SSI crossed 70, I have 2 recruiters reaching out to me every single day. I stopped applying for jobs — they come to me now.',
     name: 'Ana R.',
     role: 'Senior Product Manager',
     location: 'Lisbon'
@@ -14,8 +14,7 @@ const TESTIMONIALS = [
     location: 'São Paulo'
   },
   {
-    quote:
-      "Finally a tool that doesn't feel like gaming the system — it's smart, deliberate networking.",
+    quote: "Finally a tool that doesn't feel like gaming the system — it's smart, deliberate networking.",
     name: 'Sophie L.',
     role: 'Marketing Lead',
     location: 'London'
@@ -24,9 +23,11 @@ const TESTIMONIALS = [
 
 export default function Testimonials() {
   return (
-    <section id="testimonials" className="bg-ink px-6 py-28">
+    <section
+      id="testimonials"
+      className="bg-ink px-6 py-28"
+    >
       <div className="mx-auto max-w-5xl">
-
         <div className="mb-16 text-center">
           <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">From the circle</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
@@ -69,7 +70,6 @@ export default function Testimonials() {
             )
           })}
         </div>
-
       </div>
     </section>
   )

@@ -14,18 +14,19 @@
 
 ## File Structure
 
-| Action | File | Responsibility |
-|---|---|---|
-| Create | `convex/linkedin/parsePostContent.ts` | Pure parser: HTML → `{ text, media }`; plus `appendMediaLinks` formatter |
-| Create | `convex/linkedin/parsePostContent.test.ts` | Unit tests for parser + formatter |
-| Modify | `convex/posts.ts` | `submitPost` calls the parser, composes content, fills `mediaUrls` |
-| Create | `app/src/components/LinkedInEmbed.tsx` | Shared clipped embed iframe + namespace-preserving `buildEmbedUrl` |
-| Create | `app/src/components/LinkedInEmbed.test.tsx` | Unit tests for `buildEmbedUrl` |
-| Modify | `app/src/components/PostCard.tsx` | Iframe layout (Option B); extend `PostWithAuthor` |
-| Modify | `app/src/components/PostCard.test.tsx` | Tests for iframe layout |
-| Modify | `app/src/pages/MyPostsPage.tsx` | Use shared `LinkedInEmbed`; drop inline `buildEmbedUrl` |
+| Action | File                                        | Responsibility                                                           |
+| ------ | ------------------------------------------- | ------------------------------------------------------------------------ |
+| Create | `convex/linkedin/parsePostContent.ts`       | Pure parser: HTML → `{ text, media }`; plus `appendMediaLinks` formatter |
+| Create | `convex/linkedin/parsePostContent.test.ts`  | Unit tests for parser + formatter                                        |
+| Modify | `convex/posts.ts`                           | `submitPost` calls the parser, composes content, fills `mediaUrls`       |
+| Create | `app/src/components/LinkedInEmbed.tsx`      | Shared clipped embed iframe + namespace-preserving `buildEmbedUrl`       |
+| Create | `app/src/components/LinkedInEmbed.test.tsx` | Unit tests for `buildEmbedUrl`                                           |
+| Modify | `app/src/components/PostCard.tsx`           | Iframe layout (Option B); extend `PostWithAuthor`                        |
+| Modify | `app/src/components/PostCard.test.tsx`      | Tests for iframe layout                                                  |
+| Modify | `app/src/pages/MyPostsPage.tsx`             | Use shared `LinkedInEmbed`; drop inline `buildEmbedUrl`                  |
 
 **Commands** (run from the noted working directory):
+
 - Convex tests: `cd convex && npx vitest run <file>`
 - Convex typecheck: `cd convex && npx tsc --noEmit`
 - App tests: `cd app && npx vitest run <file>`
@@ -36,6 +37,7 @@
 ## Task 1: `appendMediaLinks` formatter
 
 **Files:**
+
 - Create: `convex/linkedin/parsePostContent.ts`
 - Test: `convex/linkedin/parsePostContent.test.ts`
 
@@ -127,6 +129,7 @@ git commit -m "feat(linkedin): add appendMediaLinks content formatter"
 ## Task 2: `parsePostContent` HTML parser
 
 **Files:**
+
 - Modify: `convex/linkedin/parsePostContent.ts`
 - Test: `convex/linkedin/parsePostContent.test.ts`
 
@@ -168,9 +171,7 @@ describe('parsePostContent', () => {
       <body><a href="https://media.licdn.com/dms/document/slides.pdf">Doc</a></body>`
     const result = parsePostContent(html)
     expect(result.text).toBe('Check out my slides')
-    expect(result.media).toEqual([
-      { type: 'document', url: 'https://media.licdn.com/dms/document/slides.pdf' }
-    ])
+    expect(result.media).toEqual([{ type: 'document', url: 'https://media.licdn.com/dms/document/slides.pdf' }])
   })
 
   it('decodes HTML entities in extracted URLs', () => {
@@ -336,6 +337,7 @@ git commit -m "feat(linkedin): parse post text + media from page HTML"
 ## Task 3: Wire `submitPost` to persist full content + media
 
 **Files:**
+
 - Modify: `convex/posts.ts` (imports near line 1-9; handler body lines 135-168)
 
 No unit test: `submitPost` is a Convex `action` (network + auth), which this codebase does not unit-test (see `convex/posts.test.ts`, which tests pure helpers only). The pure logic it now calls is covered by Task 1 & 2. Verification is typecheck + the parser suite.
@@ -353,24 +355,24 @@ import { parsePostContent, appendMediaLinks } from './linkedin/parsePostContent'
 In `convex/posts.ts`, find this block (currently around lines 146-150):
 
 ```ts
-    // 4. Verify ownership (Step A → Step B fallback)
-    // Step A: UGC API (works when r_member_social is approved)
-    // Step B: local comparison against stored publicIdentifier (no API call needed)
-    const storedIdentifier = user.linkedinPublicIdentifier ?? null
-    const ownership = await verifyPostOwnership(token, urn, user.linkedinId, parsed.vanityName, storedIdentifier)
+// 4. Verify ownership (Step A → Step B fallback)
+// Step A: UGC API (works when r_member_social is approved)
+// Step B: local comparison against stored publicIdentifier (no API call needed)
+const storedIdentifier = user.linkedinPublicIdentifier ?? null
+const ownership = await verifyPostOwnership(token, urn, user.linkedinId, parsed.vanityName, storedIdentifier)
 ```
 
 Immediately after it, insert:
 
 ```ts
-    // 4b. Extract full content + media from the page HTML we already fetched
-    // above. Best-effort and non-fatal — empty results degrade gracefully to
-    // whatever the ownership step returned. The media is appended to `content`
-    // as labeled links and also stored structured in `mediaUrls` for future use.
-    const parsedContent = parsePostContent(rawLinkedinText)
-    const baseText = ownership.content || parsedContent.text
-    const composedContent = appendMediaLinks(baseText, parsedContent.media)
-    const mediaUrls = parsedContent.media.map(m => m.url)
+// 4b. Extract full content + media from the page HTML we already fetched
+// above. Best-effort and non-fatal — empty results degrade gracefully to
+// whatever the ownership step returned. The media is appended to `content`
+// as labeled links and also stored structured in `mediaUrls` for future use.
+const parsedContent = parsePostContent(rawLinkedinText)
+const baseText = ownership.content || parsedContent.text
+const composedContent = appendMediaLinks(baseText, parsedContent.media)
+const mediaUrls = parsedContent.media.map(m => m.url)
 ```
 
 Note: the URL parse result is already named `parsed` (line 100), so the new variable is deliberately named `parsedContent` to avoid a shadow/collision.
@@ -382,7 +384,9 @@ In the `ctx.runMutation(internal.jobs.syncPosts.upsertPost, { ... })` call (line
 ```ts
       content: ownership.content,
 ```
+
 to:
+
 ```ts
       content: composedContent,
 ```
@@ -392,7 +396,9 @@ and:
 ```ts
       mediaUrls: [],
 ```
+
 to:
+
 ```ts
       mediaUrls,
 ```
@@ -419,6 +425,7 @@ git commit -m "feat(posts): persist full content + media links on submitPost"
 ## Task 4: `buildEmbedUrl` namespace fix (shared)
 
 **Files:**
+
 - Create: `app/src/components/LinkedInEmbed.tsx`
 - Test: `app/src/components/LinkedInEmbed.test.tsx`
 
@@ -432,27 +439,19 @@ import { buildEmbedUrl } from './LinkedInEmbed'
 
 describe('buildEmbedUrl', () => {
   it('preserves the share namespace', () => {
-    expect(buildEmbedUrl('urn:li:share:123')).toBe(
-      'https://www.linkedin.com/embed/feed/update/urn:li:share:123/'
-    )
+    expect(buildEmbedUrl('urn:li:share:123')).toBe('https://www.linkedin.com/embed/feed/update/urn:li:share:123/')
   })
 
   it('preserves the ugcPost namespace', () => {
-    expect(buildEmbedUrl('urn:li:ugcPost:456')).toBe(
-      'https://www.linkedin.com/embed/feed/update/urn:li:ugcPost:456/'
-    )
+    expect(buildEmbedUrl('urn:li:ugcPost:456')).toBe('https://www.linkedin.com/embed/feed/update/urn:li:ugcPost:456/')
   })
 
   it('preserves the activity namespace', () => {
-    expect(buildEmbedUrl('urn:li:activity:789')).toBe(
-      'https://www.linkedin.com/embed/feed/update/urn:li:activity:789/'
-    )
+    expect(buildEmbedUrl('urn:li:activity:789')).toBe('https://www.linkedin.com/embed/feed/update/urn:li:activity:789/')
   })
 
   it('falls back to wrapping a bare numeric id as an activity URN', () => {
-    expect(buildEmbedUrl('123456')).toBe(
-      'https://www.linkedin.com/embed/feed/update/urn:li:activity:123456/'
-    )
+    expect(buildEmbedUrl('123456')).toBe('https://www.linkedin.com/embed/feed/update/urn:li:activity:123456/')
   })
 })
 ```
@@ -505,7 +504,10 @@ export default function LinkedInEmbed({
   footer?: ReactNode
 }) {
   return (
-    <div className="relative overflow-hidden" style={{ height: containerHeight }}>
+    <div
+      className="relative overflow-hidden"
+      style={{ height: containerHeight }}
+    >
       <iframe
         src={buildEmbedUrl(urn)}
         title="LinkedIn post"
@@ -542,6 +544,7 @@ git commit -m "feat(ui): shared LinkedInEmbed with namespace-preserving embed UR
 ## Task 5: Feed `PostCard` iframe layout (Option B)
 
 **Files:**
+
 - Modify: `app/src/components/PostCard.tsx` (whole file)
 - Test: `app/src/components/PostCard.test.tsx` (whole file)
 
@@ -568,7 +571,13 @@ const mockPost: PostWithAuthor = {
 
 describe('PostCard', () => {
   it('renders the LinkedIn embed iframe for the post URN', () => {
-    render(<PostCard post={mockPost} onComment={() => {}} onReact={() => {}} />)
+    render(
+      <PostCard
+        post={mockPost}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
     const iframe = screen.getByTitle('LinkedIn post')
     expect(iframe).toHaveAttribute(
       'src',
@@ -577,26 +586,50 @@ describe('PostCard', () => {
   })
 
   it('renders the author name but not the raw post body text', () => {
-    render(<PostCard post={mockPost} onComment={() => {}} onReact={() => {}} />)
+    render(
+      <PostCard
+        post={mockPost}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
     expect(screen.getByText('Jane Doe')).toBeInTheDocument()
     expect(screen.queryByText('Hello LinkedIn world')).not.toBeInTheDocument()
   })
 
   it('shows the FEATURED badge when isFeatured is true', () => {
-    render(<PostCard post={{ ...mockPost, isFeatured: true }} onComment={() => {}} onReact={() => {}} />)
+    render(
+      <PostCard
+        post={{ ...mockPost, isFeatured: true }}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
     expect(screen.getByText(/featured/i)).toBeInTheDocument()
   })
 
   it('wires the Like button to onReact with the post id', () => {
     const onReact = vi.fn()
-    render(<PostCard post={mockPost} onComment={() => {}} onReact={onReact} />)
+    render(
+      <PostCard
+        post={mockPost}
+        onComment={() => {}}
+        onReact={onReact}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /like/i }))
     expect(onReact).toHaveBeenCalledWith(mockPost._id)
   })
 
   it('wires the Comment button to onComment with the post id', () => {
     const onComment = vi.fn()
-    render(<PostCard post={mockPost} onComment={onComment} onReact={() => {}} />)
+    render(
+      <PostCard
+        post={mockPost}
+        onComment={onComment}
+        onReact={() => {}}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /comment/i }))
     expect(onComment).toHaveBeenCalledWith(mockPost._id)
   })
@@ -725,6 +758,7 @@ git commit -m "feat(feed): render posts as LinkedIn embed (Option B layout)"
 ## Task 6: Refactor `MyPostsPage` onto the shared embed
 
 **Files:**
+
 - Modify: `app/src/pages/MyPostsPage.tsx` (lines 26-32 remove inline helper; lines 124-168 use the component)
 
 This removes the duplicate `buildEmbedUrl` (and inherits the namespace fix). The existing `MyPostsPage.test.tsx` renders with zero posts, so it does not exercise the embed — it must stay green unchanged.
@@ -754,28 +788,28 @@ function buildEmbedUrl(urn: string): string {
 In the post list, replace the embed container block (currently lines 128-164, the `<div className="relative h-[420px] overflow-hidden"> … </div>` that wraps the `<iframe>` and the overlay) with:
 
 ```tsx
-              <LinkedInEmbed
-                urn={post.linkedinPostUrn}
-                footer={
-                  <div className="flex h-[52px] items-center justify-between border-t border-slate-200 bg-white px-[14px]">
-                    {/* Engagement stats from our own tracking data */}
-                    <span className="text-xs text-slate-500">
-                      👍 {post.likeCount} · 💬 {post.commentCount}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {timeAgo(post.publishedAt)} ·{' '}
-                      <a
-                        href={buildLinkedInUrl(post)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 no-underline"
-                      >
-                        View on LinkedIn ↗
-                      </a>
-                    </span>
-                  </div>
-                }
-              />
+<LinkedInEmbed
+  urn={post.linkedinPostUrn}
+  footer={
+    <div className="flex h-[52px] items-center justify-between border-t border-slate-200 bg-white px-[14px]">
+      {/* Engagement stats from our own tracking data */}
+      <span className="text-xs text-slate-500">
+        👍 {post.likeCount} · 💬 {post.commentCount}
+      </span>
+      <span className="text-xs text-slate-500">
+        {timeAgo(post.publishedAt)} ·{' '}
+        <a
+          href={buildLinkedInUrl(post)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500 no-underline"
+        >
+          View on LinkedIn ↗
+        </a>
+      </span>
+    </div>
+  }
+/>
 ```
 
 The surrounding `<div key={post._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white">` wrapper (line 124-127) and its closing `</div>` (line 165) stay as-is. `buildLinkedInUrl` and `timeAgo` are unchanged and still used.
@@ -836,6 +870,7 @@ git commit -m "chore: lint + verification for LinkedIn iframe + content capture"
 ## Self-Review
 
 **Spec coverage:**
+
 - Iframe-only Feed display (Option B layout) → Task 5.
 - Shared embed component / refactor My Posts → Tasks 4, 6.
 - Embed URN namespace fix → Task 4.

@@ -47,8 +47,7 @@ export const processPostQueue = internalMutation({
       // Count author's posts published in the last 7 days using the compound index
       const recentPosts = await ctx.db
         .query('posts')
-        .withIndex('by_author_and_publishedAt', q =>
-          q.eq('authorId', authorId).gte('publishedAt', sevenDaysAgo))
+        .withIndex('by_author_and_publishedAt', q => q.eq('authorId', authorId).gte('publishedAt', sevenDaysAgo))
         .take(limits.postsPerWeek)
       const recentCount = recentPosts.length
 
@@ -62,9 +61,7 @@ export const processPostQueue = internalMutation({
         .take(limits.postsPerWeek)
 
       // Promote oldest posts first (publishedAt ascending)
-      const toPromote = [...authorQueued]
-        .sort((a, b) => a.publishedAt - b.publishedAt)
-        .slice(0, capacity)
+      const toPromote = [...authorQueued].sort((a, b) => a.publishedAt - b.publishedAt).slice(0, capacity)
 
       for (const queuedPost of toPromote) {
         // Dedup: skip if this URN was already promoted in a prior cron run

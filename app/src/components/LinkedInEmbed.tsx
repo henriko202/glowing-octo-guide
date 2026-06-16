@@ -36,7 +36,10 @@ export default function LinkedInEmbed({
   footer?: ReactNode
 }) {
   return (
-    <div className="relative overflow-hidden" style={{ height: containerHeight }}>
+    <div
+      className="relative overflow-hidden"
+      style={{ height: containerHeight }}
+    >
       <iframe
         src={buildEmbedUrl(urn)}
         title="LinkedIn post"

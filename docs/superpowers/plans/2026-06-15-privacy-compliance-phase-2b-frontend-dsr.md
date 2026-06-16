@@ -28,24 +28,25 @@ independent of generated types.
 Library (`pnpm --filter app test`).
 
 **Spec:** `docs/superpowers/specs/2026-06-15-privacy-compliance-design.md` §3.1/§3.2 (export, deletion
-+ grace), §14 frontend. **Backend signatures (Phase 2a):** `api.privacy.export.requestDataExport`
-(mutation → `{requestId}`), `api.privacy.export.getExportStatus` (query → `{status, requestedAt}|null`),
-`api.privacy.export.getExportDownloadUrl` (query → `string|null`), `api.privacy.deletion.requestAccountDeletion`
-(mutation → `{deletionScheduledAt}`), `api.privacy.deletion.cancelAccountDeletion` (mutation). `getMe`
-already returns `deletionScheduledAt`/`deletionReason`.
+
+- grace), §14 frontend. **Backend signatures (Phase 2a):** `api.privacy.export.requestDataExport`
+  (mutation → `{requestId}`), `api.privacy.export.getExportStatus` (query → `{status, requestedAt}|null`),
+  `api.privacy.export.getExportDownloadUrl` (query → `string|null`), `api.privacy.deletion.requestAccountDeletion`
+  (mutation → `{deletionScheduledAt}`), `api.privacy.deletion.cancelAccountDeletion` (mutation). `getMe`
+  already returns `deletionScheduledAt`/`deletionReason`.
 
 ---
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
+| File                                                          | Responsibility                                                                               |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `app/src/components/CancelDeletionScreen.tsx` (create) + test | Grace-window screen: shows the date, "Keep my account" (→ `cancelAccountDeletion`), Sign out |
-| `app/src/pages/PrivacyDataPage.tsx` (create) + test | Export (request/status/download) + delete-with-confirm-modal |
-| `app/src/App.tsx` (modify) | New guarded route `/privacy-data`; `RequireAuth` pending-deletion interception |
-| `app/src/components/AppNav.tsx` (modify) | "Privacy" nav link → `/privacy-data` |
-| `app/src/i18n/locales/{en,pt,es}.json` (modify) | New `privacy.*` keys |
-| `docs/PLATFORM.md` (modify) | §14 — document the page, screen, interception, nav link |
+| `app/src/pages/PrivacyDataPage.tsx` (create) + test           | Export (request/status/download) + delete-with-confirm-modal                                 |
+| `app/src/App.tsx` (modify)                                    | New guarded route `/privacy-data`; `RequireAuth` pending-deletion interception               |
+| `app/src/components/AppNav.tsx` (modify)                      | "Privacy" nav link → `/privacy-data`                                                         |
+| `app/src/i18n/locales/{en,pt,es}.json` (modify)               | New `privacy.*` keys                                                                         |
+| `docs/PLATFORM.md` (modify)                                   | §14 — document the page, screen, interception, nav link                                      |
 
 **Test commands:** `pnpm --filter app test [substring]`; lint `pnpm lint`.
 
@@ -161,7 +162,7 @@ export default function CancelDeletionScreen({ deletionScheduledAt }: Props) {
 ```
 
 - [ ] **Step 4: Run, confirm PASS** — `pnpm --filter app test CancelDeletionScreen`, then `pnpm lint`,
-  then `npx prettier --check "app/src/components/CancelDeletionScreen.tsx" "app/src/components/CancelDeletionScreen.test.tsx"` (write+recheck if needed).
+      then `npx prettier --check "app/src/components/CancelDeletionScreen.tsx" "app/src/components/CancelDeletionScreen.test.tsx"` (write+recheck if needed).
 
 - [ ] **Step 5: Checkpoint (NO COMMIT).**
 
@@ -183,7 +184,8 @@ let exportStatusVal: unknown = null
 let downloadUrlVal: unknown = null
 
 vi.mock('convex/react', () => ({
-  useQuery: (ref: string) => (ref === 'getExportStatus' ? exportStatusVal : ref === 'getExportDownloadUrl' ? downloadUrlVal : null),
+  useQuery: (ref: string) =>
+    ref === 'getExportStatus' ? exportStatusVal : ref === 'getExportDownloadUrl' ? downloadUrlVal : null,
   useMutation: (ref: string) => (ref === 'requestDataExport' ? requestExport : requestDeletion)
 }))
 vi.mock('../convex', () => ({
@@ -390,7 +392,7 @@ export default function PrivacyDataPage() {
 ```
 
 - [ ] **Step 4: Run, confirm PASS** — `pnpm --filter app test PrivacyDataPage`, then `pnpm lint`, then
-  `npx prettier --check` on both files (write+recheck if needed).
+      `npx prettier --check` on both files (write+recheck if needed).
 
 - [ ] **Step 5: Checkpoint (NO COMMIT).**
 
@@ -412,19 +414,19 @@ import PrivacyDataPage from './pages/PrivacyDataPage'
 ```
 
 - [ ] **Step 2: Add the pending-deletion interception** in `RequireAuth`, **after** the `isBanned`
-  check and **before** the final `return`:
+      check and **before** the final `return`:
 
 ```tsx
-  if (me.isBanned) return <BannedScreen reason={me.bannedReason ?? undefined} />
+if (me.isBanned) return <BannedScreen reason={me.bannedReason ?? undefined} />
 
-  if (me.deletionScheduledAt) return <CancelDeletionScreen deletionScheduledAt={me.deletionScheduledAt} />
+if (me.deletionScheduledAt) return <CancelDeletionScreen deletionScheduledAt={me.deletionScheduledAt} />
 
-  return (
-    <>
-      <AppNav />
-      {children}
-    </>
-  )
+return (
+  <>
+    <AppNav />
+    {children}
+  </>
+)
 ```
 
 (The `me` object from `getMe` already carries `deletionScheduledAt` — it's a non-secret field passed
@@ -435,18 +437,18 @@ runtime; add it to the local type or access via `me.deletionScheduledAt` as the 
 - [ ] **Step 3: Add the guarded route** — alongside the other `<Route>`s (e.g. after `/settings`):
 
 ```tsx
-        <Route
-          path="/privacy-data"
-          element={
-            <RequireAuth>
-              <PrivacyDataPage />
-            </RequireAuth>
-          }
-        />
+<Route
+  path="/privacy-data"
+  element={
+    <RequireAuth>
+      <PrivacyDataPage />
+    </RequireAuth>
+  }
+/>
 ```
 
 - [ ] **Step 4: Verify** — `pnpm --filter app test` (whole app suite still green — no regressions),
-  then `pnpm lint`, then `npx prettier --check "app/src/App.tsx"` (write+recheck if needed).
+      then `pnpm lint`, then `npx prettier --check "app/src/App.tsx"` (write+recheck if needed).
 
 - [ ] **Step 5: Checkpoint (NO COMMIT).**
 
@@ -469,7 +471,7 @@ const NAV_LINKS = [
 ```
 
 - [ ] **Step 2: Verify** — `pnpm --filter app test` (no AppNav test exists; ensure nothing breaks),
-  then `pnpm lint`, then `npx prettier --check "app/src/components/AppNav.tsx"`.
+      then `pnpm lint`, then `npx prettier --check "app/src/components/AppNav.tsx"`.
 
 - [ ] **Step 3: Checkpoint (NO COMMIT).**
 
@@ -558,8 +560,8 @@ const NAV_LINKS = [
 ```
 
 - [ ] **Step 4: Verify** — `pnpm --filter app test` (i18n test, if it validates key parity across
-  locales, must still pass — that's why all three locales get the block), then `pnpm lint`, then
-  `npx prettier --check "app/src/i18n/locales/*.json"`.
+      locales, must still pass — that's why all three locales get the block), then `pnpm lint`, then
+      `npx prettier --check "app/src/i18n/locales/*.json"`.
 
 > Check `app/src/i18n/i18n.test.ts` — if it asserts the three locales have identical key sets, your
 > three blocks must match exactly (same keys). Run it and fix any parity mismatch.
@@ -591,11 +593,11 @@ const NAV_LINKS = [
 ## Phase 2b completion check
 
 - [ ] `pnpm --filter app test` — all green (new: CancelDeletionScreen, PrivacyDataPage; existing app
-  tests unaffected).
+      tests unaffected).
 - [ ] `pnpm lint` — zero warnings.
 - [ ] `npx prettier --check` on all created/modified app files + the JSON locales — clean.
 - [ ] Deliverables: `CancelDeletionScreen.tsx`, `PrivacyDataPage.tsx` (+ tests), `App.tsx` route +
-  interception, `AppNav.tsx` link, `privacy.*` in all three locales, `docs/PLATFORM.md` §14.
+      interception, `AppNav.tsx` link, `privacy.*` in all three locales, `docs/PLATFORM.md` §14.
 - [ ] **Nothing committed.** (Runtime requires `pnpm dev:convex` so `api.privacy.*` resolves.)
 
 ## Self-Review (performed during authoring)
@@ -610,4 +612,7 @@ const NAV_LINKS = [
 - **Decoupled tests:** component tests mock `../convex`, so they pass without regenerating
   `_generated` — only the running app needs `pnpm dev:convex`.
 - **No-commit rule:** every task ends in a no-commit checkpoint.
+
+```
+
 ```

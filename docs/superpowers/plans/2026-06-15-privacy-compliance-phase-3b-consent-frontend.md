@@ -31,6 +31,7 @@ lint/build only).
 `{sessionToken}`). `POLICY_VERSION` from `convex/lib/policy`. `getMe` exposes `acknowledgedPolicyVersion`.
 
 ## Conventions
+
 - App component tests: `vi.mock('convex/react')` (keyed off ref strings) + `vi.mock('../convex')` +
   `vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k)=>k }) }))`. No `any` in source.
 - The app imports cross-package values from `convex/` (e.g. `SettingsPage` imports
@@ -43,18 +44,18 @@ lint/build only).
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `app/src/components/ConsentToggles.tsx` (create) + test | marketing/analytics consent toggles (getConsents / recordConsent) |
-| `app/src/pages/PrivacyDataPage.tsx` (modify) | render `<ConsentToggles />`; `PrivacyDataPage.test.tsx` mock updated |
-| `app/src/components/PolicyUpdateScreen.tsx` (create) + test | re-consent prompt (acknowledgePolicy) |
-| `app/src/App.tsx` (modify) | `RequireAuth` re-consent interception |
-| `app/src/i18n/locales/{en,pt,es}.json` (modify) | `privacy.consent.*` + `privacy.policyUpdate.*` keys |
-| `landing/app/cookies/page.tsx` (create) | Cookie Policy page |
-| `landing/components/CookieNotice.tsx` (create) | dismissible first-visit notice |
-| `landing/app/layout.tsx` (modify) | render `<CookieNotice />` |
-| `landing/components/Footer.tsx` (modify) | add `/cookies` link |
-| `docs/PLATFORM.md` (modify) | §14 (consent toggles, re-consent) + §15 (cookies) |
+| File                                                        | Responsibility                                                       |
+| ----------------------------------------------------------- | -------------------------------------------------------------------- |
+| `app/src/components/ConsentToggles.tsx` (create) + test     | marketing/analytics consent toggles (getConsents / recordConsent)    |
+| `app/src/pages/PrivacyDataPage.tsx` (modify)                | render `<ConsentToggles />`; `PrivacyDataPage.test.tsx` mock updated |
+| `app/src/components/PolicyUpdateScreen.tsx` (create) + test | re-consent prompt (acknowledgePolicy)                                |
+| `app/src/App.tsx` (modify)                                  | `RequireAuth` re-consent interception                                |
+| `app/src/i18n/locales/{en,pt,es}.json` (modify)             | `privacy.consent.*` + `privacy.policyUpdate.*` keys                  |
+| `landing/app/cookies/page.tsx` (create)                     | Cookie Policy page                                                   |
+| `landing/components/CookieNotice.tsx` (create)              | dismissible first-visit notice                                       |
+| `landing/app/layout.tsx` (modify)                           | render `<CookieNotice />`                                            |
+| `landing/components/Footer.tsx` (modify)                    | add `/cookies` link                                                  |
+| `docs/PLATFORM.md` (modify)                                 | §14 (consent toggles, re-consent) + §15 (cookies)                    |
 
 ---
 
@@ -161,17 +162,17 @@ export default function ConsentToggles() {
 ```
 
 - [ ] **Step 4: Render it in `PrivacyDataPage.tsx`** — import and place `<ConsentToggles />` between the
-  export `<section>` and the delete `<section>` (in the main return, not the deletion-confirmed branch):
+      export `<section>` and the delete `<section>` (in the main return, not the deletion-confirmed branch):
 
 ```tsx
 import ConsentToggles from '../components/ConsentToggles'
 // ... after the export <section> ... and before the delete <section>:
-      <ConsentToggles />
+;<ConsentToggles />
 ```
 
 - [ ] **Step 5: Update `PrivacyDataPage.test.tsx`** so rendering `ConsentToggles` doesn't break — extend
-  the `../convex` mock's `api.privacy` with `consent` and make the `convex/react` mocks tolerate the new
-  refs. Replace the `vi.mock('convex/react', ...)` and `vi.mock('../convex', ...)` blocks with:
+      the `../convex` mock's `api.privacy` with `consent` and make the `convex/react` mocks tolerate the new
+      refs. Replace the `vi.mock('convex/react', ...)` and `vi.mock('../convex', ...)` blocks with:
 
 ```tsx
 vi.mock('convex/react', () => ({
@@ -199,7 +200,7 @@ vi.mock('../convex', () => ({
 3 PrivacyDataPage tests still assert only export/delete behavior, so they keep passing.)
 
 - [ ] **Step 6: Add i18n keys** — add to the `privacy` block in `en.json`, `pt.json`, `es.json` (identical
-  keys in all three):
+      keys in all three):
 
 ```json
     "consent": {
@@ -213,8 +214,8 @@ vi.mock('../convex', () => ({
 (en shown; translate the values for pt/es, keep the keys identical. pt example: title "Preferências de comunicação e análise", marketing "Enviar novidades e dicas por e-mail", analytics "Permitir análise de uso", note "São opcionais e desativadas por padrão. Altere quando quiser."; es: "Preferencias de comunicación y analítica", "Enviarme novedades y consejos por correo", "Permitir analítica de uso", "Son opcionales y están desactivadas por defecto. Cámbialas cuando quieras.")
 
 - [ ] **Step 7: Run + verify** — `pnpm --filter app test ConsentToggles`, then `pnpm --filter app test`
-  (incl. PrivacyDataPage + i18n parity), then `pnpm lint`, then `npx prettier --check` on the new/changed
-  files. All green.
+      (incl. PrivacyDataPage + i18n parity), then `pnpm lint`, then `npx prettier --check` on the new/changed
+      files. All green.
 
 - [ ] **Step 8: Checkpoint (NO COMMIT).**
 
@@ -354,7 +355,7 @@ Then in `RequireAuth`, AFTER the `deletionScheduledAt` branch and BEFORE the app
 (Translate values for pt/es; keep keys identical. pt: "Atualizamos nossa Política de Privacidade" / "Fizemos alterações… Revise e confirme para continuar." / "Ler a política" / "Eu confirmo". es: "Actualizamos nuestra Política de Privacidad" / "Hicimos cambios… Revísala y confírmala para continuar." / "Leer la política" / "Acepto".)
 
 - [ ] **Step 6: Run + verify** — `pnpm --filter app test PolicyUpdateScreen`, then `pnpm --filter app test`
-  (full app suite; i18n parity), then `pnpm lint`, then `npx prettier --check` on changed files.
+      (full app suite; i18n parity), then `pnpm lint`, then `npx prettier --check` on changed files.
 
 - [ ] **Step 7: Checkpoint (NO COMMIT).**
 
@@ -367,7 +368,7 @@ Then in `RequireAuth`, AFTER the `deletionScheduledAt` branch and BEFORE the app
 > The landing site has **no Vitest setup**. Verify with `pnpm lint` + `pnpm --filter landing build`.
 
 - [ ] **Step 1: Create the Cookie Policy page** — `landing/app/cookies/page.tsx` (mirror the structure of
-  the existing `landing/app/privacy/page.tsx`):
+      the existing `landing/app/privacy/page.tsx`):
 
 ```tsx
 export default function CookiesPage() {
@@ -379,14 +380,14 @@ export default function CookiesPage() {
           <strong className="text-cream">Last updated:</strong> June 2026
         </p>
         <p>
-          Link Into The SSI uses only <strong className="text-cream">strictly necessary</strong> browser
-          storage. The app stores a session token (to keep you signed in) and your language preference.
-          We do not use advertising or cross-site tracking cookies.
+          Link Into The SSI uses only <strong className="text-cream">strictly necessary</strong> browser storage. The
+          app stores a session token (to keep you signed in) and your language preference. We do not use advertising or
+          cross-site tracking cookies.
         </p>
         <p>
-          Because this storage is essential to provide the service you requested, it does not require
-          consent under the ePrivacy rules. Optional analytics, if ever introduced, will be off by default
-          and controllable from <strong className="text-cream">Settings → Privacy &amp; Data</strong>.
+          Because this storage is essential to provide the service you requested, it does not require consent under the
+          ePrivacy rules. Optional analytics, if ever introduced, will be off by default and controllable from{' '}
+          <strong className="text-cream">Settings → Privacy &amp; Data</strong>.
         </p>
         <p>
           Questions:{' '}
@@ -404,7 +405,7 @@ export default function CookiesPage() {
 ```
 
 - [ ] **Step 2: Create the CookieNotice** — `landing/components/CookieNotice.tsx` (client component;
-  dismissible, persists to `localStorage`):
+      dismissible, persists to `localStorage`):
 
 ```tsx
 'use client'
@@ -452,23 +453,23 @@ export default function CookieNotice() {
 ```
 
 - [ ] **Step 3: Render it in the layout** — in `landing/app/layout.tsx`, import `CookieNotice` and render
-  it inside `<body>` after `{children}`:
+      it inside `<body>` after `{children}`:
 
 ```tsx
 import CookieNotice from '../components/CookieNotice'
 // ...
-      <body className="bg-ink font-body text-cream antialiased">
-        {children}
-        <CookieNotice />
-      </body>
+;<body className="bg-ink font-body text-cream antialiased">
+  {children}
+  <CookieNotice />
+</body>
 ```
 
 - [ ] **Step 4: Add a `/cookies` link to the Footer** — read `landing/components/Footer.tsx` and add a
-  `/cookies` link (a Next `<Link href="/cookies">Cookies</Link>` or `<a>`) next to the existing `/privacy`
-  and `/terms` links, matching their exact markup/styling.
+      `/cookies` link (a Next `<Link href="/cookies">Cookies</Link>` or `<a>`) next to the existing `/privacy`
+      and `/terms` links, matching their exact markup/styling.
 
 - [ ] **Step 5: Verify** — `pnpm lint`, then `pnpm --filter landing build` (Next/tsc must succeed), then
-  `npx prettier --check "landing/app/cookies/page.tsx" "landing/components/CookieNotice.tsx" "landing/app/layout.tsx" "landing/components/Footer.tsx"` (write+recheck if needed).
+      `npx prettier --check "landing/app/cookies/page.tsx" "landing/components/CookieNotice.tsx" "landing/app/layout.tsx" "landing/components/Footer.tsx"` (write+recheck if needed).
 
 - [ ] **Step 6: Checkpoint (NO COMMIT).**
 
@@ -479,17 +480,18 @@ import CookieNotice from '../components/CookieNotice'
 **Files:** Modify `docs/PLATFORM.md`
 
 - [ ] **Step 1: §14 (app)** — document `ConsentToggles` (in PrivacyDataPage; marketing/analytics off by
-  default → `recordConsent`/`getConsents`), `PolicyUpdateScreen` + the new `RequireAuth` order (banned →
-  pending-deletion → **re-consent** → app), and the new `privacy.consent.*` / `privacy.policyUpdate.*`
-  i18n keys.
+      default → `recordConsent`/`getConsents`), `PolicyUpdateScreen` + the new `RequireAuth` order (banned →
+      pending-deletion → **re-consent** → app), and the new `privacy.consent.*` / `privacy.policyUpdate.*`
+      i18n keys.
 - [ ] **Step 2: §15 (landing)** — add the `/cookies` route to the routes table; document `CookieNotice`
-  (dismissible, essential-storage-only, links `/cookies`) and the Footer `/cookies` link.
-- [ ] **Step 3: Footer** — extend the "*Last updated*" note to mention Phase 3b.
+      (dismissible, essential-storage-only, links `/cookies`) and the Footer `/cookies` link.
+- [ ] **Step 3: Footer** — extend the "_Last updated_" note to mention Phase 3b.
 - [ ] **Step 4: Verify + Checkpoint (NO COMMIT).**
 
 ---
 
 ## Phase 3b completion check
+
 - [ ] `pnpm --filter app test` — green (ConsentToggles, PolicyUpdateScreen, PrivacyDataPage, i18n parity).
 - [ ] `pnpm --filter landing build` — succeeds.
 - [ ] `pnpm lint` — zero warnings.
@@ -497,6 +499,7 @@ import CookieNotice from '../components/CookieNotice'
 - [ ] **Nothing committed.** Runtime needs `pnpm dev:convex` for `api.privacy.consent.*`.
 
 ## Self-Review (performed during authoring)
+
 - **Spec coverage:** consent toggles (§4.1 → Task 1), re-consent prompt (§4.5 → Task 2), cookie notice +
   policy page (§4.2 → Task 3), docs (Task 4).
 - **Placeholder scan:** none — components, tests, and locale blocks are complete; the Footer link + pt/es
@@ -506,4 +509,7 @@ import CookieNotice from '../components/CookieNotice'
   three locales for parity.
 - **Test isolation:** app tests mock `../convex`; landing has no test setup (lint + build verify it).
 - **No-commit rule:** every task ends in a no-commit checkpoint.
+
+```
+
 ```

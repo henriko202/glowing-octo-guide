@@ -28,14 +28,14 @@ fresh. Only admins may ban or unban.
 
 ## Decisions
 
-| # | Topic | Decision |
-|---|-------|----------|
-| 1 | Ban effect | **Hard lockout** — enforced centrally in `requireAuth`, covering every endpoint |
-| 2 | Recorded data | **Reason + who + when** stored on the user doc |
-| 3 | Guardrails | **Block self-ban only** — banning other admins is allowed; reason stays optional |
-| 4 | Admin control | **`···` kebab row-actions menu** (folds in "Set to Contact" + Ban/Unban) |
-| 5 | Confirmation | **Modal** for ban (with optional reason); **quick one-tap confirm** for unban |
-| 6 | Banned screen | **Administrative** style; reason shown to the user when present; `mailto:` contact |
+| #   | Topic         | Decision                                                                           |
+| --- | ------------- | ---------------------------------------------------------------------------------- |
+| 1   | Ban effect    | **Hard lockout** — enforced centrally in `requireAuth`, covering every endpoint    |
+| 2   | Recorded data | **Reason + who + when** stored on the user doc                                     |
+| 3   | Guardrails    | **Block self-ban only** — banning other admins is allowed; reason stays optional   |
+| 4   | Admin control | **`···` kebab row-actions menu** (folds in "Set to Contact" + Ban/Unban)           |
+| 5   | Confirmation  | **Modal** for ban (with optional reason); **quick one-tap confirm** for unban      |
+| 6   | Banned screen | **Administrative** style; reason shown to the user when present; `mailto:` contact |
 
 ## 1. Data model — `convex/schema.ts`
 
@@ -58,9 +58,11 @@ The single chokepoint. Refactor the session→user resolution so it can be share
 banned-throw, then branch:
 
 - **`requireAuth`** — after loading the user, add:
+
   ```ts
-  if (user.isBanned) throw new ConvexError({ code: 'BANNED' });
+  if (user.isBanned) throw new ConvexError({ code: 'BANNED' })
   ```
+
   This blocks **every** current and future protected query/mutation automatically.
 
 - **`getMe`** ([`convex/users.ts`](../../../convex/users.ts)) — must **not** throw on banned (a thrown
@@ -164,16 +166,16 @@ token. Hence: no `sessions` schema/index/logic changes.
 
 ## Files touched
 
-| File | Change |
-|------|--------|
-| `convex/schema.ts` | +4 fields on `users` |
-| `convex/lib/auth.ts` | `resolveSession` helper + banned-throw in `requireAuth` |
-| `convex/users.ts` | `getMe` returns `isBanned` + `bannedReason` (or `null`) |
-| `convex/admin.ts` | new `banUser`, `unbanUser` mutations |
-| `app/src/components/UsersTab.tsx` | `RowActionsMenu`, banned badge, `BanUserDialog`, unban confirm |
-| `app/src/components/BannedScreen.tsx` | new |
-| `app/src/App.tsx` | banned branch in `RequireAuth` |
-| `convex/*.test.ts` | new tests |
+| File                                  | Change                                                         |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `convex/schema.ts`                    | +4 fields on `users`                                           |
+| `convex/lib/auth.ts`                  | `resolveSession` helper + banned-throw in `requireAuth`        |
+| `convex/users.ts`                     | `getMe` returns `isBanned` + `bannedReason` (or `null`)        |
+| `convex/admin.ts`                     | new `banUser`, `unbanUser` mutations                           |
+| `app/src/components/UsersTab.tsx`     | `RowActionsMenu`, banned badge, `BanUserDialog`, unban confirm |
+| `app/src/components/BannedScreen.tsx` | new                                                            |
+| `app/src/App.tsx`                     | banned branch in `RequireAuth`                                 |
+| `convex/*.test.ts`                    | new tests                                                      |
 
 ## Open items
 

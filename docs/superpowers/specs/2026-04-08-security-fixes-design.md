@@ -22,7 +22,7 @@ many of those posts appear in the platform feed per week, regardless of how they
 ### Behavior when limit is reached
 
 | Path                                 | Behavior when limit reached                                     |
-|--------------------------------------|-----------------------------------------------------------------|
+| ------------------------------------ | --------------------------------------------------------------- |
 | Manual URL submission (`submitPost`) | Throw error immediately — user sees "Weekly post limit reached" |
 | Apify sync                           | Route to `postQueue` table instead of inserting into `posts`    |
 
@@ -42,10 +42,10 @@ postQueue: defineTable({
   mediaUrls: v.array(v.string()),
   hidden: v.boolean(),
   sourceUrl: v.optional(v.string()),
-  queuedAt: v.number()   // timestamp when this post entered the queue
+  queuedAt: v.number() // timestamp when this post entered the queue
 })
-.index('by_author', ['authorId'])
-.index('by_urn', ['linkedinPostUrn'])   // for upsert deduplication
+  .index('by_author', ['authorId'])
+  .index('by_urn', ['linkedinPostUrn']) // for upsert deduplication
 ```
 
 Fields NOT stored in the queue (set at promote-time using the author's current state):
@@ -70,9 +70,9 @@ In the **insert branch only**, before `ctx.db.insert`:
    `publishedAt >= Date.now() - 7 * 24 * 60 * 60 * 1000`. The `.take(limits.postsPerWeek)` ceiling is exact — the N most
    recent posts (sorted desc) is exactly what we need to determine if the limit is reached.
 4. If `recentCount >= limits.postsPerWeek`:
-    - If `args.queueOnLimitReached === true`: insert into `postQueue` (check `by_urn` first to avoid duplicates), return
-      `null` (or a sentinel) instead of a post `_id`
-    - Otherwise: throw `"Weekly post limit reached. Your plan allows N post(s) per week."`
+   - If `args.queueOnLimitReached === true`: insert into `postQueue` (check `by_urn` first to avoid duplicates), return
+     `null` (or a sentinel) instead of a post `_id`
+   - Otherwise: throw `"Weekly post limit reached. Your plan allows N post(s) per week."`
 
 The **update branch** (existing post) never checks limits — it only updates counts and visibility.
 
@@ -125,13 +125,15 @@ Add 4 functions to `convex/admin.ts`, all gated behind the existing `assertAdmin
 Returns all rows from `planLimits`, enriched with `userName` for contact override rows:
 
 ```typescript
-args: { sessionToken: v.string() }
+args: {
+  sessionToken: v.string()
+}
 returns: Array<{
-  _id: Id<'planLimits'>,
-  tier: 'starter' | 'growth' | 'pro' | 'contact',
-  userId?: Id<'users'>,    // undefined = tier default row
-  userName?: string,        // user.name if userId is set, undefined otherwise
-  interactionsPerPost: number,
+  _id: Id<'planLimits'>
+  tier: 'starter' | 'growth' | 'pro' | 'contact'
+  userId?: Id<'users'> // undefined = tier default row
+  userName?: string // user.name if userId is set, undefined otherwise
+  interactionsPerPost: number
   postsPerWeek: number
 }>
 ```
@@ -199,7 +201,7 @@ found, throw `"No default row found for tier — run seedPlanLimits first"`.
 ## Files Changed
 
 | File                            | Change                                                                                     |
-|---------------------------------|--------------------------------------------------------------------------------------------|
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
 | `convex/schema.ts`              | Add `postQueue` table                                                                      |
 | `convex/jobs/syncPosts.ts`      | Add `queueOnLimitReached` arg + atomic weekly limit check in insert branch                 |
 | `convex/jobs/syncPostsApify.ts` | Pass `queueOnLimitReached: true` to `upsertPost` calls                                     |

@@ -6,7 +6,7 @@
 
 **Goal:** Enrich users with `country`, `location`, and `primaryLocale` scraped from their LinkedIn profile (new Apify actor), let users edit `industry`/`country` in Settings via canonical dropdowns, seed the UI language from the scraped locale, and gate all Apify usage behind admin flags (incl. a master kill-switch).
 
-**Architecture:** A new Apify *profile* scraper action runs (scheduled, non-blocking) when a user sets their LinkedIn URL or hits a rate-limited "Refresh" button. It writes `country` (fill-when-empty), `location`/`primaryLocale` (always refresh). Industry stays manual. Canonical lists live in one pure-data module shared by server validation and the client. Three flags (`apifyEnabled` master, `apifySyncEnabled` posts, `apifyProfileScrapeEnabled` profile) gate the integration; clients never read the flags.
+**Architecture:** A new Apify _profile_ scraper action runs (scheduled, non-blocking) when a user sets their LinkedIn URL or hits a rate-limited "Refresh" button. It writes `country` (fill-when-empty), `location`/`primaryLocale` (always refresh). Industry stays manual. Canonical lists live in one pure-data module shared by server validation and the client. Three flags (`apifyEnabled` master, `apifySyncEnabled` posts, `apifyProfileScrapeEnabled` profile) gate the integration; clients never read the flags.
 
 **Tech Stack:** Convex (TypeScript backend), React 19 + React Router 7 + raw Tailwind, i18next, Vitest + @testing-library/react. Apify via REST (`run-sync-get-dataset-items`).
 
@@ -15,6 +15,7 @@
 **Before any Convex work:** read `convex/_generated/ai/guidelines.md` first (per `CLAUDE.md`). This plan already conforms (arg validators on every function; no `.filter()`/`.collect()` added; actions use `ctx.runQuery`/`ctx.runMutation`, never `ctx.db`; `fetch` needs no `"use node"`).
 
 **Testing conventions (follow these — they match the codebase, and intentionally diverge from the guidelines' `convex-test` suggestion):**
+
 - This repo does **not** use `convex-test`. `convex/vitest.config.ts` aliases `convex/server` → the `convex-mocks` shim, so backend logic is tested as **plain functions**. Keep this pattern.
 - Convex logic is tested by extracting **pure handler functions** (e.g. `upsertUserHandler`) and testing them with a **hand-rolled mock db**, exactly like [`convex/linkedin/auth.test.ts`](../../../convex/linkedin/auth.test.ts).
 - Pure validators/helpers are exported and unit-tested directly (e.g. `validateLimitArgs` in `admin.ts`).
@@ -27,6 +28,7 @@
 ## Task 1: Schema + shared types
 
 **Files:**
+
 - Modify: `convex/schema.ts` (users table; appSettings table)
 - Modify: `convex/convexTypes.ts` (`UserDoc`, `AppSettingsDoc`)
 
@@ -90,6 +92,7 @@ Expected: no errors. (If `convex/_generated` is stale, run `npx convex codegen` 
 ```bash
 git add convex/schema.ts convex/convexTypes.ts
 ```
+
 Pause for Henriko to review and commit (suggested message: `feat(schema): add user location/primaryLocale + apify master/profile flags`).
 
 ---
@@ -97,6 +100,7 @@ Pause for Henriko to review and commit (suggested message: `feat(schema): add us
 ## Task 2: Apify gate helpers + shared `runApifyTask`
 
 **Files:**
+
 - Create: `convex/lib/apify.ts`
 - Create: `convex/lib/apify.test.ts`
 - Modify: `convex/jobs/syncPostsApify.ts` (use shared helper + gate)
@@ -221,17 +225,18 @@ import { runApifyTask, isApifyPostSyncEnabled } from '../lib/apify.js'
 3. The remaining local `runApifyTask` call returns `unknown[]`, so cast it. Change the call inside `syncUserPostsViaApify`:
 
 ```ts
-    const items = (await runApifyTask(actorId, token, input)) as ApifyPostResult[] | undefined
+const items = (await runApifyTask(actorId, token, input)) as ApifyPostResult[] | undefined
 ```
 
 4. In `syncAllPostsViaApify`, replace the gate check:
 
 ```ts
-    if (!isApifyPostSyncEnabled(settings)) {
-      console.log('[Apify] Sync is disabled — skipping')
-      return
-    }
+if (!isApifyPostSyncEnabled(settings)) {
+  console.log('[Apify] Sync is disabled — skipping')
+  return
+}
 ```
+
 (Replaces the previous `if (!settings?.apifySyncEnabled) { ... }`.)
 
 - [ ] **Step 6: Verify nothing broke**
@@ -244,6 +249,7 @@ Expected: tests PASS, no type errors.
 ```bash
 git add convex/lib/apify.ts convex/lib/apify.test.ts convex/jobs/syncPostsApify.ts
 ```
+
 Pause for review/commit (suggested: `feat(apify): shared runApifyTask + 3-flag gate helpers`).
 
 ---
@@ -251,10 +257,11 @@ Pause for review/commit (suggested: `feat(apify): shared runApifyTask + 3-flag g
 ## Task 3: Canonical lists (`profileOptions.ts`)
 
 **Files:**
+
 - Create: `convex/lib/profileOptions.ts`
 - Create: `convex/lib/profileOptions.test.ts`
 
-> **Data sourcing note:** `COUNTRY_CODES` is the full ISO 3166-1 alpha-2 set (below, complete — paste as-is). `INDUSTRIES` is the **full** LinkedIn industry-codes-v2 taxonomy (~420 rows) — store **only** the LinkedIn Industry Code (`code`) and English Label (`label`) columns. Source: <https://learn.microsoft.com/en-us/linkedin/shared/references/reference-tables/industry-codes-v2>. A small accurate seed is given below to make the file compile; **you must populate the remaining rows from the source.** The integrity test in this task fails until the list is complete (it asserts `length >= 400`, unique codes, and the presence of labels that appear *after* the easily-fetched portion of the table — Software Development, IT Services and IT Consulting, Retail, Real Estate, Telecommunications, Legal Services, Technology/Internet, Transportation/Logistics). Note: a single WebFetch of that page truncates — fetch in sections or copy the rendered table to get all rows.
+> **Data sourcing note:** `COUNTRY_CODES` is the full ISO 3166-1 alpha-2 set (below, complete — paste as-is). `INDUSTRIES` is the **full** LinkedIn industry-codes-v2 taxonomy (~420 rows) — store **only** the LinkedIn Industry Code (`code`) and English Label (`label`) columns. Source: <https://learn.microsoft.com/en-us/linkedin/shared/references/reference-tables/industry-codes-v2>. A small accurate seed is given below to make the file compile; **you must populate the remaining rows from the source.** The integrity test in this task fails until the list is complete (it asserts `length >= 400`, unique codes, and the presence of labels that appear _after_ the easily-fetched portion of the table — Software Development, IT Services and IT Consulting, Retail, Real Estate, Telecommunications, Legal Services, Technology/Internet, Transportation/Logistics). Note: a single WebFetch of that page truncates — fetch in sections or copy the rendered table to get all rows.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -262,12 +269,7 @@ Create `convex/lib/profileOptions.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import {
-  COUNTRY_CODES,
-  INDUSTRIES,
-  isValidCountry,
-  isValidIndustry
-} from './profileOptions'
+import { COUNTRY_CODES, INDUSTRIES, isValidCountry, isValidIndustry } from './profileOptions'
 
 describe('country list', () => {
   it('contains common ISO alpha-2 codes and validates case-insensitively', () => {
@@ -339,31 +341,255 @@ Create `convex/lib/profileOptions.ts`. Paste the full `COUNTRY_CODES` exactly as
 
 /** Full ISO 3166-1 alpha-2 country codes. Display names are derived in the UI via Intl.DisplayNames. */
 export const COUNTRY_CODES: readonly string[] = [
-  'AD','AE','AF','AG','AI','AL','AM','AO','AQ','AR','AS','AT','AU','AW','AX','AZ',
-  'BA','BB','BD','BE','BF','BG','BH','BI','BJ','BL','BM','BN','BO','BQ','BR','BS','BT','BV','BW','BY','BZ',
-  'CA','CC','CD','CF','CG','CH','CI','CK','CL','CM','CN','CO','CR','CU','CV','CW','CX','CY','CZ',
-  'DE','DJ','DK','DM','DO','DZ',
-  'EC','EE','EG','EH','ER','ES','ET',
-  'FI','FJ','FK','FM','FO','FR',
-  'GA','GB','GD','GE','GF','GG','GH','GI','GL','GM','GN','GP','GQ','GR','GS','GT','GU','GW','GY',
-  'HK','HM','HN','HR','HT','HU',
-  'ID','IE','IL','IM','IN','IO','IQ','IR','IS','IT',
-  'JE','JM','JO','JP',
-  'KE','KG','KH','KI','KM','KN','KP','KR','KW','KY','KZ',
-  'LA','LB','LC','LI','LK','LR','LS','LT','LU','LV','LY',
-  'MA','MC','MD','ME','MF','MG','MH','MK','ML','MM','MN','MO','MP','MQ','MR','MS','MT','MU','MV','MW','MX','MY','MZ',
-  'NA','NC','NE','NF','NG','NI','NL','NO','NP','NR','NU','NZ',
+  'AD',
+  'AE',
+  'AF',
+  'AG',
+  'AI',
+  'AL',
+  'AM',
+  'AO',
+  'AQ',
+  'AR',
+  'AS',
+  'AT',
+  'AU',
+  'AW',
+  'AX',
+  'AZ',
+  'BA',
+  'BB',
+  'BD',
+  'BE',
+  'BF',
+  'BG',
+  'BH',
+  'BI',
+  'BJ',
+  'BL',
+  'BM',
+  'BN',
+  'BO',
+  'BQ',
+  'BR',
+  'BS',
+  'BT',
+  'BV',
+  'BW',
+  'BY',
+  'BZ',
+  'CA',
+  'CC',
+  'CD',
+  'CF',
+  'CG',
+  'CH',
+  'CI',
+  'CK',
+  'CL',
+  'CM',
+  'CN',
+  'CO',
+  'CR',
+  'CU',
+  'CV',
+  'CW',
+  'CX',
+  'CY',
+  'CZ',
+  'DE',
+  'DJ',
+  'DK',
+  'DM',
+  'DO',
+  'DZ',
+  'EC',
+  'EE',
+  'EG',
+  'EH',
+  'ER',
+  'ES',
+  'ET',
+  'FI',
+  'FJ',
+  'FK',
+  'FM',
+  'FO',
+  'FR',
+  'GA',
+  'GB',
+  'GD',
+  'GE',
+  'GF',
+  'GG',
+  'GH',
+  'GI',
+  'GL',
+  'GM',
+  'GN',
+  'GP',
+  'GQ',
+  'GR',
+  'GS',
+  'GT',
+  'GU',
+  'GW',
+  'GY',
+  'HK',
+  'HM',
+  'HN',
+  'HR',
+  'HT',
+  'HU',
+  'ID',
+  'IE',
+  'IL',
+  'IM',
+  'IN',
+  'IO',
+  'IQ',
+  'IR',
+  'IS',
+  'IT',
+  'JE',
+  'JM',
+  'JO',
+  'JP',
+  'KE',
+  'KG',
+  'KH',
+  'KI',
+  'KM',
+  'KN',
+  'KP',
+  'KR',
+  'KW',
+  'KY',
+  'KZ',
+  'LA',
+  'LB',
+  'LC',
+  'LI',
+  'LK',
+  'LR',
+  'LS',
+  'LT',
+  'LU',
+  'LV',
+  'LY',
+  'MA',
+  'MC',
+  'MD',
+  'ME',
+  'MF',
+  'MG',
+  'MH',
+  'MK',
+  'ML',
+  'MM',
+  'MN',
+  'MO',
+  'MP',
+  'MQ',
+  'MR',
+  'MS',
+  'MT',
+  'MU',
+  'MV',
+  'MW',
+  'MX',
+  'MY',
+  'MZ',
+  'NA',
+  'NC',
+  'NE',
+  'NF',
+  'NG',
+  'NI',
+  'NL',
+  'NO',
+  'NP',
+  'NR',
+  'NU',
+  'NZ',
   'OM',
-  'PA','PE','PF','PG','PH','PK','PL','PM','PN','PR','PS','PT','PW','PY',
+  'PA',
+  'PE',
+  'PF',
+  'PG',
+  'PH',
+  'PK',
+  'PL',
+  'PM',
+  'PN',
+  'PR',
+  'PS',
+  'PT',
+  'PW',
+  'PY',
   'QA',
-  'RE','RO','RS','RU','RW',
-  'SA','SB','SC','SD','SE','SG','SH','SI','SJ','SK','SL','SM','SN','SO','SR','SS','ST','SV','SX','SY','SZ',
-  'TC','TD','TF','TG','TH','TJ','TK','TL','TM','TN','TO','TR','TT','TV','TW','TZ',
-  'UA','UG','UM','US','UY','UZ',
-  'VA','VC','VE','VG','VI','VN','VU',
-  'WF','WS',
-  'YE','YT',
-  'ZA','ZM','ZW'
+  'RE',
+  'RO',
+  'RS',
+  'RU',
+  'RW',
+  'SA',
+  'SB',
+  'SC',
+  'SD',
+  'SE',
+  'SG',
+  'SH',
+  'SI',
+  'SJ',
+  'SK',
+  'SL',
+  'SM',
+  'SN',
+  'SO',
+  'SR',
+  'SS',
+  'ST',
+  'SV',
+  'SX',
+  'SY',
+  'SZ',
+  'TC',
+  'TD',
+  'TF',
+  'TG',
+  'TH',
+  'TJ',
+  'TK',
+  'TL',
+  'TM',
+  'TN',
+  'TO',
+  'TR',
+  'TT',
+  'TV',
+  'TW',
+  'TZ',
+  'UA',
+  'UG',
+  'UM',
+  'US',
+  'UY',
+  'UZ',
+  'VA',
+  'VC',
+  'VE',
+  'VG',
+  'VI',
+  'VN',
+  'VU',
+  'WF',
+  'WS',
+  'YE',
+  'YT',
+  'ZA',
+  'ZM',
+  'ZW'
 ]
 
 export interface Industry {
@@ -450,6 +676,7 @@ Expected: PASS (all describe blocks). If `industry list` fails on `length` or re
 ```bash
 git add convex/lib/profileOptions.ts convex/lib/profileOptions.test.ts
 ```
+
 Pause for review/commit (suggested: `feat(profile): canonical country + LinkedIn industry lists`).
 
 ---
@@ -457,6 +684,7 @@ Pause for review/commit (suggested: `feat(profile): canonical country + LinkedIn
 ## Task 4: Generalize the rate limiter to support a daily window
 
 **Files:**
+
 - Modify: `convex/lib/rateLimit.ts`
 - Create: `convex/lib/rateLimit.test.ts`
 
@@ -507,9 +735,9 @@ describe('checkRateLimit (windowed)', () => {
 
   it('throws once the cap is hit within the window', async () => {
     const ctx = createMockCtx({ _id: 'r1', windowStart: Date.now(), count: 2 })
-    await expect(
-      checkRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS, 'day')
-    ).rejects.toThrow(/at most 2 times per day/)
+    await expect(checkRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS, 'day')).rejects.toThrow(
+      /at most 2 times per day/
+    )
   })
 
   it('resets after the window elapses', async () => {
@@ -555,7 +783,9 @@ export async function checkRateLimit(
   }
 
   if (existing.count >= maxPerWindow) {
-    throw new Error(`Rate limit exceeded. You can perform this action at most ${maxPerWindow} times per ${windowLabel}.`)
+    throw new Error(
+      `Rate limit exceeded. You can perform this action at most ${maxPerWindow} times per ${windowLabel}.`
+    )
   }
 
   await ctx.db.patch(existing._id, { count: existing.count + 1 })
@@ -594,6 +824,7 @@ Expected: no errors (existing `checkRateLimit(ctx, userId, 'submitPost', 10)` ca
 ```bash
 git add convex/lib/rateLimit.ts convex/lib/rateLimit.test.ts
 ```
+
 Pause for review/commit (suggested: `feat(rateLimit): optional window size + label`).
 
 ---
@@ -601,6 +832,7 @@ Pause for review/commit (suggested: `feat(rateLimit): optional window size + lab
 ## Task 5: `applyScrapedProfile` (fill-when-empty country; always refresh location/locale)
 
 **Files:**
+
 - Modify: `convex/users.ts` (add pure handler + internal mutation)
 - Create: `convex/users.applyScrapedProfile.test.ts`
 
@@ -733,6 +965,7 @@ Expected: PASS (3 tests).
 ```bash
 git add convex/users.ts convex/users.applyScrapedProfile.test.ts
 ```
+
 Pause for review/commit (suggested: `feat(users): applyScrapedProfile mutation (fill-when-empty country)`).
 
 ---
@@ -740,6 +973,7 @@ Pause for review/commit (suggested: `feat(users): applyScrapedProfile mutation (
 ## Task 6: Profile-scrape parser + action
 
 **Files:**
+
 - Create: `convex/jobs/scrapeProfileApify.ts`
 - Create: `convex/jobs/scrapeProfileApify.test.ts`
 
@@ -848,10 +1082,7 @@ export const scrapeUserProfile = internalAction({
       return
     }
 
-    const user = (await actionCtx.runQuery(internal.users.getWithTokens, { userId })) as Record<
-      string,
-      unknown
-    > | null
+    const user = (await actionCtx.runQuery(internal.users.getWithTokens, { userId })) as Record<string, unknown> | null
     if (!user?.linkedinPublicIdentifier) {
       console.warn(`User ${userId} has no linkedinPublicIdentifier — skipping profile scrape`)
       return
@@ -888,6 +1119,7 @@ Expected: no errors; `internal.jobs.scrapeProfileApify.scrapeUserProfile` now ex
 ```bash
 git add convex/jobs/scrapeProfileApify.ts convex/jobs/scrapeProfileApify.test.ts convex/_generated
 ```
+
 Pause for review/commit (suggested: `feat(apify): LinkedIn profile scrape action + parser`).
 
 ---
@@ -895,6 +1127,7 @@ Pause for review/commit (suggested: `feat(apify): LinkedIn profile scrape action
 ## Task 7: Trigger the scrape on `setPublicIdentifier`
 
 **Files:**
+
 - Modify: `convex/users.ts` (`setPublicIdentifier`)
 
 - [ ] **Step 1: Schedule the scrape after saving the identifier**
@@ -902,11 +1135,11 @@ Pause for review/commit (suggested: `feat(apify): LinkedIn profile scrape action
 In `convex/users.ts`, in the `setPublicIdentifier` mutation handler, change the final line so that after patching the identifier it schedules the scrape (`internal` is already imported in this file):
 
 ```ts
-    // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
-    await ctx.db.patch(user._id, { linkedinPublicIdentifier: trimmed })
-    // Kick off a profile scrape now that we have the identifier (non-blocking; the action
-    // itself bails if the profile-scrape flag is off).
-    await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
+// Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
+await ctx.db.patch(user._id, { linkedinPublicIdentifier: trimmed })
+// Kick off a profile scrape now that we have the identifier (non-blocking; the action
+// itself bails if the profile-scrape flag is off).
+await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
 ```
 
 - [ ] **Step 2: Verify it typechecks**
@@ -923,6 +1156,7 @@ With `npx convex dev` running and `apifyProfileScrapeEnabled` on (Task 9 ships t
 ```bash
 git add convex/users.ts
 ```
+
 Pause for review/commit (suggested: `feat(users): schedule profile scrape on setPublicIdentifier`).
 
 ---
@@ -930,6 +1164,7 @@ Pause for review/commit (suggested: `feat(users): schedule profile scrape on set
 ## Task 8: `updateProfile` + `refreshProfileFromLinkedIn`
 
 **Files:**
+
 - Modify: `convex/users.ts`
 - Create: `convex/users.updateProfile.test.ts`
 
@@ -1053,10 +1288,14 @@ export const updateProfile = mutation({
   },
   handler: async (ctx, { sessionToken, industry, country }) => {
     const user = await requireAuth(ctx, sessionToken)
-    await updateProfileHandler(ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> }, user._id, {
-      industry,
-      country
-    })
+    await updateProfileHandler(
+      ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> },
+      user._id,
+      {
+        industry,
+        country
+      }
+    )
   }
 })
 
@@ -1088,6 +1327,7 @@ Expected: no errors.
 ```bash
 git add convex/users.ts convex/users.updateProfile.test.ts convex/_generated
 ```
+
 Pause for review/commit (suggested: `feat(users): updateProfile + refreshProfileFromLinkedIn`).
 
 ---
@@ -1095,6 +1335,7 @@ Pause for review/commit (suggested: `feat(users): updateProfile + refreshProfile
 ## Task 9: Admin flags — defaults + toggle mutations
 
 **Files:**
+
 - Modify: `convex/admin.ts`
 
 - [ ] **Step 1: Include the new flags in the `getSettings` default object**
@@ -1102,15 +1343,15 @@ Pause for review/commit (suggested: `feat(users): updateProfile + refreshProfile
 In `convex/admin.ts`, in the `getSettings` query, change the fallback object to:
 
 ```ts
-    return (
-      settings ?? {
-        apifySyncEnabled: false,
-        apifyEnabled: true,
-        apifyProfileScrapeEnabled: false,
-        lastApifySyncAt: undefined,
-        lastApifySyncError: undefined
-      }
-    )
+return (
+  settings ?? {
+    apifySyncEnabled: false,
+    apifyEnabled: true,
+    apifyProfileScrapeEnabled: false,
+    lastApifySyncAt: undefined,
+    lastApifySyncError: undefined
+  }
+)
 ```
 
 - [ ] **Step 2: Add the two toggle mutations**
@@ -1149,6 +1390,7 @@ Expected: no errors; `api.admin.toggleApifyEnabled` and `api.admin.toggleApifyPr
 ```bash
 git add convex/admin.ts convex/_generated
 ```
+
 Pause for review/commit (suggested: `feat(admin): master + profile-scrape apify toggles`).
 
 ---
@@ -1156,6 +1398,7 @@ Pause for review/commit (suggested: `feat(admin): master + profile-scrape apify 
 ## Task 10: i18n keys for the new Settings UI
 
 **Files:**
+
 - Modify: `app/src/i18n/locales/en.json`
 - Modify: `app/src/i18n/locales/pt.json`
 - Modify: `app/src/i18n/locales/es.json`
@@ -1248,6 +1491,7 @@ Expected: PASS (existing tests; JSON parses).
 ```bash
 git add app/src/i18n/locales/en.json app/src/i18n/locales/pt.json app/src/i18n/locales/es.json
 ```
+
 Pause for review/commit (suggested: `feat(i18n): settings profile-edit + location/refresh keys`).
 
 ---
@@ -1255,6 +1499,7 @@ Pause for review/commit (suggested: `feat(i18n): settings profile-edit + locatio
 ## Task 11: Settings page — editable dropdowns, location row, refresh button
 
 **Files:**
+
 - Modify: `app/src/pages/SettingsPage.tsx`
 - Create: `app/src/pages/SettingsPage.test.tsx`
 
@@ -1339,15 +1584,15 @@ In `MeProfile`, add the two fields after `country?: string`:
 2. Add mutation hooks + local state inside the component (after the existing `setPublicIdentifier` hook + state):
 
 ```ts
-  const updateProfile = useMutation(api.users.updateProfile)
-  const refreshProfile = useMutation(api.users.refreshProfileFromLinkedIn)
+const updateProfile = useMutation(api.users.updateProfile)
+const refreshProfile = useMutation(api.users.refreshProfileFromLinkedIn)
 
-  const [industry, setIndustry] = useState<string>('')
-  const [country, setCountry] = useState<string>('')
-  const [profileSaving, setProfileSaving] = useState(false)
-  const [profileSaved, setProfileSaved] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const [refreshError, setRefreshError] = useState<string | null>(null)
+const [industry, setIndustry] = useState<string>('')
+const [country, setCountry] = useState<string>('')
+const [profileSaving, setProfileSaving] = useState(false)
+const [profileSaved, setProfileSaved] = useState(false)
+const [refreshing, setRefreshing] = useState(false)
+const [refreshError, setRefreshError] = useState<string | null>(null)
 ```
 
 Also change the existing `const { t } = useTranslation()` to `const { t, i18n } = useTranslation()`.
@@ -1355,120 +1600,132 @@ Also change the existing `const { t } = useTranslation()` to `const { t, i18n } 
 3. Seed the local select state **once when the user loads** (keyed on `me?._id`, so reactive updates to other fields — e.g. `location` after a scrape — don't clobber in-progress edits, and selecting "Not set" sticks). Add this `useEffect` among the hooks, **before** the `if (!me) { return <LoadingSpinner /> }` guard:
 
 ```ts
-  useEffect(() => {
-    if (me) {
-      setIndustry(me.industry ?? '')
-      setCountry(me.country ?? '')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me?._id])
+useEffect(() => {
+  if (me) {
+    setIndustry(me.industry ?? '')
+    setCountry(me.country ?? '')
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [me?._id])
 ```
 
 4. After the `if (!me)` guard, build the localized + sorted country options:
 
 ```ts
-  const lang = i18n.language?.split('-')[0] ?? 'en'
-  const countryOptions = COUNTRY_CODES.map(code => ({ code, name: countryLabel(code, lang) })).sort((a, b) =>
-    a.name.localeCompare(b.name)
-  )
+const lang = i18n.language?.split('-')[0] ?? 'en'
+const countryOptions = COUNTRY_CODES.map(code => ({ code, name: countryLabel(code, lang) })).sort((a, b) =>
+  a.name.localeCompare(b.name)
+)
 ```
 
 5. Add the save + refresh handlers (next to `handleSaveIdentifier`):
 
 ```ts
-  async function handleSaveProfile() {
-    if (!sessionToken) return
-    setProfileSaving(true)
-    try {
-      await updateProfile({ sessionToken, industry, country })
-      setProfileSaved(true)
-      setTimeout(() => setProfileSaved(false), 3000)
-    } finally {
-      setProfileSaving(false)
-    }
+async function handleSaveProfile() {
+  if (!sessionToken) return
+  setProfileSaving(true)
+  try {
+    await updateProfile({ sessionToken, industry, country })
+    setProfileSaved(true)
+    setTimeout(() => setProfileSaved(false), 3000)
+  } finally {
+    setProfileSaving(false)
   }
+}
 
-  async function handleRefresh() {
-    if (!sessionToken) return
-    setRefreshing(true)
-    setRefreshError(null)
-    try {
-      await refreshProfile({ sessionToken })
-    } catch (err) {
-      setRefreshError(err instanceof Error ? err.message : 'Refresh failed')
-    } finally {
-      setRefreshing(false)
-    }
+async function handleRefresh() {
+  if (!sessionToken) return
+  setRefreshing(true)
+  setRefreshError(null)
+  try {
+    await refreshProfile({ sessionToken })
+  } catch (err) {
+    setRefreshError(err instanceof Error ? err.message : 'Refresh failed')
+  } finally {
+    setRefreshing(false)
   }
+}
 ```
 
 6. Replace the existing read-only profile `<section>` (the one rendering `settings.industry`/`settings.country` as `<p>`) with the editable version:
 
 ```tsx
-      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 mt-0 text-base font-semibold text-slate-900">{t('settings.profile')}</h2>
+<section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
+  <h2 className="mb-3 mt-0 text-base font-semibold text-slate-900">{t('settings.profile')}</h2>
 
-        <label htmlFor="industry-select" className="mb-1 block text-sm font-medium text-slate-700">
-          {t('settings.industry')}
-        </label>
-        <select
-          id="industry-select"
-          aria-label={t('settings.industry')}
-          value={industry}
-          onChange={e => setIndustry(e.target.value)}
-          className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
-        >
-          <option value="">{t('settings.notSet')}</option>
-          {INDUSTRIES.map(i => (
-            <option key={i.code} value={i.code}>
-              {i.label}
-            </option>
-          ))}
-        </select>
+  <label
+    htmlFor="industry-select"
+    className="mb-1 block text-sm font-medium text-slate-700"
+  >
+    {t('settings.industry')}
+  </label>
+  <select
+    id="industry-select"
+    aria-label={t('settings.industry')}
+    value={industry}
+    onChange={e => setIndustry(e.target.value)}
+    className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
+  >
+    <option value="">{t('settings.notSet')}</option>
+    {INDUSTRIES.map(i => (
+      <option
+        key={i.code}
+        value={i.code}
+      >
+        {i.label}
+      </option>
+    ))}
+  </select>
 
-        <label htmlFor="country-select" className="mb-1 block text-sm font-medium text-slate-700">
-          {t('settings.country')}
-        </label>
-        <select
-          id="country-select"
-          aria-label={t('settings.country')}
-          value={country}
-          onChange={e => setCountry(e.target.value)}
-          className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
-        >
-          <option value="">{t('settings.notSet')}</option>
-          {countryOptions.map(c => (
-            <option key={c.code} value={c.code}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+  <label
+    htmlFor="country-select"
+    className="mb-1 block text-sm font-medium text-slate-700"
+  >
+    {t('settings.country')}
+  </label>
+  <select
+    id="country-select"
+    aria-label={t('settings.country')}
+    value={country}
+    onChange={e => setCountry(e.target.value)}
+    className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
+  >
+    <option value="">{t('settings.notSet')}</option>
+    {countryOptions.map(c => (
+      <option
+        key={c.code}
+        value={c.code}
+      >
+        {c.name}
+      </option>
+    ))}
+  </select>
 
-        {me.location && (
-          <p className="my-1 text-sm text-slate-500">
-            {t('settings.location')}: <span className="text-slate-700">{me.location}</span>
-          </p>
-        )}
+  {me.location && (
+    <p className="my-1 text-sm text-slate-500">
+      {t('settings.location')}: <span className="text-slate-700">{me.location}</span>
+    </p>
+  )}
 
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            onClick={handleSaveProfile}
-            disabled={profileSaving}
-            className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${profileSaved ? 'bg-green-500' : 'bg-blue-500'} ${profileSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
-          >
-            {profileSaved ? t('settings.saved') : profileSaving ? t('settings.saving') : t('settings.save')}
-          </button>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || !me.linkedinPublicIdentifier}
-            className={`rounded-md border border-slate-300 bg-white px-4 py-[7px] text-[13px] text-slate-700 ${refreshing || !me.linkedinPublicIdentifier ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-          >
-            {refreshing ? t('settings.refreshing') : t('settings.refresh')}
-          </button>
-        </div>
-        {refreshError && <p className="mb-0 mt-2 text-xs text-red-500">{refreshError}</p>}
-        <p className="mb-0 mt-2 text-xs text-slate-400">{t('settings.profileNote')}</p>
-      </section>
+  <div className="mt-3 flex items-center gap-2">
+    <button
+      onClick={handleSaveProfile}
+      disabled={profileSaving}
+      className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${profileSaved ? 'bg-green-500' : 'bg-blue-500'} ${profileSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
+    >
+      {profileSaved ? t('settings.saved') : profileSaving ? t('settings.saving') : t('settings.save')}
+    </button>
+    <button
+      onClick={handleRefresh}
+      disabled={refreshing || !me.linkedinPublicIdentifier}
+      className={`rounded-md border border-slate-300 bg-white px-4 py-[7px] text-[13px] text-slate-700 ${refreshing || !me.linkedinPublicIdentifier ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+    >
+      {refreshing ? t('settings.refreshing') : t('settings.refresh')}
+    </button>
+  </div>
+  {refreshError && <p className="mb-0 mt-2 text-xs text-red-500">{refreshError}</p>}
+  <p className="mb-0 mt-2 text-xs text-slate-400">{t('settings.profileNote')}</p>
+</section>
 ```
 
 - [ ] **Step 4: Run the test — expect pass**
@@ -1486,6 +1743,7 @@ Expected: no errors. The cross-package import `../../../convex/lib/profileOption
 ```bash
 git add app/src/pages/SettingsPage.tsx app/src/pages/SettingsPage.test.tsx
 ```
+
 Pause for review/commit (suggested: `feat(settings): editable industry/country + location + refresh`).
 
 ---
@@ -1493,6 +1751,7 @@ Pause for review/commit (suggested: `feat(settings): editable industry/country +
 ## Task 12: Seed the UI language from `primaryLocale`
 
 **Files:**
+
 - Create: `app/src/i18n/seedLanguage.ts`
 - Create: `app/src/i18n/seedLanguage.test.ts`
 - Modify: `app/src/App.tsx`
@@ -1572,13 +1831,13 @@ import { pickSeedLanguage } from './i18n/seedLanguage'
 2. Inside `RequireAuth`, add an effect after the existing `useEffect` that handles `me === null`:
 
 ```ts
-  useEffect(() => {
-    if (me && !me.isBanned) {
-      const hasStoredPref = localStorage.getItem('i18nextLng') !== null
-      const seed = pickSeedLanguage(me.primaryLocale, ['en', 'pt', 'es'], hasStoredPref)
-      if (seed) void i18n.changeLanguage(seed)
-    }
-  }, [me])
+useEffect(() => {
+  if (me && !me.isBanned) {
+    const hasStoredPref = localStorage.getItem('i18nextLng') !== null
+    const seed = pickSeedLanguage(me.primaryLocale, ['en', 'pt', 'es'], hasStoredPref)
+    if (seed) void i18n.changeLanguage(seed)
+  }
+}, [me])
 ```
 
 (`me.primaryLocale` is present on the `getMe` payload because `toSafeMe` spreads all non-token fields.)
@@ -1593,6 +1852,7 @@ Expected: tests PASS, no type errors.
 ```bash
 git add app/src/i18n/seedLanguage.ts app/src/i18n/seedLanguage.test.ts app/src/App.tsx
 ```
+
 Pause for review/commit (suggested: `feat(i18n): seed UI language from scraped primaryLocale`).
 
 ---
@@ -1600,6 +1860,7 @@ Pause for review/commit (suggested: `feat(i18n): seed UI language from scraped p
 ## Task 13: Admin UI — master + profile-scrape toggles
 
 **Files:**
+
 - Modify: `app/src/pages/AdminPage.tsx`
 - Modify: `app/src/pages/AdminPage.test.tsx`
 
@@ -1608,11 +1869,11 @@ Pause for review/commit (suggested: `feat(i18n): seed UI language from scraped p
 In `app/src/pages/AdminPage.test.tsx`, add inside `describe('AdminPage tabs', ...)`:
 
 ```tsx
-  it('renders the master and profile-scrape Apify toggles', () => {
-    render(<AdminPage />)
-    expect(screen.getByText(/apify \(master\)/i)).toBeInTheDocument()
-    expect(screen.getByText(/profile scrape/i)).toBeInTheDocument()
-  })
+it('renders the master and profile-scrape Apify toggles', () => {
+  render(<AdminPage />)
+  expect(screen.getByText(/apify \(master\)/i)).toBeInTheDocument()
+  expect(screen.getByText(/profile scrape/i)).toBeInTheDocument()
+})
 ```
 
 (The existing `useQuery` mock returns `undefined` for `getSettings`, which is fine — the cards still render with default labels.)
@@ -1629,34 +1890,34 @@ In `app/src/pages/AdminPage.tsx`:
 1. Add the two mutation hooks (after `const toggleSync = useMutation(api.admin.toggleApifySync)`):
 
 ```ts
-  const toggleMaster = useMutation(api.admin.toggleApifyEnabled)
-  const toggleProfileScrape = useMutation(api.admin.toggleApifyProfileScrape)
-  const [togglingMaster, setTogglingMaster] = useState(false)
-  const [togglingProfile, setTogglingProfile] = useState(false)
+const toggleMaster = useMutation(api.admin.toggleApifyEnabled)
+const toggleProfileScrape = useMutation(api.admin.toggleApifyProfileScrape)
+const [togglingMaster, setTogglingMaster] = useState(false)
+const [togglingProfile, setTogglingProfile] = useState(false)
 ```
 
 2. Add two handlers (after `handleToggle`):
 
 ```ts
-  async function handleToggleMaster() {
-    if (!sessionToken || !settings) return
-    setTogglingMaster(true)
-    try {
-      await toggleMaster({ sessionToken, enabled: settings.apifyEnabled === false })
-    } finally {
-      setTogglingMaster(false)
-    }
+async function handleToggleMaster() {
+  if (!sessionToken || !settings) return
+  setTogglingMaster(true)
+  try {
+    await toggleMaster({ sessionToken, enabled: settings.apifyEnabled === false })
+  } finally {
+    setTogglingMaster(false)
   }
+}
 
-  async function handleToggleProfile() {
-    if (!sessionToken || !settings) return
-    setTogglingProfile(true)
-    try {
-      await toggleProfileScrape({ sessionToken, enabled: !settings.apifyProfileScrapeEnabled })
-    } finally {
-      setTogglingProfile(false)
-    }
+async function handleToggleProfile() {
+  if (!sessionToken || !settings) return
+  setTogglingProfile(true)
+  try {
+    await toggleProfileScrape({ sessionToken, enabled: !settings.apifyProfileScrapeEnabled })
+  } finally {
+    setTogglingProfile(false)
   }
+}
 ```
 
 3. Inside the `{tab === 'settings' && (...)}` block, add two more cards after the existing "Apify Post Sync" card (compute `masterOn = settings?.apifyEnabled !== false`):
@@ -1714,6 +1975,7 @@ Expected: no errors.
 ```bash
 git add app/src/pages/AdminPage.tsx app/src/pages/AdminPage.test.tsx
 ```
+
 Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape toggles`).
 
 ---
@@ -1721,12 +1983,12 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
 ## Task 14: Update `docs/PLATFORM.md` (canonical docs — required by CLAUDE.md)
 
 **Files:**
+
 - Modify: `docs/PLATFORM.md`
 
 > `CLAUDE.md` makes `docs/PLATFORM.md` part of "done": the feature is not complete until the docs reflect it. Apply every edit below in this one task. No automated test — verification is a grep check (Step 9) + a Mermaid sanity read.
 
 - [ ] **Step 1: §5 Data Model**
-
   - In the **`users`** table reference, add two rows after `country`:
     - `location` | string | – | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).
     - `primaryLocale` | string | – | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.
@@ -1747,13 +2009,11 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
   Note that `checkRateLimit` now accepts an optional **window size + label** (defaults 1h/"hour"), and add `profile_refresh` **2/day** to the list of limits.
 
 - [ ] **Step 4: §12 Admin & Moderation — admin functions table**
-
   - Update `getSettings` description to "App settings (3 Apify flags + last-sync status)".
   - Add: `toggleApifyEnabled(enabled)` | mutation | Master Apify kill-switch.
   - Add: `toggleApifyProfileScrape(enabled)` | mutation | Toggle the LinkedIn profile scrape.
 
 - [ ] **Step 5: §14 Frontend — Authenticated App**
-
   - Rewrite the **SettingsPage** bullet: `getMe` + `setPublicIdentifier` + `updateProfile` + `refreshProfileFromLinkedIn`. Industry/country are now **editable canonical dropdowns** (country names via `Intl.DisplayNames`); a read-only **Location** row shows when `me.location` is present; a **"Refresh from LinkedIn"** button re-scrapes (disabled without a public identifier; surfaces the server error when scrape is off).
   - Update the **AdminPage** bullet: the **Settings** tab now has **three** Apify toggles (master, post sync, profile scrape).
   - In the **i18n** subsection, add: on first authenticated load the UI language is **seeded once** from `me.primaryLocale` (when no `localStorage` `i18nextLng` exists); the AppNav switcher still overrides.
@@ -1763,7 +2023,6 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
   Change the `APIFY_TASK_ID_PROFILE_SCRAPE` row to: Required **✓ (profile scrape)**, Consumed in **`jobs/scrapeProfileApify.ts`**, Purpose "LinkedIn **profile** scraper actor (country/location/primary-locale enrichment)."
 
 - [ ] **Step 7: §19 Known Discrepancies, Dead Code & Roadmap**
-
   - Remove the **"Profile enrichment …"** bullet from **Stubs / planned** (it's now implemented).
   - Update the roadmap line so it no longer lists profile enrichment as pending.
 
@@ -1771,7 +2030,7 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
 
   Add a Table-of-Contents entry **`13A. Profile Enrichment (LinkedIn Profile Scrape)`** (right after item 13), and a matching section after §13. (Using "13A" deliberately avoids renumbering §14–§21 and their anchor links.) Content:
 
-  ```markdown
+  ````markdown
   ## 13A. Profile Enrichment (LinkedIn Profile Scrape)
 
   A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `country`
@@ -1809,11 +2068,15 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
     PARSE --> APPLY["applyScrapedProfile: country fill-when-empty; location/locale refresh"]
     APPLY --> REACT["reactive getMe → Settings updates + i18n seed"]
   ```
+  ````
+
+  ```
+
   ```
 
 - [ ] **Step 9: Footer + verification grep**
 
-  Update the *Last updated* footer line to mention the profile-enrichment feature. Then verify the key tokens are present:
+  Update the _Last updated_ footer line to mention the profile-enrichment feature. Then verify the key tokens are present:
 
   Run: `npx rg -n "primaryLocale|apifyProfileScrapeEnabled|scrapeProfileApify|refreshProfileFromLinkedIn|13A" docs/PLATFORM.md`
   Expected: matches in §5, §7, §12/§14, §16, and the new §13A.
@@ -1823,6 +2086,7 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
 ```bash
 git add docs/PLATFORM.md
 ```
+
 Pause for review/commit (suggested: `docs(platform): profile enrichment subsystem + flags`).
 
 ---

@@ -3,8 +3,24 @@ import { vi } from 'vitest'
 import { useQuery, useMutation } from 'convex/react'
 
 const mockUsers = [
-  { _id: 'u1', name: 'Jordan Maxwell', headline: 'Growth marketer', tier: 'growth', subscriptionStatus: 'active', isBanned: false, createdAt: 0 },
-  { _id: 'u2', name: 'Priya Nayar', headline: 'Founder', tier: 'starter', subscriptionStatus: 'trialing', isBanned: true, createdAt: 0 },
+  {
+    _id: 'u1',
+    name: 'Jordan Maxwell',
+    headline: 'Growth marketer',
+    tier: 'growth',
+    subscriptionStatus: 'active',
+    isBanned: false,
+    createdAt: 0
+  },
+  {
+    _id: 'u2',
+    name: 'Priya Nayar',
+    headline: 'Founder',
+    tier: 'starter',
+    subscriptionStatus: 'trialing',
+    isBanned: true,
+    createdAt: 0
+  }
 ]
 
 let mockBan: ReturnType<typeof vi.fn>
@@ -13,7 +29,7 @@ let mockSetTier: ReturnType<typeof vi.fn>
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => mockUsers),
-  useMutation: vi.fn(),
+  useMutation: vi.fn()
 }))
 
 import UsersTab from './UsersTab'
@@ -35,12 +51,22 @@ beforeEach(() => {
 
 describe('UsersTab — ban/unban', () => {
   it('shows a Banned badge for banned users only', () => {
-    render(<UsersTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <UsersTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByText('Banned')).toBeInTheDocument()
   })
 
   it('offers "Ban user…" for an active user and calls banUser with the reason', async () => {
-    render(<UsersTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <UsersTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
     fireEvent.click(screen.getByText('Ban user…'))
     fireEvent.change(screen.getByPlaceholderText(/spam/i), { target: { value: 'Spam' } })
@@ -51,7 +77,12 @@ describe('UsersTab — ban/unban', () => {
   })
 
   it('offers "Unban" for a banned user and calls unbanUser after confirm', async () => {
-    render(<UsersTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <UsersTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /actions for priya nayar/i }))
     fireEvent.click(screen.getByText('Unban'))
     fireEvent.click(screen.getByRole('button', { name: /^unban$/i }))

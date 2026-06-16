@@ -59,9 +59,7 @@ describe('parsePostContent', () => {
       <body><a href="https://media.licdn.com/dms/document/slides.pdf">Doc</a></body>`
     const result = parsePostContent(html)
     expect(result.text).toBe('Check out my slides')
-    expect(result.media).toEqual([
-      { type: 'document', url: 'https://media.licdn.com/dms/document/slides.pdf' }
-    ])
+    expect(result.media).toEqual([{ type: 'document', url: 'https://media.licdn.com/dms/document/slides.pdf' }])
   })
 
   it('decodes HTML entities in extracted URLs', () => {

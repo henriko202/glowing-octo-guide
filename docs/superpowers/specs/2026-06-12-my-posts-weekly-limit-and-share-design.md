@@ -13,7 +13,7 @@ Two changes to the **My Posts** page ([app/src/pages/MyPostsPage.tsx](../../../a
 ## Decisions
 
 | Question                        | Decision                                                           |
-|---------------------------------|--------------------------------------------------------------------|
+| ------------------------------- | ------------------------------------------------------------------ |
 | Pill placement                  | Profile header, right-aligned (next to name/plan)                  |
 | Composer appearance in My Posts | Re-themed **light** to match the white My Posts page               |
 | At weekly limit                 | Pill turns **amber** + composer Submit is **disabled** with a hint |
@@ -40,12 +40,12 @@ needs a public query.
    Refactor the existing `countRecentPosts` internalQuery to use it.
 
 2. **Add a public query** `getWeeklyUsage`:
-    - Resolves the user via `requireAuth`; returns `null` when not signed in
-      (mirrors `getMe` / `getMyPosts`).
-    - Counts posts over the **same rolling 7-day window** the action enforces
-      (`Date.now() - 7 * 24 * 60 * 60 * 1000`), via `countPostsSince`.
-    - Reads `postsPerWeek` via the existing `getPlanLimitsHelper`.
-    - Returns `{ postsThisWeek: number, postsPerWeek: number }`.
+   - Resolves the user via `requireAuth`; returns `null` when not signed in
+     (mirrors `getMe` / `getMyPosts`).
+   - Counts posts over the **same rolling 7-day window** the action enforces
+     (`Date.now() - 7 * 24 * 60 * 60 * 1000`), via `countPostsSince`.
+   - Reads `postsPerWeek` via the existing `getPlanLimitsHelper`.
+   - Returns `{ postsThisWeek: number, postsPerWeek: number }`.
 
 > **Why a dedicated query (not folded into `getMe`):** `getMe` is called on every
 > page (nav, settings, billing). Folding post-counting into it taxes every call.
@@ -77,10 +77,10 @@ interface PostComposerProps {
   `useAction(api.posts.submitPost)`.
 - **Pill** in the profile header row (switch `gap-3` → `justify-between`),
   right-aligned:
-    - Under limit: `bg-blue-50 text-blue-700`.
-    - At limit (`postsThisWeek >= postsPerWeek`): `bg-amber-50 text-amber-700`.
-    - Text: `"{postsThisWeek} of {postsPerWeek} posts this week"`,
-      `title="In the last 7 days"`. Hidden while `usage` is loading/`null`.
+  - Under limit: `bg-blue-50 text-blue-700`.
+  - At limit (`postsThisWeek >= postsPerWeek`): `bg-amber-50 text-amber-700`.
+  - Text: `"{postsThisWeek} of {postsPerWeek} posts this week"`,
+    `title="In the last 7 days"`. Hidden while `usage` is loading/`null`.
 - **Composer** below the profile header, above the "Your posts" section:
   `<PostComposer theme="light" atLimit={atLimit} limitHint="Weekly limit reached" onSubmit={handleSubmit} />`
   where `handleSubmit` calls the `submitPost` action.

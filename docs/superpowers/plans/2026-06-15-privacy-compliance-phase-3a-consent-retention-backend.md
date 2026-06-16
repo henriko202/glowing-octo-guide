@@ -32,6 +32,7 @@ grace window; re-login → CancelDeletionScreen → cancel, exactly like a user 
 **Read first:** `convex/_generated/ai/guidelines.md`.
 
 ## Conventions (from Phase 2a, verified)
+
 - Files in `convex/privacy/` import registration fns from `../_generated/server`, libs from `../lib/*`,
   siblings from `./*`. Tests resolve these through the `convex/server` mock.
 - **Unit-test the pure helpers**; thin wrappers are lint/typecheck + integration-verified.
@@ -40,6 +41,7 @@ grace window; re-login → CancelDeletionScreen → cancel, exactly like a user 
 - Test commands: `pnpm --filter convex test [substring]`; lint `pnpm lint`; format `npx prettier --check`.
 
 ## Config constants (this phase)
+
 - `TOKEN`: null LinkedIn tokens once `tokenExpiresAt < now`.
 - `EXPORT_TTL` already 7 days (Phase 2a sets `expiresAt`); retention deletes the file + flips status.
 - `AUDIT_TTL_MS = 24 * 30 * 24*60*60*1000` (~24 months).
@@ -50,13 +52,13 @@ grace window; re-login → CancelDeletionScreen → cancel, exactly like a user 
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `convex/privacy/consent.ts` (create) + test | `latestConsentByPurpose` (pure) + `recordConsent`/`getConsents`/`hasConsent` + `acknowledgePolicy` |
-| `convex/privacy/emails.ts` (modify) + test | add `dormancyWarningEmail` |
+| File                                          | Responsibility                                                                                                                      |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `convex/privacy/consent.ts` (create) + test   | `latestConsentByPurpose` (pure) + `recordConsent`/`getConsents`/`hasConsent` + `acknowledgePolicy`                                  |
+| `convex/privacy/emails.ts` (modify) + test    | add `dormancyWarningEmail`                                                                                                          |
 | `convex/privacy/retention.ts` (create) + test | `isTokenExpired`/`isExportExpired`/`isAuditExpired`/`isDormant` (pure) + `enforceDataRetention` cron + `sendDormancyWarning` action |
-| `convex/crons.ts` (modify) | register `enforce data retention` (daily) |
-| `docs/PLATFORM.md` (modify) | §13B (consent + retention/dormancy + re-consent) + §13 cron row |
+| `convex/crons.ts` (modify)                    | register `enforce data retention` (daily)                                                                                           |
+| `docs/PLATFORM.md` (modify)                   | §13B (consent + retention/dormancy + re-consent) + §13 cron row                                                                     |
 
 ---
 
@@ -197,7 +199,7 @@ export const acknowledgePolicy = mutation({
 > `hasConsent` to accept a minimal `{ db }` and cast like the other privacy helpers — keep it `any`-free.
 
 - [ ] **Step 4: Run, confirm PASS** — `pnpm --filter convex test consent`, then full suite, then
-  `pnpm lint`, then `npx prettier --check "convex/privacy/consent.ts" "convex/privacy/consent.test.ts"`.
+      `pnpm lint`, then `npx prettier --check "convex/privacy/consent.ts" "convex/privacy/consent.test.ts"`.
 
 - [ ] **Step 5: Checkpoint (NO COMMIT).**
 
@@ -374,14 +376,20 @@ export const enforceDataRetention = internalMutation({
     const dormancyThreshold = now - DORMANCY_MS
     const candidates = await ctx.db
       .query('users')
-      .filter(q => q.and(q.eq(q.field('deletionScheduledAt'), undefined), q.lt(q.field('lastLoginAt'), dormancyThreshold)))
+      .filter(q =>
+        q.and(q.eq(q.field('deletionScheduledAt'), undefined), q.lt(q.field('lastLoginAt'), dormancyThreshold))
+      )
       .take(RETENTION_BATCH)
     for (const u of candidates) {
       if (isDormant(u, now, DORMANCY_MS)) {
         const scheduledAt = now + GRACE_MS
         await ctx.db.patch(u._id, { deletionScheduledAt: scheduledAt, deletionReason: 'dormancy' })
         const email = u.email as string | undefined
-        if (email) await ctx.scheduler.runAfter(0, internal.privacy.retention.sendDormancyWarning, { email, deletionDate: dayStr(scheduledAt) })
+        if (email)
+          await ctx.scheduler.runAfter(0, internal.privacy.retention.sendDormancyWarning, {
+            email,
+            deletionDate: dayStr(scheduledAt)
+          })
       }
     }
   }
@@ -409,7 +417,7 @@ crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retenti
 ```
 
 - [ ] **Step 5: Run + verify** — `pnpm --filter convex test retention`, then full suite
-  `pnpm --filter convex test`, then `pnpm lint`, then `npx prettier --check "convex/privacy/retention.ts" "convex/privacy/retention.test.ts" "convex/crons.ts"` (write+recheck if needed).
+      `pnpm --filter convex test`, then `pnpm lint`, then `npx prettier --check "convex/privacy/retention.ts" "convex/privacy/retention.test.ts" "convex/crons.ts"` (write+recheck if needed).
 
 - [ ] **Step 6: Checkpoint (NO COMMIT).**
 
@@ -426,13 +434,13 @@ crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retenti
 ```
 
 - [ ] **Step 2: Extend §13B** with a "Consent & Retention (Phase 3a)" subsection covering: consent
-  (`consentRecords` append-only; `recordConsent`/`getConsents`/`hasConsent`; latest-record-wins via
-  `latestConsentByPurpose`), re-consent (`acknowledgePolicy` stamps `acknowledgedPolicyVersion` to
-  `POLICY_VERSION`), and retention (`enforceDataRetention`: token nulling, export-file expiry,
-  audit-log TTL, **dormancy** at 24mo excluding active/trialing subscribers → sets `deletionScheduledAt`
-  + `deletionReason='dormancy'` → reuses the Phase 2a `processAccountDeletions` cascade; re-login →
-  CancelDeletionScreen → cancel, same as a user request). Note `getMe` already exposes
-  `acknowledgedPolicyVersion` for the Phase 3b re-consent prompt.
+      (`consentRecords` append-only; `recordConsent`/`getConsents`/`hasConsent`; latest-record-wins via
+      `latestConsentByPurpose`), re-consent (`acknowledgePolicy` stamps `acknowledgedPolicyVersion` to
+      `POLICY_VERSION`), and retention (`enforceDataRetention`: token nulling, export-file expiry,
+      audit-log TTL, **dormancy** at 24mo excluding active/trialing subscribers → sets `deletionScheduledAt`
+  - `deletionReason='dormancy'` → reuses the Phase 2a `processAccountDeletions` cascade; re-login →
+    CancelDeletionScreen → cancel, same as a user request). Note `getMe` already exposes
+    `acknowledgedPolicyVersion` for the Phase 3b re-consent prompt.
 
 - [ ] **Step 3: Update the footer** "Last updated" note to mention Phase 3a.
 
@@ -441,14 +449,16 @@ crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retenti
 ---
 
 ## Phase 3a completion check
+
 - [ ] `pnpm --filter convex test` — all green (new: consent, emails dormancy, retention predicates).
 - [ ] `pnpm lint` — zero warnings.
 - [ ] `npx prettier --check` on the new/modified convex files — clean.
 - [ ] Deliverables: `consent.ts`, `retention.ts` (+ tests), `dormancyWarningEmail`, `enforce data
-  retention` cron, `docs/PLATFORM.md` updated.
+retention` cron, `docs/PLATFORM.md` updated.
 - [ ] **Nothing committed.**
 
 ## Self-Review (performed during authoring)
+
 - **Spec coverage:** consent records + record/get/check (§4.1 → Task 1), re-consent backend (§4.5 →
   Task 1 `acknowledgePolicy`), retention rules (§4.3 → Task 3), dormancy (§3.5 → Task 3 `isDormant` +
   cron, reusing Phase 2a's cascade), dormancy email (Task 2), docs (Task 4). Consent toggles UI +
@@ -459,4 +469,7 @@ crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retenti
   and `deletionScheduledAt` match the Phase 1 schema + Phase 2a cascade; `internal.privacy.retention.*`
   matches the defined exports.
 - **No-commit rule:** every task ends in a no-commit checkpoint.
+
+```
+
 ```

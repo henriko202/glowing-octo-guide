@@ -32,22 +32,23 @@ stored and forwarded to Stripe.
 
 ## File Structure (created/modified in this phase)
 
-| File | Responsibility |
-|---|---|
-| `convex/schema.ts` (modify) | Add `users` privacy fields + `consentRecords` / `dataExportRequests` / `auditLogs` tables |
-| `convex/schema.test.ts` (modify) | Assert the new tables exist |
-| `convex/lib/policy.ts` (create) | `POLICY_VERSION` constant (single source of truth) |
-| `convex/linkedin/auth.ts` (modify) | Capture `email`/`emailVerified`, stamp `lastLoginAt` + `acknowledgedPolicyVersion` |
-| `convex/linkedin/auth.test.ts` (modify) | Cover the new captured fields |
-| `convex/http.ts` (modify) | Pass `email`/`emailVerified` from OIDC userinfo into `upsertUser` |
-| `convex/billing.ts` (modify) | Send the real `user.email` to Stripe (was `undefined`) |
-| `convex/lib/audit.ts` (create) | `writeAuditLog` helper + `logAudit` internal mutation |
-| `convex/lib/audit.test.ts` (create) | Cover the audit helper |
-| `convex/lib/email.ts` (create) | Provider-agnostic `sendEmail` (Resend; no-ops if unconfigured) |
-| `convex/lib/email.test.ts` (create) | Cover send + skip-when-unconfigured |
-| `docs/PLATFORM.md` (modify) | §5 data model, §16 env vars, new §13B Privacy & Compliance |
+| File                                    | Responsibility                                                                            |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `convex/schema.ts` (modify)             | Add `users` privacy fields + `consentRecords` / `dataExportRequests` / `auditLogs` tables |
+| `convex/schema.test.ts` (modify)        | Assert the new tables exist                                                               |
+| `convex/lib/policy.ts` (create)         | `POLICY_VERSION` constant (single source of truth)                                        |
+| `convex/linkedin/auth.ts` (modify)      | Capture `email`/`emailVerified`, stamp `lastLoginAt` + `acknowledgedPolicyVersion`        |
+| `convex/linkedin/auth.test.ts` (modify) | Cover the new captured fields                                                             |
+| `convex/http.ts` (modify)               | Pass `email`/`emailVerified` from OIDC userinfo into `upsertUser`                         |
+| `convex/billing.ts` (modify)            | Send the real `user.email` to Stripe (was `undefined`)                                    |
+| `convex/lib/audit.ts` (create)          | `writeAuditLog` helper + `logAudit` internal mutation                                     |
+| `convex/lib/audit.test.ts` (create)     | Cover the audit helper                                                                    |
+| `convex/lib/email.ts` (create)          | Provider-agnostic `sendEmail` (Resend; no-ops if unconfigured)                            |
+| `convex/lib/email.test.ts` (create)     | Cover send + skip-when-unconfigured                                                       |
+| `docs/PLATFORM.md` (modify)             | §5 data model, §16 env vars, new §13B Privacy & Compliance                                |
 
 **Test commands** (from repo root):
+
 - Whole convex suite: `pnpm --filter convex test`
 - A single file: `pnpm --filter convex test <substring>` (e.g. `pnpm --filter convex test schema`)
 - A single test: add `-t "<test name>"`
@@ -58,6 +59,7 @@ stored and forwarded to Stripe.
 ## Task 1: Schema — privacy fields + three new tables
 
 **Files:**
+
 - Modify: `convex/schema.ts` (the `users` table, and the `defineSchema({...})` object)
 - Test: `convex/schema.test.ts`
 
@@ -66,12 +68,12 @@ stored and forwarded to Stripe.
 Add this test to `convex/schema.test.ts` inside the existing `describe('schema', () => { ... })` block:
 
 ```ts
-  it('defines the privacy & compliance tables', () => {
-    const tables = schema.tables
-    expect(tables).toHaveProperty('consentRecords')
-    expect(tables).toHaveProperty('dataExportRequests')
-    expect(tables).toHaveProperty('auditLogs')
-  })
+it('defines the privacy & compliance tables', () => {
+  const tables = schema.tables
+  expect(tables).toHaveProperty('consentRecords')
+  expect(tables).toHaveProperty('dataExportRequests')
+  expect(tables).toHaveProperty('auditLogs')
+})
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -168,6 +170,7 @@ working tree for Henriko to review and commit. **Do not commit.**
 ## Task 2: `POLICY_VERSION` + capture email / lastLoginAt / policy ack in `upsertUser`
 
 **Files:**
+
 - Create: `convex/lib/policy.ts`
 - Modify: `convex/linkedin/auth.ts`
 - Modify: `convex/http.ts` (the `/auth/linkedin/callback` handler, around lines 74–82)
@@ -197,23 +200,23 @@ import { POLICY_VERSION } from '../lib/policy'
 Then add these two tests inside the `describe('upsertUserHandler', () => { ... })` block:
 
 ```ts
-  it('stores email, lastLoginAt, and acknowledged policy version for a new user', async () => {
-    const db = createMockDb()
-    await upsertUserHandler(db, { ...BASE_ARGS, email: 'jane@example.com', emailVerified: true })
-    const inserted = db._inserts[0]
-    expect(inserted.email).toBe('jane@example.com')
-    expect(inserted.emailVerified).toBe(true)
-    expect(inserted.lastLoginAt).toBeGreaterThan(0)
-    expect(inserted.acknowledgedPolicyVersion).toBe(POLICY_VERSION)
-  })
+it('stores email, lastLoginAt, and acknowledged policy version for a new user', async () => {
+  const db = createMockDb()
+  await upsertUserHandler(db, { ...BASE_ARGS, email: 'jane@example.com', emailVerified: true })
+  const inserted = db._inserts[0]
+  expect(inserted.email).toBe('jane@example.com')
+  expect(inserted.emailVerified).toBe(true)
+  expect(inserted.lastLoginAt).toBeGreaterThan(0)
+  expect(inserted.acknowledgedPolicyVersion).toBe(POLICY_VERSION)
+})
 
-  it('refreshes lastLoginAt and email on an existing-user login', async () => {
-    const existing = { _id: 'existing-id', linkedinId: 'li-123', tier: 'pro', subscriptionStatus: 'active' }
-    const db = createMockDb(existing)
-    await upsertUserHandler(db, { ...BASE_ARGS, email: 'new@example.com' })
-    expect(db._patches[0].data.lastLoginAt).toBeGreaterThan(0)
-    expect(db._patches[0].data.email).toBe('new@example.com')
-  })
+it('refreshes lastLoginAt and email on an existing-user login', async () => {
+  const existing = { _id: 'existing-id', linkedinId: 'li-123', tier: 'pro', subscriptionStatus: 'active' }
+  const db = createMockDb(existing)
+  await upsertUserHandler(db, { ...BASE_ARGS, email: 'new@example.com' })
+  expect(db._patches[0].data.lastLoginAt).toBeGreaterThan(0)
+  expect(db._patches[0].data.email).toBe('new@example.com')
+})
 ```
 
 - [ ] **Step 3: Run the tests to verify they fail**
@@ -250,46 +253,46 @@ export interface UpsertUserArgs {
 (c) In `upsertUserHandler`, update the **existing-user** patch to include email + lastLoginAt:
 
 ```ts
-  if (existing) {
-    const patch: Record<string, unknown> = {
-      // SECURITY: isAdmin is intentionally excluded — it can only be set directly in the DB
-      name: args.name,
-      headline: args.headline,
-      profilePictureUrl: args.profilePictureUrl,
-      linkedinAccessToken: args.accessToken,
-      linkedinRefreshToken: args.refreshToken,
-      tokenExpiresAt: args.tokenExpiresAt,
-      email: args.email,
-      emailVerified: args.emailVerified,
-      lastLoginAt: Date.now()
-    }
-    await db.patch(existing._id, patch)
-    return existing._id
-  }
-```
-
-(d) Update the **new-user** insert to include email, lastLoginAt, and the acknowledged policy version:
-
-```ts
-  const trialEndsAt = Date.now() + TRIAL_DURATION_MS
-  return await db.insert('users', {
-    // SECURITY: isAdmin is intentionally excluded — only settable via direct DB edit
-    linkedinId: args.linkedinId,
+if (existing) {
+  const patch: Record<string, unknown> = {
+    // SECURITY: isAdmin is intentionally excluded — it can only be set directly in the DB
     name: args.name,
     headline: args.headline,
     profilePictureUrl: args.profilePictureUrl,
-    tier: 'starter' as const,
-    subscriptionStatus: 'trialing' as const,
-    trialEndsAt,
     linkedinAccessToken: args.accessToken,
     linkedinRefreshToken: args.refreshToken,
     tokenExpiresAt: args.tokenExpiresAt,
     email: args.email,
     emailVerified: args.emailVerified,
-    lastLoginAt: Date.now(),
-    acknowledgedPolicyVersion: POLICY_VERSION,
-    createdAt: Date.now()
-  })
+    lastLoginAt: Date.now()
+  }
+  await db.patch(existing._id, patch)
+  return existing._id
+}
+```
+
+(d) Update the **new-user** insert to include email, lastLoginAt, and the acknowledged policy version:
+
+```ts
+const trialEndsAt = Date.now() + TRIAL_DURATION_MS
+return await db.insert('users', {
+  // SECURITY: isAdmin is intentionally excluded — only settable via direct DB edit
+  linkedinId: args.linkedinId,
+  name: args.name,
+  headline: args.headline,
+  profilePictureUrl: args.profilePictureUrl,
+  tier: 'starter' as const,
+  subscriptionStatus: 'trialing' as const,
+  trialEndsAt,
+  linkedinAccessToken: args.accessToken,
+  linkedinRefreshToken: args.refreshToken,
+  tokenExpiresAt: args.tokenExpiresAt,
+  email: args.email,
+  emailVerified: args.emailVerified,
+  lastLoginAt: Date.now(),
+  acknowledgedPolicyVersion: POLICY_VERSION,
+  createdAt: Date.now()
+})
 ```
 
 (e) Extend the registered mutation's `args` validators:
@@ -322,17 +325,17 @@ In `convex/http.ts`, in the `/auth/linkedin/callback` handler, update the `upser
 ~lines 74–82) to pass the email claims:
 
 ```ts
-      const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
-        linkedinId: userInfo.sub,
-        name: userInfo.name,
-        headline: undefined, // OIDC userinfo doesn't include headline
-        profilePictureUrl: userInfo.picture,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        tokenExpiresAt,
-        email: userInfo.email,
-        emailVerified: userInfo.email_verified
-      })
+const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
+  linkedinId: userInfo.sub,
+  name: userInfo.name,
+  headline: undefined, // OIDC userinfo doesn't include headline
+  profilePictureUrl: userInfo.picture,
+  accessToken: tokens.access_token,
+  refreshToken: tokens.refresh_token,
+  tokenExpiresAt,
+  email: userInfo.email,
+  emailVerified: userInfo.email_verified
+})
 ```
 
 (No change needed in `convex/linkedin/oauth.ts` — `fetchLinkedInUserInfo` already returns `email` /
@@ -353,6 +356,7 @@ Leave changes in the working tree for review. **Do not commit.**
 ## Task 3: Forward the real email to Stripe
 
 **Files:**
+
 - Modify: `convex/billing.ts` (line 32, inside `createCheckoutSession`)
 
 > Note: `billing.ts` wraps the `@convex-dev/stripe` component as a Convex `action` (no plain handler
@@ -365,12 +369,12 @@ Leave changes in the working tree for review. **Do not commit.**
 In `convex/billing.ts`, in `createCheckoutSession`, change the `getOrCreateCustomer` call:
 
 ```ts
-    // Get or create Stripe customer via the component
-    const customer = await stripeClient.getOrCreateCustomer(ctx, {
-      userId: user._id,
-      email: user.email,
-      name: user.name
-    })
+// Get or create Stripe customer via the component
+const customer = await stripeClient.getOrCreateCustomer(ctx, {
+  userId: user._id,
+  email: user.email,
+  name: user.name
+})
 ```
 
 - [ ] **Step 2: Verify the suite + lint**
@@ -387,6 +391,7 @@ Leave changes in the working tree for review. **Do not commit.**
 ## Task 4: Audit-log helper
 
 **Files:**
+
 - Create: `convex/lib/audit.ts`
 - Test: `convex/lib/audit.test.ts`
 
@@ -505,6 +510,7 @@ Run `pnpm lint`. Leave changes in the working tree for review. **Do not commit.*
 ## Task 5: Transactional email wrapper (Resend)
 
 **Files:**
+
 - Create: `convex/lib/email.ts`
 - Test: `convex/lib/email.test.ts`
 
@@ -562,9 +568,7 @@ describe('sendEmail', () => {
       vi.fn(async () => ({ ok: false, status: 422, text: async () => 'bad request' }))
     )
 
-    await expect(sendEmail({ to: 'a@b.com', subject: 's', html: '<p>x</p>' })).rejects.toThrow(
-      'Failed to send email'
-    )
+    await expect(sendEmail({ to: 'a@b.com', subject: 's', html: '<p>x</p>' })).rejects.toThrow('Failed to send email')
   })
 })
 ```
@@ -646,6 +650,7 @@ Run `pnpm lint`. Leave changes in the working tree for review. **Do not commit.*
 > is a careful re-read plus the search in Step 5.
 
 **Files:**
+
 - Modify: `docs/PLATFORM.md` (§5 Data Model, §16 Environment Variables, Table of Contents, and a new
   §13B section)
 
@@ -670,15 +675,18 @@ In `docs/PLATFORM.md` §5, after the existing table subsections, add:
 
 ```markdown
 #### `consentRecords` — append-only consent/withdrawal log
+
 Latest record per `(userId, purpose)` is the effective consent. `purpose ∈ {marketing, analytics}`
 (`location_enrichment` reserved for future). Fields: `userId`, `purpose`, `granted`, `policyVersion`,
 `createdAt`. Indexes: `by_user [userId]`, `by_user_and_purpose [userId, purpose]`.
 
 #### `dataExportRequests` — async data-export job tracking
+
 Fields: `userId`, `status ∈ {pending, ready, failed, expired}`, `requestedAt`, `fileStorageId?`
 (Convex storage id), `expiresAt?`. Index: `by_user [userId]`.
 
 #### `auditLogs` — accountability log (GDPR Art. 5(2))
+
 Fields: `actor ∈ {user, admin, system}`, `actorId?`, `action`, `targetUserId?`, `metadata?` (JSON
 string, no secrets), `createdAt`. Indexes: `by_target [targetUserId]`, `by_created [createdAt]`.
 Retained (pseudonymized) past account deletion.
@@ -687,6 +695,7 @@ Retained (pseudonymized) past account deletion.
 - [ ] **Step 3: Update the table count references in §5 and §4**
 
 In `docs/PLATFORM.md`, update the table count from 10 to **13**:
+
 - §5 intro line "There are **10 tables**." → "There are **13 tables**."
 - §4 repo-layout comment `schema.ts # 10-table database schema` → `# 13-table database schema`.
 - §2 architecture Mermaid node `DB[("Convex DB<br/>10 tables")]` → `13 tables`.
@@ -716,6 +725,7 @@ In `docs/PLATFORM.md`, update the table count from 10 to **13**:
 > legal artifacts) extend this section.
 
 ### Foundations (Phase 1)
+
 - **Email capture:** `linkedin/auth.upsertUser` now stores `email`/`emailVerified` from the OIDC
   userinfo (previously discarded) and forwards the address to Stripe (`billing.ts`). Email is stored
   under legitimate interest / legal obligation (contact channel for rights + breach notice), not
@@ -771,4 +781,7 @@ Expected: all tests PASS; zero lint warnings.
   match the tests; schema field/table names match every reference in the spec and PLATFORM.md edits.
 - **No-commit rule:** every task ends in an explicit no-commit checkpoint (overrides the skill's
   default commit step, per `CLAUDE.md`).
+
+```
+
 ```

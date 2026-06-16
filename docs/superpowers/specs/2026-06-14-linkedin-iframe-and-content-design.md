@@ -14,13 +14,13 @@ A pre-existing embed-URL bug is fixed as part of this work.
 
 ## Decisions (resolved during brainstorming)
 
-| Decision | Choice |
-|---|---|
-| Feed display | **Iframe only.** Content + media links saved on backend but never shown in-app. |
-| Feed card chrome | Slim app-side author header (with **Featured** badge) above the iframe; in-app Like/Comment bar below; LinkedIn's native action bar clipped off. |
-| Content/media source (manual submit) | **Parse the post's public HTML** that `submitPost` already fetches. |
-| Existing posts | **New posts only** — no backfill (app is not yet in production). |
-| Embed URN limitation | **Fix it** — preserve the real URN namespace instead of force-wrapping as `activity`. |
+| Decision                             | Choice                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Feed display                         | **Iframe only.** Content + media links saved on backend but never shown in-app.                                                                  |
+| Feed card chrome                     | Slim app-side author header (with **Featured** badge) above the iframe; in-app Like/Comment bar below; LinkedIn's native action bar clipped off. |
+| Content/media source (manual submit) | **Parse the post's public HTML** that `submitPost` already fetches.                                                                              |
+| Existing posts                       | **New posts only** — no backfill (app is not yet in production).                                                                                 |
+| Embed URN limitation                 | **Fix it** — preserve the real URN namespace instead of force-wrapping as `activity`.                                                            |
 
 ## Background — current state
 
@@ -116,16 +116,16 @@ Test-driven (red → green) per the project's TDD practice:
 
 ## Files touched
 
-| Action | File |
-|---|---|
-| New | `convex/linkedin/parsePostContent.ts` (parser + `appendMediaLinks`) |
-| New | `convex/linkedin/parsePostContent.test.ts` |
-| New | `app/src/components/LinkedInEmbed.tsx` (shared clipped iframe + URN-preserving `buildEmbedUrl`) |
-| Modify | `convex/posts.ts` — `submitPost` parses HTML, composes content, fills `mediaUrls` |
-| Modify | `app/src/components/PostCard.tsx` — Option B iframe layout, extend `PostWithAuthor` |
-| Modify | `app/src/pages/MyPostsPage.tsx` — use shared `LinkedInEmbed`, drop inline `buildEmbedUrl` |
-| Modify | `app/src/components/PostCard.test.tsx` |
-| Modify | `convex/posts.test.ts` |
+| Action | File                                                                                            |
+| ------ | ----------------------------------------------------------------------------------------------- |
+| New    | `convex/linkedin/parsePostContent.ts` (parser + `appendMediaLinks`)                             |
+| New    | `convex/linkedin/parsePostContent.test.ts`                                                      |
+| New    | `app/src/components/LinkedInEmbed.tsx` (shared clipped iframe + URN-preserving `buildEmbedUrl`) |
+| Modify | `convex/posts.ts` — `submitPost` parses HTML, composes content, fills `mediaUrls`               |
+| Modify | `app/src/components/PostCard.tsx` — Option B iframe layout, extend `PostWithAuthor`             |
+| Modify | `app/src/pages/MyPostsPage.tsx` — use shared `LinkedInEmbed`, drop inline `buildEmbedUrl`       |
+| Modify | `app/src/components/PostCard.test.tsx`                                                          |
+| Modify | `convex/posts.test.ts`                                                                          |
 
 ## Out of scope
 

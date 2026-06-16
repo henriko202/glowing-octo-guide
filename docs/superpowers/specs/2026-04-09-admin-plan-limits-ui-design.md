@@ -10,7 +10,7 @@ frontend that exposes those endpoints in the admin panel.
 ## Decisions
 
 | Question                                                    | Answer                                                                   |
-|-------------------------------------------------------------|--------------------------------------------------------------------------|
+| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Where does Plan Limits fit?                                 | Tab navigation inside `AdminPage` (Settings + Plan Limits tabs)          |
 | How are contact users identified for new overrides?         | Live name search dropdown                                                |
 | Edit UX                                                     | Modal dialog                                                             |
@@ -39,10 +39,7 @@ The `max-w-[640px]` container and page heading remain. The tab bar sits between 
 ### Data
 
 ```typescript
-useQuery(
-  api.admin.listPlanLimits,
-  sessionToken && isAdmin ? { sessionToken } : 'skip'
-)
+useQuery(api.admin.listPlanLimits, sessionToken && isAdmin ? { sessionToken } : 'skip')
 ```
 
 `isAdmin` and `sessionToken` are already resolved in `AdminPage` before the tab renders. The `'skip'`
@@ -71,7 +68,7 @@ The query is a live subscription — the table reflects mutations automatically 
 Single table. Columns:
 
 | Column                | Notes                                                                                       |
-|-----------------------|---------------------------------------------------------------------------------------------|
+| --------------------- | ------------------------------------------------------------------------------------------- |
 | Tier / User           | Tier badge pill for default rows; plain user name for contact rows                          |
 | Interactions per post | Numeric value                                                                               |
 | Posts per week        | Numeric value                                                                               |
@@ -141,7 +138,7 @@ New query in `convex/admin.ts`:
 export const searchContactUsers = query({
   args: {
     sessionToken: v.string(),
-    nameQuery: v.string(),
+    nameQuery: v.string()
   },
   handler: async (ctx, { sessionToken, nameQuery }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -155,7 +152,7 @@ export const searchContactUsers = query({
       .filter(u => u.tier === 'contact' && (u.name ?? '').toLowerCase().includes(q))
       .slice(0, 10)
       .map(u => ({ _id: u._id, name: u.name ?? '' }))
-  },
+  }
 })
 ```
 
@@ -196,7 +193,7 @@ Two `<input type="number" min="1">` fields:
 ### Mutations
 
 | Trigger                      | Save calls                      | Reset calls                        |
-|------------------------------|---------------------------------|------------------------------------|
+| ---------------------------- | ------------------------------- | ---------------------------------- |
 | Contact override (edit)      | `api.admin.setContactUserLimit` | `api.admin.removeContactUserLimit` |
 | Search result (new override) | `api.admin.setContactUserLimit` | N/A                                |
 
@@ -220,7 +217,7 @@ automatically updates the table.
 ## Files Changed
 
 | File                                        | Change                                                                                                            |
-|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `convex/admin.ts`                           | Add `searchContactUsers` query                                                                                    |
 | `app/src/pages/AdminPage.tsx`               | Add tab bar; wrap existing card in Settings tab; add Plan Limits tab rendering `PlanLimitsTab` (**already done**) |
 | `app/src/components/PlanLimitsTab.tsx`      | Update: remove Edit from tier rows; add search form; update modal for new-override flow                           |

@@ -18,7 +18,7 @@ table. A daily cron drains the queue using bounded per-author `by_author` index 
 ## File Map
 
 | File                               | Change                                                                                                                                        |
-|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `convex/schema.ts`                 | Add `postQueue` table                                                                                                                         |
 | `convex/jobs/syncPosts.ts`         | Export `countInWindow` helper; add `queueOnLimitReached` arg + atomic limit check in insert branch                                            |
 | `convex/jobs/syncPostsApify.ts`    | Pass `queueOnLimitReached: true` to each `upsertPost` call                                                                                    |
@@ -44,7 +44,7 @@ table. A daily cron drains the queue using bounded per-author `by_author` index 
 In `convex/schema.test.ts`, add one assertion:
 
 ```typescript
-import {describe, it, expect} from 'vitest'
+import { describe, it, expect } from 'vitest'
 import schema from './schema'
 
 describe('schema', () => {
@@ -74,9 +74,9 @@ Expected: FAIL — `postQueue` not found in tables.
 Add this table definition after the `planLimits` table (before the closing `}`):
 
 ```typescript
-  // Overflow queue for posts that could not be inserted because the author was at
-  // their weekly post limit. A daily cron promotes queued posts to the posts table
-  // when capacity opens (i.e. old posts fall outside the 7-day window).
+// Overflow queue for posts that could not be inserted because the author was at
+// their weekly post limit. A daily cron promotes queued posts to the posts table
+// when capacity opens (i.e. old posts fall outside the 7-day window).
 postQueue: defineTable({
   linkedinPostUrn: v.string(),
   authorId: v.id('users'),
@@ -125,28 +125,28 @@ concurrent inserts cannot both pass; one reads the other's write and fails or qu
 Create `convex/jobs/syncPosts.test.ts`:
 
 ```typescript
-import {describe, it, expect} from 'vitest'
-import {countInWindow} from './syncPosts'
+import { describe, it, expect } from 'vitest'
+import { countInWindow } from './syncPosts'
 
 describe('countInWindow', () => {
   const since = 1_000_000
 
   it('counts posts within the window', () => {
     const posts = [
-      {publishedAt: 1_000_001},
-      {publishedAt: 1_000_002},
-      {publishedAt: 999_999},  // outside window
+      { publishedAt: 1_000_001 },
+      { publishedAt: 1_000_002 },
+      { publishedAt: 999_999 } // outside window
     ]
     expect(countInWindow(posts, since)).toBe(2)
   })
 
   it('returns 0 when no posts are in the window', () => {
-    const posts = [{publishedAt: 999_998}, {publishedAt: 500_000}]
+    const posts = [{ publishedAt: 999_998 }, { publishedAt: 500_000 }]
     expect(countInWindow(posts, since)).toBe(0)
   })
 
   it('includes the boundary timestamp', () => {
-    const posts = [{publishedAt: 1_000_000}]  // exactly at boundary
+    const posts = [{ publishedAt: 1_000_000 }] // exactly at boundary
     expect(countInWindow(posts, since)).toBe(1)
   })
 
@@ -170,10 +170,10 @@ Full replacement of the file (preserves `syncAllPosts` unchanged):
 
 ```typescript
 // convex/jobs/syncPosts.ts
-import {internalAction, internalMutation} from '../_generated/server'
-import {v} from 'convex/values'
-import {internal} from '../_generated/api'
-import {getPlanLimitsHelper, tierToRank} from '../lib/planLimits'
+import { internalAction, internalMutation } from '../_generated/server'
+import { v } from 'convex/values'
+import { internal } from '../_generated/api'
+import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
 
 // Exported for testing. Counts posts published at or after `since`.
 export function countInWindow(posts: Array<{ publishedAt: number }>, since: number): number {
@@ -258,7 +258,7 @@ export const upsertPost = internalMutation({
 
     const authorTierRank = tierToRank(author?.tier ?? 'starter')
     // Destructure out queueOnLimitReached so it is never stored on the post
-    const {queueOnLimitReached: _ignored, ...postArgs} = args
+    const { queueOnLimitReached: _ignored, ...postArgs } = args
     return await ctx.db.insert('posts', {
       ...postArgs,
       featuredAt: undefined,
@@ -364,8 +364,8 @@ This mutation runs daily. It takes bounded batches (100 rows at a time), process
 Create `convex/jobs/processQueue.test.ts`:
 
 ```typescript
-import {describe, it, expect} from 'vitest'
-import {computeCapacity} from './processQueue'
+import { describe, it, expect } from 'vitest'
+import { computeCapacity } from './processQueue'
 
 describe('computeCapacity', () => {
   it('returns positive capacity when under limit', () => {
@@ -402,10 +402,10 @@ Expected: FAIL — `computeCapacity` is not exported from `processQueue.ts` (fil
 // - Processes up to BATCH_SIZE queue rows per invocation (bounded transaction reads).
 // - Uses by_author index to fetch each author's queued posts (no full-table JS grouping).
 // - If the batch is full (suggesting more rows exist), schedules itself via runAfter(0).
-import {internalMutation} from '../_generated/server'
-import {internal} from '../_generated/api'
-import type {Id} from '../_generated/dataModel'
-import {getPlanLimitsHelper, tierToRank} from '../lib/planLimits'
+import { internalMutation } from '../_generated/server'
+import { internal } from '../_generated/api'
+import type { Id } from '../_generated/dataModel'
+import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
 
 const BATCH_SIZE = 100
 
@@ -460,9 +460,7 @@ export const processPostQueue = internalMutation({
         .take(limits.postsPerWeek)
 
       // Promote oldest posts first (publishedAt ascending)
-      const toPromote = [...authorQueued]
-        .sort((a, b) => a.publishedAt - b.publishedAt)
-        .slice(0, capacity)
+      const toPromote = [...authorQueued].sort((a, b) => a.publishedAt - b.publishedAt).slice(0, capacity)
 
       for (const queuedPost of toPromote) {
         // Dedup: skip if this URN was already promoted in a prior cron run
@@ -544,7 +542,7 @@ In `convex/crons.ts`, add after the existing `sync LinkedIn posts` cron:
 ```typescript
 // Promote queued posts to the feed when authors regain capacity (runs at 4:00 UTC,
 // one hour after the post sync so new posts are already settled).
-crons.daily('process post queue', {hourUTC: 4, minuteUTC: 0}, internal.jobs.processQueue.processPostQueue, {})
+crons.daily('process post queue', { hourUTC: 4, minuteUTC: 0 }, internal.jobs.processQueue.processPostQueue, {})
 ```
 
 - [ ] **Step 2: Run all tests**
@@ -578,8 +576,8 @@ Adds four admin-only functions, all gated by the existing `assertAdmin(user)` ch
 Create `convex/admin.test.ts`:
 
 ```typescript
-import {describe, it, expect} from 'vitest'
-import {validateLimitArgs} from './admin'
+import { describe, it, expect } from 'vitest'
+import { validateLimitArgs } from './admin'
 
 describe('validateLimitArgs', () => {
   it('passes with valid positive values', () => {
@@ -622,8 +620,8 @@ export function validateLimitArgs(interactionsPerPost: number, postsPerWeek: num
 
 // Returns all planLimits rows, enriched with userName for contact per-user overrides.
 export const listPlanLimits = query({
-  args: {sessionToken: v.string()},
-  handler: async (ctx, {sessionToken}) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
     const user = await requireAuth(ctx, sessionToken)
     assertAdmin(user)
     const rows = await ctx.db.query('planLimits').collect()
@@ -634,7 +632,7 @@ export const listPlanLimits = query({
           const u = await ctx.db.get(row.userId)
           userName = u?.name
         }
-        return {...row, userName}
+        return { ...row, userName }
       })
     )
   }
@@ -648,7 +646,7 @@ export const setContactUserLimit = mutation({
     interactionsPerPost: v.number(),
     postsPerWeek: v.number()
   },
-  handler: async (ctx, {sessionToken, userId, interactionsPerPost, postsPerWeek}) => {
+  handler: async (ctx, { sessionToken, userId, interactionsPerPost, postsPerWeek }) => {
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     validateLimitArgs(interactionsPerPost, postsPerWeek)
@@ -663,7 +661,7 @@ export const setContactUserLimit = mutation({
       .unique()
 
     if (existing) {
-      await ctx.db.patch(existing._id, {interactionsPerPost, postsPerWeek})
+      await ctx.db.patch(existing._id, { interactionsPerPost, postsPerWeek })
     } else {
       await ctx.db.insert('planLimits', {
         tier: 'contact',
@@ -681,7 +679,7 @@ export const removeContactUserLimit = mutation({
     sessionToken: v.string(),
     userId: v.id('users')
   },
-  handler: async (ctx, {sessionToken, userId}) => {
+  handler: async (ctx, { sessionToken, userId }) => {
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
 
@@ -703,16 +701,11 @@ export const removeContactUserLimit = mutation({
 export const updateTierDefault = mutation({
   args: {
     sessionToken: v.string(),
-    tier: v.union(
-      v.literal('starter'),
-      v.literal('growth'),
-      v.literal('pro'),
-      v.literal('contact')
-    ),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     interactionsPerPost: v.number(),
     postsPerWeek: v.number()
   },
-  handler: async (ctx, {sessionToken, tier, interactionsPerPost, postsPerWeek}) => {
+  handler: async (ctx, { sessionToken, tier, interactionsPerPost, postsPerWeek }) => {
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     validateLimitArgs(interactionsPerPost, postsPerWeek)
@@ -727,7 +720,7 @@ export const updateTierDefault = mutation({
       throw new Error('No default row found for tier — run seedPlanLimits first')
     }
 
-    await ctx.db.patch(defaultRow._id, {interactionsPerPost, postsPerWeek})
+    await ctx.db.patch(defaultRow._id, { interactionsPerPost, postsPerWeek })
   }
 })
 ```
@@ -764,18 +757,18 @@ After all tasks complete, verify manually via Convex dashboard / test client:
 **Fix 1 — Queue & limit:**
 
 - [ ] Submit two posts simultaneously as a starter user (limit=1) → only one succeeds, second throws "Weekly post limit
-  reached"
+      reached"
 - [ ] Apify sync finds a new post for a starter already at their weekly limit → post lands in `postQueue`, not `posts`
 - [ ] Apify sync tries to queue a URN already in `postQueue` → no duplicate (dedup via `by_urn`)
 - [ ] Apify sync tries to queue a URN already in `posts` → update branch fires, no queue insertion
 - [ ] `processPostQueue` runs when author is at capacity → no promotions, queue unchanged
 - [ ] `processPostQueue` runs after author's 7-day window shifts → queued post promoted to `posts`, deleted from
-  `postQueue`
+      `postQueue`
 
 **Fix 2 — Admin API:**
 
 - [ ] `listPlanLimits` with admin token → returns 4 default rows; after adding a contact override, returns 5 with
-  `userName` populated
+      `userName` populated
 - [ ] `setContactUserLimit` on non-existent user → throws "User not found"
 - [ ] `setContactUserLimit` on non-contact user → throws "User is not on the contact tier"
 - [ ] `setContactUserLimit` valid contact user → row inserted; calling again patches it

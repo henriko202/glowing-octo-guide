@@ -34,16 +34,14 @@ const TIER_COLOURS: Record<Tier, string> = {
   starter: 'bg-slate-100 text-slate-600',
   growth: 'bg-blue-100 text-blue-700',
   pro: 'bg-green-100 text-green-700',
-  contact: 'bg-purple-100 text-purple-700',
+  contact: 'bg-purple-100 text-purple-700'
 }
 
 function sortRows(rows: PlanLimitRow[]): { defaults: PlanLimitRow[]; overrides: PlanLimitRow[] } {
   const defaults = TIER_ORDER.map(tier => rows.find(r => r.tier === tier && !r.userId)).filter(
     Boolean
   ) as PlanLimitRow[]
-  const overrides = rows
-    .filter(r => r.userId)
-    .sort((a, b) => (a.userName ?? '').localeCompare(b.userName ?? ''))
+  const overrides = rows.filter(r => r.userId).sort((a, b) => (a.userName ?? '').localeCompare(b.userName ?? ''))
   return { defaults, overrides }
 }
 
@@ -53,10 +51,9 @@ type Props = {
 }
 
 export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
-  const rows = useQuery(
-    api.admin.listPlanLimits,
-    sessionToken && isAdmin ? { sessionToken } : 'skip'
-  ) as PlanLimitRow[] | undefined
+  const rows = useQuery(api.admin.listPlanLimits, sessionToken && isAdmin ? { sessionToken } : 'skip') as
+    | PlanLimitRow[]
+    | undefined
 
   const setContactUserLimit = useMutation(api.admin.setContactUserLimit)
   const removeContactUserLimit = useMutation(api.admin.removeContactUserLimit)
@@ -92,7 +89,7 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
       userName: user.name,
       interactionsPerPost: existing?.interactionsPerPost ?? contactDefault?.interactionsPerPost ?? 200,
       postsPerWeek: existing?.postsPerWeek ?? contactDefault?.postsPerWeek ?? 5,
-      isNew: !existing,
+      isNew: !existing
     })
     setSearchQuery('')
   }
@@ -158,7 +155,7 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
                         userId: row.userId!,
                         userName: row.userName ?? '',
                         interactionsPerPost: row.interactionsPerPost,
-                        postsPerWeek: row.postsPerWeek,
+                        postsPerWeek: row.postsPerWeek
                       })
                     }
                     className="text-xs font-medium text-blue-600 hover:underline"
@@ -181,9 +178,7 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
 
       {/* Add contact override — live search */}
       <div className="mt-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Add contact override
-        </p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add contact override</p>
         <input
           type="text"
           placeholder="Search contact users..."
@@ -255,7 +250,7 @@ function EditModal({ row, sessionToken, onClose, setContactUserLimit, removeCont
         sessionToken,
         userId: row.userId,
         interactionsPerPost: Number(interactions),
-        postsPerWeek: Number(posts),
+        postsPerWeek: Number(posts)
       })
       onClose()
     } catch (e) {
@@ -278,9 +273,7 @@ function EditModal({ row, sessionToken, onClose, setContactUserLimit, removeCont
     }
   }
 
-  const title = isNew
-    ? `Add override for ${row.userName}`
-    : `Edit ${row.userName} limits`
+  const title = isNew ? `Add override for ${row.userName}` : `Edit ${row.userName} limits`
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
@@ -302,9 +295,7 @@ function EditModal({ row, sessionToken, onClose, setContactUserLimit, removeCont
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Posts per week
-            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Posts per week</span>
             <input
               type="number"
               min="1"
@@ -315,9 +306,7 @@ function EditModal({ row, sessionToken, onClose, setContactUserLimit, removeCont
           </label>
         </div>
 
-        {error && (
-          <p className="mt-2 text-xs text-red-500">{error}</p>
-        )}
+        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
 
         <div className="mt-4 flex gap-2">
           <button

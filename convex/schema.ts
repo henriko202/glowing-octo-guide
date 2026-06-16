@@ -151,12 +151,7 @@ export default defineSchema({
   // Subscription-tier limits for post interactions and weekly post volume.
   // The contact tier supports optional per-user overrides via userId.
   planLimits: defineTable({
-    tier: v.union(
-      v.literal('starter'),
-      v.literal('growth'),
-      v.literal('pro'),
-      v.literal('contact')
-    ),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     userId: v.optional(v.id('users')), // Only set for contact-tier per-user overrides
     interactionsPerPost: v.number(),
     postsPerWeek: v.number()

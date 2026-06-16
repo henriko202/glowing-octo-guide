@@ -8,7 +8,7 @@ const PILLARS = [
   {
     icon: '🔍',
     title: 'Find the Right People',
-    body: 'Connecting with decision-makers and peers in your field using LinkedIn\'s search and recommendations.',
+    body: "Connecting with decision-makers and peers in your field using LinkedIn's search and recommendations.",
     pts: 25
   },
   {
@@ -45,9 +45,11 @@ const IMPACT = [
 
 export default function SSIExplainer() {
   return (
-    <section id="what-is-ssi" className="bg-ink px-6 py-28">
+    <section
+      id="what-is-ssi"
+      className="bg-ink px-6 py-28"
+    >
       <div className="mx-auto max-w-5xl">
-
         {/* Header */}
         <div className="mb-16 text-center">
           <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">Understanding SSI</p>
@@ -57,8 +59,8 @@ export default function SSIExplainer() {
             <span className="italic text-gold">the score that determines who finds you</span>
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-cream/60">
-            LinkedIn gives every profile a Social Selling Index score from 0–100. It measures how actively
-            you build your brand, find the right people, engage with insights, and develop relationships.
+            LinkedIn gives every profile a Social Selling Index score from 0–100. It measures how actively you build
+            your brand, find the right people, engage with insights, and develop relationships.
           </p>
         </div>
 
@@ -85,7 +87,10 @@ export default function SSIExplainer() {
         <div className="rounded-2xl bg-ink-800 px-8 py-12">
           <div className="grid grid-cols-1 gap-10 text-center md:grid-cols-3 md:gap-0 md:divide-x md:divide-gold/20">
             {IMPACT.map(stat => (
-              <div key={stat.value} className="px-6">
+              <div
+                key={stat.value}
+                className="px-6"
+              >
                 <p className="font-display text-6xl font-semibold text-gold">{stat.value}</p>
                 <p className="mx-auto mt-3 max-w-[180px] text-sm leading-relaxed text-cream/60">{stat.label}</p>
                 <p className="mt-2 text-xs text-cream/25">{stat.source}</p>
@@ -104,7 +109,6 @@ export default function SSIExplainer() {
             <span className="ml-1.5 inline-block text-gold transition-transform group-hover:translate-x-1">→</span>
           </a>
         </div>
-
       </div>
     </section>
   )

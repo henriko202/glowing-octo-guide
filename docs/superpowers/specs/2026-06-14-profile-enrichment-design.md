@@ -8,7 +8,7 @@
 ## Problem & Goal
 
 The `users` table already declares `industry` and `country`, and the Settings page already
-*displays* them with the note "Profile data is synced automatically from LinkedIn" — but **nothing
+_displays_ them with the note "Profile data is synced automatically from LinkedIn" — but **nothing
 ever writes those fields**, so they always read "Not set." The note is a promise the app never keeps.
 
 We want to:
@@ -36,7 +36,7 @@ profile scraper payload contains an industry taxonomy field), so industry is **m
   Settings via `users.setPublicIdentifier` ([`convex/users.ts`](../../../convex/users.ts)). This is
   the **only** place we obtain the identifier the profile scraper needs.
 - **Existing Apify integration:** [`convex/jobs/syncPostsApify.ts`](../../../convex/jobs/syncPostsApify.ts)
-  scrapes *posts* (not profile fields) via `run-sync-get-dataset-items`, gated by the
+  scrapes _posts_ (not profile fields) via `run-sync-get-dataset-items`, gated by the
   `appSettings.apifySyncEnabled` flag, fanned out by an hourly cron.
 - **Feed targeting:** [`convex/feed.ts`](../../../convex/feed.ts) does **exact-string matching** on
   `viewer.industry` / `viewer.country` against post `visibilityIndustries` / `visibilityCountries`.
@@ -53,27 +53,27 @@ profile scraper payload contains an industry taxonomy field), so industry is **m
 
 ## Decisions
 
-| # | Topic | Decision |
-|---|-------|----------|
-| 1 | Industry source | **Manual entry only** (not in any LinkedIn payload we have) |
-| 2 | Country / location / locale source | **Profile scraper** (new Apify actor) |
-| 3 | Primary locale meaning | **Language for i18n only** (`primaryLocale.language`); seeds UI language |
-| 4 | Country vs location | **Separate fields**: `country` editable (geographic, ISO alpha-2); `location` read-only (display text) |
-| 5 | Edit UX | **Canonical dropdowns** for industry + country (consistent feed match keys); industry needs a **searchable** control given list size |
-| 6 | List strategy | **Shared module**: full ISO country list + **full LinkedIn industry codes v2** (store the *LinkedIn Industry Code*, display the *Label*) |
-| 7 | Scrape trigger | **On `setPublicIdentifier`** + a **manual "Refresh from LinkedIn"** button (≤ 2/day) |
-| 8 | Overwrite policy | **Fill-when-empty** for `country`; **always-refresh** for `location` + `primaryLocale` |
-| 9 | Apify flags | **Three flags**: `apifyEnabled` (master kill-switch), `apifySyncEnabled` (posts), `apifyProfileScrapeEnabled` (profile) |
-| 10 | Profile API surface | Editable profile mutation **reads/writes only `industry` + `country`**; no Apify flags exposed to non-admin clients |
+| #   | Topic                              | Decision                                                                                                                                 |
+| --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Industry source                    | **Manual entry only** (not in any LinkedIn payload we have)                                                                              |
+| 2   | Country / location / locale source | **Profile scraper** (new Apify actor)                                                                                                    |
+| 3   | Primary locale meaning             | **Language for i18n only** (`primaryLocale.language`); seeds UI language                                                                 |
+| 4   | Country vs location                | **Separate fields**: `country` editable (geographic, ISO alpha-2); `location` read-only (display text)                                   |
+| 5   | Edit UX                            | **Canonical dropdowns** for industry + country (consistent feed match keys); industry needs a **searchable** control given list size     |
+| 6   | List strategy                      | **Shared module**: full ISO country list + **full LinkedIn industry codes v2** (store the _LinkedIn Industry Code_, display the _Label_) |
+| 7   | Scrape trigger                     | **On `setPublicIdentifier`** + a **manual "Refresh from LinkedIn"** button (≤ 2/day)                                                     |
+| 8   | Overwrite policy                   | **Fill-when-empty** for `country`; **always-refresh** for `location` + `primaryLocale`                                                   |
+| 9   | Apify flags                        | **Three flags**: `apifyEnabled` (master kill-switch), `apifySyncEnabled` (posts), `apifyProfileScrapeEnabled` (profile)                  |
+| 10  | Profile API surface                | Editable profile mutation **reads/writes only `industry` + `country`**; no Apify flags exposed to non-admin clients                      |
 
 ## Field model
 
-| Field | Source | Policy | Editable | Shown in Settings |
-|---|---|---|---|---|
-| `industry` | manual | user sets it | ✅ dropdown | always |
-| `country` | scrape `location.countryCode` (`"BR"`) | fill when empty | ✅ dropdown | always |
-| `location` | scrape `location.linkedinText` (`"Curitiba, Paraná, Brazil"`) | refresh every scrape | ❌ | when value present |
-| `primaryLocale` | scrape `primaryLocale.language` (`"en"`) | refresh every scrape | i18n only | (drives UI language) |
+| Field           | Source                                                        | Policy               | Editable    | Shown in Settings    |
+| --------------- | ------------------------------------------------------------- | -------------------- | ----------- | -------------------- |
+| `industry`      | manual                                                        | user sets it         | ✅ dropdown | always               |
+| `country`       | scrape `location.countryCode` (`"BR"`)                        | fill when empty      | ✅ dropdown | always               |
+| `location`      | scrape `location.linkedinText` (`"Curitiba, Paraná, Brazil"`) | refresh every scrape | ❌          | when value present   |
+| `primaryLocale` | scrape `primaryLocale.language` (`"en"`)                      | refresh every scrape | i18n only   | (drives UI language) |
 
 - `country` canonical form = **ISO 3166-1 alpha-2**, exactly what the scraper returns — no mapping.
 - `industry` canonical form = **LinkedIn Industry Code** (stored), with the **Label** shown in the UI.
@@ -120,9 +120,9 @@ Centralize the gate logic + the shared REST helper so both jobs use one implemen
 
 ```ts
 // Pure gate helpers (testable, no ctx)
-export function isApifyMasterEnabled(s): boolean        // (s.apifyEnabled ?? true)
-export function isApifyPostSyncEnabled(s): boolean       // master && !!s.apifySyncEnabled
-export function isApifyProfileScrapeEnabled(s): boolean  // master && !!s.apifyProfileScrapeEnabled
+export function isApifyMasterEnabled(s): boolean // (s.apifyEnabled ?? true)
+export function isApifyPostSyncEnabled(s): boolean // master && !!s.apifySyncEnabled
+export function isApifyProfileScrapeEnabled(s): boolean // master && !!s.apifyProfileScrapeEnabled
 
 // Shared REST runner (extracted from syncPostsApify.ts)
 export async function runApifyTask(actorId, token, input): Promise<unknown[] | undefined>
@@ -202,8 +202,8 @@ A **pure-data** module (no Convex/server imports) so it's safe to import from bo
 and the Vite client.
 
 ```ts
-export const COUNTRIES: ReadonlyArray<{ code: string; name: string }>    // full ISO 3166-1 alpha-2
-export const INDUSTRIES: ReadonlyArray<{ code: string; label: string }>  // full LinkedIn industry codes v2
+export const COUNTRIES: ReadonlyArray<{ code: string; name: string }> // full ISO 3166-1 alpha-2
+export const INDUSTRIES: ReadonlyArray<{ code: string; label: string }> // full LinkedIn industry codes v2
 export function isValidCountry(code: string): boolean
 export function isValidIndustry(code: string): boolean
 ```

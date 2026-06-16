@@ -7,11 +7,17 @@ const STATS = [
 
 export default function StatsBar() {
   return (
-    <section id="our-numbers" className="bg-ink px-6 py-16">
+    <section
+      id="our-numbers"
+      className="bg-ink px-6 py-16"
+    >
       <div className="mx-auto max-w-5xl">
         <div className="grid grid-cols-2 gap-y-10 md:grid-cols-4 md:gap-0 md:divide-x md:divide-gold/20">
           {STATS.map(stat => (
-            <div key={stat.value} className="text-center">
+            <div
+              key={stat.value}
+              className="text-center"
+            >
               <p
                 className="animate-shimmer font-display text-4xl font-semibold"
                 style={{

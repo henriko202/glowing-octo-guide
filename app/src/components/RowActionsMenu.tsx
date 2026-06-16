@@ -32,7 +32,10 @@ export default function RowActionsMenu({ label, items }: Props) {
   }, [open])
 
   return (
-    <div className="relative" ref={ref}>
+    <div
+      className="relative"
+      ref={ref}
+    >
       <button
         type="button"
         aria-label={label}

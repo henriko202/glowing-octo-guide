@@ -20,11 +20,11 @@ vi.mock('convex/react', () => ({
     // mod === 0: listPlanLimits → empty array
     return []
   }),
-  useMutation: vi.fn(() => vi.fn()),
+  useMutation: vi.fn(() => vi.fn())
 }))
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: vi.fn(() => vi.fn()),
+  useNavigate: vi.fn(() => vi.fn())
 }))
 
 import AdminPage from './AdminPage'

@@ -25,7 +25,7 @@ const TIER_COLOURS: Record<Tier, string> = {
   starter: 'bg-slate-100 text-slate-600',
   growth: 'bg-blue-100 text-blue-700',
   pro: 'bg-green-100 text-green-700',
-  contact: 'bg-purple-100 text-purple-700',
+  contact: 'bg-purple-100 text-purple-700'
 }
 
 const STATUS_COLOURS: Record<UserRow['subscriptionStatus'], string> = {
@@ -33,7 +33,7 @@ const STATUS_COLOURS: Record<UserRow['subscriptionStatus'], string> = {
   trialing: 'text-blue-600',
   canceled: 'text-slate-400',
   past_due: 'text-red-500',
-  none: 'text-slate-400',
+  none: 'text-slate-400'
 }
 
 const FILTER_LABELS: { value: TierFilter; label: string }[] = [
@@ -42,7 +42,7 @@ const FILTER_LABELS: { value: TierFilter; label: string }[] = [
   { value: 'pro', label: 'Pro' },
   { value: 'growth', label: 'Growth' },
   { value: 'starter', label: 'Starter' },
-  { value: 'none', label: 'No Tier' },
+  { value: 'none', label: 'No Tier' }
 ]
 
 type Props = {
@@ -51,10 +51,9 @@ type Props = {
 }
 
 export default function UsersTab({ sessionToken, isAdmin }: Props) {
-  const users = useQuery(
-    api.admin.listUsers,
-    sessionToken && isAdmin ? { sessionToken } : 'skip'
-  ) as UserRow[] | undefined
+  const users = useQuery(api.admin.listUsers, sessionToken && isAdmin ? { sessionToken } : 'skip') as
+    | UserRow[]
+    | undefined
 
   const setUserTier = useMutation(api.admin.setUserTier)
   const banUser = useMutation(api.admin.banUser)
@@ -71,9 +70,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
   }
 
   const filtered = users.filter(u => {
-    const matchesTier =
-      filter === 'all' ||
-      (filter === 'none' ? !u.tier : u.tier === filter)
+    const matchesTier = filter === 'all' || (filter === 'none' ? !u.tier : u.tier === filter)
     const matchesName = !nameSearch || u.name.toLowerCase().includes(nameSearch.toLowerCase())
     return matchesTier && matchesName
   })
@@ -133,9 +130,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
               key={value}
               onClick={() => setFilter(value)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                filter === value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                filter === value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {label}
@@ -167,9 +162,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
         </div>
 
         {filtered.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-400">
-            No users match this filter.
-          </div>
+          <div className="px-4 py-8 text-center text-sm text-slate-400">No users match this filter.</div>
         )}
 
         {filtered.map(user => (
@@ -187,9 +180,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
                   </span>
                 )}
               </div>
-              {user.headline && (
-                <div className="truncate text-xs text-slate-400">{user.headline}</div>
-              )}
+              {user.headline && <div className="truncate text-xs text-slate-400">{user.headline}</div>}
             </div>
 
             {/* Tier badge */}
@@ -210,7 +201,10 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
 
             {/* Row actions */}
             <div className="flex justify-end">
-              <RowActionsMenu label={`Actions for ${user.name}`} items={actionsFor(user)} />
+              <RowActionsMenu
+                label={`Actions for ${user.name}`}
+                items={actionsFor(user)}
+              />
             </div>
           </div>
         ))}
@@ -230,9 +224,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
       {unbanTarget && (
         <Modal onClose={() => setUnbanTarget(null)}>
           <h2 className="text-base font-semibold text-slate-900">Unban {unbanTarget.name}?</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
-            They'll regain access to the app immediately.
-          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-slate-500">They'll regain access to the app immediately.</p>
           <div className="mt-5 flex justify-end gap-2">
             <button
               type="button"

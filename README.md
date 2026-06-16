@@ -18,7 +18,7 @@ identity — growing their LinkedIn Social Selling Index (SSI) through consisten
 ```
 
 | Service   | Platform   | URL                             |
-|-----------|------------|---------------------------------|
+| --------- | ---------- | ------------------------------- |
 | landing/  | Vercel     | `linkintothessi.com`            |
 | app/      | Railway    | `app.linkintothessi.com`        |
 | Backend   | Convex.dev | Managed serverless              |
@@ -126,7 +126,7 @@ The app runs at `http://localhost:5173`, landing at `http://localhost:3000`.
 ## Subscription Tiers
 
 | Feature                             | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) | Contact |
-|-------------------------------------|:---------------:|:---------------:|:------------:|:-------:|
+| ----------------------------------- | :-------------: | :-------------: | :----------: | :-----: |
 | Access feed                         |        ✓        |        ✓        |      ✓       |    ✓    |
 | 3-day free trial                    |        ✓        |        —        |      —       |    —    |
 | Feed filtered by industry + country |        ✗        |    ✓ (auto)     |  ✓ (custom)  |    ✓    |
@@ -276,7 +276,7 @@ Connect the repo to Vercel, set the root directory to `landing/`, and add
 ## LinkedIn API Notes
 
 | Capability                     | Available? | Notes                                                          |
-|--------------------------------|------------|----------------------------------------------------------------|
+| ------------------------------ | ---------- | -------------------------------------------------------------- |
 | Read own posts                 | ✓          | `r_member_social` scope                                        |
 | Post comments as user          | ✓          | `w_member_social` scope                                        |
 | Post reactions as user         | ✓          | `w_member_social` scope                                        |

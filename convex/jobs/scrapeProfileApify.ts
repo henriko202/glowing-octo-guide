@@ -4,7 +4,7 @@ import { internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
 import type { ActionCtx } from '../convexTypes.js'
-import { runApifyTask, isApifyProfileScrapeEnabled } from '../lib/apify.js'
+import { isApifyProfileScrapeEnabled, runApifyTask } from '../lib/apify.js' // Only the fields we read from the (much larger) profile-scraper payload.
 
 // Only the fields we read from the (much larger) profile-scraper payload.
 interface ApifyProfileResult {
@@ -52,10 +52,7 @@ export const scrapeUserProfile = internalAction({
       return
     }
 
-    const user = (await actionCtx.runQuery(internal.users.getWithTokens, { userId })) as Record<
-      string,
-      unknown
-    > | null
+    const user = (await actionCtx.runQuery(internal.users.getWithTokens, { userId })) as Record<string, unknown> | null
     if (!user?.linkedinPublicIdentifier) {
       console.warn(`User ${userId} has no linkedinPublicIdentifier — skipping profile scrape`)
       return
@@ -68,7 +65,7 @@ export const scrapeUserProfile = internalAction({
 
     const parsed = parseProfileScrapeResult(items)
     if (parsed.country === undefined && parsed.location === undefined && parsed.primaryLocale === undefined) {
-      console.log(`[Apify] No profile fields parsed for user ${userId}`)
+      console.log(`[Apify] No profile fields parsed for user ${user.linkedinPublicIdentifier}, check Apify console`)
       return
     }
 

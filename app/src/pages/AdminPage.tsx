@@ -66,9 +66,7 @@ export default function AdminPage() {
         <button
           onClick={() => setTab('settings')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'settings'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'settings' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Settings
@@ -76,9 +74,7 @@ export default function AdminPage() {
         <button
           onClick={() => setTab('planLimits')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'planLimits'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'planLimits' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Plan Limits
@@ -86,9 +82,7 @@ export default function AdminPage() {
         <button
           onClick={() => setTab('users')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'users'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'users' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Users
@@ -164,12 +158,18 @@ export default function AdminPage() {
 
       {/* Plan Limits tab */}
       {tab === 'planLimits' && (
-        <PlanLimitsTab sessionToken={sessionToken} isAdmin={isAdmin} />
+        <PlanLimitsTab
+          sessionToken={sessionToken}
+          isAdmin={isAdmin}
+        />
       )}
 
       {/* Users tab */}
       {tab === 'users' && (
-        <UsersTab sessionToken={sessionToken} isAdmin={isAdmin} />
+        <UsersTab
+          sessionToken={sessionToken}
+          isAdmin={isAdmin}
+        />
       )}
     </div>
   )

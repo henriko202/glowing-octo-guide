@@ -19,7 +19,7 @@ const DEFAULTS: Record<'starter' | 'growth' | 'pro' | 'contact', PlanLimits> = {
   starter: { interactionsPerPost: 25, postsPerWeek: 1 },
   growth: { interactionsPerPost: 50, postsPerWeek: 2 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5 },
-  contact: { interactionsPerPost: 200, postsPerWeek: 5 },
+  contact: { interactionsPerPost: 200, postsPerWeek: 5 }
 }
 
 /**
@@ -45,7 +45,7 @@ export async function getPlanLimitsHelper(
     if (userRow) {
       return {
         interactionsPerPost: userRow.interactionsPerPost,
-        postsPerWeek: userRow.postsPerWeek,
+        postsPerWeek: userRow.postsPerWeek
       }
     }
 
@@ -60,7 +60,7 @@ export async function getPlanLimitsHelper(
     if (tierRow) {
       return {
         interactionsPerPost: tierRow.interactionsPerPost,
-        postsPerWeek: tierRow.postsPerWeek,
+        postsPerWeek: tierRow.postsPerWeek
       }
     }
 
@@ -76,7 +76,7 @@ export async function getPlanLimitsHelper(
   if (row) {
     return {
       interactionsPerPost: row.interactionsPerPost,
-      postsPerWeek: row.postsPerWeek,
+      postsPerWeek: row.postsPerWeek
     }
   }
 
@@ -111,9 +111,9 @@ export function tierToRank(tier?: string): number {
 export const getPlanLimits = internalQuery({
   args: {
     userId: v.id('users'),
-    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))
   },
   handler: async (ctx, { userId, tier }): Promise<PlanLimits> => {
     return getPlanLimitsHelper(ctx, userId, tier)
-  },
+  }
 })

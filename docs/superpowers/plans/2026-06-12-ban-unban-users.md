@@ -4,13 +4,14 @@
 
 **Goal:** Give admins a hard-lockout Ban/Unban for users, enforced centrally server-side and surfaced through a kebab menu in the admin Users tab plus a banned screen for the locked-out user.
 
-**Architecture:** Four fields on the `users` doc record the ban. A single `requireAuth` chokepoint throws for banned users (covering every protected endpoint); `getMe` resolves the session *without* that throw and returns an `isBanned` signal so the client shows a banned screen instead of looping back to LinkedIn OAuth. Convex reactivity re-runs `getMe` the instant a ban is written, so no session bookkeeping is needed.
+**Architecture:** Four fields on the `users` doc record the ban. A single `requireAuth` chokepoint throws for banned users (covering every protected endpoint); `getMe` resolves the session _without_ that throw and returns an `isBanned` signal so the client shows a banned screen instead of looping back to LinkedIn OAuth. Convex reactivity re-runs `getMe` the instant a ban is written, so no session bookkeeping is needed.
 
 **Tech Stack:** Convex (custom LinkedIn-OAuth + session-token auth), React 19 + React Router 7, raw Tailwind. Tests: `vitest` with the project's pure-function convention on the convex side and `@testing-library/react` (mocking `convex/react`) on the app side.
 
 **Conventions (match exactly):** no semicolons, single quotes, 2-space indent. Convex tests import **pure exported functions** (never mocked handlers) — see `convex/posts.test.ts`. App tests mirror `app/src/components/PlanLimitsTab.test.tsx`.
 
 **Test commands (run from repo root):**
+
 - Single convex file: `pnpm --filter convex exec vitest run <file>`
 - All convex: `pnpm --filter convex test`
 - Single app file: `pnpm --filter app exec vitest run <file>`
@@ -21,6 +22,7 @@
 ### Task 1: Schema & type fields
 
 **Files:**
+
 - Modify: `convex/schema.ts:31-32` (inside the `users` table, after `isAdmin`)
 - Modify: `convex/convexTypes.ts:99-100` (inside `UserDoc`, after `isAdmin`)
 
@@ -97,6 +99,7 @@ git commit -m "feat(schema): add ban fields to users table"
 ### Task 2: Banned enforcement in `requireAuth` (`assertNotBanned`)
 
 **Files:**
+
 - Create: `convex/lib/auth.test.ts`
 - Modify: `convex/lib/auth.ts`
 
@@ -225,6 +228,7 @@ git commit -m "feat(auth): block banned users in requireAuth chokepoint"
 ### Task 3: `getMe` returns a banned signal (`toSafeMe`)
 
 **Files:**
+
 - Create: `convex/users.test.ts`
 - Modify: `convex/users.ts:28-44` (`getMe`) and its imports (`convex/users.ts:5`)
 
@@ -340,6 +344,7 @@ git commit -m "feat(users): getMe surfaces isBanned instead of null"
 ### Task 4: `banUser` / `unbanUser` mutations + `assertNotSelfBan`
 
 **Files:**
+
 - Modify: `convex/admin.test.ts` (append a describe block)
 - Modify: `convex/admin.ts` (add guard + two mutations; extend `listUsers` map)
 
@@ -384,15 +389,15 @@ export function assertNotSelfBan(adminId: string, targetId: string): void {
 In `listUsers` (the `users.map` around lines 223-230), add `isBanned`:
 
 ```ts
-    return users.map(u => ({
-      _id: u._id,
-      name: u.name,
-      headline: u.headline,
-      tier: u.tier,
-      subscriptionStatus: u.subscriptionStatus,
-      isBanned: u.isBanned,
-      createdAt: u._creationTime,
-    }))
+return users.map(u => ({
+  _id: u._id,
+  name: u.name,
+  headline: u.headline,
+  tier: u.tier,
+  subscriptionStatus: u.subscriptionStatus,
+  isBanned: u.isBanned,
+  createdAt: u._creationTime
+}))
 ```
 
 At the end of `convex/admin.ts` (before the `// ─── Internal functions` divider on line 286), add the two mutations:
@@ -404,7 +409,7 @@ export const banUser = mutation({
   args: {
     sessionToken: v.string(),
     userId: v.id('users'),
-    reason: v.optional(v.string()),
+    reason: v.optional(v.string())
   },
   handler: async (ctx, { sessionToken, userId, reason }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -419,16 +424,16 @@ export const banUser = mutation({
       isBanned: true,
       bannedAt: Date.now(),
       bannedBy: admin._id,
-      ...(trimmed ? { bannedReason: trimmed } : {}),
+      ...(trimmed ? { bannedReason: trimmed } : {})
     })
-  },
+  }
 })
 
 // Unbans a user — clears all ban fields. Admin-only.
 export const unbanUser = mutation({
   args: {
     sessionToken: v.string(),
-    userId: v.id('users'),
+    userId: v.id('users')
   },
   handler: async (ctx, { sessionToken, userId }) => {
     const admin = await requireAuth(ctx, sessionToken)
@@ -441,9 +446,9 @@ export const unbanUser = mutation({
       isBanned: false,
       bannedAt: undefined,
       bannedBy: undefined,
-      bannedReason: undefined,
+      bannedReason: undefined
     })
-  },
+  }
 })
 ```
 
@@ -464,6 +469,7 @@ git commit -m "feat(admin): add banUser/unbanUser mutations and self-ban guard"
 ### Task 5: Generic `Modal` shell
 
 **Files:**
+
 - Create: `app/src/components/Modal.tsx`
 - Create: `app/src/components/Modal.test.tsx`
 
@@ -480,27 +486,43 @@ import Modal from './Modal'
 
 describe('Modal', () => {
   it('renders its children', () => {
-    render(<Modal onClose={() => {}}><p>Hello</p></Modal>)
+    render(
+      <Modal onClose={() => {}}>
+        <p>Hello</p>
+      </Modal>
+    )
     expect(screen.getByText('Hello')).toBeInTheDocument()
   })
 
   it('calls onClose when the backdrop is clicked', () => {
     const onClose = vi.fn()
-    render(<Modal onClose={onClose}><p>Body</p></Modal>)
+    render(
+      <Modal onClose={onClose}>
+        <p>Body</p>
+      </Modal>
+    )
     fireEvent.click(screen.getByTestId('modal-backdrop'))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('does not call onClose when the card body is clicked', () => {
     const onClose = vi.fn()
-    render(<Modal onClose={onClose}><p>Body</p></Modal>)
+    render(
+      <Modal onClose={onClose}>
+        <p>Body</p>
+      </Modal>
+    )
     fireEvent.click(screen.getByText('Body'))
     expect(onClose).not.toHaveBeenCalled()
   })
 
   it('calls onClose when Escape is pressed', () => {
     const onClose = vi.fn()
-    render(<Modal onClose={onClose}><p>Body</p></Modal>)
+    render(
+      <Modal onClose={onClose}>
+        <p>Body</p>
+      </Modal>
+    )
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -567,6 +589,7 @@ git commit -m "feat(ui): add generic Modal shell"
 ### Task 6: `RowActionsMenu` kebab
 
 **Files:**
+
 - Create: `app/src/components/RowActionsMenu.tsx`
 - Create: `app/src/components/RowActionsMenu.test.tsx`
 
@@ -583,7 +606,12 @@ import RowActionsMenu from './RowActionsMenu'
 
 describe('RowActionsMenu', () => {
   it('hides menu items until the kebab is clicked', () => {
-    render(<RowActionsMenu label="Actions for Jordan" items={[{ label: 'Ban user…', onClick: () => {} }]} />)
+    render(
+      <RowActionsMenu
+        label="Actions for Jordan"
+        items={[{ label: 'Ban user…', onClick: () => {} }]}
+      />
+    )
     expect(screen.queryByText('Ban user…')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Jordan' }))
     expect(screen.getByText('Ban user…')).toBeInTheDocument()
@@ -591,7 +619,12 @@ describe('RowActionsMenu', () => {
 
   it('fires the item callback and closes the menu', () => {
     const onClick = vi.fn()
-    render(<RowActionsMenu label="Actions" items={[{ label: 'Unban', onClick }]} />)
+    render(
+      <RowActionsMenu
+        label="Actions"
+        items={[{ label: 'Unban', onClick }]}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
     fireEvent.click(screen.getByText('Unban'))
     expect(onClick).toHaveBeenCalledTimes(1)
@@ -599,7 +632,12 @@ describe('RowActionsMenu', () => {
   })
 
   it('closes when clicking outside', () => {
-    render(<RowActionsMenu label="Actions" items={[{ label: 'Ban user…', onClick: () => {} }]} />)
+    render(
+      <RowActionsMenu
+        label="Actions"
+        items={[{ label: 'Ban user…', onClick: () => {} }]}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
     expect(screen.getByText('Ban user…')).toBeInTheDocument()
     fireEvent.mouseDown(document.body)
@@ -652,7 +690,10 @@ export default function RowActionsMenu({ label, items }: Props) {
   }, [open])
 
   return (
-    <div className="relative" ref={ref}>
+    <div
+      className="relative"
+      ref={ref}
+    >
       <button
         type="button"
         aria-label={label}
@@ -703,6 +744,7 @@ git commit -m "feat(ui): add RowActionsMenu kebab"
 ### Task 7: `BanUserDialog` modal
 
 **Files:**
+
 - Create: `app/src/components/BanUserDialog.tsx`
 - Create: `app/src/components/BanUserDialog.test.tsx`
 
@@ -717,14 +759,28 @@ import BanUserDialog from './BanUserDialog'
 
 describe('BanUserDialog', () => {
   it('shows the target name and a suspension warning', () => {
-    render(<BanUserDialog userName="Priya Nayar" pending={false} onConfirm={() => {}} onCancel={() => {}} />)
+    render(
+      <BanUserDialog
+        userName="Priya Nayar"
+        pending={false}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    )
     expect(screen.getByText(/ban priya nayar\?/i)).toBeInTheDocument()
     expect(screen.getByText(/signed out immediately/i)).toBeInTheDocument()
   })
 
   it('confirms with the trimmed reason text', () => {
     const onConfirm = vi.fn()
-    render(<BanUserDialog userName="Priya Nayar" pending={false} onConfirm={onConfirm} onCancel={() => {}} />)
+    render(
+      <BanUserDialog
+        userName="Priya Nayar"
+        pending={false}
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />
+    )
     fireEvent.change(screen.getByPlaceholderText(/spam/i), { target: { value: '  TOS violation  ' } })
     fireEvent.click(screen.getByRole('button', { name: /^ban user$/i }))
     expect(onConfirm).toHaveBeenCalledWith('TOS violation')
@@ -732,14 +788,28 @@ describe('BanUserDialog', () => {
 
   it('confirms with an empty string when no reason is typed', () => {
     const onConfirm = vi.fn()
-    render(<BanUserDialog userName="Priya Nayar" pending={false} onConfirm={onConfirm} onCancel={() => {}} />)
+    render(
+      <BanUserDialog
+        userName="Priya Nayar"
+        pending={false}
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /^ban user$/i }))
     expect(onConfirm).toHaveBeenCalledWith('')
   })
 
   it('calls onCancel from the Cancel button', () => {
     const onCancel = vi.fn()
-    render(<BanUserDialog userName="Priya Nayar" pending={false} onConfirm={() => {}} onCancel={onCancel} />)
+    render(
+      <BanUserDialog
+        userName="Priya Nayar"
+        pending={false}
+        onConfirm={() => {}}
+        onCancel={onCancel}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
@@ -826,6 +896,7 @@ git commit -m "feat(ui): add BanUserDialog modal"
 ### Task 8: `BannedScreen`
 
 **Files:**
+
 - Create: `app/src/components/BannedScreen.tsx`
 - Create: `app/src/components/BannedScreen.test.tsx`
 
@@ -893,8 +964,21 @@ export default function BannedScreen({ reason }: Props) {
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
         <div className="mb-3 flex items-center gap-2 text-red-700">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="4" y="11" width="16" height="9" rx="2" />
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <rect
+              x="4"
+              y="11"
+              width="16"
+              height="9"
+              rx="2"
+            />
             <path d="M8 11V8a4 4 0 0 1 8 0v3" />
           </svg>
           <span className="text-[11px] font-bold uppercase tracking-wider">Account suspended</span>
@@ -950,6 +1034,7 @@ git commit -m "feat(ui): add BannedScreen"
 ### Task 9: Integrate ban/unban into `UsersTab`
 
 **Files:**
+
 - Create: `app/src/components/UsersTab.test.tsx`
 - Modify: `app/src/components/UsersTab.tsx`
 
@@ -965,8 +1050,24 @@ import { vi } from 'vitest'
 import { useQuery, useMutation } from 'convex/react'
 
 const mockUsers = [
-  { _id: 'u1', name: 'Jordan Maxwell', headline: 'Growth marketer', tier: 'growth', subscriptionStatus: 'active', isBanned: false, createdAt: 0 },
-  { _id: 'u2', name: 'Priya Nayar', headline: 'Founder', tier: 'starter', subscriptionStatus: 'trialing', isBanned: true, createdAt: 0 },
+  {
+    _id: 'u1',
+    name: 'Jordan Maxwell',
+    headline: 'Growth marketer',
+    tier: 'growth',
+    subscriptionStatus: 'active',
+    isBanned: false,
+    createdAt: 0
+  },
+  {
+    _id: 'u2',
+    name: 'Priya Nayar',
+    headline: 'Founder',
+    tier: 'starter',
+    subscriptionStatus: 'trialing',
+    isBanned: true,
+    createdAt: 0
+  }
 ]
 
 let mockBan: ReturnType<typeof vi.fn>
@@ -975,7 +1076,7 @@ let mockSetTier: ReturnType<typeof vi.fn>
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(() => mockUsers),
-  useMutation: vi.fn(),
+  useMutation: vi.fn()
 }))
 
 import UsersTab from './UsersTab'
@@ -995,12 +1096,22 @@ beforeEach(() => {
 
 describe('UsersTab — ban/unban', () => {
   it('shows a Banned badge for banned users only', () => {
-    render(<UsersTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <UsersTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     expect(screen.getByText('Banned')).toBeInTheDocument()
   })
 
   it('offers "Ban user…" for an active user and calls banUser with the reason', async () => {
-    render(<UsersTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <UsersTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
     fireEvent.click(screen.getByText('Ban user…'))
     fireEvent.change(screen.getByPlaceholderText(/spam/i), { target: { value: 'Spam' } })
@@ -1011,7 +1122,12 @@ describe('UsersTab — ban/unban', () => {
   })
 
   it('offers "Unban" for a banned user and calls unbanUser after confirm', async () => {
-    render(<UsersTab sessionToken="tok" isAdmin={true} />)
+    render(
+      <UsersTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /actions for priya nayar/i }))
     fireEvent.click(screen.getByText('Unban'))
     fireEvent.click(screen.getByRole('button', { name: /^unban$/i }))
@@ -1059,7 +1175,7 @@ const TIER_COLOURS: Record<Tier, string> = {
   starter: 'bg-slate-100 text-slate-600',
   growth: 'bg-blue-100 text-blue-700',
   pro: 'bg-green-100 text-green-700',
-  contact: 'bg-purple-100 text-purple-700',
+  contact: 'bg-purple-100 text-purple-700'
 }
 
 const STATUS_COLOURS: Record<UserRow['subscriptionStatus'], string> = {
@@ -1067,7 +1183,7 @@ const STATUS_COLOURS: Record<UserRow['subscriptionStatus'], string> = {
   trialing: 'text-blue-600',
   canceled: 'text-slate-400',
   past_due: 'text-red-500',
-  none: 'text-slate-400',
+  none: 'text-slate-400'
 }
 
 const FILTER_LABELS: { value: TierFilter; label: string }[] = [
@@ -1076,7 +1192,7 @@ const FILTER_LABELS: { value: TierFilter; label: string }[] = [
   { value: 'pro', label: 'Pro' },
   { value: 'growth', label: 'Growth' },
   { value: 'starter', label: 'Starter' },
-  { value: 'none', label: 'No Tier' },
+  { value: 'none', label: 'No Tier' }
 ]
 
 type Props = {
@@ -1085,10 +1201,9 @@ type Props = {
 }
 
 export default function UsersTab({ sessionToken, isAdmin }: Props) {
-  const users = useQuery(
-    api.admin.listUsers,
-    sessionToken && isAdmin ? { sessionToken } : 'skip'
-  ) as UserRow[] | undefined
+  const users = useQuery(api.admin.listUsers, sessionToken && isAdmin ? { sessionToken } : 'skip') as
+    | UserRow[]
+    | undefined
 
   const setUserTier = useMutation(api.admin.setUserTier)
   const banUser = useMutation(api.admin.banUser)
@@ -1105,9 +1220,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
   }
 
   const filtered = users.filter(u => {
-    const matchesTier =
-      filter === 'all' ||
-      (filter === 'none' ? !u.tier : u.tier === filter)
+    const matchesTier = filter === 'all' || (filter === 'none' ? !u.tier : u.tier === filter)
     const matchesName = !nameSearch || u.name.toLowerCase().includes(nameSearch.toLowerCase())
     return matchesTier && matchesName
   })
@@ -1167,9 +1280,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
               key={value}
               onClick={() => setFilter(value)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                filter === value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                filter === value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {label}
@@ -1201,9 +1312,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
         </div>
 
         {filtered.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-400">
-            No users match this filter.
-          </div>
+          <div className="px-4 py-8 text-center text-sm text-slate-400">No users match this filter.</div>
         )}
 
         {filtered.map(user => (
@@ -1221,9 +1330,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
                   </span>
                 )}
               </div>
-              {user.headline && (
-                <div className="truncate text-xs text-slate-400">{user.headline}</div>
-              )}
+              {user.headline && <div className="truncate text-xs text-slate-400">{user.headline}</div>}
             </div>
 
             {/* Tier badge */}
@@ -1244,7 +1351,10 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
 
             {/* Row actions */}
             <div className="flex justify-end">
-              <RowActionsMenu label={`Actions for ${user.name}`} items={actionsFor(user)} />
+              <RowActionsMenu
+                label={`Actions for ${user.name}`}
+                items={actionsFor(user)}
+              />
             </div>
           </div>
         ))}
@@ -1264,9 +1374,7 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
       {unbanTarget && (
         <Modal onClose={() => setUnbanTarget(null)}>
           <h2 className="text-base font-semibold text-slate-900">Unban {unbanTarget.name}?</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
-            They'll regain access to the app immediately.
-          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-slate-500">They'll regain access to the app immediately.</p>
           <div className="mt-5 flex justify-end gap-2">
             <button
               type="button"
@@ -1308,6 +1416,7 @@ git commit -m "feat(admin): kebab ban/unban actions in UsersTab"
 ### Task 10: Render the banned branch in `RequireAuth`
 
 **Files:**
+
 - Modify: `app/src/App.tsx:1-36`
 
 Integration wiring (a route guard that reads the live `getMe` result). Verified by `tsc` + the full app suite + manual smoke, since the redirect/`useQuery` guard isn't a unit-test target in this codebase.
