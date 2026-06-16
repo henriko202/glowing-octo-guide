@@ -30,3 +30,10 @@ export function deletionCompletedEmail(): EmailContent {
   const html = `<p>Your <strong>${APP}</strong> account and personal data have been permanently deleted.</p><p>Required billing records are retained in anonymized form as the law requires.</p><p>Thank you for using ${APP}.</p>`
   return { subject, html, text }
 }
+
+export function dormancyWarningEmail(deletionDate: string): EmailContent {
+  const subject = `Your ${APP} account is inactive — action needed`
+  const text = `Your ${APP} account has been inactive for a long time. To comply with data-minimization rules, it is scheduled for deletion on ${deletionDate}. Simply sign in before then to keep your account and cancel the deletion.`
+  const html = `<p>Your <strong>${APP}</strong> account has been inactive for a long time.</p><p>To comply with data-minimization rules, it is scheduled for deletion on <strong>${deletionDate}</strong>. Simply sign in before then to keep your account and cancel the deletion.</p>`
+  return { subject, html, text }
+}

@@ -993,6 +993,7 @@ flowchart TD
 | `cleanup expired sessions` | every **6h** | `sessions.deleteExpiredSessions` | Purge expired sessions (≤ 200/run). |
 | `cleanup expired oauth states` | every **1h** | `sessions.deleteExpiredOAuthStates` | Purge expired CSRF nonces (≤ 200/run). |
 | `process account deletions` | every **24h** | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Batched, self-rescheduling. |
+| `enforce data retention` | every **24h** | `privacy/retention.enforceDataRetention` | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Batched. |
 
 ---
 
@@ -1119,6 +1120,66 @@ flowchart TD
   GRACE -->|"elapsed"| CRON["processAccountDeletions cron"]
   CRON --> CASCADE["cascadeDeleteUser: delete owned rows + export files; pseudonymize auditLogs; delete user last"]
   CASCADE --> DONE["deletion-completed email; Stripe retains invoices"]
+```
+
+### Consent & Retention (Phase 3a)
+
+Backend for **granular consent** recording, **re-consent** prompting, and automated **data
+retention/dormancy** enforcement. The consent toggles UI, PolicyUpdateModal, and cookie
+notice/page are **Phase 3b** (not yet shipped).
+
+**Consent recording** — `convex/privacy/consent.ts`:
+- `consentRecords` is **append-only** — individual purpose changes are each a new row, never an
+  update, preserving a full audit trail.
+- `recordConsent` (mutation, `resolveSession`) inserts a new `consentRecords` row for a given
+  `purpose` + `granted` value, then writes an audit log entry.
+- `getConsents` (query, `resolveSession`) returns the **latest record per purpose** for the
+  current user via the pure helper `latestConsentByPurpose` (groups by purpose, keeps the most
+  recent `_creationTime`).
+- Purposes at launch: `marketing` and `analytics` — both **off by default** (no row = no
+  consent; the pure helper returns `false` for absent purposes).
+
+**Re-consent / policy acknowledgement**:
+- `acknowledgePolicy` (mutation, `resolveSession`) stamps `users.acknowledgedPolicyVersion` with
+  the current `POLICY_VERSION` constant (from `lib/policy.ts`) and writes an audit log entry.
+  This allows the backend to detect users who have not yet acknowledged an updated policy.
+- `getMe` already exposes `acknowledgedPolicyVersion` so the Phase 3b frontend can prompt
+  re-acceptance via a `PolicyUpdateModal` without a separate query.
+
+**Data retention & dormancy** — `convex/privacy/retention.ts`:
+
+The `enforceDataRetention` cron (daily — see [§13](#13-scheduled-jobs-crons)) runs four
+sequential batched sweeps using pure predicate helpers for testability:
+
+| Sweep | Predicate | Action |
+|---|---|---|
+| LinkedIn token expiry | `isTokenExpired(user)` — `tokenExpiresAt` in the past | Nulls `linkedinAccessToken`, `linkedinRefreshToken`, `tokenExpiresAt`, `tokenScope` on the `users` row. |
+| Export file expiry | `isExportExpired(req)` — status `ready` + `expiresAt` in the past | Deletes the file from Convex storage, sets status → `expired`. |
+| Audit log purge | `isAuditExpired(log)` — older than ~24 months | Deletes the `auditLogs` row entirely. |
+| Dormancy | `isDormant(user)` — `lastLoginAt` (or `_creationTime`) >24 months ago **and** no active/trialing subscription | Sets `deletionScheduledAt` (+30 days from now) + `deletionReason='dormancy'` and sends a dormancy-warning email. |
+
+The dormancy path **reuses the Phase 2a deletion cascade**: once `deletionScheduledAt` is set,
+`processAccountDeletions` (the existing daily cron) handles the hard delete after the 30-day
+grace window. A dormant user who re-logs in sees `CancelDeletionScreen` (same interstitial as a
+voluntary deletion request) and can cancel via `cancelAccountDeletion` — no new UI needed.
+
+```mermaid
+flowchart TD
+  CRON["enforceDataRetention (daily cron)"] --> TOK["Sweep 1: isTokenExpired?"]
+  TOK -->|yes| NULLTOK["null LinkedIn token fields"]
+  TOK -->|no| EXP
+  NULLTOK --> EXP["Sweep 2: isExportExpired?"]
+  EXP -->|yes| DELFILE["storage.delete + status=expired"]
+  EXP -->|no| AUD
+  DELFILE --> AUD["Sweep 3: isAuditExpired? (>24mo)"]
+  AUD -->|yes| DELLOG["delete auditLogs row"]
+  AUD -->|no| DORM
+  DELLOG --> DORM["Sweep 4: isDormant? (>24mo inactive, no sub)"]
+  DORM -->|yes| FLAG["set deletionScheduledAt=+30d, reason=dormancy + warning email"]
+  DORM -->|no| END["done"]
+  FLAG --> GRACE{"within 30d grace?"}
+  GRACE -->|"re-login → CancelDeletionScreen"| CANCEL["cancelAccountDeletion → clear fields"]
+  GRACE -->|"elapsed"| PDA["processAccountDeletions cron → cascadeDeleteUser"]
 ```
 
 ---
@@ -1534,4 +1595,13 @@ with auditLog pseudonymization; Stripe subscription cancellation during grace pe
 `api.privacy.*`), `CancelDeletionScreen` (grace-window interstitial wired into `RequireAuth`),
 the updated `RequireAuth` interception order (loading → null → isBanned → deletionScheduledAt →
 app), the **"Privacy"** link added to `AppNav`, and the new `privacy.*` i18n namespace (en/pt/es)
-— see [§14](#14-frontend--authenticated-app-app).*
+— see [§14](#14-frontend--authenticated-app-app). Also reflects **Privacy & Compliance Phase 3a
+(Consent + Retention/Dormancy + Re-consent Backend)**: append-only `consentRecords` table with
+`recordConsent`/`getConsents` (latest-per-purpose via `latestConsentByPurpose`); `marketing` and
+`analytics` purposes off by default; `acknowledgePolicy` stamping `users.acknowledgedPolicyVersion`
+for Phase 3b re-consent prompts (`getMe` exposes the field); and the new `enforce data retention`
+daily cron (`convex/privacy/retention.ts`) sweeping expired LinkedIn tokens, expiring/purging old
+export files, purging audit logs >24 months, and flagging dormant accounts (24 months inactive,
+non-subscriber) with `deletionScheduledAt='dormancy'` + warning email — reusing the Phase 2a
+`processAccountDeletions` cascade and `CancelDeletionScreen` for the grace window. See
+[§13](#13-scheduled-jobs-crons) and [§13B](#13b-privacy--compliance).*

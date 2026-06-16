@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exportReadyEmail, deletionScheduledEmail, deletionCompletedEmail } from './emails'
+import { exportReadyEmail, deletionScheduledEmail, deletionCompletedEmail, dormancyWarningEmail } from './emails'
 
 describe('privacy email templates', () => {
   it('exportReadyEmail includes the app name and a body', () => {
@@ -20,5 +20,14 @@ describe('privacy email templates', () => {
     const m = deletionCompletedEmail()
     expect(m.subject).toMatch(/deleted/i)
     expect(m.html).toContain('Link Into The SSI')
+  })
+})
+
+describe('dormancyWarningEmail', () => {
+  it('names the deletion date and the reactivation action', () => {
+    const m = dormancyWarningEmail('June 30, 2026')
+    expect(m.subject).toMatch(/inactive|deletion/i)
+    expect(m.html).toContain('June 30, 2026')
+    expect(m.text).toContain('June 30, 2026')
   })
 })

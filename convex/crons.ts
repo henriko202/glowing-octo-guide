@@ -26,4 +26,7 @@ crons.interval('cleanup expired oauth states', { hours: 1 }, internal.sessions.d
 // Batched; reschedules itself when a run fills the batch.
 crons.interval('process account deletions', { hours: 24 }, internal.privacy.deletion.processAccountDeletions, {})
 
+// Data minimization: expire tokens, purge old export files + audit logs, flag dormant accounts.
+crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retention.enforceDataRetention, {})
+
 export default crons
