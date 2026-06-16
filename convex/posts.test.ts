@@ -1,6 +1,9 @@
 // convex/posts.test.ts
 import { describe, expect, it } from 'vitest'
-import { countPostsSince } from './posts'
+import { canModifyPost, countPostsSince, isAdminShareOverrideEnabled } from './posts'
+import type { Id } from './_generated/dataModel'
+
+const asUserId = (s: string) => s as Id<'users'>
 
 // We test the handler logic directly since Convex query wrappers are
 // not testable in unit tests — this mirrors the pattern in feed.test.ts.
@@ -42,5 +45,44 @@ describe('countPostsSince', () => {
 
   it('returns 0 for an empty list', () => {
     expect(countPostsSince([], since)).toBe(0)
+  })
+})
+
+// The admin "share any post" override is dev-only: it requires BOTH an admin user
+// AND the ALLOW_ADMIN_SHARE_ANY_POST env flag set to the literal string 'true'.
+describe('isAdminShareOverrideEnabled', () => {
+  it('is enabled only for an admin when the env flag is exactly "true"', () => {
+    expect(isAdminShareOverrideEnabled({ isAdmin: true }, { ALLOW_ADMIN_SHARE_ANY_POST: 'true' })).toBe(true)
+  })
+
+  it('is disabled for a non-admin even when the flag is set (production-safe)', () => {
+    expect(isAdminShareOverrideEnabled({ isAdmin: false }, { ALLOW_ADMIN_SHARE_ANY_POST: 'true' })).toBe(false)
+    expect(isAdminShareOverrideEnabled({}, { ALLOW_ADMIN_SHARE_ANY_POST: 'true' })).toBe(false)
+  })
+
+  it('is disabled for an admin when the flag is absent or not exactly "true"', () => {
+    expect(isAdminShareOverrideEnabled({ isAdmin: true }, {})).toBe(false)
+    expect(isAdminShareOverrideEnabled({ isAdmin: true }, { ALLOW_ADMIN_SHARE_ANY_POST: 'false' })).toBe(false)
+    expect(isAdminShareOverrideEnabled({ isAdmin: true }, { ALLOW_ADMIN_SHARE_ANY_POST: '1' })).toBe(false)
+  })
+})
+
+// Hiding/deleting a post is allowed for its author OR any admin (moderation).
+describe('canModifyPost', () => {
+  const author = { _id: asUserId('u_author'), isAdmin: false }
+  const admin = { _id: asUserId('u_admin'), isAdmin: true }
+  const other = { _id: asUserId('u_other'), isAdmin: false }
+  const post = { authorId: asUserId('u_author') }
+
+  it('allows the author to modify their own post', () => {
+    expect(canModifyPost(author, post)).toBe(true)
+  })
+
+  it('allows any admin to modify another user’s post', () => {
+    expect(canModifyPost(admin, post)).toBe(true)
+  })
+
+  it('forbids a non-admin from modifying someone else’s post', () => {
+    expect(canModifyPost(other, post)).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 import type { DatabaseWriter } from './_generated/server'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth } from './lib/auth'
 
 // SECURITY: Every admin endpoint MUST call this.
@@ -206,30 +206,62 @@ export const updateTierDefault = mutation({
   }
 })
 
-// Returns up to 10 contact-tier users whose name contains nameQuery (case-insensitive).
-// Uses the by_tier index on users to avoid a full-table scan.
-// Note: users where `tier` is `undefined` are excluded from the `by_tier` index scan — they will not appear in search results.
-export const searchContactUsers = query({
-  args: {
-    sessionToken: v.string(),
-    nameQuery: v.string()
-  },
-  handler: async (ctx, { sessionToken, nameQuery }) => {
+// Effective plan limits for a contact-tier user: their per-user override row if present,
+// otherwise the contact tier default. Falls back to the hardcoded contact default
+// (matches DEFAULTS.contact in lib/planLimits.ts) when no default row exists.
+// Exported for unit testing.
+export function effectiveContactLimits(
+  override: { interactionsPerPost: number; postsPerWeek: number } | undefined,
+  contactDefault: { interactionsPerPost: number; postsPerWeek: number } | undefined
+): { interactionsPerPost: number; postsPerWeek: number; hasOverride: boolean } {
+  if (override) {
+    return {
+      interactionsPerPost: override.interactionsPerPost,
+      postsPerWeek: override.postsPerWeek,
+      hasOverride: true
+    }
+  }
+  if (contactDefault) {
+    return {
+      interactionsPerPost: contactDefault.interactionsPerPost,
+      postsPerWeek: contactDefault.postsPerWeek,
+      hasOverride: false
+    }
+  }
+  return { interactionsPerPost: 200, postsPerWeek: 5, hasOverride: false }
+}
+
+// Returns every contact-tier user with their effective plan limits, for the read-only
+// Plan Limits tab. Per-user limit editing lives in the Users tab (setContactUserLimit).
+// Uses the by_tier index on users to avoid a full-table scan. Bounded take(500).
+// Note: users where `tier` is `undefined` are excluded from the by_tier index scan.
+export const listContactUsersWithLimits = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
-
-    if (!nameQuery) return []
 
     const contactUsers = await ctx.db
       .query('users')
       .withIndex('by_tier', q => q.eq('tier', 'contact'))
       .take(500)
 
-    const q = nameQuery.toLowerCase()
+    // Read all contact planLimits rows once (default row + per-user overrides), then index by userId.
+    const contactRows = await ctx.db
+      .query('planLimits')
+      .withIndex('by_tier', q => q.eq('tier', 'contact'))
+      .take(500)
+    const contactDefault = contactRows.find(r => r.userId === undefined)
+    const overrideByUser = new Map(
+      contactRows.filter(r => r.userId !== undefined).map(r => [r.userId as Id<'users'>, r] as const)
+    )
+
     return contactUsers
-      .filter(u => u.name.toLowerCase().includes(q))
-      .slice(0, 10)
-      .map(u => ({ _id: u._id, name: u.name }))
+      .map(u => {
+        const limits = effectiveContactLimits(overrideByUser.get(u._id), contactDefault)
+        return { _id: u._id, name: u.name, ...limits }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 })
 
@@ -300,6 +332,33 @@ export const setUserTier = mutation({
         }
       }
     }
+  }
+})
+
+// Sets a user's subscription status directly. Admin override — primarily used to take a
+// user out of `trialing` (which hides their posts from the shared feed) without waiting on
+// Stripe. NOTE: this is a manual override; a later Stripe webhook (stripe.ts) may overwrite it.
+// Touches only subscriptionStatus — tier and Stripe records are left untouched.
+export const setUserSubscriptionStatus = mutation({
+  args: {
+    sessionToken: v.string(),
+    userId: v.id('users'),
+    status: v.union(
+      v.literal('trialing'),
+      v.literal('active'),
+      v.literal('canceled'),
+      v.literal('past_due'),
+      v.literal('none')
+    )
+  },
+  handler: async (ctx, { sessionToken, userId, status }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+
+    const targetUser = await ctx.db.get(userId)
+    if (!targetUser) throw new Error('User not found')
+
+    await ctx.db.patch(userId, { subscriptionStatus: status })
   }
 })
 

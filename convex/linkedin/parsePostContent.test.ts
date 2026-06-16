@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendMediaLinks, parsePostContent, type PostMedia } from './parsePostContent'
+import { appendMediaLinks, parsePostContent, parsePostEngagement, type PostMedia } from './parsePostContent'
 
 describe('appendMediaLinks', () => {
   const media: PostMedia[] = [
@@ -85,5 +85,62 @@ describe('parsePostContent', () => {
     const html = `<a href="https://example.com/file.pdf.zip">x</a>`
     const result = parsePostContent(html)
     expect(result.media).toEqual([])
+  })
+})
+
+describe('parsePostEngagement', () => {
+  it('reads like + comment counts from a JSON-LD interactionStatistic array (string interactionType)', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"DiscussionForumPosting","interactionStatistic":[
+        {"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":142},
+        {"@type":"InteractionCounter","interactionType":"https://schema.org/CommentAction","userInteractionCount":17}
+      ]}
+    </script>`
+    expect(parsePostEngagement(html)).toEqual({ likeCount: 142, commentCount: 17 })
+  })
+
+  it('handles interactionType as an object and userInteractionCount as a string', () => {
+    const html = `<script type="application/ld+json">
+      {"interactionStatistic":[
+        {"interactionType":{"@type":"LikeAction"},"userInteractionCount":"8"},
+        {"interactionType":{"@type":"CommentAction"},"userInteractionCount":"3"}
+      ]}
+    </script>`
+    expect(parsePostEngagement(html)).toEqual({ likeCount: 8, commentCount: 3 })
+  })
+
+  it('accepts a single (non-array) interactionStatistic object', () => {
+    const html = `<script type="application/ld+json">
+      {"interactionStatistic":{"interactionType":"https://schema.org/LikeAction","userInteractionCount":5}}
+    </script>`
+    expect(parsePostEngagement(html)).toEqual({ likeCount: 5, commentCount: 0 })
+  })
+
+  it('keeps the largest matching counter when multiple JSON-LD blocks are present', () => {
+    const html = `
+      <script type="application/ld+json">
+      {"interactionStatistic":[{"interactionType":"LikeAction","userInteractionCount":2}]}
+      </script>
+      <script type="application/ld+json">
+      {"interactionStatistic":[{"interactionType":"LikeAction","userInteractionCount":99}]}
+      </script>`
+    expect(parsePostEngagement(html)).toEqual({ likeCount: 99, commentCount: 0 })
+  })
+
+  it('returns zeros when there is no interactionStatistic or no JSON-LD at all', () => {
+    expect(parsePostEngagement('<html><body>nothing</body></html>')).toEqual({ likeCount: 0, commentCount: 0 })
+    expect(parsePostEngagement('')).toEqual({ likeCount: 0, commentCount: 0 })
+    const noStats = `<script type="application/ld+json">{"@type":"Article","articleBody":"hi"}</script>`
+    expect(parsePostEngagement(noStats)).toEqual({ likeCount: 0, commentCount: 0 })
+  })
+
+  it('coerces malformed / negative counts to 0', () => {
+    const html = `<script type="application/ld+json">
+      {"interactionStatistic":[
+        {"interactionType":"LikeAction","userInteractionCount":"oops"},
+        {"interactionType":"CommentAction","userInteractionCount":-4}
+      ]}
+    </script>`
+    expect(parsePostEngagement(html)).toEqual({ likeCount: 0, commentCount: 0 })
   })
 })

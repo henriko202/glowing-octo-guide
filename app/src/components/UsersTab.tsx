@@ -4,6 +4,9 @@ import LoadingSpinner from './LoadingSpinner'
 import RowActionsMenu, { type RowAction } from './RowActionsMenu'
 import BanUserDialog from './BanUserDialog'
 import Modal from './Modal'
+import ChangeTierModal from './ChangeTierModal'
+import ChangeStatusModal from './ChangeStatusModal'
+import ContactLimitsModal from './ContactLimitsModal'
 import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 
@@ -55,13 +58,15 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
     | UserRow[]
     | undefined
 
-  const setUserTier = useMutation(api.admin.setUserTier)
   const banUser = useMutation(api.admin.banUser)
   const unbanUser = useMutation(api.admin.unbanUser)
 
   const [filter, setFilter] = useState<TierFilter>('all')
   const [pendingId, setPendingId] = useState<Id<'users'> | null>(null)
   const [nameSearch, setNameSearch] = useState('')
+  const [tierTarget, setTierTarget] = useState<UserRow | null>(null)
+  const [statusTarget, setStatusTarget] = useState<UserRow | null>(null)
+  const [limitsTarget, setLimitsTarget] = useState<UserRow | null>(null)
   const [banTarget, setBanTarget] = useState<UserRow | null>(null)
   const [unbanTarget, setUnbanTarget] = useState<UserRow | null>(null)
 
@@ -74,16 +79,6 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
     const matchesName = !nameSearch || u.name.toLowerCase().includes(nameSearch.toLowerCase())
     return matchesTier && matchesName
   })
-
-  async function handleSetContact(userId: Id<'users'>) {
-    if (!sessionToken) return
-    setPendingId(userId)
-    try {
-      await setUserTier({ sessionToken, userId, tier: 'contact' })
-    } finally {
-      setPendingId(null)
-    }
-  }
 
   async function handleBan(reason: string) {
     if (!sessionToken || !banTarget) return
@@ -108,9 +103,13 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
   }
 
   function actionsFor(user: UserRow): RowAction[] {
-    const items: RowAction[] = []
-    if (user.tier !== 'contact') {
-      items.push({ label: 'Set to Contact', onClick: () => void handleSetContact(user._id) })
+    const items: RowAction[] = [
+      { label: 'Change tier…', onClick: () => setTierTarget(user) },
+      { label: 'Change status…', onClick: () => setStatusTarget(user) }
+    ]
+    // Per-user plan-limit overrides only apply on the contact tier — see lib/planLimits.ts.
+    if (user.tier === 'contact') {
+      items.push({ label: 'Edit limits…', onClick: () => setLimitsTarget(user) })
     }
     if (user.isBanned) {
       items.push({ label: 'Unban', onClick: () => setUnbanTarget(user) })
@@ -209,6 +208,33 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
           </div>
         ))}
       </div>
+
+      {/* Change tier */}
+      {tierTarget && sessionToken && (
+        <ChangeTierModal
+          user={tierTarget}
+          sessionToken={sessionToken}
+          onClose={() => setTierTarget(null)}
+        />
+      )}
+
+      {/* Change subscription status */}
+      {statusTarget && sessionToken && (
+        <ChangeStatusModal
+          user={statusTarget}
+          sessionToken={sessionToken}
+          onClose={() => setStatusTarget(null)}
+        />
+      )}
+
+      {/* Edit contact plan limits */}
+      {limitsTarget && sessionToken && (
+        <ContactLimitsModal
+          user={limitsTarget}
+          sessionToken={sessionToken}
+          onClose={() => setLimitsTarget(null)}
+        />
+      )}
 
       {/* Ban dialog */}
       {banTarget && (

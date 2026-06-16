@@ -89,7 +89,11 @@ export default defineSchema({
     // Original URL submitted by the user — stored so we can link back correctly
     // without reconstructing URNs (activity IDs ≠ ugcPost IDs across LinkedIn namespaces).
     // Absent for cron-synced posts (those use urnToLinkedInUrl fallback).
-    sourceUrl: v.optional(v.string())
+    sourceUrl: v.optional(v.string()),
+    // Soft-delete marker. When set, the post is excluded from the feed AND the
+    // author's My Posts view, but the row is intentionally KEPT so it still counts
+    // toward the rolling weekly post limit (deleting must not free up a slot).
+    deletedAt: v.optional(v.number())
   })
     .index('by_author', ['authorId'])
     .index('by_urn', ['linkedinPostUrn'])

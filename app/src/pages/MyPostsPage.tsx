@@ -1,5 +1,6 @@
 // app/src/pages/MyPostsPage.tsx
-import { useAction, useQuery } from 'convex/react'
+import { useState } from 'react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 
@@ -15,6 +16,7 @@ interface MyPost {
   publishedAt: number
   likeCount: number
   commentCount: number
+  hidden?: boolean
   sourceUrl?: string
 }
 
@@ -52,10 +54,43 @@ export default function MyPostsPage() {
   const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
   const posts = useQuery(api.posts.getMyPosts, { sessionToken }) as unknown as MyPost[] | undefined
   const submitPost = useAction(api.posts.submitPost)
+  const setPostHidden = useMutation(api.posts.setPostHidden)
+  const deletePost = useMutation(api.posts.deletePost)
+
+  // Transient error surfaced above the list when a hide/delete action fails.
+  const [actionError, setActionError] = useState<string | null>(null)
 
   async function handleSubmit(postUrl: string) {
     if (!sessionToken) throw new Error('Not signed in')
     await submitPost({ sessionToken, postUrl })
+  }
+
+  // Toggle a post's feed visibility. Convex queries are reactive, so getMyPosts
+  // re-renders with the new `hidden` state automatically — no manual refetch.
+  async function handleToggleHidden(post: MyPost) {
+    if (!sessionToken) return
+    setActionError(null)
+    try {
+      await setPostHidden({ sessionToken, postId: post._id, hidden: !post.hidden })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not update the post.')
+    }
+  }
+
+  // Soft-delete: drops the post from the feed and this list. It still counts
+  // toward the weekly limit, so we say so in the confirmation.
+  async function handleDelete(post: MyPost) {
+    if (!sessionToken) return
+    const ok = window.confirm(
+      'Delete this post? It will be removed from the feed and from My Posts. It still counts toward your weekly post limit.'
+    )
+    if (!ok) return
+    setActionError(null)
+    try {
+      await deletePost({ sessionToken, postId: post._id })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not delete the post.')
+    }
   }
 
   if (posts === undefined) {
@@ -106,6 +141,11 @@ export default function MyPostsPage() {
       {/* Section header */}
       <div className="mb-3 text-[10px] uppercase tracking-wider text-slate-500">Your posts ({posts.length})</div>
 
+      {/* Transient error from a hide/delete action */}
+      {actionError && (
+        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</div>
+      )}
+
       {/* Post list */}
       {posts.length === 0 ? (
         <div className="border-t border-slate-200 pt-5 text-center">
@@ -116,8 +156,34 @@ export default function MyPostsPage() {
           {posts.map(post => (
             <div
               key={post._id}
-              className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+              className={`overflow-hidden rounded-lg border border-slate-200 bg-white ${post.hidden ? 'opacity-60' : ''}`}
             >
+              {/* Owner action bar: visibility state + Hide/Unhide + Delete */}
+              <div className="flex items-center justify-between border-b border-slate-200 px-[14px] py-2">
+                {post.hidden ? (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                    Hidden from feed
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-400">Visible in feed</span>
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleHidden(post)}
+                    className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    {post.hidden ? 'Unhide' : 'Hide'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(post)}
+                    className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
               <LinkedInEmbed
                 urn={post.linkedinPostUrn}
                 footer={

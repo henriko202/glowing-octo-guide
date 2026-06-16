@@ -1,25 +1,10 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, beforeEach } from 'vitest'
-
-// Track call order: 3 useQuery calls per render cycle:
-//   1 = checkIsAdmin, 2 = getSettings (skipped), 3 = listPlanLimits
-let queryCallCount = 0
+import { getFunctionName } from 'convex/server'
+import { useQuery } from 'convex/react'
 
 vi.mock('convex/react', () => ({
-  useQuery: vi.fn((_query: unknown, _args: unknown) => {
-    queryCallCount += 1
-    const mod = queryCallCount % 3
-    if (mod === 1) {
-      // checkIsAdmin → true
-      return true
-    }
-    if (mod === 2) {
-      // getSettings (args === 'skip' because sessionToken is null in jsdom)
-      return undefined
-    }
-    // mod === 0: listPlanLimits → empty array
-    return []
-  }),
+  useQuery: vi.fn(),
   useMutation: vi.fn(() => vi.fn())
 }))
 
@@ -29,8 +14,15 @@ vi.mock('react-router-dom', () => ({
 
 import AdminPage from './AdminPage'
 
+// Route each query by its function reference (robust to query count / order):
+//   checkIsAdmin → true, getSettings → undefined, all list* queries → []
 beforeEach(() => {
-  queryCallCount = 0
+  vi.mocked(useQuery).mockImplementation((ref: unknown, ..._rest: unknown[]) => {
+    const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
+    if (name === 'admin:checkIsAdmin') return true as never
+    if (name === 'admin:getSettings') return undefined as never
+    return [] as never
+  })
 })
 
 describe('AdminPage tabs', () => {

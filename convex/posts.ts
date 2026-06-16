@@ -1,13 +1,41 @@
 // convex/posts.ts
-import { action, internalQuery, query } from './_generated/server'
+import { action, internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { parseLinkedInPostUrl } from './linkedin/parsePostUrl'
 import { verifyPostOwnership, type OwnershipResult } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { getPlanLimitsHelper } from './lib/planLimits'
-import { parsePostContent, appendMediaLinks } from './linkedin/parsePostContent'
+import { parsePostContent, parsePostEngagement, appendMediaLinks } from './linkedin/parsePostContent'
+
+/**
+ * Whether the admin "share any post" override is active for this submitter.
+ *
+ * TESTING ONLY: when enabled, an admin bypasses post-ownership verification AND
+ * the posting throttles (hourly rate limit + weekly per-plan limit). It is gated
+ * behind the `ALLOW_ADMIN_SHARE_ANY_POST` env var, which is set **only** on the
+ * local / dev Convex deployment. In production the var is absent, so admins submit
+ * posts under exactly the same rules as everyone else.
+ */
+export function isAdminShareOverrideEnabled(
+  user: { isAdmin?: boolean },
+  env: { ALLOW_ADMIN_SHARE_ANY_POST?: string }
+): boolean {
+  return user.isAdmin === true && env.ALLOW_ADMIN_SHARE_ANY_POST === 'true'
+}
+
+/**
+ * Authorization for hiding / deleting a post: the post's author, or any admin
+ * (moderation). Pure helper so the rule is testable and applied identically by
+ * the `setPostHidden` and `deletePost` mutations.
+ */
+export function canModifyPost(
+  user: { _id: Id<'users'>; isAdmin?: boolean },
+  post: { authorId: Id<'users'> }
+): boolean {
+  return post.authorId === user._id || user.isAdmin === true
+}
 
 export const getMyPosts = query({
   args: {
@@ -25,11 +53,13 @@ export const getMyPosts = query({
       .query('posts')
       .withIndex('by_author', q => q.eq('authorId', user._id))
       .collect()
-    // Returns all posts by this user including hidden ones — hidden means hidden from
-    // other users' feeds, not from the author's own My Posts page.
+    // Returns this user's posts EXCEPT soft-deleted ones. Hidden posts ARE included —
+    // "hidden" means hidden from other users' feeds, not from the author's own My Posts
+    // page (where they can unhide). Soft-deleted posts are dropped from this view, but
+    // their rows persist so they still count toward the rolling weekly post limit.
     // Sort by publishedAt descending — the by_author index orders by _creationTime,
     // not publishedAt, so we sort in-memory to get correct chronological order.
-    return posts.sort((a, b) => b.publishedAt - a.publishedAt)
+    return posts.filter(p => p.deletedAt === undefined).sort((a, b) => b.publishedAt - a.publishedAt)
   }
 })
 
@@ -109,10 +139,15 @@ export const submitPost = action({
       throw new Error('No LinkedIn access token. Please sign in again.')
     }
 
-    // 3. Posting throttles — admins are exempt. Admins curate the shared feed
-    //    and may submit any post in any volume, so both the hourly rate limit
-    //    and the weekly per-plan limit are skipped for them.
-    if (!user.isAdmin) {
+    // Admin "share any post" override — TESTING ONLY, enabled only on the local /
+    // dev deployment via the ALLOW_ADMIN_SHARE_ANY_POST env var. When off (always
+    // the case in production), admins submit under the normal rules below.
+    const adminShareOverride = isAdminShareOverrideEnabled(user, process.env)
+
+    // 3. Posting throttles — skipped only under the admin override. It lets a dev
+    //    admin curate the shared feed by submitting any post in any volume, so both
+    //    the hourly rate limit and the weekly per-plan limit are bypassed.
+    if (!adminShareOverride) {
       // Rate limit: max 10 post submissions per hour per user
       await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
         userId: user._id,
@@ -148,15 +183,15 @@ export const submitPost = action({
       throw new Error('Could not find a valid LinkedIn post URN')
     }
 
-    // 4. Verify ownership — admins are exempt and may share ANY post, so we
-    //    skip the "does this post belong to you?" check for them.
-    //    Non-admins: Step A (UGC API, works when r_member_social is approved) →
+    // 4. Verify ownership — skipped only under the admin override (dev-only), so a
+    //    dev admin may share ANY post regardless of who authored it.
+    //    Normal path: Step A (UGC API, works when r_member_social is approved) →
     //    Step B (local comparison against stored publicIdentifier, no API call).
-    //    Admins: synthesize a confirmed result. content stays empty (it falls
+    //    Override path: synthesize a confirmed result. content stays empty (it falls
     //    back to the HTML-parsed text below) and publishedAt defaults to now —
     //    identical to the vanity-heuristic fallback's degraded shape.
     let ownership: OwnershipResult
-    if (user.isAdmin) {
+    if (adminShareOverride) {
       ownership = { confirmed: true, content: '', publishedAt: Date.now(), strategy: 'admin-override' }
     } else {
       const token = user.linkedinAccessToken
@@ -173,14 +208,19 @@ export const submitPost = action({
     const composedContent = appendMediaLinks(baseText, parsedContent.media)
     const mediaUrls = parsedContent.media.map(m => m.url)
 
+    // 4c. Pull current engagement (reactions + comments) from the same page HTML's
+    // JSON-LD. Best-effort: missing data degrades to 0, so the post just starts at
+    // zero engagement rather than failing the submit.
+    const engagement = parsePostEngagement(rawLinkedinText)
+
     // 5. Upsert the post — returns the post _id
     const postId = await ctx.runMutation(internal.jobs.syncPosts.upsertPost, {
       linkedinPostUrn: urn,
       authorId: user._id,
       content: composedContent,
       publishedAt: ownership.publishedAt,
-      likeCount: 0,
-      commentCount: 0,
+      likeCount: engagement.likeCount,
+      commentCount: engagement.commentCount,
       mediaUrls,
       isFeatured: false,
       visibilityIndustries: [],
@@ -196,5 +236,56 @@ export const submitPost = action({
     }
 
     return { postId }
+  }
+})
+
+/**
+ * Hide or unhide a shared post. Hiding drops it from the public feed; the author
+ * still sees it in My Posts and can unhide it. Authorized for the post's author or
+ * any admin (see `canModifyPost`). Does NOT touch the weekly post count — the row
+ * is unchanged apart from the `hidden` flag, so it stays within the rolling window.
+ */
+export const setPostHidden = mutation({
+  args: {
+    sessionToken: v.string(),
+    postId: v.id('posts'),
+    hidden: v.boolean()
+  },
+  handler: async (ctx, { sessionToken, postId, hidden }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const post = await ctx.db.get(postId)
+    if (!post) throw new Error('Post not found')
+    if (!canModifyPost(user, post)) {
+      throw new Error('Forbidden: you can only modify your own posts')
+    }
+    // A soft-deleted post must never be resurfaced by un-hiding it.
+    if (post.deletedAt !== undefined) {
+      throw new Error('Post has been deleted')
+    }
+    await ctx.db.patch(postId, { hidden })
+  }
+})
+
+/**
+ * Soft-delete a shared post: it disappears from the feed AND the author's My Posts
+ * view, but the row is intentionally KEPT so it still counts toward the rolling
+ * weekly post limit — deleting must never free up a posting slot. We also set
+ * `hidden: true` so the post leaves the feed (the feed query keys on `hidden`).
+ * Authorized for the post's author or any admin. Idempotent.
+ */
+export const deletePost = mutation({
+  args: {
+    sessionToken: v.string(),
+    postId: v.id('posts')
+  },
+  handler: async (ctx, { sessionToken, postId }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const post = await ctx.db.get(postId)
+    if (!post) throw new Error('Post not found')
+    if (!canModifyPost(user, post)) {
+      throw new Error('Forbidden: you can only modify your own posts')
+    }
+    if (post.deletedAt !== undefined) return // already deleted — idempotent no-op
+    await ctx.db.patch(postId, { deletedAt: Date.now(), hidden: true })
   }
 })

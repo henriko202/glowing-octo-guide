@@ -13,7 +13,9 @@ vi.mock('../convex', () => ({
     posts: {
       getMyPosts: 'posts.getMyPosts',
       getWeeklyUsage: 'posts.getWeeklyUsage',
-      submitPost: 'posts.submitPost'
+      submitPost: 'posts.submitPost',
+      setPostHidden: 'posts.setPostHidden',
+      deletePost: 'posts.deletePost'
     }
   }
 }))
@@ -24,7 +26,8 @@ let mockQueryReturns: Record<string, unknown> = {}
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
-  useAction: vi.fn(() => async () => {})
+  useAction: vi.fn(() => async () => {}),
+  useMutation: vi.fn(() => async () => {})
 }))
 
 function renderPage() {
@@ -71,5 +74,24 @@ describe('MyPostsPage', () => {
     expect(screen.getByText(/5 of 5 posts this week/i)).toBeInTheDocument()
     expect(screen.getByText(/weekly limit reached/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
+  })
+
+  it('shows Hide + Delete controls and a "Visible in feed" state for a visible post', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      { _id: 'p1', linkedinPostUrn: 'urn:li:activity:1', content: 'Hi', publishedAt: Date.now(), likeCount: 3, commentCount: 1, hidden: false }
+    ]
+    renderPage()
+    expect(screen.getByText(/visible in feed/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^hide$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
+  })
+
+  it('shows an Unhide control and a "Hidden from feed" badge for a hidden post', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      { _id: 'p2', linkedinPostUrn: 'urn:li:activity:2', content: 'Hi', publishedAt: Date.now(), likeCount: 0, commentCount: 0, hidden: true }
+    ]
+    renderPage()
+    expect(screen.getByText(/hidden from feed/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /unhide/i })).toBeInTheDocument()
   })
 })

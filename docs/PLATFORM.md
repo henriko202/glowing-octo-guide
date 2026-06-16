@@ -281,6 +281,7 @@ erDiagram
     number authorTierRank "4=contact..1=starter"
     boolean interactionLimitReached
     string sourceUrl
+    number deletedAt "soft-delete; row kept for weekly count"
   }
   planLimits {
     string tier
@@ -314,7 +315,7 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `location`                   | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                 |
 | `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                              |
 | `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                             |
-| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status.                                                                                                                                                               |
+| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. `trialing` hides the user's posts from the feed.                                                      |
 | `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                    |
 | `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                               |
 | `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                               |
@@ -342,26 +343,27 @@ Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`,
 #### `posts` — the shared feed
 
 Inserted by `jobs/syncPosts.upsertPost` (manual + Apify) and `jobs/processQueue` (queue promotion).
-Patched by `stripe.ts` (re‑stamp `authorTierRank` on tier change) and `interactions.ts`
-(`interactionLimitReached`).
+Patched by `stripe.ts` (re‑stamp `authorTierRank` on tier change), `interactions.ts`
+(`interactionLimitReached`), and `posts.ts` (`setPostHidden` → `hidden`; `deletePost` → `deletedAt`).
 
-| Field                     | Type          | Req | Meaning                                                                                                               |
-| ------------------------- | ------------- | :-: | --------------------------------------------------------------------------------------------------------------------- |
-| `linkedinPostUrn`         | string        |  ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                  |
-| `authorId`                | `id('users')` |  ✓  | Post author.                                                                                                          |
-| `content`                 | string        |  ✓  | Post text (composed text + appended media links).                                                                     |
-| `publishedAt`             | number        |  ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                   |
-| `likeCount`               | number        |  ✓  | Reaction count (incremented on in‑app reactions).                                                                     |
-| `commentCount`            | number        |  ✓  | Comment count (incremented on in‑app comments).                                                                       |
-| `mediaUrls`               | string[]      |  ✓  | Extracted media URLs.                                                                                                 |
-| `isFeatured`              | boolean       |  ✓  | Pinned to top of feed.                                                                                                |
-| `featuredAt`              | number        |  –  | When featured (secondary sort for featured).                                                                          |
-| `visibilityIndustries`    | string[]      |  ✓  | Author allowlist — only viewers in these industries see it.                                                           |
-| `visibilityCountries`     | string[]      |  ✓  | Author allowlist — only viewers in these countries see it.                                                            |
-| `hidden`                  | boolean       |  ✓  | `true` = excluded from feed (trial posts; un‑hidden on activation).                                                   |
-| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent. |
-| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                     |
-| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links). Absent for cron‑synced posts.                              |
+| Field                     | Type          | Req | Meaning                                                                                                                               |
+| ------------------------- | ------------- | :-: | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `linkedinPostUrn`         | string        |  ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                  |
+| `authorId`                | `id('users')` |  ✓  | Post author.                                                                                                                          |
+| `content`                 | string        |  ✓  | Post text (composed text + appended media links).                                                                                     |
+| `publishedAt`             | number        |  ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                   |
+| `likeCount`               | number        |  ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.            |
+| `commentCount`            | number        |  ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                              |
+| `mediaUrls`               | string[]      |  ✓  | Extracted media URLs.                                                                                                                 |
+| `isFeatured`              | boolean       |  ✓  | Pinned to top of feed.                                                                                                                |
+| `featuredAt`              | number        |  –  | When featured (secondary sort for featured).                                                                                          |
+| `visibilityIndustries`    | string[]      |  ✓  | Author allowlist — only viewers in these industries see it.                                                                           |
+| `visibilityCountries`     | string[]      |  ✓  | Author allowlist — only viewers in these countries see it.                                                                            |
+| `hidden`                  | boolean       |  ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                   |
+| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                 |
+| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                     |
+| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links). Absent for cron‑synced posts.                                              |
+| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit. |
 
 Indexes: `by_author [authorId]`, `by_urn [linkedinPostUrn]`, `by_published [hidden, publishedAt]`,
 `by_author_and_publishedAt [authorId, publishedAt]`, plus **`by_featured [isFeatured, featuredAt]`
@@ -786,18 +788,19 @@ flowchart TD
   P -->|unrecognized| X1["throw 'Unrecognized LinkedIn post URL'"]
   P -->|ok| AU["requireAuthAction → user (+ token)"]
   AU -->|no token| X2["throw 'No LinkedIn access token'"]
-  AU --> ADM{"user.isAdmin?"}
+  AU --> ADM{"admin override?<br/>(isAdmin AND ALLOW_ADMIN_SHARE_ANY_POST=true)"}
   ADM -->|yes: skip throttles| F["fetch(postUrl) HTML → extract data-attributed-urn"]
   ADM -->|no| RL["rateLimit submitPost: 10/hour"]
   RL --> WL{"recent posts (7d) ≥ postsPerWeek?"}
   WL -->|yes| X3["throw 'Weekly post limit reached'"]
   WL -->|no| F
   F -->|no urn| X4["throw 'Could not find urn'"]
-  F --> OWN{"user.isAdmin?"}
+  F --> OWN{"admin override?"}
   OWN -->|yes: share ANY post| PC["parsePostContent(html) → text + media; appendMediaLinks"]
   OWN -->|no| V["verifyPostOwnership(token, urn, linkedinId, vanityName, publicIdentifier)"]
   V --> PC
-  PC --> UP["upsertPost(authorId = submitter, hidden = subscriptionStatus=='trialing', sourceUrl=postUrl)"]
+  PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
+  ENG --> UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = subscriptionStatus=='trialing', sourceUrl=postUrl)"]
   UP --> R["return { postId }"]
 ```
 
@@ -806,13 +809,21 @@ the UGC API (works when `w_member_social`/`r_member_social` is approved); **Step
 comparison of the post's author against the user's stored `linkedinPublicIdentifier` / `vanityName`
 (no API call). This lets the product work **without LinkedIn Partner/MDP access**.
 
-**Admin exemption.** When the submitter is an admin (`user.isAdmin`), `submitPost` skips **both** the
-posting throttles (hourly rate limit + weekly per‑plan limit) **and** the ownership check entirely —
-an admin may share **any** post in any volume to curate the shared feed. The ownership step is
-replaced by a synthesized `OwnershipResult` with `strategy: 'admin-override'`, empty `content` (it
-falls back to the HTML‑parsed text), and `publishedAt = now`. Note the post is still attributed to
-the **admin** (`authorId = submitter`), because `posts.authorId` must reference a real `users` row;
-the original LinkedIn author — who typically has no account — cannot be the `authorId`.
+**Admin override (testing only, dev‑gated).** The override is active **only** when the submitter is an
+admin **and** the `ALLOW_ADMIN_SHARE_ANY_POST` env var is `'true'` — a flag set exclusively on the
+local / dev Convex deployment (`isAdminShareOverrideEnabled`). In production the var is absent, so
+admins submit posts under exactly the same rules as everyone else. When active, `submitPost` skips
+**both** the posting throttles (hourly rate limit + weekly per‑plan limit) **and** the ownership check,
+so a dev admin may share **any** post in any volume. The ownership step is replaced by a synthesized
+`OwnershipResult` with `strategy: 'admin-override'`, empty `content` (it falls back to the HTML‑parsed
+text), and `publishedAt = now`. The post is still attributed to the **admin** (`authorId = submitter`),
+because `posts.authorId` must reference a real `users` row; the original LinkedIn author — who
+typically has no account — cannot be the `authorId`.
+
+**Engagement counts.** Manual submissions seed `likeCount` / `commentCount` from
+`parsePostEngagement(html)`, which reads schema.org `interactionStatistic` (`InteractionCounter`)
+out of the same page HTML already fetched for content — no extra API call. Best‑effort: missing data
+degrades to `0`. This mirrors the Apify path, which reads `engagement.likes/comments`.
 
 **Content extraction** (`linkedin/parsePostContent.ts`) is best‑effort and non‑fatal (unrecognized
 HTML yields `{ text: '', media: [] }`). From the already‑fetched page HTML it parses:
@@ -831,6 +842,25 @@ a blank line, then one `[type] url` line per media item — self‑describing fo
 structured `mediaUrls` array (the bare URLs) is **persisted but not currently displayed** anywhere;
 the feed/My Posts UI shows the post via the LinkedIn embed, not this stored text (see
 [§11](#11-feed--engagement) / [§14](#14-frontend--authenticated-app-app)).
+
+### Hiding & deleting a post (`posts.setPostHidden` / `posts.deletePost`, mutations)
+
+Authors manage their own shared posts from My Posts; **admins may act on any post** (moderation). Both
+mutations authorize via the pure `canModifyPost(user, post)` helper (`post.authorId === user._id ||
+user.isAdmin`).
+
+- **Hide / unhide** (`setPostHidden`) flips the `hidden` flag. Hidden posts leave the public feed
+  (`getFeed` keys on `hidden === false`) but stay in the author's My Posts (so they can unhide).
+  Un‑hiding a soft‑deleted post is rejected.
+- **Delete** (`deletePost`) is a **soft delete**: it stamps `deletedAt` and sets `hidden: true`. The
+  post disappears from the feed **and** from My Posts (`getMyPosts` filters `deletedAt === undefined`),
+  but the row is intentionally **kept**. Idempotent.
+
+**Invariant — neither operation changes the weekly post count.** The rolling 7‑day count
+(`countPostsSince`, and the atomic check in `upsertPost`) counts **every** `posts` row in the window
+regardless of `hidden`/`deletedAt`, so keeping the row means hiding or deleting a post never frees up
+a posting slot. A hard delete is the only thing that would break this, which is why delete is soft.
+On account deletion the privacy cascade still purges these rows by `authorId` (they are not exempt).
 
 ### Apify sync + queue pipeline
 
@@ -880,17 +910,19 @@ flowchart TD
 
 ### Post‑related functions
 
-| Function                                    | Kind             | Purpose                                                                                   |
-| ------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------- |
-| `posts.submitPost`                          | action (public)  | Manual submission (above).                                                                |
-| `posts.getMyPosts`                          | query (public)   | Author's posts incl. hidden, sorted by `publishedAt` desc.                                |
-| `posts.getWeeklyUsage`                      | query (public)   | `{ postsThisWeek, postsPerWeek }` over the same rolling 7‑day window submitPost enforces. |
-| `posts.countRecentPosts`                    | internalQuery    | Count posts since a timestamp (shared by enforcement + usage pill).                       |
-| `jobs/syncPosts.upsertPost`                 | internalMutation | Insert/update gatekeeper with atomic weekly‑limit + optional queueing.                    |
-| `jobs/syncPosts.syncAllPosts`               | internalAction   | Cron router → Apify (if enabled).                                                         |
-| `jobs/syncPostsApify.syncUserPostsViaApify` | internalAction   | Scrape one user's recent posts via Apify REST.                                            |
-| `jobs/syncPostsApify.syncAllPostsViaApify`  | internalAction   | Fan‑out over active subscribers; records sync status.                                     |
-| `jobs/processQueue.processPostQueue`        | internalMutation | Drain overflow queue when capacity opens.                                                 |
+| Function                                    | Kind              | Purpose                                                                                    |
+| ------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------ |
+| `posts.submitPost`                          | action (public)   | Manual submission (above).                                                                 |
+| `posts.getMyPosts`                          | query (public)    | Author's posts incl. hidden, **excl. soft‑deleted**, sorted by `publishedAt` desc.         |
+| `posts.setPostHidden`                       | mutation (public) | Hide/unhide a post (author or admin via `canModifyPost`). Doesn't change the weekly count. |
+| `posts.deletePost`                          | mutation (public) | Soft‑delete a post (author or admin). Row kept → weekly count unchanged. Idempotent.       |
+| `posts.getWeeklyUsage`                      | query (public)    | `{ postsThisWeek, postsPerWeek }` over the same rolling 7‑day window submitPost enforces.  |
+| `posts.countRecentPosts`                    | internalQuery     | Count posts since a timestamp (shared by enforcement + usage pill).                        |
+| `jobs/syncPosts.upsertPost`                 | internalMutation  | Insert/update gatekeeper with atomic weekly‑limit + optional queueing.                     |
+| `jobs/syncPosts.syncAllPosts`               | internalAction    | Cron router → Apify (if enabled).                                                          |
+| `jobs/syncPostsApify.syncUserPostsViaApify` | internalAction    | Scrape one user's recent posts via Apify REST.                                             |
+| `jobs/syncPostsApify.syncAllPostsViaApify`  | internalAction    | Fan‑out over active subscribers; records sync status.                                      |
+| `jobs/processQueue.processPostQueue`        | internalMutation  | Drain overflow queue when capacity opens.                                                  |
 
 ---
 
@@ -914,7 +946,8 @@ flowchart TD
   AU -->|no| EMPTY["return { posts: [], hasMore: false }"]
   AU -->|yes| BASE["query posts by_published(hidden=false) desc"]
   BASE --> F1["drop interactionLimitReached === true"]
-  F1 --> F2["author visibility: post.visibilityIndustries/Countries must include viewer's"]
+  F1 --> FD["drop soft-deleted (deletedAt set)"]
+  FD --> F2["author visibility: post.visibilityIndustries/Countries must include viewer's"]
   F2 --> F3["viewer industry filter (growth/pro)"]
   F3 --> F4["viewer country filter (pro)"]
   F4 --> F5["drop posts whose author is 'trialing'"]
@@ -978,10 +1011,12 @@ implementation is fixed‑window.) `checkRateLimit` now accepts an optional `win
 `commentOnPost` 20/h, `reactToPost` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget is
 **shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the
 non-throwing `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier.
-**Admins (`user.isAdmin`) bypass every rate limit** — each call site skips the check for admins.
-Beyond rate limits, `submitPost` also exempts admins from the **weekly per‑plan post limit** and from
-**post‑ownership verification**, so an admin can share any post in any volume (see
-[§10 — Manual post submission](#manual-post-submission-postssubmitpost-action)).
+**Admins (`user.isAdmin`) bypass the rate limit on `commentOnPost`, `reactToPost`, and
+`profile_refresh`** — those call sites unconditionally skip the check for admins. **`submitPost` is the
+exception:** its rate‑limit, weekly‑limit, and ownership bypass apply **only under the dev‑gated admin
+override** (`ALLOW_ADMIN_SHARE_ANY_POST` — see
+[§10 — Manual post submission](#manual-post-submission-postssubmitpost-action)). In production that
+var is unset, so an admin submits posts under exactly the same limits as everyone else.
 
 ---
 
@@ -993,25 +1028,27 @@ edit** — no application code writes it. Every admin function calls `assertAdmi
 
 ### Admin functions (`convex/admin.ts`)
 
-| Function                                   | Kind     | Purpose                                                                                                                     |
-| ------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `checkIsAdmin`                             | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                       |
-| `getSettings`                              | query    | App settings (3 Apify flags + last‑sync status).                                                                            |
-| `toggleApifySync(enabled)`                 | mutation | Master switch for the Apify post‑sync cron.                                                                                 |
-| `toggleApifyEnabled(enabled)`              | mutation | Master Apify kill-switch.                                                                                                   |
-| `toggleApifyProfileScrape(enabled)`        | mutation | Toggle the LinkedIn profile scrape.                                                                                         |
-| `listUsers`                                | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs.                                                             |
-| `setUserTier(userId, tier)`                | mutation | Change tier; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                      |
-| `searchContactUsers(nameQuery)`            | query    | Up to 10 contact‑tier users matching a name (uses `by_tier`).                                                               |
-| `listPlanLimits`                           | query    | All `planLimits` rows, enriched with `userName` for overrides.                                                              |
-| `updateTierDefault(tier, …)`               | mutation | Edit a tier's **default** row (filters out per‑user overrides).                                                             |
-| `setContactUserLimit(userId, …)`           | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier).                                            |
-| `removeContactUserLimit(userId)`           | mutation | Delete a contact override (revert to tier default).                                                                         |
-| `banUser(userId, reason?)`                 | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed. |
-| `unbanUser(userId)`                        | mutation | Clear all ban fields.                                                                                                       |
-| `getSettingsInternal` / `updateSyncStatus` | internal | Used by the Apify jobs.                                                                                                     |
+| Function                                    | Kind     | Purpose                                                                                                                                                                                                  |
+| ------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `checkIsAdmin`                              | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                    |
+| `getSettings`                               | query    | App settings (3 Apify flags + last‑sync status).                                                                                                                                                         |
+| `toggleApifySync(enabled)`                  | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                              |
+| `toggleApifyEnabled(enabled)`               | mutation | Master Apify kill-switch.                                                                                                                                                                                |
+| `toggleApifyProfileScrape(enabled)`         | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                      |
+| `listUsers`                                 | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs.                                                                                                                                          |
+| `setUserTier(userId, tier)`                 | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                 |
+| `setUserSubscriptionStatus(userId, status)` | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab — chiefly to take a user out of `trialing` (which hides their posts). Manual override; a later Stripe webhook can overwrite it. |
+| `listContactUsersWithLimits`                | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                       |
+| `listPlanLimits`                            | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                         |
+| `updateTierDefault(tier, …)`                | mutation | Edit a tier's **default** row (filters out per‑user overrides). Backend‑only (no UI).                                                                                                                    |
+| `setContactUserLimit(userId, …)`            | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                              |
+| `removeContactUserLimit(userId)`            | mutation | Delete a contact override (revert to tier default).                                                                                                                                                      |
+| `banUser(userId, reason?)`                  | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                              |
+| `unbanUser(userId)`                         | mutation | Clear all ban fields.                                                                                                                                                                                    |
+| `getSettingsInternal` / `updateSyncStatus`  | internal | Used by the Apify jobs.                                                                                                                                                                                  |
 
-`validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`.
+`validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`. `effectiveContactLimits`
+(pure, unit‑tested) resolves a contact user's display limits as `override ?? contact default ?? hardcoded`.
 
 ### Ban model — **reactive, not a forced logout**
 
@@ -1329,7 +1366,9 @@ flowchart TD
   missing); "Manage Subscription" → Stripe portal; Enterprise → `mailto:`.
 - **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Three tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync
-  status), **Plan Limits** (`PlanLimitsTab`), **Users** (`UsersTab`).
+  status), **Plan Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's
+  effective limits, with an "override" tag), **Users** (`UsersTab` — per‑user row actions:
+  **Change tier**, **Change status**, **Edit limits** (contact tier only), and **Ban/Unban**).
 - **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b
   - 3b). Three sections: (1) **Consent preferences** (`ConsentToggles` — see below) — marketing and
     analytics toggles, OFF by default, reading `api.privacy.consent.getConsents` and writing
@@ -1346,9 +1385,11 @@ flowchart TD
 `AppNav` (feed/my‑posts/settings/billing/**privacy** links + language `<select>` + sign‑out; **no
 admin link**; the **"Privacy"** link navigates to `/privacy-data`),
 `PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`), `Modal`,
-`BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + `setUserTier`/`banUser`/`unbanUser`),
-`PlanLimitsTab` (tier defaults + debounced contact override editor), `RowActionsMenu`,
-`LoadingSpinner`,
+`BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + per‑row modals + `banUser`/`unbanUser`),
+`ChangeTierModal` / `ChangeStatusModal` (admin `setUserTier` / `setUserSubscriptionStatus`),
+`ContactLimitsModal` (per‑user contact `setContactUserLimit`/`removeContactUserLimit`, prefilled from
+`listPlanLimits`), `PlanLimitsTab` (**read‑only**: tier defaults + contact users via
+`listContactUsersWithLimits`), `RowActionsMenu`, `LoadingSpinner`,
 `CancelDeletionScreen` (grace‑window full‑screen interstitial shown by `RequireAuth` when
 `me.deletionScheduledAt` is set; "Keep my account" button calls
 `api.privacy.deletion.cancelAccountDeletion` then `window.location.reload()`; also offers a Sign
@@ -1491,23 +1532,24 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 ### Convex backend — set in the **Convex dashboard** (Settings → Environment Variables)
 
-| Variable                       |              Required               | Consumed in                          | Purpose                                                                                      |
-| ------------------------------ | :---------------------------------: | ------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `LINKEDIN_CLIENT_ID`           |                  ✓                  | `linkedin/oauth.ts`                  | OAuth client id (authorize URL + token exchange).                                            |
-| `LINKEDIN_CLIENT_SECRET`       |                  ✓                  | `linkedin/oauth.ts`                  | OAuth client secret (server‑side token exchange).                                            |
-| `LINKEDIN_REDIRECT_URI`        |                  ✓                  | `linkedin/oauth.ts`                  | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app). |
-| `APP_URL`                      | – (default `http://localhost:5173`) | `http.ts`, `billing.ts`              | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.              |
-| `STRIPE_STARTER_PRICE_ID`      |             ✓ (billing)             | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `starter` tier; checkout allowlist + price→tier map.                              |
-| `STRIPE_GROWTH_PRICE_ID`       |             ✓ (billing)             | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `growth` tier.                                                                    |
-| `STRIPE_PRO_PRICE_ID`          |             ✓ (billing)             | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `pro` tier.                                                                       |
-| `STRIPE_SECRET_KEY`            |             ✓ (billing)             | _(read by `@convex-dev/stripe`)_     | Stripe API secret — not referenced directly in our source.                                   |
-| `STRIPE_WEBHOOK_SECRET`        |             ✓ (billing)             | _(read by `@convex-dev/stripe`)_     | Verifies webhook signatures at `/stripe/webhook`.                                            |
-| `APIFY_API_TOKEN`              |              ✓ (sync)               | `jobs/syncPostsApify.ts`             | Bearer token for Apify REST. If unset, sync no‑ops.                                          |
-| `APIFY_TASK_ID`                |              ✓ (sync)               | `jobs/syncPostsApify.ts`             | Apify actor (`harvestapi~linkedin-profile-posts`).                                           |
-| `APIFY_TASK_ID_PROFILE_SCRAPE` |         ✓ (profile scrape)          | `jobs/scrapeProfileApify.ts`         | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment).             |
-| `RESEND_API_KEY`               |      – (email no‑ops if unset)      | `lib/email.ts`                       | Resend API key for transactional email (DSR confirmations + breach notices).                 |
-| `EMAIL_FROM`                   |      – (email no‑ops if unset)      | `lib/email.ts`                       | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                    |
-| `CONVEX_DEPLOYMENT`            |               ✓ (CLI)               | Convex CLI                           | Selects the deployment for `convex dev`/`deploy`.                                            |
+| Variable                       |                Required                 | Consumed in                          | Purpose                                                                                                                                                                                               |
+| ------------------------------ | :-------------------------------------: | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LINKEDIN_CLIENT_ID`           |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client id (authorize URL + token exchange).                                                                                                                                                     |
+| `LINKEDIN_CLIENT_SECRET`       |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client secret (server‑side token exchange).                                                                                                                                                     |
+| `LINKEDIN_REDIRECT_URI`        |                    ✓                    | `linkedin/oauth.ts`                  | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                          |
+| `APP_URL`                      |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`              | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                       |
+| `STRIPE_STARTER_PRICE_ID`      |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                       |
+| `STRIPE_GROWTH_PRICE_ID`       |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `growth` tier.                                                                                                                                                                             |
+| `STRIPE_PRO_PRICE_ID`          |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `pro` tier.                                                                                                                                                                                |
+| `STRIPE_SECRET_KEY`            |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Stripe API secret — not referenced directly in our source.                                                                                                                                            |
+| `STRIPE_WEBHOOK_SECRET`        |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Verifies webhook signatures at `/stripe/webhook`.                                                                                                                                                     |
+| `APIFY_API_TOKEN`              |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                   |
+| `APIFY_TASK_ID`                |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Apify actor (`harvestapi~linkedin-profile-posts`).                                                                                                                                                    |
+| `APIFY_TASK_ID_PROFILE_SCRAPE` |           ✓ (profile scrape)            | `jobs/scrapeProfileApify.ts`         | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment).                                                                                                                      |
+| `RESEND_API_KEY`               |        – (email no‑ops if unset)        | `lib/email.ts`                       | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                          |
+| `EMAIL_FROM`                   |        – (email no‑ops if unset)        | `lib/email.ts`                       | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                             |
+| `CONVEX_DEPLOYMENT`            |                 ✓ (CLI)                 | Convex CLI                           | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                     |
+| `ALLOW_ADMIN_SHARE_ANY_POST`   | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)            | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 

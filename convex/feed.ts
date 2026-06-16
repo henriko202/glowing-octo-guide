@@ -120,6 +120,11 @@ export const getFeed = query({
     // Filter out posts that have reached their interaction limit
     allPosts = allPosts.filter(post => post.interactionLimitReached !== true)
 
+    // Filter out soft-deleted posts. Their rows are kept only to preserve the weekly
+    // count, so they must never reappear in the feed — even if a later upsert/re-sync
+    // flips `hidden` back to false (the feed index keys on `hidden`, not `deletedAt`).
+    allPosts = allPosts.filter(post => post.deletedAt === undefined)
+
     // Apply post-level visibility restrictions (Pro author settings)
     allPosts = allPosts.filter(post => {
       if (post.visibilityIndustries.length > 0) {

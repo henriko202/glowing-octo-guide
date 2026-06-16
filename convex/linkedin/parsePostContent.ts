@@ -125,6 +125,54 @@ export function parsePostContent(html: string): ParsedPostContent {
   return { text: extractText(html, blocks), media: extractMedia(html, blocks) }
 }
 
+export interface PostEngagement {
+  /** Reaction count (schema.org LikeAction interaction count). */
+  likeCount: number
+  /** Comment count (schema.org CommentAction interaction count). */
+  commentCount: number
+}
+
+/** schema.org `interactionType` may be a string or an `{ '@type': ... }` object. */
+function interactionTypeName(t: unknown): string {
+  if (typeof t === 'string') return t
+  const rec = asRecord(t)
+  return typeof rec?.['@type'] === 'string' ? (rec['@type'] as string) : ''
+}
+
+/** Coerce a userInteractionCount (string or number) to a safe non-negative integer. */
+function toCount(v: unknown): number {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+}
+
+/**
+ * Extracts like + comment counts from a LinkedIn post page's JSON-LD
+ * `interactionStatistic` blocks (schema.org `InteractionCounter`). Best-effort
+ * and non-fatal: unrecognized HTML yields { likeCount: 0, commentCount: 0 }, so
+ * a manually-shared post simply starts at zero engagement when LinkedIn omits
+ * the data — never throws.
+ */
+export function parsePostEngagement(html: string): PostEngagement {
+  const blocks = extractJsonLd(html)
+  let likeCount = 0
+  let commentCount = 0
+  for (const b of blocks) {
+    const stat = b.interactionStatistic
+    const counters = Array.isArray(stat) ? stat : stat ? [stat] : []
+    for (const c of counters) {
+      const rec = asRecord(c)
+      if (!rec) continue
+      const type = interactionTypeName(rec.interactionType).toLowerCase()
+      const count = toCount(rec.userInteractionCount)
+      // Take the largest matching counter across all blocks — LinkedIn occasionally
+      // emits both a page-level and post-level block; the higher value is the real one.
+      if (/like/.test(type)) likeCount = Math.max(likeCount, count)
+      else if (/comment/.test(type)) commentCount = Math.max(commentCount, count)
+    }
+  }
+  return { likeCount, commentCount }
+}
+
 /**
  * Appends media as labeled links to the end of the post text.
  * - A single blank line separates body text from links (only when both exist).
