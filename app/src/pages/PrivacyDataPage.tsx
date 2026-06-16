@@ -3,6 +3,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import Modal from '../components/Modal'
+import ConsentToggles from '../components/ConsentToggles'
 
 export default function PrivacyDataPage() {
   const { t } = useTranslation()
@@ -92,6 +93,8 @@ export default function PrivacyDataPage() {
           )}
         </div>
       </section>
+
+      <ConsentToggles />
 
       <section className="rounded-xl border border-red-200 bg-white p-5">
         <h2 className="mb-2 mt-0 text-base font-semibold text-red-700">{t('privacy.deleteTitle')}</h2>

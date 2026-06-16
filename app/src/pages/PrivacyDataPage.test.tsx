@@ -9,7 +9,8 @@ let downloadUrlVal: unknown = null
 vi.mock('convex/react', () => ({
   useQuery: (ref: string) =>
     ref === 'getExportStatus' ? exportStatusVal : ref === 'getExportDownloadUrl' ? downloadUrlVal : null,
-  useMutation: (ref: string) => (ref === 'requestDataExport' ? requestExport : requestDeletion)
+  useMutation: (ref: string) =>
+    ref === 'requestDataExport' ? requestExport : ref === 'requestAccountDeletion' ? requestDeletion : vi.fn()
 }))
 vi.mock('../convex', () => ({
   api: {
@@ -19,7 +20,8 @@ vi.mock('../convex', () => ({
         getExportDownloadUrl: 'getExportDownloadUrl',
         requestDataExport: 'requestDataExport'
       },
-      deletion: { requestAccountDeletion: 'requestAccountDeletion' }
+      deletion: { requestAccountDeletion: 'requestAccountDeletion' },
+      consent: { getConsents: 'getConsents', recordConsent: 'recordConsent' }
     }
   }
 }))

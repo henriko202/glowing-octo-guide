@@ -1125,8 +1125,9 @@ flowchart TD
 ### Consent & Retention (Phase 3a)
 
 Backend for **granular consent** recording, **re-consent** prompting, and automated **data
-retention/dormancy** enforcement. The consent toggles UI, PolicyUpdateModal, and cookie
-notice/page are **Phase 3b** (not yet shipped).
+retention/dormancy** enforcement. The Phase 3b frontend — `ConsentToggles`, `PolicyUpdateScreen`,
+`CookieNotice`, and the `/cookies` landing page — is documented in [§14](#14-frontend--authenticated-app-app)
+and [§15](#15-frontend--landing-site-landing).
 
 **Consent recording** — `convex/privacy/consent.ts`:
 - `consentRecords` is **append-only** — individual purpose changes are each a new row, never an
@@ -1216,7 +1217,8 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 2. **`me === null`** → hard‑redirect to `${VITE_CONVEX_SITE}/auth/linkedin` (straight into OAuth — there's no login page)
 3. **`isBanned`** → `<BannedScreen>`
 4. **`me.deletionScheduledAt` set** (account pending deletion, within grace window) → `<CancelDeletionScreen>`
-5. **user ok** → `<AppNav>` + the requested page
+5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
+6. **user ok** → `<AppNav>` + the requested page
 
 ```mermaid
 flowchart TD
@@ -1228,6 +1230,7 @@ flowchart TD
   RA -->|null| OAUTH["window.location = VITE_CONVEX_SITE/auth/linkedin"]
   RA -->|isBanned| BAN["BannedScreen"]
   RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
+  RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
   RA -->|user ok| SHELL["AppNav + page → page issues Convex queries"]
 ```
 
@@ -1254,13 +1257,16 @@ flowchart TD
 - **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Three tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync
   status), **Plan Limits** (`PlanLimitsTab`), **Users** (`UsersTab`).
-- **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b).
-  Two sections: (1) **Data export**: "Request export" button calls
-  `api.privacy.export.requestDataExport`; polls status via `api.privacy.export.getExportStatus`;
-  shows a download link via `api.privacy.export.getExportDownloadUrl` once ready. (2) **Delete
-  account**: a type‑`DELETE` confirm `Modal` wrapping `api.privacy.deletion.requestAccountDeletion`;
-  on success replaces the section with a "scheduled for {date}" info panel. Cross‑reference: §13B
-  (backend mutations/actions these calls hit).
+- **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b
+  + 3b). Three sections: (1) **Consent preferences** (`ConsentToggles` — see below) — marketing and
+  analytics toggles, OFF by default, reading `api.privacy.consent.getConsents` and writing
+  `api.privacy.consent.recordConsent` on toggle change. (2) **Data export**: "Request export" button
+  calls `api.privacy.export.requestDataExport`; polls status via
+  `api.privacy.export.getExportStatus`; shows a download link via
+  `api.privacy.export.getExportDownloadUrl` once ready. (3) **Delete account**: a type‑`DELETE`
+  confirm `Modal` wrapping `api.privacy.deletion.requestAccountDeletion`; on success replaces the
+  section with a "scheduled for {date}" info panel. Cross‑reference: §13B (backend
+  mutations/actions these calls hit).
 
 ### Reusable components
 `AppNav` (feed/my‑posts/settings/billing/**privacy** links + language `<select>` + sign‑out; **no
@@ -1273,6 +1279,15 @@ admin link**; the **"Privacy"** link navigates to `/privacy-data`),
 `me.deletionScheduledAt` is set; "Keep my account" button calls
 `api.privacy.deletion.cancelAccountDeletion` then `window.location.reload()`; also offers a Sign
 out link — mirrors the `BannedScreen` layout),
+`ConsentToggles` (Phase 3b — rendered inside `PrivacyDataPage`; a pair of labelled toggles for
+`marketing` and `analytics` consent purposes, both **OFF by default**; reads
+`api.privacy.consent.getConsents` on mount, calls `api.privacy.consent.recordConsent` on each
+toggle change; cross-reference: §13B for the append-only backend),
+`PolicyUpdateScreen` (Phase 3b — full‑screen interstitial injected by `RequireAuth` when
+`me.acknowledgedPolicyVersion !== POLICY_VERSION`; "I acknowledge" button calls
+`api.privacy.consent.acknowledgePolicy` then `window.location.reload()`; ensures every existing
+user re-accepts after a policy update before reaching the app — see the `RequireAuth` interception
+order above and §13B),
 plus the two LinkedIn‑embed components:
 
 - **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
@@ -1305,6 +1320,10 @@ selector persists the choice to `localStorage`. On the first authenticated load,
 confirmation copy used by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
 `es` translation files.
 
+**Keys added in Phase 3b:** `privacy.consent.*` (toggle labels, descriptions, and status copy for
+`ConsentToggles`) and `privacy.policyUpdate.*` (heading, body, and button copy for
+`PolicyUpdateScreen`); all three locales (`en`/`pt`/`es`).
+
 ---
 
 ## 15. Frontend — Landing Site (`landing/`)
@@ -1319,12 +1338,24 @@ calls**; all content (pricing, testimonials, FAQ, stats) is hard‑coded in modu
 | `/pricing` | Standalone pricing (`Nav` + `Pricing`). |
 | `/privacy` | Privacy Policy — **required for LinkedIn app review**. |
 | `/terms` | Terms of Service — **required for LinkedIn app review**. |
+| `/cookies` | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`. |
 
-`app/layout.tsx` defines static SEO metadata (title/description/OpenGraph) and the dark "ink"
-theme. **Notable section content** (encodes the business rules): Pricing lists "Posts hidden during
-trial"; Features tags tiers (Growth+/All tiers/Pro/Coming soon); FAQ states SSI is 0–100 across four
-25‑point pillars, official OAuth, "no automation — you write your own comments". `Footer` links to
-`/privacy`, `/terms`, and `mailto:hello@linkintothessi.com`.
+`app/layout.tsx` defines static SEO metadata (title/description/OpenGraph), the dark "ink" theme,
+and renders `<CookieNotice>` (see below). **Notable section content** (encodes the business rules):
+Pricing lists "Posts hidden during trial"; Features tags tiers (Growth+/All tiers/Pro/Coming soon);
+FAQ states SSI is 0–100 across four 25‑point pillars, official OAuth, "no automation — you write
+your own comments". `Footer` links to `/privacy`, `/terms`, `/cookies`, and
+`mailto:hello@linkintothessi.com`.
+
+### CookieNotice (Phase 3b)
+
+`CookieNotice` is a **client component** rendered in `landing/app/layout.tsx`. It displays a
+dismissible first-visit banner informing visitors that the site uses only essential storage (no
+tracking). Dismissal is persisted in **`localStorage`** (key `cookieNoticeDismissed`). The
+component uses **`useSyncExternalStore`** with a no-op server snapshot so it hydrates safely
+without an SSR/client mismatch — the notice is invisible on the server render and appears only
+after hydration confirms the key is absent. The banner is **not** shown to returning visitors (key
+already set) and disappears without page reload on dismiss.
 
 ### Why the legal pages exist
 LinkedIn requires a publicly reachable **privacy policy** and **terms of service** before approving
@@ -1604,4 +1635,12 @@ daily cron (`convex/privacy/retention.ts`) sweeping expired LinkedIn tokens, exp
 export files, purging audit logs >24 months, and flagging dormant accounts (24 months inactive,
 non-subscriber) with `deletionScheduledAt='dormancy'` + warning email — reusing the Phase 2a
 `processAccountDeletions` cascade and `CancelDeletionScreen` for the grace window. See
-[§13](#13-scheduled-jobs-crons) and [§13B](#13b-privacy--compliance).*
+[§13](#13-scheduled-jobs-crons) and [§13B](#13b-privacy--compliance). Also reflects **Privacy &
+Compliance Phase 3b (Consent UI + Re-consent + Cookies Frontend)**: `ConsentToggles` (marketing +
+analytics toggles, off by default, inside `PrivacyDataPage`) and `PolicyUpdateScreen` (full-screen
+`RequireAuth` interstitial when `acknowledgedPolicyVersion !== POLICY_VERSION`, calls
+`acknowledgePolicy`) in the authenticated app — see [§14](#14-frontend--authenticated-app-app);
+`CookiesPage` (`/cookies` route, essential-storage-only policy) and `CookieNotice` (dismissible
+first-visit banner, `localStorage`-persisted, SSR-safe via `useSyncExternalStore`) in the landing
+site, with `Footer` updated to link `/cookies` — see [§15](#15-frontend--landing-site-landing);
+new i18n keys `privacy.consent.*` and `privacy.policyUpdate.*` in all three locales (en/pt/es).*

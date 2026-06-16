@@ -25,6 +25,12 @@ export default function Footer() {
           >
             Terms
           </Link>
+          <Link
+            href="/cookies"
+            className="transition-colors hover:text-cream/60"
+          >
+            Cookies
+          </Link>
           <a
             href="mailto:hello@linkintothessi.com"
             className="transition-colors hover:text-cream/60"

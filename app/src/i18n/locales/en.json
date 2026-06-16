@@ -102,6 +102,12 @@
   },
   "privacy": {
     "title": "Privacy & Data",
+    "consent": {
+      "title": "Communication & analytics preferences",
+      "note": "These are optional and off by default. Change them anytime.",
+      "marketing": "Send me product news and tips by email",
+      "analytics": "Allow privacy-friendly usage analytics"
+    },
     "exportTitle": "Export your data",
     "exportNote": "Download a machine-readable copy of your account data. We'll prepare it and the download link will be available here (valid for 7 days).",
     "exportButton": "Request my data",
@@ -119,6 +125,12 @@
     "deleting": "Scheduling…",
     "confirmDeleteButton": "Schedule deletion",
     "deletionScheduledTitle": "Account scheduled for deletion",
-    "deletionScheduledBody": "Your account will be permanently deleted on {{date}}. You've been signed out. Sign in again before then to cancel. We've emailed you a confirmation."
+    "deletionScheduledBody": "Your account will be permanently deleted on {{date}}. You've been signed out. Sign in again before then to cancel. We've emailed you a confirmation.",
+    "policyUpdate": {
+      "title": "We've updated our Privacy Policy",
+      "body": "We've made changes to how we handle your data. Please review and acknowledge to continue.",
+      "readPolicy": "Read the policy",
+      "acknowledge": "I acknowledge"
+    }
   }
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import CookieNotice from '../components/CookieNotice'
 
 export const metadata: Metadata = {
   title: 'Link Into The SSI — Grow Your LinkedIn Influence',
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className="scroll-smooth"
     >
-      <body className="bg-ink font-body text-cream antialiased">{children}</body>
+      <body className="bg-ink font-body text-cream antialiased">
+        {children}
+        <CookieNotice />
+      </body>
     </html>
   )
 }

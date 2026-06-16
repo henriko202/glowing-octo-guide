@@ -14,7 +14,9 @@ import AppNav from './components/AppNav'
 import LoadingSpinner from './components/LoadingSpinner'
 import BannedScreen from './components/BannedScreen'
 import CancelDeletionScreen from './components/CancelDeletionScreen'
+import PolicyUpdateScreen from './components/PolicyUpdateScreen'
 import PrivacyDataPage from './pages/PrivacyDataPage'
+import { POLICY_VERSION } from '../../convex/lib/policy'
 
 const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE as string
 const AUTH_URL = `${CONVEX_SITE_URL}/auth/linkedin`
@@ -43,6 +45,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (me.isBanned) return <BannedScreen reason={me.bannedReason ?? undefined} />
 
   if (me.deletionScheduledAt) return <CancelDeletionScreen deletionScheduledAt={me.deletionScheduledAt} />
+
+  if (me.acknowledgedPolicyVersion !== POLICY_VERSION) return <PolicyUpdateScreen />
 
   return (
     <>

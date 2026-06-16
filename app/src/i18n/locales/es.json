@@ -102,6 +102,12 @@
   },
   "privacy": {
     "title": "Privacidad y Datos",
+    "consent": {
+      "title": "Preferencias de comunicación y analítica",
+      "note": "Son opcionales y están desactivadas por defecto. Cámbialas cuando quieras.",
+      "marketing": "Enviarme novedades y consejos del producto por correo",
+      "analytics": "Permitir analítica de uso respetuosa con la privacidad"
+    },
     "exportTitle": "Exporta tus datos",
     "exportNote": "Descarga una copia legible por máquina de los datos de tu cuenta. La prepararemos y el enlace de descarga estará disponible aquí (válido por 7 días).",
     "exportButton": "Solicitar mis datos",
@@ -119,6 +125,12 @@
     "deleting": "Programando…",
     "confirmDeleteButton": "Programar eliminación",
     "deletionScheduledTitle": "Cuenta programada para eliminación",
-    "deletionScheduledBody": "Tu cuenta se eliminará permanentemente el {{date}}. Se ha cerrado tu sesión. Vuelve a iniciar sesión antes de esa fecha para cancelar. Te enviamos una confirmación por correo."
+    "deletionScheduledBody": "Tu cuenta se eliminará permanentemente el {{date}}. Se ha cerrado tu sesión. Vuelve a iniciar sesión antes de esa fecha para cancelar. Te enviamos una confirmación por correo.",
+    "policyUpdate": {
+      "title": "Actualizamos nuestra Política de Privacidad",
+      "body": "Hicimos cambios en cómo tratamos tus datos. Revísala y confírmala para continuar.",
+      "readPolicy": "Leer la política",
+      "acknowledge": "Acepto"
+    }
   }
 }
