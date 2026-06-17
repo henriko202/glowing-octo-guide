@@ -45,22 +45,20 @@ export const enforceDataRetention = internalMutation({
   handler: async ctx => {
     const now = Date.now()
 
-    // 1. Null expired LinkedIn tokens.
-    const usersWithTokens = await ctx.db
+    // 1. Null expired LinkedIn tokens. The by_token_expiry index targets users whose
+    // tokenExpiresAt is set and already in the past, so we read only expired rows instead
+    // of scanning every token holder. We also clear tokenExpiresAt so the row leaves the
+    // index range — that's what lets the batch drain across reschedules (see step 5).
+    const expiredTokenUsers = await ctx.db
       .query('users')
-      .filter(q => q.neq(q.field('linkedinAccessToken'), undefined))
+      .withIndex('by_token_expiry', q => q.gte('tokenExpiresAt', 1).lt('tokenExpiresAt', now))
       .take(RETENTION_BATCH)
-    for (const u of usersWithTokens as Array<{
-      _id: string
-      linkedinAccessToken?: string
-      tokenExpiresAt?: number
-    }>) {
-      if (isTokenExpired(u, now)) {
-        await ctx.db.patch(u._id as Parameters<typeof ctx.db.patch>[0], {
-          linkedinAccessToken: undefined,
-          linkedinRefreshToken: undefined
-        })
-      }
+    for (const u of expiredTokenUsers) {
+      await ctx.db.patch(u._id, {
+        linkedinAccessToken: undefined,
+        linkedinRefreshToken: undefined,
+        tokenExpiresAt: undefined
+      })
     }
 
     // 2. Expire + delete old export files.
@@ -88,11 +86,15 @@ export const enforceDataRetention = internalMutation({
     for (const a of oldAudits) await ctx.db.delete(a._id)
 
     // 4. Dormancy: flag long-inactive non-subscribers for deletion (feeds processAccountDeletions).
+    // Compound index: eq(deletionScheduledAt, undefined) restricts to not-yet-flagged users,
+    // then a range on lastLoginAt selects stale logins. gte(1) skips users who never logged in
+    // (isDormant requires a numeric lastLoginAt anyway). Already-flagged users have
+    // deletionScheduledAt set, so they fall outside this range and aren't re-read.
     const dormancyThreshold = now - DORMANCY_MS
     const candidates = await ctx.db
       .query('users')
-      .filter(q =>
-        q.and(q.eq(q.field('deletionScheduledAt'), undefined), q.lt(q.field('lastLoginAt'), dormancyThreshold))
+      .withIndex('by_deletion_and_last_login', q =>
+        q.eq('deletionScheduledAt', undefined).gte('lastLoginAt', 1).lt('lastLoginAt', dormancyThreshold)
       )
       .take(RETENTION_BATCH)
     for (const u of candidates as Array<{
@@ -116,6 +118,17 @@ export const enforceDataRetention = internalMutation({
           })
         }
       }
+    }
+
+    // 5. If a fully-draining step filled its batch, more rows remain — reschedule immediately.
+    // We only key off the token and audit steps: each clears/deletes every row it reads, so the
+    // matched set strictly shrinks and the loop is guaranteed to terminate. The export and
+    // dormancy steps can legitimately re-return unprocessed rows (a not-yet-expired "ready"
+    // export, an active user with a stale login), so including them could spin forever — they
+    // instead make bounded progress once per run and rely on the daily schedule for the tail.
+    const moreToProcess = expiredTokenUsers.length === RETENTION_BATCH || oldAudits.length === RETENTION_BATCH
+    if (moreToProcess) {
+      await ctx.scheduler.runAfter(0, internal.privacy.retention.enforceDataRetention, {})
     }
   }
 })

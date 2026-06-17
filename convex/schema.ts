@@ -64,7 +64,18 @@ export default defineSchema({
   })
     .index('by_linkedin_id', ['linkedinId'])
     .index('by_stripe_customer', ['stripeCustomerId'])
-    .index('by_tier', ['tier']),
+    .index('by_tier', ['tier'])
+    // Active-subscriber fan-out (Apify post sync). Replaces a full-table .filter() scan.
+    .index('by_subscription_status', ['subscriptionStatus'])
+    // Data-retention cron: target users whose LinkedIn token has expired directly,
+    // instead of scanning every user that still holds a token.
+    .index('by_token_expiry', ['tokenExpiresAt'])
+    // Serves BOTH privacy crons from one compound index:
+    //  • processAccountDeletions: range on the leading field — deletionScheduledAt in (0, now].
+    //  • dormancy sweep: eq(deletionScheduledAt, undefined) + range on lastLoginAt.
+    // Because flagging a dormant user SETS deletionScheduledAt, that row immediately leaves
+    // the dormancy range — so the retention cron can self-reschedule without re-reading it.
+    .index('by_deletion_and_last_login', ['deletionScheduledAt', 'lastLoginAt']),
 
   posts: defineTable({
     linkedinPostUrn: v.string(),

@@ -15,13 +15,16 @@ export const getWithTokens = internalQuery({
   }
 })
 
-// Internal: returns all users with active subscriptions (excludes trialing)
+// Internal: returns all users with active subscriptions (excludes trialing).
+// Uses the by_subscription_status index so this reads only active subscribers
+// instead of scanning the whole users table. Returns the full set on purpose —
+// the Apify sync fans out one job per active subscriber.
 export const getActiveSubscribers = internalQuery({
   args: {},
   handler: async ctx => {
     return ctx.db
       .query('users')
-      .filter(q => q.eq(q.field('subscriptionStatus'), 'active'))
+      .withIndex('by_subscription_status', q => q.eq('subscriptionStatus', 'active'))
       .collect()
   }
 })

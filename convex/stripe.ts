@@ -74,29 +74,29 @@ export const syncUserSubscription = internalMutation({
       trialEndsAt: undefined
     })
 
-    // Sync authorTierRank on all posts by this user
+    // Read this user's posts once, then patch authorTierRank on every post and
+    // un-hide any hidden ones when the subscription is active — in a single pass.
+    // (Previously the same posts were read twice: once for the rank sync and again
+    // with a `hidden` filter to un-hide.)
     const newRank = tierToRank(args.tier)
+    const becameActive = status === 'active'
     const userPosts = await ctx.db
       .query('posts')
       .withIndex('by_author', q => q.eq('authorId', user._id))
       .collect()
-    await Promise.all(userPosts.map(p => ctx.db.patch(p._id, { authorTierRank: newRank })))
+    await Promise.all(
+      userPosts.map(p => {
+        const fields: { authorTierRank: number; hidden?: boolean } = { authorTierRank: newRank }
+        if (becameActive && p.hidden) fields.hidden = false
+        return ctx.db.patch(p._id, fields)
+      })
+    )
 
     // Trigger immediate post fetch when subscription becomes active
-    if (status === 'active') {
+    if (becameActive) {
       await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncUserPostsViaApify, {
         userId: user._id
       })
-    }
-
-    // Un-hide posts when subscription becomes active
-    if (status === 'active') {
-      const posts = await ctx.db
-        .query('posts')
-        .withIndex('by_author', q => q.eq('authorId', user._id))
-        .filter(q => q.eq(q.field('hidden'), true))
-        .collect()
-      await Promise.all(posts.map(p => ctx.db.patch(p._id, { hidden: false })))
     }
 
     // Upsert our own subscriptions table

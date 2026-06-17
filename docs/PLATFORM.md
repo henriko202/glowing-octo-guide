@@ -338,7 +338,12 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `publicIdentifierPromptedAt` | number                                                 |  –  | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login. |
 | `createdAt`                  | number                                                 |  ✓  | Creation timestamp (ms).                                                                                                                                                              |
 
-Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`.
+Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
+`by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
+`by_token_expiry [tokenExpiresAt]` (retention cron targets expired tokens directly),
+`by_deletion_and_last_login [deletionScheduledAt, lastLoginAt]` (compound — serves both the
+hard-delete sweep, ranging the leading field, and the dormancy sweep, `eq(deletionScheduledAt,
+undefined)` + range on `lastLoginAt`).
 
 #### `posts` — the shared feed
 
@@ -639,7 +644,7 @@ flowchart TD
 | `linkedin.auth.upsertUser`                                    | internalMutation  | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                    |
 | `users.getMe`                                                 | query (public)    | Safe profile via `resolveSession` + `toSafeMe` (strips tokens + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`).        |
 | `users.getWithTokens`                                         | internalQuery     | Full record **incl. tokens** — server‑only.                                                                                                                      |
-| `users.getActiveSubscribers`                                  | internalQuery     | All users with `subscriptionStatus === 'active'` (full‑table scan).                                                                                              |
+| `users.getActiveSubscribers`                                  | internalQuery     | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                    |
 | `users.getSubscriptionInfo`                                   | query (public)    | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                   |
 | `users.setPublicIdentifier`                                   | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased).                                                                                   |
 | `users.dismissPublicIdentifierPrompt`                         | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path).                                 |
@@ -957,7 +962,9 @@ flowchart TD
 ```
 
 > The current implementation `.collect()`s all visible posts and filters/sorts in memory — simple
-> and correct at current scale; a candidate for index‑backed pagination as volume grows.
+> and correct at current scale; a candidate for index‑backed pagination as volume grows. A concrete
+> migration-safe design (denormalized `feedRank`/`inFeed` + cursor pagination) is captured in
+> [docs/feed-cursor-pagination-plan.md](./feed-cursor-pagination-plan.md) — not yet built.
 
 ### Sort priority (effective order)
 
@@ -1078,14 +1085,14 @@ flowchart TD
 `convex/crons.ts` is the **only** file Convex reads for scheduled work. All are fixed‑interval
 (`crons.interval`), not wall‑clock (the inline "3:00 UTC" comments are aspirational).
 
-| Cron name                      | Interval      | Target                                     | Effect                                                                                                                                                 |
-| ------------------------------ | ------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sync LinkedIn posts`          | every **24h** | `jobs/syncPosts.syncAllPosts`              | Apify sync **iff** `apifySyncEnabled` (else no‑op).                                                                                                    |
-| `process post queue`           | every **25h** | `jobs/processQueue.processPostQueue`       | Promote queued posts when authors regain weekly capacity.                                                                                              |
-| `cleanup expired sessions`     | every **6h**  | `sessions.deleteExpiredSessions`           | Purge expired sessions (≤ 200/run).                                                                                                                    |
-| `cleanup expired oauth states` | every **1h**  | `sessions.deleteExpiredOAuthStates`        | Purge expired CSRF nonces (≤ 200/run).                                                                                                                 |
-| `process account deletions`    | every **24h** | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Batched, self-rescheduling.                 |
-| `enforce data retention`       | every **24h** | `privacy/retention.enforceDataRetention`   | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Batched. |
+| Cron name                      | Interval      | Target                                     | Effect                                                                                                                                                                                                             |
+| ------------------------------ | ------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sync LinkedIn posts`          | every **24h** | `jobs/syncPosts.syncAllPosts`              | Apify sync **iff** `apifySyncEnabled` (else no‑op).                                                                                                                                                                |
+| `process post queue`           | every **25h** | `jobs/processQueue.processPostQueue`       | Promote queued posts when authors regain weekly capacity.                                                                                                                                                          |
+| `cleanup expired sessions`     | every **6h**  | `sessions.deleteExpiredSessions`           | Purge expired sessions (≤ 200/run).                                                                                                                                                                                |
+| `cleanup expired oauth states` | every **1h**  | `sessions.deleteExpiredOAuthStates`        | Purge expired CSRF nonces (≤ 200/run).                                                                                                                                                                             |
+| `process account deletions`    | every **24h** | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; batched, self-rescheduling.                        |
+| `enforce data retention`       | every **24h** | `privacy/retention.enforceDataRetention`   | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps. |
 
 ---
 
@@ -1255,7 +1262,13 @@ and [§15](#15-frontend--landing-site-landing).
 **Data retention & dormancy** — `convex/privacy/retention.ts`:
 
 The `enforceDataRetention` cron (daily — see [§13](#13-scheduled-jobs-crons)) runs four
-sequential batched sweeps using pure predicate helpers for testability:
+sequential batched sweeps using pure predicate helpers for testability. The token-expiry and
+dormancy sweeps read through indexes (`by_token_expiry`, `by_deletion_and_last_login`) rather
+than scanning the whole `users` table, and each processed row leaves its index range (token
+fields incl. `tokenExpiresAt` cleared; dormant rows gain `deletionScheduledAt`). The cron
+**self-reschedules** (`runAfter(0)`) whenever the token or audit sweep fills its batch, so a
+large backlog drains across runs; rescheduling keys only off those two strictly-draining sweeps
+to guarantee termination (the export and dormancy sweeps make bounded progress per run):
 
 | Sweep                 | Predicate                                                                                                     | Action                                                                                                           |
 | --------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |

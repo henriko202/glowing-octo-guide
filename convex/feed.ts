@@ -136,12 +136,17 @@ export const getFeed = query({
       return true
     })
 
+    // Fetch every post's author exactly once. This single map is reused by the
+    // industry/country/eligibility filters, sort scoring, and enrichment below.
+    // Each subsequent filter only ever shrinks `allPosts`, so this superset always
+    // covers every authorId looked up downstream. (Previously the authors were
+    // re-fetched in up to three separate passes per feed load.)
+    const uniqueAuthorIds = [...new Set(allPosts.map(p => p.authorId))]
+    const authors = await Promise.all(uniqueAuthorIds.map(id => ctx.db.get(id)))
+    const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
+
     // Apply viewer-side industry filter (Growth/Pro)
     if (filter.applyIndustry && filter.industries.length > 0) {
-      // Need author industries — fetch unique authors
-      const uniqueAuthorIds = [...new Set(allPosts.map(p => p.authorId))]
-      const authors = await Promise.all(uniqueAuthorIds.map(id => ctx.db.get(id)))
-      const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
       allPosts = allPosts.filter(post => {
         const author = authorMap.get(post.authorId)
         return author?.industry && filter.industries.includes(author.industry)
@@ -150,22 +155,14 @@ export const getFeed = query({
 
     // Apply viewer-side country filter (Pro)
     if (filter.applyCountry && filter.countries.length > 0) {
-      const uniqueAuthorIds = [...new Set(allPosts.map(p => p.authorId))]
-      const authors = await Promise.all(uniqueAuthorIds.map(id => ctx.db.get(id)))
-      const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
       allPosts = allPosts.filter(post => {
         const author = authorMap.get(post.authorId)
         return author?.country && filter.countries.includes(author.country)
       })
     }
 
-    // Load all unique authors for sort scoring and trial filter
-    const uniqueAllAuthorIds = [...new Set(allPosts.map(p => p.authorId))]
-    const allAuthors = await Promise.all(uniqueAllAuthorIds.map(id => ctx.db.get(id)))
-    const allAuthorMap = new Map(allAuthors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
-
     // Filter out posts whose author is trialing or pending account deletion
-    allPosts = allPosts.filter(post => isAuthorFeedEligible(allAuthorMap.get(post.authorId) ?? null))
+    allPosts = allPosts.filter(post => isAuthorFeedEligible(authorMap.get(post.authorId) ?? null))
 
     // Sort: featured first (by publishedAt desc) → authorTierRank desc → publishedAt desc
     const featured = allPosts.filter(p => p.isFeatured).sort((a, b) => b.publishedAt - a.publishedAt)
@@ -183,14 +180,13 @@ export const getFeed = query({
     const paginated = sorted.slice(0, pageLimit)
     const hasMore = sorted.length > pageLimit
 
-    // Enrich with author info (safe — no tokens returned)
-    const enriched = await Promise.all(
-      paginated.map(async post => {
-        const author = allAuthorMap.get(post.authorId)
-        if (!author) return { ...post, author: null }
-        return { ...post, author: toFeedAuthor(author) }
-      })
-    )
+    // Enrich with author info from the map already loaded above (safe — no tokens
+    // returned). No DB reads here: the authors were all fetched once up front.
+    const enriched = paginated.map(post => {
+      const author = authorMap.get(post.authorId)
+      if (!author) return { ...post, author: null }
+      return { ...post, author: toFeedAuthor(author) }
+    })
 
     return { posts: enriched, hasMore }
   }

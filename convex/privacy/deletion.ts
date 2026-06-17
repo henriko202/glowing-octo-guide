@@ -177,9 +177,12 @@ export const processAccountDeletions = internalMutation({
   args: {},
   handler: async ctx => {
     const now = Date.now()
+    // Indexed range on the leading field of by_deletion_and_last_login. gte(1) skips rows
+    // where deletionScheduledAt is unset (undefined sorts before all numbers), so this reads
+    // only accounts actually due for deletion — not the whole users table.
     const due = await ctx.db
       .query('users')
-      .filter(q => q.and(q.neq(q.field('deletionScheduledAt'), undefined), q.lte(q.field('deletionScheduledAt'), now)))
+      .withIndex('by_deletion_and_last_login', q => q.gte('deletionScheduledAt', 1).lte('deletionScheduledAt', now))
       .take(DELETION_BATCH)
     for (const user of due) {
       const email = user.email as string | undefined
