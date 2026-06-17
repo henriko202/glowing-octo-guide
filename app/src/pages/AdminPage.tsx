@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import PlanLimitsTab from '../components/PlanLimitsTab'
 import UsersTab from '../components/UsersTab'
 import FeedbackTab from '../components/FeedbackTab'
+import MotdTab from '../components/MotdTab'
 
 export default function AdminPage() {
   const navigate = useNavigate()
@@ -18,7 +19,7 @@ export default function AdminPage() {
   const [toggling, setToggling] = useState(false)
   const [togglingMaster, setTogglingMaster] = useState(false)
   const [togglingProfile, setTogglingProfile] = useState(false)
-  const [tab, setTab] = useState<'settings' | 'planLimits' | 'users' | 'feedback'>('settings')
+  const [tab, setTab] = useState<'settings' | 'planLimits' | 'users' | 'feedback' | 'motd'>('settings')
 
   if (isAdmin === undefined) {
     return <LoadingSpinner />
@@ -95,6 +96,14 @@ export default function AdminPage() {
           }`}
         >
           Feedback
+        </button>
+        <button
+          onClick={() => setTab('motd')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            tab === 'motd' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          MOTD
         </button>
       </div>
 
@@ -184,6 +193,14 @@ export default function AdminPage() {
       {/* Feedback tab */}
       {tab === 'feedback' && (
         <FeedbackTab
+          sessionToken={sessionToken}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {/* MOTD tab */}
+      {tab === 'motd' && (
+        <MotdTab
           sessionToken={sessionToken}
           isAdmin={isAdmin}
         />

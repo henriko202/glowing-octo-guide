@@ -29,6 +29,7 @@
 11. [Feed & Engagement](#11-feed--engagement)
 12. [Admin & Moderation](#12-admin--moderation)
     12A. [Feedback](#12a-feedback)
+    12B. [Message of the Day (MOTD)](#12b-message-of-the-day-motd)
 13. [Scheduled Jobs (Crons)](#13-scheduled-jobs-crons)
     13A. [Profile Enrichment (LinkedIn Profile Scrape)](#13a-profile-enrichment-linkedin-profile-scrape)
     13B. [Privacy & Compliance](#13b-privacy--compliance)
@@ -557,6 +558,24 @@ Each row is one admin reply to a feedback item. Multiple rows per feedback item 
 
 Index: `by_feedback [feedbackId, createdAt]` (chronological per feedback item).
 
+#### `motds` — admin Message of the Day
+
+Admin-authored announcements. Exactly one is shown at a time: the newest `enabled` row whose
+`[startAt, expiresAt)` window covers "now" (`convex/motd/motd.ts:selectActiveMotd`). Hard-deleted
+on removal (admin content, not personal data).
+
+| Field       | Type                     | Req | Meaning                                                                                          |
+|-------------|--------------------------|:---:|--------------------------------------------------------------------------------------------------|
+| `bodies`    | `record<string, string>` |  ✓  | Locale code → markdown body. `en` required (validation) and is the fallback for missing locales. |
+| `important` | boolean                  |  ✓  | `false` → dismissible top banner; `true` → blocking modal (closable only via OK).                |
+| `enabled`   | boolean                  |  ✓  | Admin on/off switch.                                                                             |
+| `startAt`   | number                   |  –  | Optional scheduled start (ms). Absent ⇒ active immediately.                                      |
+| `expiresAt` | number                   |  –  | Optional "limited date" (ms). Absent ⇒ never expires.                                            |
+| `createdBy` | `id('users')`            |  ✓  | Admin who created it.                                                                            |
+| `createdAt` | number                   |  ✓  | Creation timestamp (ms); also the tie-breaker for "newest active".                               |
+| `updatedAt` | number                   |  ✓  | Last-edit timestamp (ms).                                                                        |
+
+Index: `by_enabled_and_created [enabled, createdAt]` — the viewer query walks `enabled=true` newest-first.
 
 ---
 
@@ -1192,6 +1211,64 @@ flowchart TD
   S -->|sendEmail · Reply-To=FEEDBACK_REPLY_TO| MAIL[(User receives email)]
   DEL[Account deletion cascade] -.anonymize.-> DB2[feedback.userId = undefined · content kept]
   DB2 -.responses retained.-> FR[(feedbackResponses rows kept)]
+```
+
+---
+
+## 12B. Message of the Day (MOTD)
+
+Admins author markdown announcements shown to authenticated users at the very top of the app.
+Default presentation is a **dismissible top banner**; flagging a MOTD **important** escalates it to a
+**blocking modal** that closes only via an OK button. Bodies are **per-locale markdown** (`en`
+required as the fallback; others optional and extensible with no schema migration), with optional
+**start/expiry scheduling**. Dismissal is **session-scoped** and re-shows on the next login.
+
+**Data:** `motds` table (see [§5](#5-data-model)). The active MOTD is the newest `enabled` row whose
+`[startAt, expiresAt)` window covers "now" — `selectActiveMotd` (pure, unit-tested).
+
+**Backend** (`convex/motd/motd.ts`):
+
+- `getActiveMotd` (viewer query) — `resolveSession`; returns `{ _id, bodies, important }` for the
+  active MOTD or `null` (non-throwing). Reads `enabled=true` newest-first via `by_enabled_and_created`,
+  then `selectActiveMotd`.
+- `listMotds` (admin) — all MOTDs newest-first, bounded `take(200)`.
+- `createMotd` / `updateMotd` / `deleteMotd` / `toggleMotdEnabled` (admin) — `requireAuth` +
+  `assertAdmin`. Writes go through the pure `validateMotdInput` (trims bodies, drops empty locales,
+  requires `en`, caps each body at 5000 chars, requires `expiresAt > startAt`). No audit log — admin
+  content, not a personal-data action.
+
+**Frontend** (`app/src/components/`):
+
+- `MarkdownView` — shared safe renderer (`react-markdown` + `remark-gfm`, no raw HTML; links open in
+  a new tab; dangerous URL protocols stripped).
+- `Motd` — subscribes to `getActiveMotd`, resolves the body for the active language
+  (`bodies[lang] ?? bodies.en`), renders the banner or (when `important`) the blocking `Modal`
+  (`dismissOnBackdrop={false}`, `dismissOnEscape={false}`, OK button). Mounted in `RequireAuth`
+  above `AppNav`. New i18n keys: `motd.dismiss`, `motd.ok` (en/pt/es).
+- `MotdTab` — admin authoring (list + create/edit form with per-locale textareas, important/enabled
+  toggles, optional `datetime-local` start/expiry, live `MarkdownView` preview). Added as the
+  **MOTD** tab in `AdminPage` (admin chrome is English-only, like the other admin tabs).
+
+**Dismissal & re-login mechanic:** dismissal is stored in `sessionStorage` under `motdDismissed` as
+`{ token, motdId }`. The MOTD is hidden only when both the stored token equals the current
+`sessionToken` **and** the stored `motdId` equals the active MOTD's id. A page reload keeps the same
+token (stays dismissed); a re-login rotates the token via `AuthSuccessPage` (stored token no longer
+matches → re-shows); a newly published MOTD has a new id → re-shows even mid-session.
+
+```mermaid
+flowchart TD
+  A[Admin: MOTD tab] -->|createMotd / updateMotd / toggleMotdEnabled| DB[(motds table)]
+  V[Authenticated user loads app] --> Q[getActiveMotd]
+  Q --> SEL{selectActiveMotd: newest enabled in date window?}
+  SEL -->|none| NONE[Render nothing]
+  SEL -->|found| D{sessionStorage motdDismissed matches token + motdId?}
+  D -->|yes| NONE
+  D -->|no| I{important?}
+  I -->|no| BANNER[Top banner · ✕ dismiss]
+  I -->|yes| MODAL[Blocking modal · OK dismiss]
+  BANNER -->|dismiss| W[Write motdDismissed = token + motdId]
+  MODAL -->|dismiss| W
+  RELOGIN[Re-login rotates sessionToken] -.stored token no longer matches.-> SEL
 ```
 
 ---
@@ -1911,6 +1988,7 @@ checklist when you touch the codebase:
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                 | [§11](#11-feed--engagement) (+ flows)                                                     |
 | Admin/moderation (`admin.ts`, ban UI)                                                                                            | [§12](#12-admin--moderation)                                                              |
 | Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab) | [§12A](#12a-feedback)                                                                     |
+| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                            | [§12B](#12b-message-of-the-day-motd)                                                      |
 | App UI (`app/src/**`)                                                                                                            | [§14](#14-frontend--authenticated-app-app)                                                |
 | Landing (`landing/**`)                                                                                                           | [§15](#15-frontend--landing-site-landing)                                                 |
 | Any `process.env` / `import.meta.env` usage                                                                                      | [§16 Environment Variables](#16-environment-variables)                                    |

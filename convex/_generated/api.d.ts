@@ -40,6 +40,7 @@ import type * as linkedin_posts from "../linkedin/posts.js";
 import type * as linkedin_types from "../linkedin/types.js";
 import type * as linkedin_verifyPostOwnership from "../linkedin/verifyPostOwnership.js";
 import type * as migrations_seedPlanLimits from "../migrations/seedPlanLimits.js";
+import type * as motd_motd from "../motd/motd.js";
 import type * as posts from "../posts.js";
 import type * as privacy_consent from "../privacy/consent.js";
 import type * as privacy_deletion from "../privacy/deletion.js";
@@ -89,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   "linkedin/types": typeof linkedin_types;
   "linkedin/verifyPostOwnership": typeof linkedin_verifyPostOwnership;
   "migrations/seedPlanLimits": typeof migrations_seedPlanLimits;
+  "motd/motd": typeof motd_motd;
   posts: typeof posts;
   "privacy/consent": typeof privacy_consent;
   "privacy/deletion": typeof privacy_deletion;

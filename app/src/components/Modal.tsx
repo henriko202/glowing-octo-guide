@@ -4,21 +4,30 @@ type Props = {
   onClose: () => void
   children: ReactNode
   panelClassName?: string
+  dismissOnBackdrop?: boolean
+  dismissOnEscape?: boolean
 }
 
-export default function Modal({ onClose, children, panelClassName = 'max-w-sm' }: Props) {
+export default function Modal({
+  onClose,
+  children,
+  panelClassName = 'max-w-sm',
+  dismissOnBackdrop = true,
+  dismissOnEscape = true
+}: Props) {
   useEffect(() => {
+    if (!dismissOnEscape) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, dismissOnEscape])
 
   return (
     <div
       data-testid="modal-backdrop"
-      onClick={onClose}
+      onClick={dismissOnBackdrop ? onClose : undefined}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
     >
       <div

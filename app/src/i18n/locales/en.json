@@ -135,6 +135,10 @@
     "thanks": "Thanks! We've received your feedback.",
     "error": "Something went wrong. Please try again."
   },
+  "motd": {
+    "dismiss": "Dismiss",
+    "ok": "OK"
+  },
   "privacy": {
     "title": "Privacy & Data",
     "consentPrompt": {

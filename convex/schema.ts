@@ -274,5 +274,21 @@ export default defineSchema({
     responderId: v.id('users'),
     text: v.string(),
     createdAt: v.number()
-  }).index('by_feedback', ['feedbackId', 'createdAt'])
+  }).index('by_feedback', ['feedbackId', 'createdAt']),
+
+  // Admin-authored Message of the Day. Exactly one is shown at a time (the newest enabled
+  // row whose [startAt, expiresAt) window covers "now" — see convex/motd/motd.ts:selectActiveMotd).
+  // `bodies` is a locale->markdown map; `en` is required (enforced in validation) and is the
+  // fallback for locales without their own body. A record (not a fixed object) so new locales
+  // need no schema migration. Admin content — not personal data, hard-deleted on removal.
+  motds: defineTable({
+    bodies: v.record(v.string(), v.string()),
+    important: v.boolean(), // false -> banner, true -> blocking modal
+    enabled: v.boolean(),
+    startAt: v.optional(v.number()), // optional scheduled start (ms epoch)
+    expiresAt: v.optional(v.number()), // optional "limited date" (ms epoch)
+    createdBy: v.id('users'),
+    createdAt: v.number(),
+    updatedAt: v.number()
+  }).index('by_enabled_and_created', ['enabled', 'createdAt'])
 })

@@ -44,4 +44,32 @@ describe('Modal', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it('does not call onClose on backdrop click when dismissOnBackdrop is false', () => {
+    const onClose = vi.fn()
+    render(
+      <Modal
+        onClose={onClose}
+        dismissOnBackdrop={false}
+      >
+        <p>Body</p>
+      </Modal>
+    )
+    fireEvent.click(screen.getByTestId('modal-backdrop'))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('does not call onClose on Escape when dismissOnEscape is false', () => {
+    const onClose = vi.fn()
+    render(
+      <Modal
+        onClose={onClose}
+        dismissOnEscape={false}
+      >
+        <p>Body</p>
+      </Modal>
+    )
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+  })
 })
