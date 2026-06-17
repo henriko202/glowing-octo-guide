@@ -78,7 +78,15 @@ describe('MyPostsPage', () => {
 
   it('shows Hide + Delete controls and a "Visible in feed" state for a visible post', () => {
     mockQueryReturns['posts.getMyPosts'] = [
-      { _id: 'p1', linkedinPostUrn: 'urn:li:activity:1', content: 'Hi', publishedAt: Date.now(), likeCount: 3, commentCount: 1, hidden: false }
+      {
+        _id: 'p1',
+        linkedinPostUrn: 'urn:li:activity:1',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 3,
+        commentCount: 1,
+        hidden: false
+      }
     ]
     renderPage()
     expect(screen.getByText(/visible in feed/i)).toBeInTheDocument()
@@ -88,7 +96,15 @@ describe('MyPostsPage', () => {
 
   it('shows an Unhide control and a "Hidden from feed" badge for a hidden post', () => {
     mockQueryReturns['posts.getMyPosts'] = [
-      { _id: 'p2', linkedinPostUrn: 'urn:li:activity:2', content: 'Hi', publishedAt: Date.now(), likeCount: 0, commentCount: 0, hidden: true }
+      {
+        _id: 'p2',
+        linkedinPostUrn: 'urn:li:activity:2',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: true
+      }
     ]
     renderPage()
     expect(screen.getByText(/hidden from feed/i)).toBeInTheDocument()

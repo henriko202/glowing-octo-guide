@@ -143,7 +143,9 @@ export default function MyPostsPage() {
 
       {/* Transient error from a hide/delete action */}
       {actionError && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</div>
+        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {actionError}
+        </div>
       )}
 
       {/* Post list */}
