@@ -7,6 +7,7 @@ import { parseLinkedInPostUrl } from './linkedin/parsePostUrl'
 import { verifyPostOwnership, type OwnershipResult } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { getPlanLimitsHelper } from './lib/planLimits'
+import { computeFeedFields } from './lib/feedRank'
 import { parsePostContent, parsePostEngagement, appendMediaLinks } from './linkedin/parsePostContent'
 
 /**
@@ -30,10 +31,7 @@ export function isAdminShareOverrideEnabled(
  * (moderation). Pure helper so the rule is testable and applied identically by
  * the `setPostHidden` and `deletePost` mutations.
  */
-export function canModifyPost(
-  user: { _id: Id<'users'>; isAdmin?: boolean },
-  post: { authorId: Id<'users'> }
-): boolean {
+export function canModifyPost(user: { _id: Id<'users'>; isAdmin?: boolean }, post: { authorId: Id<'users'> }): boolean {
   return post.authorId === user._id || user.isAdmin === true
 }
 
@@ -262,7 +260,16 @@ export const setPostHidden = mutation({
     if (post.deletedAt !== undefined) {
       throw new Error('Post has been deleted')
     }
-    await ctx.db.patch(postId, { hidden })
+    // Hiding/unhiding flips feed eligibility — refresh the denormalized feed fields.
+    const feed = computeFeedFields({
+      isFeatured: post.isFeatured,
+      publishedAt: post.publishedAt,
+      authorTierRank: post.authorTierRank,
+      hidden,
+      interactionLimitReached: post.interactionLimitReached,
+      deletedAt: post.deletedAt
+    })
+    await ctx.db.patch(postId, { hidden, ...feed })
   }
 })
 
@@ -286,6 +293,16 @@ export const deletePost = mutation({
       throw new Error('Forbidden: you can only modify your own posts')
     }
     if (post.deletedAt !== undefined) return // already deleted — idempotent no-op
-    await ctx.db.patch(postId, { deletedAt: Date.now(), hidden: true })
+    const deletedAt = Date.now()
+    // Soft-delete removes the post from the feed — recompute so inFeed becomes false.
+    const feed = computeFeedFields({
+      isFeatured: post.isFeatured,
+      publishedAt: post.publishedAt,
+      authorTierRank: post.authorTierRank,
+      hidden: true,
+      interactionLimitReached: post.interactionLimitReached,
+      deletedAt
+    })
+    await ctx.db.patch(postId, { deletedAt, hidden: true, ...feed })
   }
 })

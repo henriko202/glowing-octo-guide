@@ -3,6 +3,8 @@ import { internalMutation, internalQuery, mutation, query } from './_generated/s
 import { v } from 'convex/values'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth } from './lib/auth'
+import { tierToRank } from './lib/planLimits'
+import { restampUserPostsTierRank } from './lib/feedRank'
 
 // SECURITY: Every admin endpoint MUST call this.
 // Accepts the user doc already resolved by requireAuth — never re-fetches from client ID.
@@ -306,6 +308,11 @@ export const setUserTier = mutation({
     if (!targetUser) throw new Error('User not found')
 
     await ctx.db.patch(userId, { tier })
+
+    // Keep the denormalized authorTierRank/feedRank on the user's posts in sync with the new
+    // tier — same as the Stripe webhook paths. Without this, an admin tier change would leave
+    // the user's posts sorting at their previous tier until the next Stripe sync re-stamped them.
+    await restampUserPostsTierRank(ctx, userId, tierToRank(tier))
 
     // When promoting to contact, auto-seed a planLimits override so the user is
     // immediately subject to the plan limits system without a separate admin step.

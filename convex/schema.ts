@@ -104,14 +104,24 @@ export default defineSchema({
     // Soft-delete marker. When set, the post is excluded from the feed AND the
     // author's My Posts view, but the row is intentionally KEPT so it still counts
     // toward the rolling weekly post limit (deleting must not free up a slot).
-    deletedAt: v.optional(v.number())
+    deletedAt: v.optional(v.number()),
+    // ─── Feed cursor-pagination (denormalized, maintained by lib/feedRank.ts) ────
+    // Single descending sort key encoding featured→tier→recency; see computeFeedFields.
+    // Optional during the widen→backfill rollout — old posts are stamped by the
+    // backfill migration before getFeed switches to the by_feed_rank index.
+    feedRank: v.optional(v.number()),
+    // True iff the post passes the non-viewer-specific feed filters
+    // (hidden === false && !interactionLimitReached && deletedAt === undefined).
+    inFeed: v.optional(v.boolean())
   })
     .index('by_author', ['authorId'])
     .index('by_urn', ['linkedinPostUrn'])
     .index('by_featured', ['isFeatured', 'featuredAt'])
     .index('by_published', ['hidden', 'publishedAt'])
     .index('by_author_and_publishedAt', ['authorId', 'publishedAt'])
-    .index('by_feed', ['hidden', 'isFeatured', 'featuredAt']),
+    .index('by_feed', ['hidden', 'isFeatured', 'featuredAt'])
+    // Cursor-pagination index for getFeed: walk inFeed=true posts in feedRank desc order.
+    .index('by_feed_rank', ['inFeed', 'feedRank']),
 
   subscriptions: defineTable({
     userId: v.id('users'),

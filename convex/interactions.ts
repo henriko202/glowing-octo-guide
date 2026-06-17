@@ -5,6 +5,7 @@ import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { requireAuthAction } from './lib/auth'
 import { getPlanLimitsHelper } from './lib/planLimits'
+import { computeFeedFields } from './lib/feedRank'
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
@@ -29,7 +30,16 @@ export const incrementCommentCount = internalMutation({
     if (author) {
       const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
       if (total >= limits.interactionsPerPost && !post.interactionLimitReached) {
-        await ctx.db.patch(postId, { interactionLimitReached: true })
+        // Hitting the interaction limit removes the post from the feed — refresh feed fields.
+        const feed = computeFeedFields({
+          isFeatured: post.isFeatured,
+          publishedAt: post.publishedAt,
+          authorTierRank: post.authorTierRank,
+          hidden: post.hidden,
+          interactionLimitReached: true,
+          deletedAt: post.deletedAt
+        })
+        await ctx.db.patch(postId, { interactionLimitReached: true, ...feed })
       }
     }
   }
@@ -50,7 +60,16 @@ export const incrementLikeCount = internalMutation({
     if (author) {
       const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
       if (total >= limits.interactionsPerPost && !post.interactionLimitReached) {
-        await ctx.db.patch(postId, { interactionLimitReached: true })
+        // Hitting the interaction limit removes the post from the feed — refresh feed fields.
+        const feed = computeFeedFields({
+          isFeatured: post.isFeatured,
+          publishedAt: post.publishedAt,
+          authorTierRank: post.authorTierRank,
+          hidden: post.hidden,
+          interactionLimitReached: true,
+          deletedAt: post.deletedAt
+        })
+        await ctx.db.patch(postId, { interactionLimitReached: true, ...feed })
       }
     }
   }

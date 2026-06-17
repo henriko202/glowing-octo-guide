@@ -3,6 +3,7 @@ import { internalAction, internalMutation } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
+import { computeFeedFields } from '../lib/feedRank'
 import { isApifyPostSyncEnabled, type ApifyFlags } from '../lib/apify'
 
 // Upsert a single post — inserts new, updates like/comment counts on existing.
@@ -31,11 +32,22 @@ export const upsertPost = internalMutation({
       .first()
 
     if (existing) {
-      // Update branch — never checks limits; only updates engagement counts
+      // Update branch — never checks limits; only updates engagement counts.
+      // `hidden` can change here (e.g. a re-sync after activation), so refresh the
+      // denormalized feed fields from the existing post + the incoming hidden flag.
+      const feed = computeFeedFields({
+        isFeatured: existing.isFeatured,
+        publishedAt: existing.publishedAt,
+        authorTierRank: existing.authorTierRank,
+        hidden: args.hidden,
+        interactionLimitReached: existing.interactionLimitReached,
+        deletedAt: existing.deletedAt
+      })
       await ctx.db.patch(existing._id, {
         likeCount: args.likeCount,
         commentCount: args.commentCount,
-        hidden: args.hidden
+        hidden: args.hidden,
+        ...feed
       })
       return existing._id
     }
@@ -83,11 +95,20 @@ export const upsertPost = internalMutation({
     const authorTierRank = tierToRank(author?.tier ?? 'starter')
     // Destructure out queueOnLimitReached so it is never stored on the post
     const { queueOnLimitReached: _queueOnLimitReached, ...postArgs } = args
+    const feed = computeFeedFields({
+      isFeatured: postArgs.isFeatured,
+      publishedAt: postArgs.publishedAt,
+      authorTierRank,
+      hidden: postArgs.hidden,
+      interactionLimitReached: false,
+      deletedAt: undefined
+    })
     return await ctx.db.insert('posts', {
       ...postArgs,
       featuredAt: undefined,
       authorTierRank,
-      interactionLimitReached: false
+      interactionLimitReached: false,
+      ...feed
     })
   }
 })

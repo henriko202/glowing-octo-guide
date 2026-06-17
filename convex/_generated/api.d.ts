@@ -25,6 +25,7 @@ import type * as lib_apify from "../lib/apify.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_email from "../lib/email.js";
+import type * as lib_feedRank from "../lib/feedRank.js";
 import type * as lib_planLimits from "../lib/planLimits.js";
 import type * as lib_policy from "../lib/policy.js";
 import type * as lib_profileOptions from "../lib/profileOptions.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
   "lib/email": typeof lib_email;
+  "lib/feedRank": typeof lib_feedRank;
   "lib/planLimits": typeof lib_planLimits;
   "lib/policy": typeof lib_policy;
   "lib/profileOptions": typeof lib_profileOptions;

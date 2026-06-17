@@ -8,6 +8,7 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { tierToRank } from './lib/planLimits'
+import { restampUserPostsTierRank } from './lib/feedRank'
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
 // any status that does not clearly grant access (incomplete, unpaid, paused, unknown)
@@ -74,23 +75,10 @@ export const syncUserSubscription = internalMutation({
       trialEndsAt: undefined
     })
 
-    // Read this user's posts once, then patch authorTierRank on every post and
-    // un-hide any hidden ones when the subscription is active — in a single pass.
-    // (Previously the same posts were read twice: once for the rank sync and again
-    // with a `hidden` filter to un-hide.)
-    const newRank = tierToRank(args.tier)
+    // Re-stamp authorTierRank + feed fields on all this user's posts, un-hiding them when
+    // the subscription becomes active. Shared with the cancel + admin tier-change paths.
     const becameActive = status === 'active'
-    const userPosts = await ctx.db
-      .query('posts')
-      .withIndex('by_author', q => q.eq('authorId', user._id))
-      .collect()
-    await Promise.all(
-      userPosts.map(p => {
-        const fields: { authorTierRank: number; hidden?: boolean } = { authorTierRank: newRank }
-        if (becameActive && p.hidden) fields.hidden = false
-        return ctx.db.patch(p._id, fields)
-      })
-    )
+    await restampUserPostsTierRank(ctx, user._id, tierToRank(args.tier), { unhideHidden: becameActive })
 
     // Trigger immediate post fetch when subscription becomes active
     if (becameActive) {
@@ -134,13 +122,8 @@ export const cancelUserSubscription = internalMutation({
     await ctx.db.patch(sub._id, { status: 'canceled' })
     await ctx.db.patch(sub.userId, { tier: 'starter', subscriptionStatus: 'canceled' })
 
-    // Sync authorTierRank on all posts by this user (downgraded to starter)
-    const starterRank = tierToRank('starter')
-    const userPosts = await ctx.db
-      .query('posts')
-      .withIndex('by_author', q => q.eq('authorId', sub.userId))
-      .collect()
-    await Promise.all(userPosts.map(p => ctx.db.patch(p._id, { authorTierRank: starterRank })))
+    // Downgrade authorTierRank (→ feedRank) on all posts by this user to starter.
+    await restampUserPostsTierRank(ctx, sub.userId, tierToRank('starter'))
   }
 })
 

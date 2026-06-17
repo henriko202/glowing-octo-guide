@@ -1,6 +1,7 @@
 // convex/feed.ts
 import { query } from './_generated/server'
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth } from './lib/auth'
 
@@ -47,10 +48,7 @@ export function buildFeedFilter(params: FeedFilterParams): FeedFilter {
   }
 }
 
-// Max posts scanned per feed read — bounds the query so a growing table can't blow the
-// Convex read limit. Generous vs. current volume; swap for cursor pagination at scale.
-const FEED_SCAN_LIMIT = 1000
-// Hard cap on the page size a client can request.
+// Hard cap on the page size a client can request (clamps paginationOpts.numItems).
 const MAX_FEED_PAGE = 100
 
 /**
@@ -85,21 +83,24 @@ export function isAuthorFeedEligible(
   return true
 }
 
+// Empty pagination page for unauthenticated/invalid sessions — the shape
+// `usePaginatedQuery` expects so the client renders an empty feed, not an error.
+const EMPTY_PAGE = { page: [], isDone: true, continueCursor: '' }
+
 export const getFeed = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     sessionToken: v.optional(v.string()),
-    limit: v.optional(v.number()),
     filterIndustries: v.optional(v.array(v.string())),
     filterCountries: v.optional(v.array(v.string()))
   },
-  handler: async (ctx, { sessionToken, limit = 20, filterIndustries, filterCountries }) => {
-    if (!sessionToken) return { posts: [], hasMore: false }
-    const pageLimit = Math.min(Math.max(1, limit), MAX_FEED_PAGE)
+  handler: async (ctx, { paginationOpts, sessionToken, filterIndustries, filterCountries }) => {
+    if (!sessionToken) return EMPTY_PAGE
     let viewer: Doc<'users'>
     try {
       viewer = await requireAuth(ctx, sessionToken)
     } catch {
-      return { posts: [], hasMore: false }
+      return EMPTY_PAGE
     }
 
     const filter = buildFeedFilter({
@@ -110,84 +111,49 @@ export const getFeed = query({
       filterCountries
     })
 
-    // Fetch all visible posts sorted by publishedAt desc
-    let allPosts = await ctx.db
+    // Walk posts in feed order straight off the index: `inFeed === true` already encodes the
+    // hidden / interaction-limit / soft-delete filters, and descending `feedRank` yields
+    // featured → author tier → recency (see lib/feedRank.ts). The cursor reads only one page.
+    const numItems = Math.min(Math.max(1, paginationOpts.numItems), MAX_FEED_PAGE)
+    const result = await ctx.db
       .query('posts')
-      .withIndex('by_published', q => q.eq('hidden', false))
+      .withIndex('by_feed_rank', q => q.eq('inFeed', true))
       .order('desc')
-      .take(FEED_SCAN_LIMIT)
+      .paginate({ ...paginationOpts, numItems })
 
-    // Filter out posts that have reached their interaction limit
-    allPosts = allPosts.filter(post => post.interactionLimitReached !== true)
-
-    // Filter out soft-deleted posts. Their rows are kept only to preserve the weekly
-    // count, so they must never reappear in the feed — even if a later upsert/re-sync
-    // flips `hidden` back to false (the feed index keys on `hidden`, not `deletedAt`).
-    allPosts = allPosts.filter(post => post.deletedAt === undefined)
-
-    // Apply post-level visibility restrictions (Pro author settings)
-    allPosts = allPosts.filter(post => {
-      if (post.visibilityIndustries.length > 0) {
-        if (!viewer.industry || !post.visibilityIndustries.includes(viewer.industry)) return false
-      }
-      if (post.visibilityCountries.length > 0) {
-        if (!viewer.country || !post.visibilityCountries.includes(viewer.country)) return false
-      }
-      return true
-    })
-
-    // Fetch every post's author exactly once. This single map is reused by the
-    // industry/country/eligibility filters, sort scoring, and enrichment below.
-    // Each subsequent filter only ever shrinks `allPosts`, so this superset always
-    // covers every authorId looked up downstream. (Previously the authors were
-    // re-fetched in up to three separate passes per feed load.)
-    const uniqueAuthorIds = [...new Set(allPosts.map(p => p.authorId))]
+    // Authors for THIS page only (≤ numItems). Fetched once, reused by the filters + enrichment.
+    const uniqueAuthorIds = [...new Set(result.page.map(p => p.authorId))]
     const authors = await Promise.all(uniqueAuthorIds.map(id => ctx.db.get(id)))
     const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
 
-    // Apply viewer-side industry filter (Growth/Pro)
-    if (filter.applyIndustry && filter.industries.length > 0) {
-      allPosts = allPosts.filter(post => {
+    // Viewer-/author-dependent filters that can't live in the global index (plan §3c):
+    // post visibility allowlists, author eligibility (trialing / pending deletion), and the
+    // viewer's industry/country filters. Pages may come back short when these drop posts —
+    // `usePaginatedQuery` just loads more.
+    const enriched = result.page
+      .filter(post => {
+        if (post.visibilityIndustries.length > 0) {
+          if (!viewer.industry || !post.visibilityIndustries.includes(viewer.industry)) return false
+        }
+        if (post.visibilityCountries.length > 0) {
+          if (!viewer.country || !post.visibilityCountries.includes(viewer.country)) return false
+        }
         const author = authorMap.get(post.authorId)
-        return author?.industry && filter.industries.includes(author.industry)
+        if (!isAuthorFeedEligible(author ?? null)) return false
+        if (filter.applyIndustry && filter.industries.length > 0) {
+          if (!author?.industry || !filter.industries.includes(author.industry)) return false
+        }
+        if (filter.applyCountry && filter.countries.length > 0) {
+          if (!author?.country || !filter.countries.includes(author.country)) return false
+        }
+        return true
       })
-    }
-
-    // Apply viewer-side country filter (Pro)
-    if (filter.applyCountry && filter.countries.length > 0) {
-      allPosts = allPosts.filter(post => {
+      .map(post => {
         const author = authorMap.get(post.authorId)
-        return author?.country && filter.countries.includes(author.country)
-      })
-    }
-
-    // Filter out posts whose author is trialing or pending account deletion
-    allPosts = allPosts.filter(post => isAuthorFeedEligible(authorMap.get(post.authorId) ?? null))
-
-    // Sort: featured first (by publishedAt desc) → authorTierRank desc → publishedAt desc
-    const featured = allPosts.filter(p => p.isFeatured).sort((a, b) => b.publishedAt - a.publishedAt)
-
-    const regular = allPosts
-      .filter(p => !p.isFeatured)
-      .sort((a, b) => {
-        // Sort by authorTierRank desc (higher tier first), then publishedAt desc
-        const rankDiff = (b.authorTierRank ?? 1) - (a.authorTierRank ?? 1)
-        if (rankDiff !== 0) return rankDiff
-        return b.publishedAt - a.publishedAt
+        return author ? { ...post, author: toFeedAuthor(author) } : { ...post, author: null }
       })
 
-    const sorted = [...featured, ...regular]
-    const paginated = sorted.slice(0, pageLimit)
-    const hasMore = sorted.length > pageLimit
-
-    // Enrich with author info from the map already loaded above (safe — no tokens
-    // returned). No DB reads here: the authors were all fetched once up front.
-    const enriched = paginated.map(post => {
-      const author = authorMap.get(post.authorId)
-      if (!author) return { ...post, author: null }
-      return { ...post, author: toFeedAuthor(author) }
-    })
-
-    return { posts: enriched, hasMore }
+    // Preserve isDone + continueCursor from the index walk; only `page` is filtered/enriched.
+    return { ...result, page: enriched }
   }
 })

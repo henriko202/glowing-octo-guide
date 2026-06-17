@@ -9,6 +9,7 @@ import { internalMutation } from '../_generated/server'
 import { internal } from '../_generated/api'
 import type { Id } from '../_generated/dataModel'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
+import { computeFeedFields } from '../lib/feedRank'
 
 const BATCH_SIZE = 100
 
@@ -76,6 +77,14 @@ export const processPostQueue = internalMutation({
         }
 
         const authorTierRank = tierToRank(author.tier)
+        const feed = computeFeedFields({
+          isFeatured: false,
+          publishedAt: queuedPost.publishedAt,
+          authorTierRank,
+          hidden: queuedPost.hidden,
+          interactionLimitReached: false,
+          deletedAt: undefined
+        })
         await ctx.db.insert('posts', {
           linkedinPostUrn: queuedPost.linkedinPostUrn,
           authorId: queuedPost.authorId,
@@ -90,7 +99,8 @@ export const processPostQueue = internalMutation({
           hidden: queuedPost.hidden,
           sourceUrl: queuedPost.sourceUrl,
           authorTierRank,
-          interactionLimitReached: false
+          interactionLimitReached: false,
+          ...feed
         })
         await ctx.db.delete(queuedPost._id)
       }
