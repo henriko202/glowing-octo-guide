@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { buildExportBundle } from './export'
 
 const USER = {
@@ -62,5 +62,46 @@ describe('buildExportBundle', () => {
     })
     expect(bundle.exportedAt).toBe(42)
     expect(bundle.formatVersion).toBe(1)
+  })
+
+  it('includes the user feedback verbatim', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      feedback: [{ _id: 'fb1', category: 'bug', message: 'broken', status: 'responded', responseText: 'fixed' }]
+    })
+    expect(bundle.feedback).toHaveLength(1)
+    expect(bundle.feedback[0].message).toBe('broken')
+    expect(bundle.feedback[0].responseText).toBe('fixed')
+  })
+
+  it('includes feedbackResponses verbatim', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      feedback: [{ _id: 'fb1', category: 'bug', message: 'broken', status: 'responded' }],
+      feedbackResponses: [
+        { _id: 'fr1', feedbackId: 'fb1', text: 'We fixed it!', responderId: 'admin1', createdAt: 1000 }
+      ]
+    })
+    expect(bundle.feedbackResponses).toHaveLength(1)
+    expect(bundle.feedbackResponses[0].text).toBe('We fixed it!')
+  })
+
+  it('defaults feedbackResponses to empty array when omitted', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: []
+    })
+    expect(bundle.feedbackResponses).toEqual([])
   })
 })

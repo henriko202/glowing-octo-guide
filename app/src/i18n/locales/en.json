@@ -112,6 +112,29 @@
     "disable": "Disable",
     "lastSync": "Last sync"
   },
+  "feedback": {
+    "button": "Feedback",
+    "title": "Send us feedback",
+    "categoryLabel": "What kind of feedback is this?",
+    "categories": {
+      "feature_request": "Feature request",
+      "bug": "Bug",
+      "comment": "Comment",
+      "criticism": "Criticism",
+      "praise": "Praise",
+      "question": "Question",
+      "suggestion": "Suggestion",
+      "other": "Other"
+    },
+    "messageLabel": "Your message",
+    "messagePlaceholder": "Tell us what's on your mind…",
+    "submit": "Send feedback",
+    "submitting": "Sending…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "thanks": "Thanks! We've received your feedback.",
+    "error": "Something went wrong. Please try again."
+  },
   "privacy": {
     "title": "Privacy & Data",
     "consentPrompt": {

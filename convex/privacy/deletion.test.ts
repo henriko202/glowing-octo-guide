@@ -55,6 +55,7 @@ const SEED = {
   planLimits: [{ _id: 'pl1', userId: 'u1' }],
   consentRecords: [{ _id: 'c1', userId: 'u1' }],
   dataExportRequests: [{ _id: 'de1', userId: 'u1', fileStorageId: 'stor1' }],
+  feedback: [{ _id: 'fb1', userId: 'u1', message: 'test', category: 'comment', status: 'new', createdAt: 1000 }],
   auditLogs: [{ _id: 'al1', targetUserId: 'u1', actorId: 'u1', action: 'x' }]
 }
 
@@ -79,6 +80,13 @@ describe('cascadeDeleteUser', () => {
       expect(deletedTables).toContain(t)
     }
     expect(db._deleted.filter(d => d.table === 'posts')).toHaveLength(2)
+  })
+
+  it('anonymizes feedback rows instead of deleting them', async () => {
+    const db = createMockDb(SEED)
+    await cascadeDeleteUser(db, { delete: async () => {} }, 'u1')
+    expect(db._patched).toContainEqual({ id: 'fb1', data: { userId: undefined } })
+    expect(db._deleted.map(d => d.id)).not.toContain('fb1')
   })
 
   it('deletes the user document LAST', async () => {
@@ -119,10 +127,11 @@ describe('cascadeDeleteUser', () => {
 })
 
 describe('deletion cascade completeness', () => {
-  it('covers every table that references a user (userId/authorId), except users/auditLogs', async () => {
-    const EXEMPT = new Set(['users', 'auditLogs'])
+  it('covers every table that references a user (userId/authorId), except users/auditLogs/feedback', async () => {
+    const FULLY_EXEMPT = new Set(['users', 'auditLogs'])
+    const ANONYMIZED_TABLES = new Set(['feedback'])
     const userRefTables = Object.keys(schema.tables).filter(name => {
-      if (EXEMPT.has(name)) return false
+      if (FULLY_EXEMPT.has(name) || ANONYMIZED_TABLES.has(name)) return false
       const fields = (schema.tables as any)[name]?._fields
       return fields && ('userId' in fields || 'authorId' in fields)
     })
@@ -132,6 +141,14 @@ describe('deletion cascade completeness', () => {
     const deletedTables = new Set(db._deleted.map(d => d.table))
     for (const t of userRefTables) {
       expect(deletedTables.has(t), `cascade must delete rows from "${t}"`).toBe(true)
+    }
+
+    // Verify anonymized tables are actually anonymized, not just skipped
+    for (const table of ANONYMIZED_TABLES) {
+      if (table === 'feedback') {
+        expect(db._patched).toContainEqual({ id: 'fb1', data: { userId: undefined } })
+        expect(db._deleted.map(d => d.id)).not.toContain('fb1')
+      }
     }
   })
 })

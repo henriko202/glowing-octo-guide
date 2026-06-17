@@ -236,5 +236,43 @@ export default defineSchema({
     createdAt: v.number()
   })
     .index('by_target', ['targetUserId'])
-    .index('by_created', ['createdAt'])
+    .index('by_created', ['createdAt']),
+
+  // User-submitted product feedback. Authenticated submitters; admins reply by email
+  // (status → 'responded'). On account deletion the row is ANONYMIZED, not deleted:
+  // userId is cleared (→ undefined) while the content is retained. See convex/privacy/deletion.ts.
+  feedback: defineTable({
+    userId: v.optional(v.id('users')), // submitter; set on submit, CLEARED on account deletion (anonymize)
+    category: v.union(
+      v.literal('feature_request'),
+      v.literal('bug'),
+      v.literal('comment'),
+      v.literal('criticism'),
+      v.literal('praise'),
+      v.literal('question'),
+      v.literal('suggestion'),
+      v.literal('other')
+    ),
+    message: v.string(),
+    status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
+    createdAt: v.number(),
+    // DEPRECATED — superseded by feedbackResponses table (Task 10).
+    // Retained as v.optional to avoid a schema-narrowing migration on existing rows.
+    // Stop writing these fields; read feedbackResponses instead.
+    responseText: v.optional(v.string()),
+    respondedAt: v.optional(v.number()),
+    respondedBy: v.optional(v.id('users'))
+  })
+    .index('by_user', ['userId']) // export + locate rows to anonymize on deletion
+    .index('by_status', ['status', 'createdAt']), // reserved for future server-side status triage
+
+  // Append-only reply log for feedback items. Replaces the single-reply fields on the
+  // feedback row (responseText/respondedAt/respondedBy). Each admin reply is a separate row.
+  // Index order: feedbackId first (equality), createdAt second (range / chronological).
+  feedbackResponses: defineTable({
+    feedbackId: v.id('feedback'),
+    responderId: v.id('users'),
+    text: v.string(),
+    createdAt: v.number()
+  }).index('by_feedback', ['feedbackId', 'createdAt'])
 })

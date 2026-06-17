@@ -28,6 +28,7 @@
 10. [Posts & Content Pipeline](#10-posts--content-pipeline)
 11. [Feed & Engagement](#11-feed--engagement)
 12. [Admin & Moderation](#12-admin--moderation)
+    12A. [Feedback](#12a-feedback)
 13. [Scheduled Jobs (Crons)](#13-scheduled-jobs-crons)
     13A. [Profile Enrichment (LinkedIn Profile Scrape)](#13a-profile-enrichment-linkedin-profile-scrape)
     13B. [Privacy & Compliance](#13b-privacy--compliance)
@@ -110,7 +111,7 @@ flowchart LR
     direction TB
     Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
     Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-    DB[("Convex DB<br/>13 tables")]
+    DB[("Convex DB<br/>15 tables")]
     Crons["Cron scheduler"]
     Cloud --- DB
     Site --- DB
@@ -236,7 +237,7 @@ the app. This is the backbone of the [security model](#17-security-posture).
 
 ## 5. Data Model
 
-All state lives in **Convex** (`convex/schema.ts`). There are **13 tables**. Every document also
+All state lives in **Convex** (`convex/schema.ts`). There are **15 tables**. Every document also
 carries Convex‑managed `_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
 
 Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential
@@ -257,6 +258,8 @@ erDiagram
   users ||--o{ consentRecords : "consent log"
   users ||--o{ dataExportRequests : "DSR exports"
   users ||--o{ auditLogs : "audit target"
+  users ||--o{ feedback : "submits"
+  feedback ||--o{ feedbackResponses : "replies"
 
   users {
     string linkedinId
@@ -521,6 +524,39 @@ retained past account deletion (actorId and targetUserId nulled out, action/meta
 | `createdAt`    | number                      |  ✓  | Event timestamp (ms).                                                                                         |
 
 Indexes: `by_target [targetUserId]`, `by_created [createdAt]`.
+
+#### `feedback` — user-submitted product feedback
+
+One row per feedback submission. `userId` is cleared on account deletion (anonymization, not deletion).
+Legacy single-reply fields (`responseText`, `respondedAt`, `respondedBy`) are kept as optional but
+**deprecated** — `feedbackResponses` is now the source of truth for replies.
+
+| Field          | Type                                                                                            | Req | Meaning                                      |
+|----------------|-------------------------------------------------------------------------------------------------|:---:|----------------------------------------------|
+| `userId`       | `id('users')`                                                                                   |  –  | Submitter (cleared on account deletion).     |
+| `category`     | `'feature_request'\|'bug'\|'comment'\|'criticism'\|'praise'\|'question'\|'suggestion'\|'other'` |  ✓  | Feedback category.                           |
+| `message`      | string                                                                                          |  ✓  | Free-text feedback body (≤4000 chars).       |
+| `status`       | `'new'\|'responded'\|'archived'`                                                                |  ✓  | Triage state.                                |
+| `createdAt`    | number                                                                                          |  ✓  | Submission timestamp (ms).                   |
+| `responseText` | string                                                                                          |  –  | **Deprecated.** Legacy single-reply text.    |
+| `respondedAt`  | number                                                                                          |  –  | **Deprecated.** Legacy reply timestamp (ms). |
+| `respondedBy`  | `id('users')`                                                                                   |  –  | **Deprecated.** Legacy responding admin.     |
+
+Indexes: `by_user [userId]`, `by_status [status]`.
+
+#### `feedbackResponses` — append-only admin reply thread
+
+Each row is one admin reply to a feedback item. Multiple rows per feedback item are allowed (threaded replies).
+
+| Field         | Type             | Req | Meaning                     |
+|---------------|------------------|:---:|-----------------------------|
+| `feedbackId`  | `id('feedback')` |  ✓  | Parent feedback item.       |
+| `responderId` | `id('users')`    |  ✓  | Admin who wrote this reply. |
+| `text`        | string           |  ✓  | Reply text.                 |
+| `createdAt`   | number           |  ✓  | Reply timestamp (ms).       |
+
+Index: `by_feedback [feedbackId, createdAt]` (chronological per feedback item).
+
 
 ---
 
@@ -1097,6 +1133,69 @@ flowchart TD
 
 ---
 
+## 12A. Feedback
+
+Authenticated users submit free-text feedback (≤4000 chars) tagged with a single category
+via a floating button (bottom-right of every authenticated page). Admins read and reply by
+email from the **Feedback** tab in the admin panel. Each feedback item can receive **multiple
+admin replies** stored as a thread in the `feedbackResponses` table.
+
+**Data:**
+
+- `feedback` table — `userId?` (submitter; cleared on account deletion), `category` (one of
+  `feature_request | bug | comment | criticism | praise | question | suggestion | other`),
+  `message`, `status` (`new | responded | archived`), `createdAt`. The legacy single-reply
+  fields `responseText`, `respondedAt`, `respondedBy` are retained as **optional/deprecated**
+  (no longer written; superseded by `feedbackResponses`). Indexes: `by_user`, `by_status`.
+
+- `feedbackResponses` table — append-only reply log; each row is one admin reply.
+  `feedbackId` (FK → `feedback`), `responderId` (FK → `users`, the admin who replied),
+  `text` (reply text), `createdAt` (ms). Index: `by_feedback [feedbackId, createdAt]`
+  (chronological per item). A `backfillFeedbackResponses` internal mutation migrates any
+  existing single-reply rows from the legacy fields — run once from the Convex dashboard
+  after deploying.
+
+**Backend** (`convex/feedback/`):
+
+- `feedback.ts` — `submitFeedback` (user; validates, throttles **10/hour**, admins exempt),
+  `listFeedback` (admin; newest-first, enriched with submitter name/email and full reply
+  thread from `feedbackResponses`), `respondToFeedback` (admin; inserts a new
+  `feedbackResponses` row, patches `status=responded`, writes a `feedback.responded` audit
+  log, schedules the email if `sendEmail=true`), `archiveFeedback` / `reopenFeedback`, and
+  the internal `getReplyData` + `sendFeedbackReply` action (keyed by `responseId`).
+  `backfillFeedbackResponses` (internalMutation — one-time operator migration).
+- `emails.ts` — `feedbackReplyEmail` builder (HTML-escapes user/admin text).
+- Replies use `lib/email.ts:sendEmail` with `Reply-To` = `FEEDBACK_REPLY_TO` so users reply
+  to a human inbox. The admin chooses **per reply** whether to send an email (`sendEmail`
+  boolean arg to `respondToFeedback`).
+
+**Frontend** (`app/src/components/`): `FeedbackButton` + `FeedbackModal` (user, i18n
+en/pt/es); `FeedbackTab` + `RespondFeedbackModal` (admin, English). Respond is disabled when
+the submitter has no email on file.
+
+**Privacy:** `feedback` rows are **anonymized, not deleted**, on account erasure
+(`cascadeDeleteUser` clears `userId`; content retained). `feedbackResponses` rows are
+retained attached to the anonymized feedback after account deletion. Both are included in the
+DSR export bundle (`gatherUserData` collects `feedbackResponses` for each of the user's
+feedback items).
+
+```mermaid
+flowchart TD
+  U[User clicks floating Feedback button] --> M[FeedbackModal: pick category + message ≤4000]
+  M -->|submitFeedback| V{Valid & under 10/hour?}
+  V -->|no| E[Error shown in modal]
+  V -->|yes| DB[(feedback row · status=new)]
+  A[Admin opens Feedback tab] --> L[listFeedback]
+  L --> R[RespondFeedbackModal]
+  R -->|respondToFeedback| P[insert feedbackResponses row · patch status=responded · audit log]
+  P -->|sendEmail=true| S[schedule sendFeedbackReply by responseId]
+  S -->|sendEmail · Reply-To=FEEDBACK_REPLY_TO| MAIL[(User receives email)]
+  DEL[Account deletion cascade] -.anonymize.-> DB2[feedback.userId = undefined · content kept]
+  DB2 -.responses retained.-> FR[(feedbackResponses rows kept)]
+```
+
+---
+
 ## 13. Scheduled Jobs (Crons)
 
 `convex/crons.ts` is the **only** file Convex reads for scheduled work. All are fixed‑interval
@@ -1398,11 +1497,16 @@ flowchart TD
 - **BillingPage** — `getMe` + `getSubscriptionInfo` + `createCheckoutSession` + `createPortalSession`.
   Trial/expired banners; per‑plan Subscribe CTAs (disabled if the plan's `VITE_STRIPE_*_PRICE_ID` is
   missing); "Manage Subscription" → Stripe portal; Enterprise → `mailto:`.
-- **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Three tabs:
+- **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Four tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync
   status), **Plan Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's
   effective limits, with an "override" tag), **Users** (`UsersTab` — per‑user row actions:
-  **Change tier**, **Change status**, **Edit limits** (contact tier only), and **Ban/Unban**).
+  **Change tier**, **Change status**, **Edit limits** (contact tier only), and **Ban/Unban**),
+  **Feedback** (`FeedbackTab` — newest-first list of all user-submitted feedback; status filter
+  pills New/Responded/Archived/All; per‑row actions **Respond…** (opens `RespondFeedbackModal` —
+  sends an email reply via `api.feedback.feedback.respondToFeedback`; Respond button and textarea
+  are disabled with a warning when the submitter has no email on file), **Archive**
+  (`archiveFeedback`), **Reopen** (`reopenFeedback`)).
 - **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b
     - 3b). Three sections: (1) **Consent preferences** (`ConsentToggles` — see below) — marketing and
       analytics toggles, OFF by default, reading `api.privacy.consent.getConsents` and writing
@@ -1420,6 +1524,9 @@ flowchart TD
 admin link**; the **"Privacy"** link navigates to `/privacy-data`),
 `PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`), `Modal`,
 `BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + per‑row modals + `banUser`/`unbanUser`),
+`FeedbackTab` (status filter pills + per‑row `RowActionsMenu` + `RespondFeedbackModal`),
+`RespondFeedbackModal` (shows original message read-only + reply textarea; Respond disabled when submitter has no email
+on file; calls `respondToFeedback`),
 `ChangeTierModal` / `ChangeStatusModal` (admin `setUserTier` / `setUserSubscriptionStatus`),
 `ContactLimitsModal` (per‑user contact `setContactUserLimit`/`removeContactUserLimit`, prefilled from
 `listPlanLimits`), `PlanLimitsTab` (**read‑only**: tier defaults + contact users via
@@ -1584,6 +1691,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `EMAIL_FROM`                   |        – (email no‑ops if unset)        | `lib/email.ts`                       | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                             |
 | `CONVEX_DEPLOYMENT`            |                 ✓ (CLI)                 | Convex CLI                           | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                     |
 | `ALLOW_ADMIN_SHARE_ANY_POST`   | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)            | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
+| `FEEDBACK_REPLY_TO`            |              – (optional)               | `convex/feedback/feedback.ts`        | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                     |
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
@@ -1793,20 +1901,21 @@ This document is **canonical** and must not be allowed to drift. The rule in `CL
 that **any code change or push updates the relevant section(s) here in the same change**. Practical
 checklist when you touch the codebase:
 
-| If you change…                                                                   | Update section(s)                                                                         |
-|----------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
-| `convex/schema.ts` (tables/fields/indexes)                                       | [§5 Data Model](#5-data-model) (+ ER diagram)                                             |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)       | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                |
-| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)            | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model) |
-| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)               | [§9](#9-plan-limits-system)                                                               |
-| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)           | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)             |
-| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`) | [§11](#11-feed--engagement) (+ flows)                                                     |
-| Admin/moderation (`admin.ts`, ban UI)                                            | [§12](#12-admin--moderation)                                                              |
-| App UI (`app/src/**`)                                                            | [§14](#14-frontend--authenticated-app-app)                                                |
-| Landing (`landing/**`)                                                           | [§15](#15-frontend--landing-site-landing)                                                 |
-| Any `process.env` / `import.meta.env` usage                                      | [§16 Environment Variables](#16-environment-variables)                                    |
-| Tooling/tests/deploy                                                             | [§18](#18-configuration-tooling--testing)                                                 |
-| Resolving a stale item / removing dead code                                      | [§19](#19-known-discrepancies-dead-code--roadmap)                                         |
+| If you change…                                                                                                                   | Update section(s)                                                                         |
+|----------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| `convex/schema.ts` (tables/fields/indexes)                                                                                       | [§5 Data Model](#5-data-model) (+ ER diagram)                                             |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                       | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                |
+| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                            | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model) |
+| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                               | [§9](#9-plan-limits-system)                                                               |
+| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                           | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)             |
+| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                 | [§11](#11-feed--engagement) (+ flows)                                                     |
+| Admin/moderation (`admin.ts`, ban UI)                                                                                            | [§12](#12-admin--moderation)                                                              |
+| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab) | [§12A](#12a-feedback)                                                                     |
+| App UI (`app/src/**`)                                                                                                            | [§14](#14-frontend--authenticated-app-app)                                                |
+| Landing (`landing/**`)                                                                                                           | [§15](#15-frontend--landing-site-landing)                                                 |
+| Any `process.env` / `import.meta.env` usage                                                                                      | [§16 Environment Variables](#16-environment-variables)                                    |
+| Tooling/tests/deploy                                                                                                             | [§18](#18-configuration-tooling--testing)                                                 |
+| Resolving a stale item / removing dead code                                                                                      | [§19](#19-known-discrepancies-dead-code--roadmap)                                         |
 
 When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add
 a flow chart (Mermaid) if it introduces a multi‑step flow.

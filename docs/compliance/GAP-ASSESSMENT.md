@@ -6,16 +6,20 @@
 
 **Controller:** [LEGAL_ENTITY_NAME]
 **Service:** Link Into The SSI
-**Assessed against:** GDPR (EU) / UK GDPR / LGPD (Brazil) / CCPA-CPRA and comparable US state privacy acts (Virginia CDPA, Colorado CPA, Connecticut CTDPA, etc.)
+**Assessed against:** GDPR (EU) / UK GDPR / LGPD (Brazil) / CCPA-CPRA and comparable US state privacy acts (Virginia
+CDPA, Colorado CPA, Connecticut CTDPA, etc.)
 
-This document assesses the current implementation of Link Into The SSI's privacy and data-protection controls against the key requirements of the frameworks above. It reflects the state after Phases 1–3 of the privacy compliance implementation (Foundations, Data-Subject Rights backend, and Consent & Retention). Residual gaps and human action items are listed in the final section.
+This document assesses the current implementation of Link Into The SSI's privacy and data-protection controls against
+the key requirements of the frameworks above. It reflects the state after Phases 1–3 of the privacy compliance
+implementation (Foundations, Data-Subject Rights backend, and Consent & Retention). Residual gaps and human action items
+are listed in the final section.
 
 ---
 
 ## Compliance Matrix
 
 | Requirement                                                                                                                                                                                                                         | Frameworks                                                                                                                                 | Current state                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Gap                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Lawful basis for processing & transparency** — each processing activity must have a documented legal basis; users must be informed via a privacy policy before or at the point of data collection.                                | GDPR Art. 6, 13–14; UK GDPR equivalent; LGPD Art. 7–8, 9; CCPA (disclosure of categories and purposes)                                     | **Implemented.** Legal bases documented for every processing activity in `DATA-INVENTORY.md`. Privacy policy drafted and published in this phase at `/privacy` on the landing site. Policy version stamped on user records (`acknowledgedPolicyVersion`) to track acknowledgement.                                                                                                                                                                                                                                                                                  | None material. Human action: lawyer must review and approve the privacy policy text before go-live. Fill `[LEGAL_ENTITY_NAME]` and `[PRIVACY_CONTACT_EMAIL]` in published policy.                                                                                                         |
 | **Right of access & data portability** — data subjects may request a copy of their personal data in a portable, machine-readable format.                                                                                            | GDPR Art. 15, 20; UK GDPR equivalent; LGPD Art. 18(I)–(II); CCPA-CPRA §1798.100, §1798.110                                                 | **Implemented.** Self-service data export in Settings → Privacy & Data → Export My Data. `requestDataExport` mutation generates a JSON bundle (via `generateExport` action), strips token secrets, redacts other actors from audit entries, stores in Convex file storage, emails user on completion. 7-day download window. Rate-limited 1/day.                                                                                                                                                                                                                    | None material.                                                                                                                                                                                                                                                                            |
 | **Right to erasure (right to be forgotten)** — data subjects may request deletion of their personal data; controller must delete or demonstrate retention is legally required.                                                      | GDPR Art. 17; UK GDPR equivalent; LGPD Art. 18(VI); CCPA-CPRA §1798.105                                                                    | **Implemented.** Self-service account deletion in Settings → Privacy & Data → Delete Account. 30-day grace period. `processAccountDeletions` cron executes `cascadeDeleteUser` (deletes all user-owned rows across every table; pseudonymizes audit logs; deletes the `users` row last). Stripe billing records are retained by Stripe under tax/accounting legal obligation. Schema-derived completeness test ensures future tables cannot silently orphan data.                                                                                                   | None material. Legal basis for Stripe billing record retention should be confirmed in the published privacy policy.                                                                                                                                                                       |
@@ -34,28 +38,45 @@ This document assesses the current implementation of Link Into The SSI's privacy
 
 ## Residual Gaps and Human To-Dos
 
-The following items are **not code gaps** — the implementation is substantially complete — but require human action, legal input, or business decisions before the privacy programme can be considered production-ready:
+The following items are **not code gaps** — the implementation is substantially complete — but require human action,
+legal input, or business decisions before the privacy programme can be considered production-ready:
 
-1. **Legal review of all DRAFT documents.** Every document in `docs/compliance/` (`DATA-INVENTORY.md`, `SUBPROCESSORS.md`, `RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`) and the published privacy policy and cookie policy pages (`landing/app/privacy/page.tsx`, `landing/app/cookies/page.tsx`) carry a DRAFT notice. A qualified privacy lawyer or DPO must review and approve each before public launch.
+1. **Legal review of all DRAFT documents.** Every document in `docs/compliance/` (`DATA-INVENTORY.md`,
+   `SUBPROCESSORS.md`, `RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`) and the published privacy policy and cookie policy
+   pages (`landing/app/privacy/page.tsx`, `landing/app/cookies/page.tsx`) carry a DRAFT notice. A qualified privacy
+   lawyer or DPO must review and approve each before public launch.
 
-2. **Fill all `[BRACKETED]` business inputs.** Across all compliance documents and published policy pages: `[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, `[PRIVACY_CONTACT_EMAIL]`, `[DPO_OR_REP_CONTACT]`, sub-processor DPA links, Railway deployment region, and sub-processor log-retention periods.
+2. **Fill all `[BRACKETED]` business inputs.** Across all compliance documents and published policy pages:
+   `[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, `[PRIVACY_CONTACT_EMAIL]`, `[DPO_OR_REP_CONTACT]`, sub-processor DPA
+   links, Railway deployment region, and sub-processor log-retention periods.
 
-3. **Appoint a privacy contact / assess DPO requirement.** Determine whether a formal Data Protection Officer appointment is legally required (GDPR Art. 37) based on the nature and scale of processing. Even if a DPO is not mandatory, a designated privacy contact must be appointed and the email address published.
+3. **Appoint a privacy contact / assess DPO requirement.** Determine whether a formal Data Protection Officer
+   appointment is legally required (GDPR Art. 37) based on the nature and scale of processing. Even if a DPO is not
+   mandatory, a designated privacy contact must be appointed and the email address published.
 
-4. **Assess EU and UK representative obligations.** If the controller entity is not established in the EU or UK but processes data of EU/UK residents, a representative under GDPR Art. 27 (and UK equivalent) may be required. Legal advice needed on the controller's domicile and the scope of EEA/UK user processing.
+4. **Assess EU and UK representative obligations.** If the controller entity is not established in the EU or UK but
+   processes data of EU/UK residents, a representative under GDPR Art. 27 (and UK equivalent) may be required. Legal
+   advice needed on the controller's domicile and the scope of EEA/UK user processing.
 
-5. **Assess ANPD obligations (Brazil / LGPD).** If the service processes data of Brazilian residents, evaluate whether notification to the ANPD (Brazil's data protection authority) or appointment of a Data Protection Officer under LGPD is required.
+5. **Assess ANPD obligations (Brazil / LGPD).** If the service processes data of Brazilian residents, evaluate whether
+   notification to the ANPD (Brazil's data protection authority) or appointment of a Data Protection Officer under LGPD
+   is required.
 
-6. **Sign sub-processor DPAs.** A signed Data Processing Agreement must be in place with each sub-processor listed in `SUBPROCESSORS.md` (Convex, Stripe, Vercel, Railway, Cloudflare, Resend) before launch. DPA links are currently `[bracketed]`.
+6. **Sign sub-processor DPAs.** A signed Data Processing Agreement must be in place with each sub-processor listed in
+   `SUBPROCESSORS.md` (Convex, Stripe, Vercel, Railway, Cloudflare, Resend) before launch. DPA links are currently
+   `[bracketed]`.
 
-7. **Confirm sub-processor log-retention periods.** Review each sub-processor's DPA or documentation to fill in the `[bracketed]` retention periods for platform/server logs in `RETENTION-POLICY.md`.
+7. **Confirm sub-processor log-retention periods.** Review each sub-processor's DPA or documentation to fill in the
+   `[bracketed]` retention periods for platform/server logs in `RETENTION-POLICY.md`.
 
-8. **LinkedIn ToS and automated-scraping risk (Apify dormant).** If the Apify LinkedIn post-sync or profile-scrape integrations are ever enabled, obtain legal advice on LinkedIn's User Agreement provisions on automated data access before enabling. See `DATA-INVENTORY.md` §7 (Known Gap) and §6 (Dormant Integrations HARD GATE). Do not enable these integrations without legal sign-off and completion of all HARD GATE steps.
+8. **Penetration testing and organisational security measures.** Commission a penetration test of the production
+   environment. Document organisational security measures (production access controls, secrets management procedures,
+   incident response beyond the breach runbook).
 
-9. **Penetration testing and organisational security measures.** Commission a penetration test of the production environment. Document organisational security measures (production access controls, secrets management procedures, incident response beyond the breach runbook).
-
-10. **Annual review cadence.** Schedule an annual review of this gap assessment, the ROPA, and the retention schedule. Assign ownership.
+9. **Annual review cadence.** Schedule an annual review of this gap assessment, the ROPA, and the retention schedule.
+   Assign ownership.
 
 ---
 
-> **Human action required:** Items 1–10 above. This assessment is a point-in-time snapshot as of the date above and must be updated whenever the system, sub-processors, or applicable law changes.
+> **Human action required:** Items 1–9 above. This assessment is a point-in-time snapshot as of the date above and must
+> be updated whenever the system, sub-processors, or applicable law changes.

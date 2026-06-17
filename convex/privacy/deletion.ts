@@ -38,6 +38,13 @@ const OWNED: Array<{ table: string; index: string; field: string }> = [
   { table: 'consentRecords', index: 'by_user', field: 'userId' }
 ]
 
+// Tables with user references that are ANONYMIZED rather than deleted (userId cleared to undefined).
+// The cascade loop clears a single field to undefined via { [field]: undefined }. Tables requiring
+// multi-field clearing or value replacement would need this structure evolved.
+const ANONYMIZED: Array<{ table: string; index: string; field: string }> = [
+  { table: 'feedback', index: 'by_user', field: 'userId' }
+]
+
 export async function cascadeDeleteUser(db: CascadeDb, storage: CascadeStorage, userId: string): Promise<void> {
   // 1. Delete export jobs + their stored files first (needs storage cleanup).
   const exports = [
@@ -60,6 +67,17 @@ export async function cascadeDeleteUser(db: CascadeDb, storage: CascadeStorage, 
         .collect())
     ]
     for (const r of rows) await db.delete(r._id)
+  }
+
+  // 2b. Anonymize feedback rows (clear userId but retain content).
+  for (const { table, index, field } of ANONYMIZED) {
+    const rows = [
+      ...(await db
+        .query(table)
+        .withIndex(index, (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq(field, userId))
+        .collect())
+    ]
+    for (const r of rows) await db.patch(r._id, { [field]: undefined })
   }
 
   // 3. Pseudonymize audit rows that target this user (keep action/metadata for accountability).

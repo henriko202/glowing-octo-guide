@@ -14,35 +14,36 @@
 
 1. [Controller Identity](#1-controller-identity)
 2. [Processing Activities](#2-processing-activities)
-   - [Activity 1: Authentication & Account](#activity-1-authentication--account)
-   - [Activity 2: Profile Attributes](#activity-2-profile-attributes)
-   - [Activity 3: Posts (User-Submitted Content)](#activity-3-posts-user-submitted-content)
-   - [Activity 4: Engagement Actions](#activity-4-engagement-actions)
-   - [Activity 5: LinkedIn OAuth Tokens](#activity-5-linkedin-oauth-tokens)
-   - [Activity 6: Billing & Subscription](#activity-6-billing--subscription)
-   - [Activity 7: Consent Records](#activity-7-consent-records)
-   - [Activity 8: Audit Log](#activity-8-audit-log)
-   - [Activity 9: Data-Export Jobs](#activity-9-data-export-jobs)
-   - [Activity 10: Contact & Notification Email](#activity-10-contact--notification-email)
-   - [Activity 11: Security & Operational Data](#activity-11-security--operational-data)
+    - [Activity 1: Authentication & Account](#activity-1-authentication--account)
+    - [Activity 2: Profile Attributes](#activity-2-profile-attributes)
+    - [Activity 3: Posts (User-Submitted Content)](#activity-3-posts-user-submitted-content)
+    - [Activity 4: Engagement Actions](#activity-4-engagement-actions)
+    - [Activity 5: LinkedIn OAuth Tokens](#activity-5-linkedin-oauth-tokens)
+    - [Activity 6: Billing & Subscription](#activity-6-billing--subscription)
+    - [Activity 7: Consent Records](#activity-7-consent-records)
+    - [Activity 8: Audit Log](#activity-8-audit-log)
+    - [Activity 9: Data-Export Jobs](#activity-9-data-export-jobs)
+    - [Activity 10: Contact & Notification Email](#activity-10-contact--notification-email)
+    - [Activity 11: Security & Operational Data](#activity-11-security--operational-data)
+    - [Activity 12: In-App Feedback](#activity-12-in-app-feedback)
 3. [Legitimate-Interest Assessment (LIA)](#3-legitimate-interest-assessment-lia)
 4. [International Transfers](#4-international-transfers)
 5. [Data-Subject Rights](#5-data-subject-rights)
-6. [Dormant Integrations](#6-dormant-integrations)
-7. [Known Gap](#7-known-gap)
 
 ---
 
 ## 1. Controller Identity
 
 | Field                             | Value                   |
-| --------------------------------- | ----------------------- |
+|-----------------------------------|-------------------------|
 | **Legal entity name**             | [LEGAL_ENTITY_NAME]     |
 | **Registered address**            | [BUSINESS_ADDRESS]      |
 | **Primary privacy contact**       | [PRIVACY_CONTACT_EMAIL] |
 | **DPO / EU or UK representative** | [DPO_OR_REP_CONTACT]    |
 
-> **Human action required:** Fill in the bracketed fields above before publishing. Assess whether a formal DPO appointment or an EU/UK representative (GDPR Art. 27) is legally required given the entity's domicile and the scope of processing.
+> **Human action required:** Fill in the bracketed fields above before publishing. Assess whether a formal DPO
+> appointment or an EU/UK representative (GDPR Art. 27) is legally required given the entity's domicile and the scope of
+> processing.
 
 ---
 
@@ -55,7 +56,7 @@
 **Purpose:** Create and maintain user accounts; authenticate users to provide and secure the service.
 
 | Attribute                       | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | LinkedIn member ID (`linkedinId`), full name (`name`), professional headline (`headline`), profile picture URL (`profilePictureUrl`), email address (`email`), email-verified flag (`emailVerified`); also: `tier`, `subscriptionStatus`, `trialEndsAt`, `linkedinPublicIdentifier`, `isAdmin` (admin-only), `isBanned`/`bannedAt`/`bannedBy`/`bannedReason` (moderation state), `acknowledgedPolicyVersion`, `lastLoginAt`, `deletionRequestedAt`/`deletionScheduledAt`/`deletionReason`, `createdAt` |
 | **Data subjects**               | Registered users                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **Source**                      | LinkedIn OIDC token exchange (at login/registration); user-set fields updated via Settings                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -69,30 +70,32 @@
 
 ### Activity 2: Profile Attributes
 
-**Purpose:** Enable subscription-tier feed targeting (filter by industry and country); seed UI locale/internationalisation.
+**Purpose:** Enable subscription-tier feed targeting (filter by industry and country); seed UI
+locale/internationalisation.
 
-| Attribute                       | Detail                                                                                                                                                                                                                                                                                                   |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Data categories**             | Professional industry (`industry`), geographic country code (`country`); additionally `location` (human-readable location string) and `primaryLocale` (language code) — the latter two are populated **only** by the Apify profile scrape, which is **disabled at launch** (see §6 Dormant Integrations) |
-| **Data subjects**               | Registered users                                                                                                                                                                                                                                                                                         |
-| **Source**                      | LinkedIn OIDC token exchange (industry, country); Apify profile scrape (location, primaryLocale) — **DORMANT**                                                                                                                                                                                           |
-| **Legal basis**                 | **Legitimate interest** (Art. 6(1)(f)) for feed targeting (see §3 LIA); **performance of a contract** (Art. 6(1)(b)) for locale/UX personalisation                                                                                                                                                       |
-| **Recipients / sub-processors** | Convex, Inc. (hosting). **Apify** would become a recipient only if the profile-scrape integration is enabled — it is currently disabled (see §6)                                                                                                                                                         |
-| **Retention**                   | Life of account; deleted in the account-deletion cascade                                                                                                                                                                                                                                                 |
-| **International transfers**     | United States — Convex, Inc. (SCCs)                                                                                                                                                                                                                                                                      |
-| **Security measures**           | Same as Activity 1; `location`/`primaryLocale` are read-only fields for display only                                                                                                                                                                                                                     |
+| Attribute                       | Detail                                                                                                                                                                |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Data categories**             | Professional industry (`industry`), geographic country code (`country`); additionally `location` (human-readable location string) and `primaryLocale` (language code) |
+| **Data subjects**               | Registered users                                                                                                                                                      |
+| **Source**                      | user-set fields updated via Settings                                                                                                                                  |
+| **Legal basis**                 | **Legitimate interest** (Art. 6(1)(f)) for feed targeting (see §3 LIA); **performance of a contract** (Art. 6(1)(b)) for locale/UX personalisation                    |
+| **Recipients / sub-processors** | Convex, Inc. (backend / database hosting)                                                                                                                             |
+| **Retention**                   | Life of account; deleted in the account-deletion cascade                                                                                                              |
+| **International transfers**     | United States — Convex, Inc. (SCCs)                                                                                                                                   |
+| **Security measures**           | Same as Activity 1; `location`/`primaryLocale` are read-only fields for display only                                                                                  |
 
 ---
 
 ### Activity 3: Posts (User-Submitted Content)
 
-**Purpose:** Populate the shared real-time engagement feed so other subscribers can comment and react on posts, increasing their LinkedIn Social Selling Index (SSI).
+**Purpose:** Populate the shared real-time engagement feed so other subscribers can comment and react on posts,
+increasing their LinkedIn Social Selling Index (SSI).
 
 | Attribute                       | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | Post text content (`content`), media attachment URLs (`mediaUrls`), LinkedIn post URN (`linkedinPostUrn`), original post URL (`sourceUrl`), publication timestamp (`publishedAt`), like and comment counts (`likeCount`, `commentCount`), author reference (`authorId`), feed-visibility settings (`visibilityIndustries`, `visibilityCountries`), featured flag (`isFeatured`, `featuredAt`), hidden flag (`hidden`), author tier rank at submission (`authorTierRank`), interaction-limit flag (`interactionLimitReached`). Also: queued posts in `postQueue` carry the same content fields plus `queuedAt` |
 | **Data subjects**               | The submitting user (author). Post content may incidentally reference third parties who published the content on LinkedIn (see LIA in §3)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **Source**                      | **Manual user submission only** — the user pastes or provides a LinkedIn post URL/content via the in-app form. (Automated Apify post sync is **disabled at launch**; see §6)                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Source**                      | **Manual user submission only** — the user pastes or provides a LinkedIn post URL/content via the in-app form.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Legal basis**                 | **Legitimate interest** (Art. 6(1)(f)) — network-effect feed, assessed in §3 LIA; the submission is also a **voluntary user action**                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **Recipients / sub-processors** | Convex, Inc. (hosting). Other authenticated users of the platform can view submitted posts in the feed (this is the core product purpose)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **Retention**                   | Life of account; deleted in the account-deletion cascade. `postQueue` rows are promoted to `posts` or purged with the author                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -103,10 +106,11 @@
 
 ### Activity 4: Engagement Actions
 
-**Purpose:** Allow users to comment on and react to other users' posts directly via the LinkedIn API, using the acting user's own credentials, in order to raise their LinkedIn SSI score.
+**Purpose:** Allow users to comment on and react to other users' posts directly via the LinkedIn API, using the acting
+user's own credentials, in order to raise their LinkedIn SSI score.
 
 | Attribute                       | Detail                                                                                                                                                                                                                                                                                         |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | The user's comment text (transmitted live to LinkedIn; **not** stored by Link Into The SSI beyond the increment of `commentCount`/`likeCount` on the target post). Reaction type (currently always `LIKE`). The **acting user's `linkedinId`** is used to construct the LinkedIn API actor URN |
 | **Data subjects**               | The acting user (who comments/reacts); the post author (whose counts are updated)                                                                                                                                                                                                              |
 | **Source**                      | User action within the app                                                                                                                                                                                                                                                                     |
@@ -120,10 +124,11 @@
 
 ### Activity 5: LinkedIn OAuth Tokens
 
-**Purpose:** Authenticate Link Into The SSI to the LinkedIn API on the user's behalf, enabling post reading and publishing engagement actions.
+**Purpose:** Authenticate Link Into The SSI to the LinkedIn API on the user's behalf, enabling post reading and
+publishing engagement actions.
 
 | Attribute                       | Detail                                                                                                                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | LinkedIn OAuth access token (`linkedinAccessToken`), refresh token (`linkedinRefreshToken`), token expiry timestamp (`tokenExpiresAt`)                                                           |
 | **Data subjects**               | Registered users                                                                                                                                                                                 |
 | **Source**                      | LinkedIn OAuth 2.0 authorization flow                                                                                                                                                            |
@@ -137,10 +142,11 @@
 
 ### Activity 6: Billing & Subscription
 
-**Purpose:** Process subscription payments and fulfil contractual billing obligations; satisfy tax and accounting legal obligations.
+**Purpose:** Process subscription payments and fulfil contractual billing obligations; satisfy tax and accounting legal
+obligations.
 
 | Attribute                       | Detail                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | Stripe customer identifier (`stripeCustomerId`); subscription records (`subscriptions` table: `stripeSubscriptionId`, `tier`, `status`, `currentPeriodEnd`); subscription-status mirror fields on the user record (`subscriptionStatus`, `tier`, `trialEndsAt`). **Card or bank data is never stored by Link Into The SSI** — it is held exclusively by Stripe |
 | **Data subjects**               | Paying subscribers                                                                                                                                                                                                                                                                                                                                             |
 | **Source**                      | Stripe webhook events; Stripe API responses                                                                                                                                                                                                                                                                                                                    |
@@ -154,10 +160,11 @@
 
 ### Activity 7: Consent Records
 
-**Purpose:** Record and demonstrate that user consent (where relied upon) was freely given, specific, informed, and unambiguous; fulfil the accountability obligation under GDPR Art. 7(1).
+**Purpose:** Record and demonstrate that user consent (where relied upon) was freely given, specific, informed, and
+unambiguous; fulfil the accountability obligation under GDPR Art. 7(1).
 
 | Attribute                       | Detail                                                                                                                                                                                                                |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | `consentRecords` table: user reference (`userId`), consent purpose (`purpose`: `marketing` or `analytics`), granted/withdrawn flag (`granted`), policy version at the time (`policyVersion`), timestamp (`createdAt`) |
 | **Data subjects**               | Registered users                                                                                                                                                                                                      |
 | **Source**                      | User action via Settings → Privacy & Data consent toggles                                                                                                                                                             |
@@ -171,10 +178,11 @@
 
 ### Activity 8: Audit Log
 
-**Purpose:** Maintain an accountability record of DSR actions, consent changes, and admin access to personal data, as required by GDPR Art. 5(2) (accountability principle).
+**Purpose:** Maintain an accountability record of DSR actions, consent changes, and admin access to personal data, as
+required by GDPR Art. 5(2) (accountability principle).
 
 | Attribute                       | Detail                                                                                                                                                                                                                                                                                    |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | `auditLogs` table: actor type (`actor`: user / admin / system), actor user reference (`actorId`), action description (`action`), target user reference (`targetUserId`), optional metadata string (`metadata`), timestamp (`createdAt`)                                                   |
 | **Data subjects**               | Registered users (as actors or targets of logged actions)                                                                                                                                                                                                                                 |
 | **Source**                      | System-generated on DSR requests, consent changes, admin operations, and account lifecycle events                                                                                                                                                                                         |
@@ -188,10 +196,11 @@
 
 ### Activity 9: Data-Export Jobs
 
-**Purpose:** Fulfil the data subject's right of access (GDPR Art. 15) and right to data portability (Art. 20) through an in-app export mechanism.
+**Purpose:** Fulfil the data subject's right of access (GDPR Art. 15) and right to data portability (Art. 20) through an
+in-app export mechanism.
 
 | Attribute                       | Detail                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | `dataExportRequests` table: user reference (`userId`), job status (`status`: pending / ready / failed / expired), request timestamp (`requestedAt`), Convex file-storage reference (`fileStorageId`), expiry timestamp (`expiresAt`). The **export file** (stored in Convex file storage) contains a copy of the user's personal data |
 | **Data subjects**               | Registered users requesting a data export                                                                                                                                                                                                                                                                                             |
 | **Source**                      | User-initiated via Settings → Privacy & Data                                                                                                                                                                                                                                                                                          |
@@ -205,10 +214,11 @@
 
 ### Activity 10: Contact & Notification Email
 
-**Purpose:** Send transactional notifications required by legal or contractual obligations: DSR confirmation emails, data-export ready notifications, and breach notifications to affected users.
+**Purpose:** Send transactional notifications required by legal or contractual obligations: DSR confirmation emails,
+data-export ready notifications, and breach notifications to affected users.
 
 | Attribute                       | Detail                                                                                                                                                                                                                        |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | User email address (`email`, from LinkedIn OIDC); user's name (`name`); the notification content (DSR confirmation, export link, or breach notice)                                                                            |
 | **Data subjects**               | Registered users                                                                                                                                                                                                              |
 | **Source**                      | Email address sourced from LinkedIn OIDC at registration; notification triggered by DSR lifecycle events or a declared security incident                                                                                      |
@@ -222,10 +232,11 @@
 
 ### Activity 11: Security & Operational Data
 
-**Purpose:** Provide secure stateful authentication sessions; prevent CSRF attacks during the OAuth flow; detect and prevent abuse, bot activity, and platform misuse.
+**Purpose:** Provide secure stateful authentication sessions; prevent CSRF attacks during the OAuth flow; detect and
+prevent abuse, bot activity, and platform misuse.
 
 | Attribute                       | Detail                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Data categories**             | `sessions` table: session token (hashed, `token`), user reference (`userId`), expiry timestamp (`expiresAt`). `oauthStates` table: ephemeral OAuth state nonce (`state`), expiry timestamp (`expiresAt`). `rateLimits` table: user reference (`userId`), action type (`action`), rate-window start (`windowStart`), action count (`count`)                                       |
 | **Data subjects**               | Registered users (sessions, rate limits); unauthenticated visitors initiating the LinkedIn OAuth flow (oauthStates)                                                                                                                                                                                                                                                              |
 | **Source**                      | System-generated on authentication events and API calls                                                                                                                                                                                                                                                                                                                          |
@@ -237,13 +248,35 @@
 
 ---
 
+### Activity 12: In-App Feedback
+
+**Purpose:** Collect voluntary product feedback from users (feature requests, bug reports, praise, questions, etc.) and
+enable admins to respond by email, supporting product improvement and customer support.
+
+| Attribute                       | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Data categories**             | `feedback` table: submitter reference (`userId?`), feedback category (`category`), free-text feedback message (`message`), status (`status`: `new` / `responded` / `archived`), creation timestamp (`createdAt`). Legacy single-reply fields (`responseText`, `respondedAt`, `respondedBy`) are **deprecated** (kept optional; no longer written). `feedbackResponses` table: parent feedback reference (`feedbackId`), responding admin (`responderId`), reply text (`text`), reply timestamp (`createdAt`) — one row per admin reply; **included in the DSR export**                                                                                                                                                                         |
+| **Data subjects**               | Registered users who submit feedback. **Residual risk:** the free-text `message` field could rarely contain self-identifying content (e.g. the user's own name, contact details, or references to third parties) that persists even after the submitter link is removed on account deletion — see **Anonymization note** in Retention below                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Source**                      | Voluntary user action via the floating **Feedback** button (bottom-right of every authenticated page)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Legal basis**                 | **Legitimate interest** (Art. 6(1)(f)) — collecting and acting on product feedback to improve the service is a proportionate interest; submission is entirely voluntary and limited to authenticated users                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Recipients / sub-processors** | Convex, Inc. (hosting); **Resend, Inc.** (email delivery — only when an admin responds and the submitter has an email address on file)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Retention**                   | **Anonymized, not deleted, on account erasure**: `cascadeDeleteUser` clears `userId` (the submitter reference) from all `feedback` rows; the `message` and other fields are retained so product-support context is preserved. `feedbackResponses` rows (admin replies) are also retained attached to the anonymized feedback — they are not deleted on account erasure. Both `feedback` and `feedbackResponses` are included in the DSR export. This is consistent with the audit-log pseudonymization approach. **Residual risk:** free-text content could rarely contain self-identifying information even after the link is cleared — legal review should assess whether a full erasure obligation applies to such edge cases under Art. 17 |
+| **International transfers**     | United States — Convex, Inc. (SCCs); Resend, Inc. (SCCs, when reply emails are sent)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Security measures**           | Submission authenticated via session token; throttled to 10/hour per user (admins exempt); message length capped at 4000 characters; feedback list readable only by admins (`assertAdmin`); email reply sent only when submitter has a verified email on file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+
+---
+
 ## 3. Legitimate-Interest Assessment (LIA)
 
-This assessment applies to the processing in **Activity 3 (Posts)** and, to a lesser extent, **Activity 2 (Profile Attributes for feed targeting)** and **Activity 4 (Engagement)**, all of which rely on Art. 6(1)(f) legitimate interest as a lawful basis.
+This assessment applies to the processing in **Activity 3 (Posts)** and, to a lesser extent, **Activity 2 (Profile
+Attributes for feed targeting)** and **Activity 4 (Engagement)**, all of which rely on Art. 6(1)(f) legitimate interest
+as a lawful basis.
 
 ### Purpose test
 
-**Purpose:** Operate a shared engagement feed where subscribers submit their LinkedIn posts and engage with other subscribers' posts, with the specific aim of improving each participant's LinkedIn Social Selling Index (SSI). This is the core commercial purpose of the service and the primary value exchange the user contracts for.
+**Purpose:** Operate a shared engagement feed where subscribers submit their LinkedIn posts and engage with other
+subscribers' posts, with the specific aim of improving each participant's LinkedIn Social Selling Index (SSI). This is
+the core commercial purpose of the service and the primary value exchange the user contracts for.
 
 The purpose is **specific, explicit, and legitimate.** It directly delivers the product the user signed up for.
 
@@ -252,34 +285,40 @@ The purpose is **specific, explicit, and legitimate.** It directly delivers the 
 The processing is **necessary** to achieve the purpose:
 
 - Post content (`content`, `mediaUrls`, `linkedinPostUrn`, `publishedAt`) must be stored to render the feed.
-- Author identity (`authorId`, and by extension `name`, `headline`, `profilePictureUrl` from Activity 1) must be associated with the post to allow other users to make informed engagement decisions.
-- Industry and country (`industry`, `country` from Activity 2) are needed to implement feed targeting for Growth/Pro/Contact tiers — without them, tier-based filtering cannot function.
+- Author identity (`authorId`, and by extension `name`, `headline`, `profilePictureUrl` from Activity 1) must be
+  associated with the post to allow other users to make informed engagement decisions.
+- Industry and country (`industry`, `country` from Activity 2) are needed to implement feed targeting for
+  Growth/Pro/Contact tiers — without them, tier-based filtering cannot function.
 - Engagement counts (`likeCount`, `commentCount`) must be tracked to enforce plan limits.
 
-There is no less-intrusive way to deliver the feed product. Data is limited to what the user explicitly chose to publish on LinkedIn.
+There is no less-intrusive way to deliver the feed product. Data is limited to what the user explicitly chose to publish
+on LinkedIn.
 
 ### Balancing test
 
 | Factor                        | Assessment                                                                                                                                                                                                                                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Nature of the data**        | Professional content the user **voluntarily published on LinkedIn** — not private or sensitive data. Profile attributes (industry, country) are professional/geographic, not special-category data                                                                                                |
 | **Reasonable expectations**   | A user who signs in with LinkedIn and submits posts to a LinkedIn engagement platform reasonably expects those posts to be visible to other platform members. This is the explicitly described purpose of the service                                                                             |
 | **Impact on data subjects**   | Low. The user controls what they submit. Posts can be hidden or deleted by the user at any time. Opt-out is simple: stop submitting posts, or delete the account                                                                                                                                  |
 | **Third-party data in posts** | Post content published by the user on LinkedIn may incidentally reference or mention third parties. Those third parties chose to engage on LinkedIn (a public professional network). The controller does not independently enrich or profile those third parties; the content is reproduced as-is |
 | **Safeguards**                | Visibility controls (Growth/Pro tiers can restrict by industry/country); `hidden` flag for admin moderation; account deletion cascade removes all posts; 30-day soft-delete grace period; interaction limits prevent mass-engagement abuse                                                        |
 
-**Conclusion:** Legitimate interest is not overridden by the interests or rights and freedoms of the data subjects. The processing is proportionate, expected, and adequately safeguarded.
+**Conclusion:** Legitimate interest is not overridden by the interests or rights and freedoms of the data subjects. The
+processing is proportionate, expected, and adequately safeguarded.
 
-**Opt-out mechanism:** Users can object to this processing at any time by stopping post submissions, hiding existing posts, or deleting their account (Settings → Privacy & Data → Delete Account).
+**Opt-out mechanism:** Users can object to this processing at any time by stopping post submissions, hiding existing
+posts, or deleting their account (Settings → Privacy & Data → Delete Account).
 
 ---
 
 ## 4. International Transfers
 
-All personal data is processed by sub-processors located in the **United States**. The following transfer mechanisms apply:
+All personal data is processed by sub-processors located in the **United States**. The following transfer mechanisms
+apply:
 
 | Sub-processor        | Role                                      | Transfer mechanism                               |
-| -------------------- | ----------------------------------------- | ------------------------------------------------ |
+|----------------------|-------------------------------------------|--------------------------------------------------|
 | **Convex, Inc.**     | Backend / database / file-storage hosting | Standard Contractual Clauses (SCCs)              |
 | **Stripe, Inc.**     | Payment processing                        | Standard Contractual Clauses (SCCs) + Stripe DPA |
 | **Vercel, Inc.**     | Landing site hosting                      | Standard Contractual Clauses (SCCs)              |
@@ -289,16 +328,18 @@ All personal data is processed by sub-processors located in the **United States*
 
 See `docs/compliance/SUBPROCESSORS.md` for the full sub-processor list including DPA links.
 
-> **Human action required:** Confirm that each sub-processor has executed an appropriate SCC-backed DPA before launch. Assess whether a UK International Data Transfer Agreement (IDTA) or addendum is required for UK-resident users.
+> **Human action required:** Confirm that each sub-processor has executed an appropriate SCC-backed DPA before launch.
+> Assess whether a UK International Data Transfer Agreement (IDTA) or addendum is required for UK-resident users.
 
 ---
 
 ## 5. Data-Subject Rights
 
-The following rights are available to all data subjects. Self-service mechanisms are provided in **Settings → Privacy & Data** in the authenticated app.
+The following rights are available to all data subjects. Self-service mechanisms are provided in **Settings → Privacy &
+Data** in the authenticated app.
 
 | Right                            | How to exercise                                                                                                                                                                                                |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|----------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Access (Art. 15)**             | Request a data export in Settings → Privacy & Data → Export My Data. The export is generated and available for download within the app (7-day link)                                                            |
 | **Portability (Art. 20)**        | Same as access — the export is provided in a machine-readable format                                                                                                                                           |
 | **Erasure (Art. 17)**            | Settings → Privacy & Data → Delete Account. A 30-day grace period applies; hard deletion is performed by the `processAccountDeletions` cron. Stripe billing records required by tax law are retained by Stripe |
@@ -308,70 +349,29 @@ The following rights are available to all data subjects. Self-service mechanisms
 | **Withdraw consent (Art. 7(3))** | Settings → Privacy & Data → Consent toggles (marketing, analytics). Withdrawal does not affect the lawfulness of processing before withdrawal                                                                  |
 | **Lodge a complaint**            | Any data subject may lodge a complaint with the competent supervisory authority in their country of residence                                                                                                  |
 
-All self-service actions are recorded in the audit log (Activity 8). For requests that cannot be fulfilled self-service, contact [PRIVACY_CONTACT_EMAIL].
+All self-service actions are recorded in the audit log (Activity 8). For requests that cannot be fulfilled self-service,
+contact [PRIVACY_CONTACT_EMAIL].
 
 ---
 
-## 6. Dormant Integrations
-
-### Apify — LinkedIn Post Sync & Profile Scrape
-
-**Status: DISABLED IN PRODUCTION**
-
-The codebase contains two Apify-powered integrations:
-
-- **LinkedIn post sync** (`convex/jobs/syncPostsApify.ts`) — would automatically synchronise a user's recent LinkedIn posts via the Apify REST API, without requiring manual submission.
-- **LinkedIn profile scrape** (`convex/jobs/scrapeProfileApify.ts`) — would enrich `location` and `primaryLocale` fields on the user record by scraping the user's LinkedIn public profile.
-
-Both integrations are **completely disabled at launch** through multiple independent controls:
-
-1. **Kill-switch flags in `appSettings`:** `apifyEnabled` defaults to `false` when absent (treated as disabled); `apifyProfileScrapeEnabled` defaults to `false` when absent. Both flags would need to be explicitly set to `true` in the database to enable either path.
-2. **Environment variables unset:** The `APIFY_*` environment variables required to call the Apify API are not configured in the production environment.
-3. **No active cron triggers:** The Apify-powered paths in the cron jobs are gated behind the kill-switch checks and will not execute while the flags are off.
-
-Because both integrations are disabled, **Apify is not a current sub-processor** and is not listed in `docs/compliance/SUBPROCESSORS.md`.
-
-**HARD GATE:** If either Apify integration is ever enabled, **all of the following must be updated in the same code change, before enabling:**
-
-1. This ROPA (DATA-INVENTORY.md) — add Apify as a sub-processor in Activities 2 and 3; update data sources, retention, and transfer sections.
-2. The privacy policy (`landing/app/privacy/page.tsx`) — disclose automated profile enrichment and post synchronisation.
-3. `docs/compliance/SUBPROCESSORS.md` — add Apify with DPA details.
-4. A signed **Data Processing Agreement** with Apify must be in place.
-5. A revised **Legitimate-Interest Assessment** (or consent collection) for automated profile scraping must be completed and approved.
-
----
-
-## 7. Known Gap
-
-### Automated scraping and LinkedIn's User Agreement
-
-If either Apify integration is enabled in the future, the automated fetching of data from LinkedIn (posts and/or public profile pages) may conflict with **LinkedIn's User Agreement**, which restricts automated data collection ("scraping") without express written permission from LinkedIn.
-
-This is a **platform/contract risk** and is **separate from data-protection law** — GDPR/LGPD compliance of the data processing itself does not resolve potential breach of LinkedIn's terms of service.
-
-> **Human action required:** Before enabling any Apify integration, obtain legal advice on (a) LinkedIn's current User Agreement provisions on automated data access, and (b) whether a LinkedIn Partner API arrangement or formal data-access agreement is required. Do not enable the Apify integrations without this assessment.
-
----
-
-_This document covers all personal-data fields present in `convex/schema.ts` as of the date above. A field-to-activity mapping is maintained below for reference._
+_This document covers all personal-data fields present in `convex/schema.ts` as of the date above. A field-to-activity
+mapping is maintained below for reference._
 
 ### Field-to-Activity Mapping (schema self-check)
 
 | Table                | Field(s)                                                                                                                                                                                                                                         | Activity                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|
 | `users`              | `linkedinId`, `name`, `headline`, `profilePictureUrl`, `email`, `emailVerified`                                                                                                                                                                  | Activity 1                                                         |
 | `users`              | `tier`, `subscriptionStatus`, `trialEndsAt`, `linkedinPublicIdentifier`                                                                                                                                                                          | Activity 1                                                         |
 | `users`              | `isAdmin`, `isBanned`, `bannedAt`, `bannedBy`, `bannedReason`                                                                                                                                                                                    | Activity 1                                                         |
 | `users`              | `acknowledgedPolicyVersion`, `lastLoginAt`, `deletionRequestedAt`, `deletionScheduledAt`, `deletionReason`, `createdAt`                                                                                                                          | Activity 1                                                         |
 | `users`              | `industry`, `country`                                                                                                                                                                                                                            | Activity 2                                                         |
-| `users`              | `location`, `primaryLocale`                                                                                                                                                                                                                      | Activity 2 (dormant — see §6)                                      |
 | `users`              | `stripeCustomerId`                                                                                                                                                                                                                               | Activity 6                                                         |
 | `users`              | `linkedinAccessToken`, `linkedinRefreshToken`, `tokenExpiresAt`                                                                                                                                                                                  | Activity 5                                                         |
 | `posts`              | `linkedinPostUrn`, `content`, `mediaUrls`, `publishedAt`, `likeCount`, `commentCount`, `authorId`, `visibilityIndustries`, `visibilityCountries`, `isFeatured`, `featuredAt`, `hidden`, `authorTierRank`, `interactionLimitReached`, `sourceUrl` | Activity 3                                                         |
 | `postQueue`          | `linkedinPostUrn`, `content`, `mediaUrls`, `publishedAt`, `likeCount`, `commentCount`, `authorId`, `hidden`, `sourceUrl`, `queuedAt`                                                                                                             | Activity 3                                                         |
 | `subscriptions`      | `userId`, `stripeSubscriptionId`, `tier`, `status`, `currentPeriodEnd`                                                                                                                                                                           | Activity 6                                                         |
 | `featuredPostUsage`  | `userId`, `month`, `usedCount`                                                                                                                                                                                                                   | Activity 11                                                        |
-| `appSettings`        | `apifySyncEnabled`, `apifyEnabled`, `apifyProfileScrapeEnabled`, `lastApifySyncAt`, `lastApifySyncError`                                                                                                                                         | §6 Dormant (operational config, not personal data)                 |
 | `sessions`           | `token`, `userId`, `expiresAt`                                                                                                                                                                                                                   | Activity 11                                                        |
 | `rateLimits`         | `userId`, `action`, `windowStart`, `count`                                                                                                                                                                                                       | Activity 11                                                        |
 | `oauthStates`        | `state`, `expiresAt`                                                                                                                                                                                                                             | Activity 11                                                        |
@@ -379,3 +379,5 @@ _This document covers all personal-data fields present in `convex/schema.ts` as 
 | `consentRecords`     | `userId`, `purpose`, `granted`, `policyVersion`, `createdAt`                                                                                                                                                                                     | Activity 7                                                         |
 | `dataExportRequests` | `userId`, `status`, `requestedAt`, `fileStorageId`, `expiresAt`                                                                                                                                                                                  | Activity 9                                                         |
 | `auditLogs`          | `actor`, `actorId`, `action`, `targetUserId`, `metadata`, `createdAt`                                                                                                                                                                            | Activity 8                                                         |
+| `feedback`           | `userId`, `category`, `message`, `status`, `createdAt`; legacy deprecated: `responseText`, `respondedAt`, `respondedBy`                                                                                                                          | Activity 12                                                        |
+| `feedbackResponses`  | `feedbackId`, `responderId`, `text`, `createdAt`                                                                                                                                                                                                 | Activity 12 (included in DSR export)                               |

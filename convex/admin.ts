@@ -8,7 +8,7 @@ import { restampUserPostsTierRank } from './lib/feedRank'
 
 // SECURITY: Every admin endpoint MUST call this.
 // Accepts the user doc already resolved by requireAuth — never re-fetches from client ID.
-function assertAdmin(user: Doc<'users'>): void {
+export function assertAdmin(user: Doc<'users'>): void {
   if (!user.isAdmin) {
     throw new Error('Forbidden: admin access required')
   }

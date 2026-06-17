@@ -11,6 +11,7 @@ import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
 import AdminPage from './pages/AdminPage'
 import AppNav from './components/AppNav'
+import FeedbackButton from './components/FeedbackButton'
 import LoadingSpinner from './components/LoadingSpinner'
 import BannedScreen from './components/BannedScreen'
 import CancelDeletionScreen from './components/CancelDeletionScreen'
@@ -58,6 +59,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
     <>
       <AppNav />
       {children}
+      <FeedbackButton />
     </>
   )
 }

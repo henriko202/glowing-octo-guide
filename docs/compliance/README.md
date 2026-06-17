@@ -14,14 +14,14 @@ recording, data-subject rights endpoints, retention crons, audit logs) is descri
 
 ## Index
 
-| File                                       | Summary                                                                                                                                                                                   |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [DATA-INVENTORY.md](DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — catalogues every personal-data category, purpose, legal basis, retention period, and data-flow under GDPR Art. 30.                               |
-| [SUBPROCESSORS.md](SUBPROCESSORS.md)       | Sub-processor list — names every third-party organisation that processes personal data on behalf of the controller (Convex, Stripe, LinkedIn, Resend); includes the Apify hard-gate note. |
-| [RETENTION-POLICY.md](RETENTION-POLICY.md) | Data retention policy — states the retention window for each data category, the legal/business justification, and the automated enforcement mechanism in the codebase.                    |
-| [GAP-ASSESSMENT.md](GAP-ASSESSMENT.md)     | Compliance gap assessment — maps the post-Phase-3 implementation against GDPR, UK GDPR, LGPD, and CCPA/CPRA requirements; identifies residual gaps and required human actions.            |
-| [BREACH-RUNBOOK.md](BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook — step-by-step detection, triage, containment, authority notification (72-hour GDPR deadline), and post-incident review procedure.         |
-| [DPA-TEMPLATE.md](DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37) — must be signed with each sub-processor before they process personal data on the controller's behalf.                   |
+| File                                       | Summary                                                                                                                                                                           |
+|--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [DATA-INVENTORY.md](DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — catalogues every personal-data category, purpose, legal basis, retention period, and data-flow under GDPR Art. 30.                       |
+| [SUBPROCESSORS.md](SUBPROCESSORS.md)       | Sub-processor list — names every third-party organisation that processes personal data on behalf of the controller (Convex, Stripe, LinkedIn, Resend).                            |
+| [RETENTION-POLICY.md](RETENTION-POLICY.md) | Data retention policy — states the retention window for each data category, the legal/business justification, and the automated enforcement mechanism in the codebase.            |
+| [GAP-ASSESSMENT.md](GAP-ASSESSMENT.md)     | Compliance gap assessment — maps the post-Phase-3 implementation against GDPR, UK GDPR, LGPD, and CCPA/CPRA requirements; identifies residual gaps and required human actions.    |
+| [BREACH-RUNBOOK.md](BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook — step-by-step detection, triage, containment, authority notification (72-hour GDPR deadline), and post-incident review procedure. |
+| [DPA-TEMPLATE.md](DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37) — must be signed with each sub-processor before they process personal data on the controller's behalf.           |
 
 ---
 
@@ -38,8 +38,10 @@ the document has any legal effect:
 - `[LEGAL_ENTITY_NAME]` — the registered company or trading name that acts as data controller.
 - `[BUSINESS_ADDRESS]` — the controller's registered address (used in privacy notices and DPAs).
 - `[GOVERNING_LAW_JURISDICTION]` — the jurisdiction whose law governs the DPA and ToS (e.g. "England and Wales").
-- `[PRIVACY_CONTACT_EMAIL]` — the email address data subjects use to exercise their rights (currently `hello@linkintothessi.com` in the UI — confirm this is monitored and correct).
-- `[DPO_OR_REP_CONTACT]` — contact details of the Data Protection Officer (if appointed) or the EU/UK representative (if required — see item 5 below).
+- `[PRIVACY_CONTACT_EMAIL]` — the email address data subjects use to exercise their rights (currently
+  `hello@linkintothessi.com` in the UI — confirm this is monitored and correct).
+- `[DPO_OR_REP_CONTACT]` — contact details of the Data Protection Officer (if appointed) or the EU/UK representative (if
+  required — see item 5 below).
 
 These placeholders also appear in the `/privacy` and `/terms` landing pages.
 
@@ -47,7 +49,8 @@ These placeholders also appear in the `/privacy` and `/terms` landing pages.
 
 Have a qualified privacy lawyer review:
 
-- All six files in this folder (`DATA-INVENTORY.md`, `SUBPROCESSORS.md`, `RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`, `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`).
+- All six files in this folder (`DATA-INVENTORY.md`, `SUBPROCESSORS.md`, `RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`,
+  `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`).
 - The `/privacy` (GDPR/LGPD/US privacy notice) and `/terms` (Terms of Service) pages in `landing/`.
 - The `/cookies` cookie policy page.
 
@@ -60,8 +63,6 @@ Use `DPA-TEMPLATE.md` as the starting point, but note:
 - Convex, Stripe, Resend, and LinkedIn each have their own standard DPA. Accept / execute the
   vendor's DPA via their dashboard or legal portal (do **not** send them the template).
 - Keep a signed copy on file for each vendor.
-- Do **not** enable Apify in production until its DPA is signed and `SUBPROCESSORS.md` is updated
-  (see the Apify hard gate below).
 
 ### 4. Confirm the lawful-basis posture
 
@@ -82,7 +83,8 @@ confirm:
 - An **EU representative** (GDPR Art. 27) is required if the controller is not established in the EU
   but offers services to EU residents. An **UK representative** (UK GDPR Art. 27) has an equivalent
   requirement for the UK.
-- If either representative is required, appoint them and add their contact details to `[DPO_OR_REP_CONTACT]` in all relevant documents.
+- If either representative is required, appoint them and add their contact details to `[DPO_OR_REP_CONTACT]` in all
+  relevant documents.
 
 ### 6. Assess ANPD (Brazil) obligations
 
@@ -104,20 +106,6 @@ Whenever a new processing activity, data category, or third-party integration is
 
 The mapping in `docs/PLATFORM.md` §21 ("Maintaining This Document") includes a reminder to keep
 compliance docs in sync.
-
-### 8. Honor the Apify hard gate
-
-The LinkedIn post-sync and profile-scrape integrations (Apify) are **disabled at launch**. If they
-are ever enabled in production, all of the following must be completed **in the same change**:
-
-- Add Apify's disclosure and legal basis to `DATA-INVENTORY.md`.
-- Add Apify to `SUBPROCESSORS.md`.
-- Sign Apify's DPA and file it.
-- Add the Apify processing activity to the `/privacy` page.
-
-This requirement is also stated in `docs/PLATFORM.md` §13B and `DATA-INVENTORY.md` §6.
-
----
 
 ## Cross-references
 

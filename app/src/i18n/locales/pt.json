@@ -112,6 +112,29 @@
     "disable": "Desativar",
     "lastSync": "Última sincronização"
   },
+  "feedback": {
+    "button": "Feedback",
+    "title": "Envie seu feedback",
+    "categoryLabel": "Que tipo de feedback é este?",
+    "categories": {
+      "feature_request": "Sugestão de recurso",
+      "bug": "Erro",
+      "comment": "Comentário",
+      "criticism": "Crítica",
+      "praise": "Elogio",
+      "question": "Pergunta",
+      "suggestion": "Sugestão",
+      "other": "Outro"
+    },
+    "messageLabel": "Sua mensagem",
+    "messagePlaceholder": "Conte o que você está pensando…",
+    "submit": "Enviar feedback",
+    "submitting": "Enviando…",
+    "cancel": "Cancelar",
+    "close": "Fechar",
+    "thanks": "Obrigado! Recebemos seu feedback.",
+    "error": "Algo deu errado. Tente novamente."
+  },
   "privacy": {
     "title": "Privacidade e Dados",
     "consentPrompt": {

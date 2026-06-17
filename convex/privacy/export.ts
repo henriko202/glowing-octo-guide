@@ -22,6 +22,8 @@ export interface ExportInput {
   subscriptions: AnyDoc[]
   consents: AnyDoc[]
   audits: AnyDoc[]
+  feedback?: AnyDoc[]
+  feedbackResponses?: AnyDoc[]
   exportedAt?: number
 }
 
@@ -34,6 +36,8 @@ export function buildExportBundle(input: ExportInput) {
     posts: input.posts,
     subscriptions: input.subscriptions,
     consents: input.consents,
+    feedback: input.feedback ?? [],
+    feedbackResponses: input.feedbackResponses ?? [],
     // The user is entitled to data ABOUT them, not the internal admin trail — keep the
     // action + when, drop other actors' identifiers and internal fields.
     auditLog: input.audits.map(a => ({ action: a.action, createdAt: a.createdAt, metadata: a.metadata }))
@@ -61,7 +65,21 @@ export const gatherUserData = internalQuery({
       .query('auditLogs')
       .withIndex('by_target', q => q.eq('targetUserId', userId))
       .collect()
-    return { user, posts, subscriptions, consents, audits }
+    const feedback = await ctx.db
+      .query('feedback')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .collect()
+    // Gather all admin replies for each of the user's feedback items.
+    const feedbackResponseArrays = await Promise.all(
+      feedback.map(f =>
+        ctx.db
+          .query('feedbackResponses')
+          .withIndex('by_feedback', q => q.eq('feedbackId', f._id))
+          .collect()
+      )
+    )
+    const feedbackResponses = feedbackResponseArrays.flat()
+    return { user, posts, subscriptions, consents, audits, feedback, feedbackResponses }
   }
 })
 

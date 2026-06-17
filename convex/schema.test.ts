@@ -18,4 +18,12 @@ describe('schema', () => {
     expect(tables).toHaveProperty('dataExportRequests')
     expect(tables).toHaveProperty('auditLogs')
   })
+
+  it('defines the feedback table', () => {
+    expect(schema.tables).toHaveProperty('feedback')
+  })
+
+  it('defines the feedbackResponses table', () => {
+    expect(schema.tables).toHaveProperty('feedbackResponses')
+  })
 })

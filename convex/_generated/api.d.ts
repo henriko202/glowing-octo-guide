@@ -15,6 +15,8 @@ import type * as convex__generated_api from "../convex/_generated/api.js";
 import type * as convex__generated_server from "../convex/_generated/server.js";
 import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
+import type * as feedback_emails from "../feedback/emails.js";
+import type * as feedback_feedback from "../feedback/feedback.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
 import type * as jobs_processQueue from "../jobs/processQueue.js";
@@ -62,6 +64,8 @@ declare const fullApi: ApiFromModules<{
   "convex/_generated/server": typeof convex__generated_server;
   crons: typeof crons;
   feed: typeof feed;
+  "feedback/emails": typeof feedback_emails;
+  "feedback/feedback": typeof feedback_feedback;
   http: typeof http;
   interactions: typeof interactions;
   "jobs/processQueue": typeof jobs_processQueue;

@@ -3,9 +3,10 @@ import { type ReactNode, useEffect } from 'react'
 type Props = {
   onClose: () => void
   children: ReactNode
+  panelClassName?: string
 }
 
-export default function Modal({ onClose, children }: Props) {
+export default function Modal({ onClose, children, panelClassName = 'max-w-sm' }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -22,7 +23,7 @@ export default function Modal({ onClose, children }: Props) {
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl"
+        className={`w-full ${panelClassName} rounded-xl bg-white p-5 shadow-2xl`}
       >
         {children}
       </div>

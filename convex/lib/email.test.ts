@@ -49,4 +49,28 @@ describe('sendEmail', () => {
 
     await expect(sendEmail({ to: 'a@b.com', subject: 's', html: '<p>x</p>' })).rejects.toThrow('Failed to send email')
   })
+
+  it('forwards replyTo to Resend as reply_to when provided', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'key_123')
+    vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
+    const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>', replyTo: 'support@linkintothessi.com' })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.reply_to).toBe('support@linkintothessi.com')
+  })
+
+  it('omits reply_to when replyTo is not provided', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'key_123')
+    vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
+    const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>' })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect('reply_to' in body).toBe(false)
+  })
 })
