@@ -1,10 +1,10 @@
 // LinkedIn profile scrape via a dedicated Apify actor (APIFY_TASK_ID_PROFILE_SCRAPE).
 // Populates users.country (fill-when-empty), users.location + users.primaryLocale (refresh).
-import { internalActionGeneric as internalAction } from 'convex/server'
-import { v } from 'convex/values'
-import { internal } from '../_generated/api.js'
-import type { ActionCtx } from '../convexTypes.js'
-import { isApifyProfileScrapeEnabled, runApifyTask } from '../lib/apify.js' // Only the fields we read from the (much larger) profile-scraper payload.
+import {internalActionGeneric as internalAction} from 'convex/server'
+import {v} from 'convex/values'
+import {internal} from '../_generated/api.js'
+import type {ActionCtx} from '../convexTypes.js'
+import {isApifyProfileScrapeEnabled, runApifyTask} from '../lib/apify.js' // Only the fields we read from the (much larger) profile-scraper payload.
 
 // Only the fields we read from the (much larger) profile-scraper payload.
 interface ApifyProfileResult {
@@ -70,5 +70,40 @@ export const scrapeUserProfile = internalAction({
     }
 
     await actionCtx.runMutation(internal.users.applyScrapedProfile, { userId, ...parsed })
+  }
+})
+
+// ─── Fan-out: scrape every user that has a LinkedIn identifier ───────────────
+// Mirrors syncAllPostsViaApify. Honors the profile-scrape flag (the per-user action re-checks
+// it too). Records its own last-run + error on appSettings, parallel to the post-sync status.
+export const scrapeAllProfilesViaApify = internalAction({
+  args: {},
+  handler: async ctx => {
+    const actionCtx = ctx as unknown as ActionCtx
+
+    const settings = (await actionCtx.runQuery(internal.admin.getSettingsInternal, {})) as Record<
+      string,
+      unknown
+    > | null
+    if (!isApifyProfileScrapeEnabled(settings)) {
+      console.log('[Apify] Profile scrape disabled — skipping')
+      return
+    }
+
+    const users = (await actionCtx.runQuery(internal.users.getUsersWithLinkedin, {})) as Array<{ _id: string }>
+
+    const results = await Promise.allSettled(
+      users.map(u => actionCtx.runAction(internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: u._id }))
+    )
+
+    const failed = results.filter(r => r.status === 'rejected')
+    if (failed.length > 0) {
+      console.error(`[Apify] ${failed.length}/${users.length} profile scrapes failed`)
+    }
+
+    await actionCtx.runMutation(internal.admin.updateProfileScrapeStatus, {
+      lastProfileScrapeAt: Date.now(),
+      lastProfileScrapeError: failed.length > 0 ? `${failed.length} user(s) failed` : undefined
+    })
   }
 })

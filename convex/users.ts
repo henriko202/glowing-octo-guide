@@ -4,7 +4,7 @@ import { components, internal } from './_generated/api'
 import type { UserDoc } from './convexTypes'
 import { requireAuth, resolveSession } from './lib/auth'
 import { isValidCountry, isValidIndustry } from './lib/profileOptions'
-import { isApifyProfileScrapeEnabled, type ApifyFlags } from './lib/apify'
+import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
 import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
@@ -26,6 +26,18 @@ export const getActiveSubscribers = internalQuery({
       .query('users')
       .withIndex('by_subscription_status', q => q.eq('subscriptionStatus', 'active'))
       .collect()
+  }
+})
+
+// Internal: ids of users who have a LinkedIn public identifier, for the profile-scrape fan-out.
+// Profile data (country/location/locale) is useful for everyone with a profile — not just active
+// subscribers — so this intentionally differs from getActiveSubscribers. Bounded take(500):
+// no index on linkedinPublicIdentifier, so this scans + filters, matching listUsers' bounded-scan style.
+export const getUsersWithLinkedin = internalQuery({
+  args: {},
+  handler: async ctx => {
+    const users = await ctx.db.query('users').take(500)
+    return users.filter(u => !!u.linkedinPublicIdentifier).map(u => ({ _id: u._id }))
   }
 })
 

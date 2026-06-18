@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from '../convex'
 import LoadingSpinner from './LoadingSpinner'
 import RowActionsMenu, { type RowAction } from './RowActionsMenu'
@@ -9,6 +9,7 @@ import ChangeStatusModal from './ChangeStatusModal'
 import ContactLimitsModal from './ContactLimitsModal'
 import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { Flash, useFlash } from './useFlash'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
 
@@ -20,6 +21,7 @@ type UserRow = {
   subscriptionStatus: 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
   isBanned?: boolean
   createdAt: number
+  linkedinPublicIdentifier?: string
 }
 
 type TierFilter = Tier | 'none' | 'all'
@@ -51,15 +53,21 @@ const FILTER_LABELS: { value: TierFilter; label: string }[] = [
 type Props = {
   sessionToken: string | undefined
   isAdmin: boolean | undefined
+  // Whether the matching Apify feature (+ master) is on; gates the per-row sync actions.
+  postSyncOn: boolean
+  profileScrapeOn: boolean
 }
 
-export default function UsersTab({ sessionToken, isAdmin }: Props) {
+export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScrapeOn }: Props) {
   const users = useQuery(api.admin.listUsers, sessionToken && isAdmin ? { sessionToken } : 'skip') as
     | UserRow[]
     | undefined
 
   const banUser = useMutation(api.admin.banUser)
   const unbanUser = useMutation(api.admin.unbanUser)
+  const syncUserPosts = useMutation(api.admin.syncUserPosts)
+  const syncUserProfile = useMutation(api.admin.syncUserProfile)
+  const { flash, showFlash, clearFlash } = useFlash()
 
   const [filter, setFilter] = useState<TierFilter>('all')
   const [pendingId, setPendingId] = useState<Id<'users'> | null>(null)
@@ -102,6 +110,26 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
     }
   }
 
+  async function handleSyncPosts(user: UserRow) {
+    if (!sessionToken) return
+    try {
+      await syncUserPosts({ sessionToken, userId: user._id })
+      showFlash('success', `Post sync started for ${user.name}.`)
+    } catch (err) {
+      showFlash('error', err instanceof Error ? err.message : 'Could not start post sync.')
+    }
+  }
+
+  async function handleSyncProfile(user: UserRow) {
+    if (!sessionToken) return
+    try {
+      await syncUserProfile({ sessionToken, userId: user._id })
+      showFlash('success', `Profile sync started for ${user.name}.`)
+    } catch (err) {
+      showFlash('error', err instanceof Error ? err.message : 'Could not start profile sync.')
+    }
+  }
+
   function actionsFor(user: UserRow): RowAction[] {
     const items: RowAction[] = [
       { label: 'Change tier…', onClick: () => setTierTarget(user) },
@@ -111,6 +139,27 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
     if (user.tier === 'contact') {
       items.push({ label: 'Edit limits…', onClick: () => setLimitsTarget(user) })
     }
+
+    // Manual Apify triggers — disabled (with a reason) when the feature is off or the user has no
+    // LinkedIn URL on file. The server wrappers enforce the same two conditions.
+    const hasLinkedin = !!user.linkedinPublicIdentifier
+    items.push({
+      label: 'Sync posts',
+      disabled: !postSyncOn || !hasLinkedin,
+      title: !postSyncOn ? 'Enable post sync in Settings' : !hasLinkedin ? 'No LinkedIn URL on file' : undefined,
+      onClick: () => void handleSyncPosts(user)
+    })
+    items.push({
+      label: 'Sync profile',
+      disabled: !profileScrapeOn || !hasLinkedin,
+      title: !profileScrapeOn
+        ? 'Enable profile scrape in Settings'
+        : !hasLinkedin
+          ? 'No LinkedIn URL on file'
+          : undefined,
+      onClick: () => void handleSyncProfile(user)
+    })
+
     if (user.isBanned) {
       items.push({ label: 'Unban', onClick: () => setUnbanTarget(user) })
     } else {
@@ -121,6 +170,11 @@ export default function UsersTab({ sessionToken, isAdmin }: Props) {
 
   return (
     <div>
+      <Flash
+        flash={flash}
+        onDismiss={clearFlash}
+      />
+
       {/* Toolbar */}
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-1">

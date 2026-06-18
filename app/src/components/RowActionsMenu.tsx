@@ -4,6 +4,9 @@ export type RowAction = {
   label: string
   onClick: () => void
   danger?: boolean
+  // When set, the item is shown muted and inert; `title` explains why (tooltip).
+  disabled?: boolean
+  title?: string
 }
 
 type Props = {
@@ -51,12 +54,16 @@ export default function RowActionsMenu({ label, items }: Props) {
             <button
               key={item.label}
               type="button"
+              disabled={item.disabled}
+              title={item.title}
               onClick={() => {
                 setOpen(false)
                 item.onClick()
               }}
-              className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${
-                item.danger ? 'text-red-600' : 'text-slate-700'
+              className={`block w-full px-3 py-2 text-left text-sm ${
+                item.disabled
+                  ? 'cursor-not-allowed text-slate-300'
+                  : `hover:bg-slate-50 ${item.danger ? 'text-red-600' : 'text-slate-700'}`
               }`}
             >
               {item.label}

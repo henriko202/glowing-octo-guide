@@ -147,7 +147,10 @@ export default defineSchema({
     // Gates the LinkedIn profile scrape. Absent ⇒ disabled (false) — opt-in (paid actor).
     apifyProfileScrapeEnabled: v.optional(v.boolean()),
     lastApifySyncAt: v.optional(v.number()),
-    lastApifySyncError: v.optional(v.string())
+    lastApifySyncError: v.optional(v.string()),
+    // Last manual/cron profile-scrape fan-out run (parallels the post-sync fields above).
+    lastProfileScrapeAt: v.optional(v.number()),
+    lastProfileScrapeError: v.optional(v.string())
   }),
 
   sessions: defineTable({

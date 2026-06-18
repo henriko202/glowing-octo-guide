@@ -469,8 +469,10 @@ Accessed via `.first()` (treated as a singleton; no index).
 | `apifySyncEnabled`          | boolean |  ✓  | Master toggle for the Apify post‑sync cron.                                                               |
 | `apifyEnabled`              | boolean |  –  | **Master Apify kill-switch.** Absent ⇒ enabled. When false, all Apify (post sync + profile scrape) halts. |
 | `apifyProfileScrapeEnabled` | boolean |  –  | Gates the LinkedIn profile scrape. Absent ⇒ disabled (opt-in; paid actor).                                |
-| `lastApifySyncAt`           | number  |  –  | Last sync timestamp.                                                                                      |
-| `lastApifySyncError`        | string  |  –  | Last sync error message.                                                                                  |
+| `lastApifySyncAt`           | number  |  –  | Last post‑sync timestamp (cron or manual "Sync all posts").                                               |
+| `lastApifySyncError`        | string  |  –  | Last post‑sync error message.                                                                             |
+| `lastProfileScrapeAt`       | number  |  –  | Last profile‑scrape fan‑out timestamp (manual "Sync all users").                                          |
+| `lastProfileScrapeError`    | string  |  –  | Last profile‑scrape fan‑out error message.                                                                |
 
 #### `featuredPostUsage` — per‑user monthly featured quota **(defined but unused)**
 
@@ -1107,27 +1109,54 @@ edit** — no application code writes it. Every admin function calls `assertAdmi
 
 ### Admin functions (`convex/admin.ts`)
 
-| Function                                    | Kind     | Purpose                                                                                                                                                                                                  |
-|---------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `checkIsAdmin`                              | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                    |
-| `getSettings`                               | query    | App settings (3 Apify flags + last‑sync status).                                                                                                                                                         |
-| `toggleApifySync(enabled)`                  | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                              |
-| `toggleApifyEnabled(enabled)`               | mutation | Master Apify kill-switch.                                                                                                                                                                                |
-| `toggleApifyProfileScrape(enabled)`         | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                      |
-| `listUsers`                                 | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs.                                                                                                                                          |
-| `setUserTier(userId, tier)`                 | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                 |
-| `setUserSubscriptionStatus(userId, status)` | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab — chiefly to take a user out of `trialing` (which hides their posts). Manual override; a later Stripe webhook can overwrite it. |
-| `listContactUsersWithLimits`                | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                       |
-| `listPlanLimits`                            | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                         |
-| `updateTierDefault(tier, …)`                | mutation | Edit a tier's **default** row (filters out per‑user overrides). Backend‑only (no UI).                                                                                                                    |
-| `setContactUserLimit(userId, …)`            | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                              |
-| `removeContactUserLimit(userId)`            | mutation | Delete a contact override (revert to tier default).                                                                                                                                                      |
-| `banUser(userId, reason?)`                  | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                              |
-| `unbanUser(userId)`                         | mutation | Clear all ban fields.                                                                                                                                                                                    |
-| `getSettingsInternal` / `updateSyncStatus`  | internal | Used by the Apify jobs.                                                                                                                                                                                  |
+| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                  |
+|--------------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                    |
+| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                               |
+| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                              |
+| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                |
+| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                      |
+| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                    |
+| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                              |
+| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                  |
+| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                         |
+| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                  |
+| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                 |
+| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab — chiefly to take a user out of `trialing` (which hides their posts). Manual override; a later Stripe webhook can overwrite it. |
+| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                       |
+| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                         |
+| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Backend‑only (no UI).                                                                                                                    |
+| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                              |
+| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                      |
+| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                              |
+| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                    |
+| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                 |
 
 `validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`. `effectiveContactLimits`
 (pure, unit‑tested) resolves a contact user's display limits as `override ?? contact default ?? hardcoded`.
+
+### Manual Apify sync triggers
+
+Four admin‑only mutations let an admin run a sync on demand instead of waiting for the daily cron.
+Each **respects the same toggles the crons honor**: it schedules the (slow, paid) job and returns
+immediately, but only when its feature flag (+ the master kill‑switch) is on — otherwise it throws
+`"<feature> is disabled — enable it in Settings first."` The UI also gates each control, but the
+**server check is authoritative** (a stale client or a direct API call still can't run a disabled
+integration).
+
+| Trigger                   | Schedules                                           | Surface (admin panel)                               |
+|---------------------------|-----------------------------------------------------|-----------------------------------------------------|
+| `syncAllPosts`            | `jobs/syncPosts.syncAllPosts` (post‑sync router)    | "Sync all now" on the **Apify Post Sync** card      |
+| `syncUserPosts(userId)`   | `jobs/syncPostsApify.syncUserPostsViaApify`         | "Sync posts" in the **Users**‑tab row menu          |
+| `syncAllProfiles`         | `jobs/scrapeProfileApify.scrapeAllProfilesViaApify` | "Sync all now" on the **Apify Profile Scrape** card |
+| `syncUserProfile(userId)` | `jobs/scrapeProfileApify.scrapeUserProfile`         | "Sync profile" in the **Users**‑tab row menu        |
+
+The per‑user triggers additionally require the target to have a `linkedinPublicIdentifier`
+(otherwise the menu item is disabled and the server throws). Outcome is observable via each card's
+`Last sync` / `Last profile sync` line (and the user's data updating reactively) — there is no
+per‑item progress view. Because these are flag‑gated, they do **not** by themselves "switch Apify
+on" — only the toggles do, and doing so in production triggers the compliance hard gate
+(see [§13B](#13b-privacy--compliance)).
 
 ### Ban model — **reactive, not a forced logout**
 
@@ -1302,8 +1331,12 @@ payload) — it's user-edited in Settings. The scrape is **triggered**, not cron
 - on the **post sync** (`syncUserPostsViaApify` — subscription activation + hourly cron) **when the
   user has no `country` yet**, which bounds the (paid) scrape to ~once per user even though posts
   sync repeatedly.
+- on an **admin manual trigger** — `admin.syncUserProfile(userId)` for one user, or
+  `admin.syncAllProfiles`, which fans out via `jobs/scrapeProfileApify.scrapeAllProfilesViaApify`
+  over every user with a `linkedinPublicIdentifier`. Both are flag‑gated; see
+  [§12](#12-admin--moderation).
 
-Both schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails if the
+These triggers all schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails if the
 Apify env vars (`APIFY_API_TOKEN`/`APIFY_TASK_ID_PROFILE_SCRAPE`) are unset, or unless
 `apifyEnabled && apifyProfileScrapeEnabled` (gate helpers in `lib/apify.ts`). It calls the Apify
 actor, parses `location.countryCode` → `country`, `location.linkedinText` → `location`,

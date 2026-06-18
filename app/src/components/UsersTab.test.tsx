@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
-import { useQuery, useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
+import UsersTab from './UsersTab'
 
 const mockUsers = [
   {
@@ -11,7 +12,8 @@ const mockUsers = [
     tier: 'growth',
     subscriptionStatus: 'active',
     isBanned: false,
-    createdAt: 0
+    createdAt: 0,
+    linkedinPublicIdentifier: 'jordan-maxwell'
   },
   {
     _id: 'u2',
@@ -30,6 +32,7 @@ const mockUsers = [
     subscriptionStatus: 'active',
     isBanned: false,
     createdAt: 0
+    // No linkedinPublicIdentifier → per-row sync actions are disabled for this user.
   }
 ]
 
@@ -41,7 +44,9 @@ const mocks = {
   banUser: vi.fn(),
   unbanUser: vi.fn(),
   setContactUserLimit: vi.fn(),
-  removeContactUserLimit: vi.fn()
+  removeContactUserLimit: vi.fn(),
+  syncUserPosts: vi.fn(),
+  syncUserProfile: vi.fn()
 }
 
 vi.mock('convex/react', () => ({
@@ -49,7 +54,17 @@ vi.mock('convex/react', () => ({
   useMutation: vi.fn()
 }))
 
-import UsersTab from './UsersTab'
+// Default both Apify feature flags on; individual tests override to exercise gating.
+function renderTab(overrides: { postSyncOn?: boolean; profileScrapeOn?: boolean } = {}) {
+  return render(
+    <UsersTab
+      sessionToken="tok"
+      isAdmin={true}
+      postSyncOn={overrides.postSyncOn ?? true}
+      profileScrapeOn={overrides.profileScrapeOn ?? true}
+    />
+  )
+}
 
 beforeEach(() => {
   Object.values(mocks).forEach(m => {
@@ -68,22 +83,12 @@ beforeEach(() => {
 
 describe('UsersTab — ban/unban', () => {
   it('shows a Banned badge for banned users only', () => {
-    render(
-      <UsersTab
-        sessionToken="tok"
-        isAdmin={true}
-      />
-    )
+    renderTab()
     expect(screen.getByText('Banned')).toBeInTheDocument()
   })
 
   it('offers "Ban user…" for an active user and calls banUser with the reason', async () => {
-    render(
-      <UsersTab
-        sessionToken="tok"
-        isAdmin={true}
-      />
-    )
+    renderTab()
     fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
     fireEvent.click(screen.getByText('Ban user…'))
     fireEvent.change(screen.getByPlaceholderText(/spam/i), { target: { value: 'Spam' } })
@@ -94,12 +99,7 @@ describe('UsersTab — ban/unban', () => {
   })
 
   it('offers "Unban" for a banned user and calls unbanUser after confirm', async () => {
-    render(
-      <UsersTab
-        sessionToken="tok"
-        isAdmin={true}
-      />
-    )
+    renderTab()
     fireEvent.click(screen.getByRole('button', { name: /actions for priya nayar/i }))
     fireEvent.click(screen.getByText('Unban'))
     fireEvent.click(screen.getByRole('button', { name: /^unban$/i }))
@@ -111,12 +111,7 @@ describe('UsersTab — ban/unban', () => {
 
 describe('UsersTab — change tier', () => {
   it('opens the tier modal and calls setUserTier with the chosen tier', async () => {
-    render(
-      <UsersTab
-        sessionToken="tok"
-        isAdmin={true}
-      />
-    )
+    renderTab()
     fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
     fireEvent.click(screen.getByText('Change tier…'))
 
@@ -132,12 +127,7 @@ describe('UsersTab — change tier', () => {
 
 describe('UsersTab — change status', () => {
   it('opens the status modal and calls setUserSubscriptionStatus with the chosen status', async () => {
-    render(
-      <UsersTab
-        sessionToken="tok"
-        isAdmin={true}
-      />
-    )
+    renderTab()
     fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
     fireEvent.click(screen.getByText('Change status…'))
 
@@ -157,25 +147,56 @@ describe('UsersTab — change status', () => {
 
 describe('UsersTab — edit contact limits action', () => {
   it('offers "Edit limits…" only for contact-tier users', () => {
-    render(
-      <UsersTab
-        sessionToken="tok"
-        isAdmin={true}
-      />
-    )
+    renderTab()
     // Contact-tier user → action present
     fireEvent.click(screen.getByRole('button', { name: /actions for dana lee/i }))
     expect(screen.getByText('Edit limits…')).toBeInTheDocument()
   })
 
   it('does not offer "Edit limits…" for non-contact users', () => {
-    render(
-      <UsersTab
-        sessionToken="tok"
-        isAdmin={true}
-      />
-    )
+    renderTab()
     fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
     expect(screen.queryByText('Edit limits…')).not.toBeInTheDocument()
+  })
+})
+
+describe('UsersTab — manual sync actions', () => {
+  it('offers "Sync posts" and "Sync profile" in the row menu', () => {
+    renderTab()
+    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    expect(screen.getByRole('button', { name: 'Sync posts' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sync profile' })).toBeInTheDocument()
+  })
+
+  it('disables the sync actions when the user has no LinkedIn URL on file', () => {
+    renderTab() // Dana Lee (u3) has no linkedinPublicIdentifier
+    fireEvent.click(screen.getByRole('button', { name: /actions for dana lee/i }))
+    expect(screen.getByRole('button', { name: 'Sync posts' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Sync profile' })).toBeDisabled()
+  })
+
+  it('disables the matching action when its Apify feature is off', () => {
+    renderTab({ postSyncOn: false, profileScrapeOn: true }) // Jordan has a LinkedIn URL
+    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    expect(screen.getByRole('button', { name: 'Sync posts' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Sync profile' })).toBeEnabled()
+  })
+
+  it('calls syncUserPosts when enabled and the user has a LinkedIn URL', async () => {
+    renderTab()
+    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sync posts' }))
+    await waitFor(() => {
+      expect(mocks.syncUserPosts).toHaveBeenCalledWith({ sessionToken: 'tok', userId: 'u1' })
+    })
+  })
+
+  it('calls syncUserProfile when enabled and the user has a LinkedIn URL', async () => {
+    renderTab()
+    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sync profile' }))
+    await waitFor(() => {
+      expect(mocks.syncUserProfile).toHaveBeenCalledWith({ sessionToken: 'tok', userId: 'u1' })
+    })
   })
 })

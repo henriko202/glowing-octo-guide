@@ -2,9 +2,11 @@ import type { DatabaseWriter } from './_generated/server'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import type { Doc, Id } from './_generated/dataModel'
+import { internal } from './_generated/api'
 import { requireAuth } from './lib/auth'
 import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
+import { isApifyPostSyncEnabled, isApifyProfileScrapeEnabled } from './lib/apify'
 
 // SECURITY: Every admin endpoint MUST call this.
 // Accepts the user doc already resolved by requireAuth — never re-fetches from client ID.
@@ -58,7 +60,9 @@ export const getSettings = query({
         apifyEnabled: true,
         apifyProfileScrapeEnabled: false,
         lastApifySyncAt: undefined,
-        lastApifySyncError: undefined
+        lastApifySyncError: undefined,
+        lastProfileScrapeAt: undefined,
+        lastProfileScrapeError: undefined
       }
     )
   }
@@ -91,6 +95,72 @@ export const toggleApifyProfileScrape = mutation({
     assertAdmin(user)
     const settings = await getOrCreateSettings(ctx.db)
     await ctx.db.patch(settings._id, { apifyProfileScrapeEnabled: enabled })
+  }
+})
+
+// ─── Manual Apify sync triggers (admin-initiated, flag-gated) ────────────────
+// Each respects the same toggles the crons honor: a trigger runs only when its feature flag
+// (+ the master switch) is on. The UI also gates these, but THIS server check is the real
+// control — a stale client or a direct API call still can't run a disabled integration.
+// All four schedule the (slow, paid) job and return immediately so the request never blocks.
+
+export const syncAllPosts = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    assertAdmin(user)
+    const settings = await ctx.db.query('appSettings').first()
+    if (!isApifyPostSyncEnabled(settings)) {
+      throw new Error('Post sync is disabled — enable it in Settings first.')
+    }
+    await ctx.scheduler.runAfter(0, internal.jobs.syncPosts.syncAllPosts, {})
+  }
+})
+
+export const syncUserPosts = mutation({
+  args: { sessionToken: v.string(), userId: v.id('users') },
+  handler: async (ctx, { sessionToken, userId }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+    const settings = await ctx.db.query('appSettings').first()
+    // syncUserPostsViaApify does NOT self-check the flag (the fan-out checks before calling),
+    // so for the per-user trigger this wrapper is the only server gate.
+    if (!isApifyPostSyncEnabled(settings)) {
+      throw new Error('Post sync is disabled — enable it in Settings first.')
+    }
+    const target = await ctx.db.get(userId)
+    if (!target) throw new Error('User not found')
+    if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')
+    await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId })
+  }
+})
+
+export const syncAllProfiles = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    assertAdmin(user)
+    const settings = await ctx.db.query('appSettings').first()
+    if (!isApifyProfileScrapeEnabled(settings)) {
+      throw new Error('Profile scrape is disabled — enable it in Settings first.')
+    }
+    await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeAllProfilesViaApify, {})
+  }
+})
+
+export const syncUserProfile = mutation({
+  args: { sessionToken: v.string(), userId: v.id('users') },
+  handler: async (ctx, { sessionToken, userId }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+    const settings = await ctx.db.query('appSettings').first()
+    if (!isApifyProfileScrapeEnabled(settings)) {
+      throw new Error('Profile scrape is disabled — enable it in Settings first.')
+    }
+    const target = await ctx.db.get(userId)
+    if (!target) throw new Error('User not found')
+    if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')
+    await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId })
   }
 })
 
@@ -285,7 +355,9 @@ export const listUsers = query({
       tier: u.tier,
       subscriptionStatus: u.subscriptionStatus,
       isBanned: u.isBanned,
-      createdAt: u._creationTime
+      createdAt: u._creationTime,
+      // Public profile slug — used by the Users tab to gate the per-row sync actions.
+      linkedinPublicIdentifier: u.linkedinPublicIdentifier
     }))
   }
 })
@@ -440,6 +512,23 @@ export const updateSyncStatus = internalMutation({
       await ctx.db.patch(settings._id, {
         lastApifySyncAt: args.lastApifySyncAt,
         lastApifySyncError: args.lastApifySyncError
+      })
+    }
+  }
+})
+
+// Records the profile-scrape fan-out's last run + error, parallel to updateSyncStatus.
+export const updateProfileScrapeStatus = internalMutation({
+  args: {
+    lastProfileScrapeAt: v.number(),
+    lastProfileScrapeError: v.optional(v.string())
+  },
+  handler: async (ctx, args) => {
+    const settings = await ctx.db.query('appSettings').first()
+    if (settings) {
+      await ctx.db.patch(settings._id, {
+        lastProfileScrapeAt: args.lastProfileScrapeAt,
+        lastProfileScrapeError: args.lastProfileScrapeError
       })
     }
   }
