@@ -16,6 +16,7 @@ export type PostWithAuthor = {
     headline?: string
     profilePictureUrl?: string
   } | null
+  sourceUrl: string
 }
 
 export default function PostCard({
@@ -82,6 +83,17 @@ export default function PostCard({
             >
               💬 {post.commentCount} {t('feed.comment')}
             </button>
+
+            {!!post.sourceUrl && (
+              <a
+                href={post.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 no-underline"
+              >
+                View on LinkedIn ↗
+              </a>
+            )}
           </div>
         }
       />

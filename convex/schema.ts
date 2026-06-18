@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { articleValidator } from './lib/articleValidator'
 
 export default defineSchema({
   users: defineTable({
@@ -101,6 +102,11 @@ export default defineSchema({
     // without reconstructing URNs (activity IDs ≠ ugcPost IDs across LinkedIn namespaces).
     // Absent for cron-synced posts (those use urnToLinkedInUrl fallback).
     sourceUrl: v.optional(v.string()),
+    // Structured data for an article the post links to (e.g. a LinkedIn Pulse article),
+    // captured best-effort on manual submission. Seeds a future AI-comment feature; not
+    // displayed in-app. Absent when the post shares no article or enrichment failed.
+    // See convex/lib/articleValidator.ts.
+    article: v.optional(articleValidator),
     // Soft-delete marker. When set, the post is excluded from the feed AND the
     // author's My Posts view, but the row is intentionally KEPT so it still counts
     // toward the rolling weekly post limit (deleting must not free up a slot).

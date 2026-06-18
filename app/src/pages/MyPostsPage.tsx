@@ -42,7 +42,7 @@ function buildLinkedInUrl(post: MyPost): string {
 
 function timeAgo(ts: number): string {
   const days = Math.floor((Date.now() - ts) / 86400000)
-  if (days === 0) return 'Today'
+  if (days <= 0) return 'Today'
   if (days === 1) return '1 day ago'
   return `${days} days ago`
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { appendMediaLinks, parsePostContent, parsePostEngagement, type PostMedia } from './parsePostContent'
+import {
+  appendMediaLinks,
+  extractArticleUrl,
+  parseArticle,
+  parsePostContent,
+  parsePostEngagement,
+  type PostMedia
+} from './parsePostContent'
 
 describe('appendMediaLinks', () => {
   const media: PostMedia[] = [
@@ -85,6 +92,187 @@ describe('parsePostContent', () => {
     const html = `<a href="https://example.com/file.pdf.zip">x</a>`
     const result = parsePostContent(html)
     expect(result.media).toEqual([])
+  })
+
+  it('extracts the shared article link from the post body anchor, not the "more from author" decoys', () => {
+    // Mirrors real LinkedIn post HTML: the post's @type is SocialMediaPosting (NOT Article),
+    // the article URL appears only as an <a data-test-id="article-content"> anchor, and the
+    // page also lists other /pulse/ articles by the author that must be ignored.
+    const html = `
+      <meta property="og:image" content="https://media.licdn.com/cover.jpg">
+      <script type="application/ld+json">
+        {"@type":"SocialMediaPosting","articleBody":"My take on modern Java","image":{"@type":"ImageObject","url":"https://media.licdn.com/cover.jpg"}}
+      </script>
+      <a href="https://www.linkedin.com/pulse/why-modern-java-7wksf?trk=public_post_feed-article-content" data-tracking-control-name="public_post_feed-article-content" class="flex flex-col feed-article-content" data-test-id="article-content"><span>Read</span></a>
+      <a href="https://www.linkedin.com/pulse/rise-ai-coding-tools-3cicf?trk=public_post">More by author</a>
+      <a href="https://www.linkedin.com/pulse/using-selenium-ai-ovtrf?trk=public_post">More by author</a>`
+    const result = parsePostContent(html)
+    expect(result.text).toBe('My take on modern Java')
+    expect(result.media).toContainEqual({
+      type: 'article',
+      url: 'https://www.linkedin.com/pulse/why-modern-java-7wksf'
+    })
+    expect(result.media).toContainEqual({ type: 'image', url: 'https://media.licdn.com/cover.jpg' })
+    expect(result.media.some(m => m.url.includes('rise-ai-coding-tools'))).toBe(false)
+    expect(result.media.some(m => m.url.includes('using-selenium-ai'))).toBe(false)
+  })
+})
+
+describe('extractArticleUrl', () => {
+  // Real LinkedIn post HTML marks the primary shared article with data-test-id="article-content"
+  // and a feed-article-content class/tracking name. "More from author" links lack those markers,
+  // so they must never be selected. Tracking query params are stripped to a clean canonical URL.
+  const html = `
+    <a href="https://www.linkedin.com/pulse/why-modern-java-more-exciting-than-ever-backend-junior-nakamura-7wksf?trk=public_post_feed-article-content" target="_self" data-tracking-control-name="public_post_feed-article-content" data-tracking-will-navigate class="flex flex-col feed-article-content" data-test-id="article-content"><span>Read</span></a>
+    <a href="https://www.linkedin.com/pulse/rise-ai-coding-tools-has-created-common-misconception-junior-nakamura-3cicf?trk=public_post" data-tracking-control-name="public_post">Another</a>
+    <a href="https://www.linkedin.com/pulse/using-selenium-ai-improve-test-automation-junior-nakamura-ovtrf?trk=public_post">Another</a>`
+
+  it('returns the primary shared article URL with tracking params stripped', () => {
+    expect(extractArticleUrl(html)).toBe(
+      'https://www.linkedin.com/pulse/why-modern-java-more-exciting-than-ever-backend-junior-nakamura-7wksf'
+    )
+  })
+
+  it('never selects a "more from author" decoy link', () => {
+    const url = extractArticleUrl(html)
+    expect(url).not.toContain('rise-ai-coding-tools')
+    expect(url).not.toContain('using-selenium-ai')
+  })
+
+  it('returns null when the post shares no article', () => {
+    expect(extractArticleUrl('<a href="https://www.linkedin.com/feed/">home</a>')).toBeNull()
+    expect(extractArticleUrl('')).toBeNull()
+  })
+
+  it('rejects a non-LinkedIn host even when the article-content marker is present (SSRF guard)', () => {
+    const evil = `<a data-test-id="article-content" href="https://evil.example.com/pulse/x?trk=public_post_feed-article-content">x</a>`
+    expect(extractArticleUrl(evil)).toBeNull()
+  })
+
+  it('decodes HTML entities in the extracted href', () => {
+    const html = `<a data-test-id="article-content" href="https://www.linkedin.com/pulse/a-b?trk=x&amp;utm=y">x</a>`
+    expect(extractArticleUrl(html)).toBe('https://www.linkedin.com/pulse/a-b')
+  })
+})
+
+describe('parseArticle', () => {
+  // Mirrors a real LinkedIn Pulse article guest page: a single @type:Article JSON-LD block
+  // where `name` is the title and `headline` is the intro/summary (LinkedIn's unusual mapping),
+  // plus og: tags.
+  const html = `
+    <meta property="og:title" content="Why Modern Java Is More Exciting Than Ever for Backend Engineers">
+    <meta property="og:description" content="Java continues to evolve much faster than many developers realize.">
+    <meta property="og:image" content="https://media.licdn.com/cover.jpg">
+    <script type="application/ld+json">
+      {"@type":"Article","name":"Why Modern Java Is More Exciting Than Ever for Backend Engineers","headline":"Java continues to evolve much faster than many developers realize.","url":"https://www.linkedin.com/pulse/why-modern-java-7wksf","image":{"@type":"ImageObject","url":"https://media.licdn.com/cover.jpg"},"author":{"@type":"Person","name":"JUNIOR N.","url":"https://br.linkedin.com/in/junior-nakamura-developer"}}
+    </script>`
+
+  it('reads title from JSON-LD name, summary from headline, and author from author.name', () => {
+    const result = parseArticle(html)
+    expect(result.title).toBe('Why Modern Java Is More Exciting Than Ever for Backend Engineers')
+    expect(result.summary).toBe('Java continues to evolve much faster than many developers realize.')
+    expect(result.author).toBe('JUNIOR N.')
+  })
+
+  it('captures the cover image and de-duplicates it across JSON-LD and og:image', () => {
+    expect(parseArticle(html).imageUrls).toEqual(['https://media.licdn.com/cover.jpg'])
+  })
+
+  it('falls back to og: tags when there is no JSON-LD', () => {
+    const ogOnly = `
+      <meta property="og:title" content="A Title">
+      <meta property="og:description" content="A summary">
+      <meta property="og:image" content="https://media.licdn.com/x.jpg">`
+    const result = parseArticle(ogOnly)
+    expect(result.title).toBe('A Title')
+    expect(result.summary).toBe('A summary')
+    expect(result.imageUrls).toEqual(['https://media.licdn.com/x.jpg'])
+    expect(result.author).toBeUndefined()
+    expect(result.text).toBeUndefined()
+  })
+
+  it('returns empty fields (and an empty image array) for unrecognized HTML', () => {
+    expect(parseArticle('<html><body>nothing</body></html>')).toEqual({
+      title: undefined,
+      summary: undefined,
+      text: undefined,
+      author: undefined,
+      imageUrls: []
+    })
+  })
+
+  describe('full body extraction from article-content-blocks', () => {
+    // Mirrors the real SSR structure: <article> → header (excluded) → article-content-blocks with
+    // publishing-text-block <p>/<h3>/<pre>/list elements (the body) → </article> → comments + "more
+    // articles" chrome (excluded). Sign-in chrome before/after must not leak into the extracted text.
+    const articleHtml = `
+      <a href="/uas/login?session_redirect=x">Sign in</a>
+      <article class="article-main pulse">
+        <figure class="cover-img"><img src="https://media.licdn.com/cover.jpg"></figure>
+        <header>
+          <h1 class="pulse-title">Why Modern Java Is More Exciting Than Ever for Backend Engineers</h1>
+          <img data-delayed-url="https://media.licdn.com/avatar.jpg" alt="JUNIOR N.">
+        </header>
+        <div data-test-id="article-content-blocks">
+          <div class="article-main__content" data-test-id="publishing-text-block">
+            <p><span class>Java continues to evolve much faster than many developers realize.</span><!----></p>
+          </div>
+          <div class="article-main__content" data-test-id="publishing-text-block">
+            <h3><span class>Scoped Values</span><!----></h3>
+          </div>
+          <div class="article-main__content" data-test-id="publishing-text-block">
+            <img data-delayed-url="https://media.licdn.com/inline-body-image.jpg" alt="diagram">
+          </div>
+          <div class="article-main__content" data-test-id="publishing-text-block">
+            <pre class="x"><span class>int x = 1;
+if (x &gt; 0) {
+  print(x);
+}</span></pre>
+          </div>
+          <div class="article-main__content" data-test-id="publishing-text-block">
+            <p><span class><ul><li><span class>Compact Object Headers</span><!----></li><li><span class>Generational Shenandoah GC</span><!----></li></ul></span><!----></p>
+          </div>
+          <div class="article-main__content" data-test-id="publishing-text-block">
+            <p><span class>#Java #Java25 #SpringBoot</span><!----></p>
+          </div>
+        </div>
+      </article>
+      <div class="comments"><p class="comment__text">Thanks for sharing!!</p></div>
+      <section class="stacked-articles"><p class="base-main-card__description">A teaser for another article</p></section>`
+
+    it('extracts paragraphs, headings, list bullets and fenced code in document order', () => {
+      const text = parseArticle(articleHtml).text ?? ''
+      expect(text).toContain('Java continues to evolve much faster than many developers realize.')
+      expect(text).toContain('Scoped Values')
+      expect(text).toContain('- Compact Object Headers')
+      expect(text).toContain('- Generational Shenandoah GC')
+      expect(text).toContain('#Java #Java25 #SpringBoot')
+      // Code: fenced, entities decoded, <span> wrapper stripped, internal newlines + indent preserved.
+      expect(text).toContain('```')
+      expect(text).toContain('int x = 1;\nif (x > 0) {')
+      expect(text).toContain('  print(x);')
+    })
+
+    it('keeps blocks in document order separated by blank lines', () => {
+      const text = parseArticle(articleHtml).text ?? ''
+      expect(text.indexOf('Java continues to evolve')).toBeLessThan(text.indexOf('Scoped Values'))
+      expect(text.indexOf('Scoped Values')).toBeLessThan(text.indexOf('Compact Object Headers'))
+      expect(text).toContain('realize.\n\nScoped Values')
+    })
+
+    it('excludes sign-in chrome, comments and "more articles" cards', () => {
+      const text = parseArticle(articleHtml).text ?? ''
+      expect(text).not.toMatch(/sign in/i)
+      expect(text).not.toContain('Thanks for sharing')
+      expect(text).not.toContain('A teaser for another article')
+    })
+
+    it('captures inline body images but not the cover or the author avatar', () => {
+      const result = parseArticle(articleHtml)
+      expect(result.imageUrls).toContain('https://media.licdn.com/inline-body-image.jpg')
+      expect(result.imageUrls).not.toContain('https://media.licdn.com/avatar.jpg')
+      expect(result.imageUrls).not.toContain('https://media.licdn.com/cover.jpg')
+    })
   })
 })
 

@@ -24,6 +24,7 @@ import type * as jobs_scrapeProfileApify from "../jobs/scrapeProfileApify.js";
 import type * as jobs_syncPosts from "../jobs/syncPosts.js";
 import type * as jobs_syncPostsApify from "../jobs/syncPostsApify.js";
 import type * as lib_apify from "../lib/apify.js";
+import type * as lib_articleValidator from "../lib/articleValidator.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_email from "../lib/email.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   "jobs/syncPosts": typeof jobs_syncPosts;
   "jobs/syncPostsApify": typeof jobs_syncPostsApify;
   "lib/apify": typeof lib_apify;
+  "lib/articleValidator": typeof lib_articleValidator;
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
   "lib/email": typeof lib_email;

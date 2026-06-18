@@ -18,6 +18,22 @@ export interface ParsedPostUrl {
 // this URL server-side, so scheme + host MUST be restricted. Allows linkedin.com + subdomains.
 const ALLOWED_LINKEDIN_HOST = /^([a-z0-9-]+\.)?linkedin\.com$/
 
+/**
+ * SSRF guard for any LinkedIn URL we are about to fetch server-side (e.g. a shared
+ * article link extracted from post HTML). Returns true only for https URLs on
+ * linkedin.com or a subdomain. Shares ALLOWED_LINKEDIN_HOST with parseLinkedInPostUrl
+ * so the article-fetch guard and the post-fetch guard can never drift apart.
+ */
+export function isAllowedLinkedInUrl(url: string): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  return parsed.protocol === 'https:' && ALLOWED_LINKEDIN_HOST.test(parsed.hostname.toLowerCase())
+}
+
 export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
   if (!url) return null
 

@@ -217,7 +217,7 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │   │   ├── auth.ts              # upsertUser mutation
 │   │   ├── posts.ts             # LinkedIn post fetch/parse helpers
 │   │   ├── parsePostUrl.ts      # /posts/… and /feed/update/… URL parser
-│   │   ├── parsePostContent.ts  # HTML → text + media extraction
+│   │   ├── parsePostContent.ts  # HTML → text/media + shared-article link (extractArticleUrl) + article enrichment (parseArticle)
 │   │   ├── verifyPostOwnership.ts
 │   │   └── types.ts             # LinkedIn API response interfaces
 │   ├── jobs/
@@ -358,26 +358,27 @@ change, via the shared `restampUserPostsTierRank` helper), `interactions.ts`
 Every post writer keeps the denormalized `feedRank` / `inFeed` fields in sync through the single
 `computeFeedFields` helper (`lib/feedRank.ts`).
 
-| Field                     | Type          | Req | Meaning                                                                                                                                           |
-|---------------------------|---------------|:---:|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinPostUrn`         | string        |  ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                              |
-| `authorId`                | `id('users')` |  ✓  | Post author.                                                                                                                                      |
-| `content`                 | string        |  ✓  | Post text (composed text + appended media links).                                                                                                 |
-| `publishedAt`             | number        |  ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                               |
-| `likeCount`               | number        |  ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                        |
-| `commentCount`            | number        |  ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                          |
-| `mediaUrls`               | string[]      |  ✓  | Extracted media URLs.                                                                                                                             |
-| `isFeatured`              | boolean       |  ✓  | Pinned to top of feed.                                                                                                                            |
-| `featuredAt`              | number        |  –  | When featured (secondary sort for featured).                                                                                                      |
-| `visibilityIndustries`    | string[]      |  ✓  | Author allowlist — only viewers in these industries see it.                                                                                       |
-| `visibilityCountries`     | string[]      |  ✓  | Author allowlist — only viewers in these countries see it.                                                                                        |
-| `hidden`                  | boolean       |  ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                               |
-| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                             |
-| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                 |
-| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links). Absent for cron‑synced posts.                                                          |
-| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.             |
-| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout. |
-| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                             |
+| Field                     | Type          | Req | Meaning                                                                                                                                                                                                                                                                                |
+|---------------------------|---------------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinPostUrn`         | string        |  ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                                                                                                                                                                   |
+| `authorId`                | `id('users')` |  ✓  | Post author.                                                                                                                                                                                                                                                                           |
+| `content`                 | string        |  ✓  | Post text (composed text + appended media links).                                                                                                                                                                                                                                      |
+| `publishedAt`             | number        |  ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                                                                                                                                                                    |
+| `likeCount`               | number        |  ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                                                                                                                                                             |
+| `commentCount`            | number        |  ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                                                                                                                                                               |
+| `mediaUrls`               | string[]      |  ✓  | Extracted media URLs (images, documents, and the shared‑article link when the post links a LinkedIn article).                                                                                                                                                                          |
+| `isFeatured`              | boolean       |  ✓  | Pinned to top of feed.                                                                                                                                                                                                                                                                 |
+| `featuredAt`              | number        |  –  | When featured (secondary sort for featured).                                                                                                                                                                                                                                           |
+| `visibilityIndustries`    | string[]      |  ✓  | Author allowlist — only viewers in these industries see it.                                                                                                                                                                                                                            |
+| `visibilityCountries`     | string[]      |  ✓  | Author allowlist — only viewers in these countries see it.                                                                                                                                                                                                                             |
+| `hidden`                  | boolean       |  ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                    |
+| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                  |
+| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                      |
+| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                         |
+| `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Seeds a future AI‑comment feature; not displayed. Absent when the post shares no article or enrichment failed. |
+| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.                                                                                                                                                  |
+| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                      |
+| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                  |
 
 Indexes: `by_author [authorId]`, `by_urn [linkedinPostUrn]`, `by_published [hidden, publishedAt]`,
 `by_author_and_publishedAt [authorId, publishedAt]`, plus **`by_featured [isFeatured, featuredAt]`
@@ -876,7 +877,11 @@ flowchart TD
   OWN -->|no| V["verifyPostOwnership(token, urn, linkedinId, vanityName, publicIdentifier)"]
   V --> PC
   PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
-  ENG --> UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = subscriptionStatus=='trialing', sourceUrl=postUrl)"]
+  ENG --> ART{"post links an article?<br/>(extractArticleUrl finds the /pulse/… anchor)"}
+  ART -->|no| UP
+  ART -->|yes| AF["fetch(articleUrl) → parseArticle → article<br/>(best‑effort, SSRF‑guarded, non‑fatal)"]
+  AF --> UP
+  UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = subscriptionStatus=='trialing', sourceUrl=postUrl, article?)"]
   UP --> R["return { postId }"]
 ```
 
@@ -907,17 +912,49 @@ HTML yields `{ text: '', media: [] }`). From the already‑fetched page HTML it 
 - **Text** — from JSON‑LD blocks (`articleBody` → `description` → `text`), falling back to the
   `og:description` meta tag.
 - **Media** — typed as `image | article | document` (`PostMedia`), de‑duplicated, gathered from:
-  `og:image` meta tags and JSON‑LD `image` (→ image); JSON‑LD `@type=Article` `url` and
-  `sharedContent.url` (→ article); JSON‑LD `associatedMedia.contentUrl` and **direct `.pdf` links
-  found in the page** (→ document). `findPdfLinks` tests only the path segment (before `?`/`#`) for
-  the `.pdf` extension but **returns the full URL including its query string**, so signed/expiring
-  document tokens are preserved (the `4603f40` fix).
+  `og:image` meta tags and JSON‑LD `image` (→ image); the **shared‑article anchor in the post body**
+  (`extractArticleUrl`) plus a JSON‑LD `@type=Article` `url` fallback (→ article); JSON‑LD
+  `associatedMedia.contentUrl` and **direct `.pdf` links found in the page** (→ document).
+  `findPdfLinks` tests only the path segment (before `?`/`#`) for the `.pdf` extension but **returns
+  the full URL including its query string**, so signed/expiring document tokens are preserved (the
+  `4603f40` fix).
+
+**Shared‑article link** (`extractArticleUrl`). A LinkedIn post that links an article (e.g. a Pulse
+post) does **not** expose the article URL in its JSON‑LD — the post is typed `SocialMediaPosting`,
+whose only URLs are the post's own `@id`, the author profile, and the cover image. The article link
+lives only in the post body as an `<a data-test-id="article-content">` element (also carrying a
+`feed-article-content` class/tracking name). `extractArticleUrl` selects that anchor — ignoring the
+page's "more from this author" `/pulse/…` links, which lack those markers — strips tracking
+query/hash to a clean canonical URL, and re‑validates the LinkedIn host (it is fetched server‑side, so
+the SSRF guard applies). The earlier assumed `sharedContent.url` field does not exist in real LinkedIn
+HTML and was removed.
 
 `appendMediaLinks(text, media)` composes the stored `content`: the trimmed body, then (if any media)
 a blank line, then one `[type] url` line per media item — self‑describing for future use. The
 structured `mediaUrls` array (the bare URLs) is **persisted but not currently displayed** anywhere;
 the feed/My Posts UI shows the post via the LinkedIn embed, not this stored text (see
 [§11](#11-feed--engagement) / [§14](#14-frontend--authenticated-app-app)).
+
+**Article enrichment** (`parseArticle`). When `extractArticleUrl` finds a shared article, `submitPost`
+does one extra **best‑effort, SSRF‑guarded** `fetch` of that article page and runs `parseArticle` to
+capture `{ url, title?, summary?, text?, author?, imageUrls }` into the post's `article` field
+(`lib/articleValidator.ts`):
+
+- **`text`** — the **full article body** as plain text. The guest SSR page renders the whole body
+  (despite the post JSON‑LD's `isAccessibleForFree:false` flag) inside `<div
+  data-test-id="article-content-blocks">` as a flat list of `publishing-text-block` elements.
+  `extractArticleBody` isolates that container (up to `</article>`) — excluding the header, sign‑in
+  modal, comments, and "more articles" cards — and renders each `<p>` / `<h1‑6>` / `<pre>` / list in
+  document order: paragraphs (blank‑line separated), headings on their own line, `- ` bullets, and
+  ``` ``` ``‑fenced code blocks (internal whitespace preserved, entities decoded).
+- **`title` / `summary` / `author`** — from the article's `@type:Article` JSON‑LD (where LinkedIn
+  unusually maps `name`→title and `headline`→summary), with `og:` tag fallbacks.
+- **`imageUrls`** — cover (`og:image` / JSON‑LD) plus inline body images (`media.licdn.com` URLs inside
+  `article-content-blocks`), de‑duplicated.
+
+Non‑fatal: no article link, a network error, or a parse miss simply leaves `article` undefined. The
+data is **not displayed**; it seeds a future AI‑comment feature. The Apify cron path does not populate
+`article`.
 
 ### Hiding & deleting a post (`posts.setPostHidden` / `posts.deletePost`, mutations)
 
@@ -1681,8 +1718,13 @@ plus the two LinkedIn‑embed components:
 - **`PostCard`** — the Feed's post renderer (**Option B layout**): an app‑owned header (Featured
   badge via `feed.featured` + author avatar/name/headline) **above** a `LinkedInEmbed`, whose
   `footer` is the app's in‑app **Like/Comment bar** (`type="button"` actions calling `onReact` /
-  `onComment`) overlaying the clipped native bar. **`PostCard` does not render `post.content` or
-  `mediaUrls`** — the post body comes entirely from the embed.
+  `onComment`) overlaying the clipped native bar, plus a **View on LinkedIn ↗** link. That link is
+  rendered **only when `post.sourceUrl` is present** and points **directly at `sourceUrl`** (the exact
+  URL the user submitted) — there is no URN reconstruction, because LinkedIn's `ugcPost`/`activity`/
+  `share` IDs differ for the same post and a reconstructed `/feed/update/<urn>/` link can resolve
+  wrongly. (`MyPostsPage` keeps a `buildLinkedInUrl` with a reconstruction fallback for cron‑synced
+  posts.) **`PostCard` does not render `post.content` or `mediaUrls`** — the post body comes entirely
+  from the embed.
 
 > As of `1fcc123`, `MyPostsPage` uses this shared `LinkedInEmbed` directly (its old local
 > `buildEmbedUrl` that force‑normalized to `activity` was removed, eliminating the previous
@@ -1852,6 +1894,10 @@ The codebase follows a consistent, defensible security model:
 - **SSRF guard on outbound fetches.** `submitPost` fetches a user‑supplied URL, so
   `parseLinkedInPostUrl` rejects any non‑`https` scheme or non‑`linkedin.com` host **before** the
   fetch, and the URN scraped from the returned page is format‑validated before any downstream use.
+  The follow‑up **article‑enrichment fetch** runs the URL extracted from the page HTML through the
+  same host allowlist (`isAllowedLinkedInUrl`, which shares `ALLOWED_LINKEDIN_HOST` with
+  `parseLinkedInPostUrl`) **before** fetching, so a malicious/derived link cannot redirect the
+  server‑side fetch off‑LinkedIn.
 - **Payments fail safe.** The Stripe webhook signature is verified by `@convex-dev/stripe` before any
   handler runs; checkout/portal require auth and an allow‑listed price id; `toSubscriptionStatus`
   maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a

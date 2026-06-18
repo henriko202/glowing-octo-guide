@@ -4,7 +4,8 @@ import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
 import { computeFeedFields } from '../lib/feedRank'
-import { isApifyPostSyncEnabled, type ApifyFlags } from '../lib/apify'
+import { type ApifyFlags, isApifyPostSyncEnabled } from '../lib/apify'
+import { articleValidator } from '../lib/articleValidator'
 
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
@@ -23,6 +24,8 @@ export const upsertPost = internalMutation({
     visibilityCountries: v.array(v.string()),
     hidden: v.boolean(),
     sourceUrl: v.optional(v.string()),
+    // Best-effort article enrichment from the manual-submit path (absent on the Apify path).
+    article: v.optional(articleValidator),
     queueOnLimitReached: v.optional(v.boolean())
   },
   handler: async (ctx, args) => {

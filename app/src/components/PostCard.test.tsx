@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import PostCard, { type PostWithAuthor } from './PostCard'
 
@@ -11,7 +11,8 @@ const mockPost: PostWithAuthor = {
   commentCount: 3,
   mediaUrls: [],
   isFeatured: false,
-  author: { name: 'Jane Doe', headline: 'Engineer' }
+  author: { name: 'Jane Doe', headline: 'Engineer' },
+  sourceUrl: ''
 }
 
 describe('PostCard', () => {
@@ -102,5 +103,21 @@ describe('PostCard', () => {
     )
     expect(screen.getByRole('button', { name: /10.*like/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /3.*comment/i })).toBeInTheDocument()
+  })
+
+  // The "View on LinkedIn" link must point to the exact URL the user submitted
+  // (sourceUrl). Reconstructing from the URN is lossy: LinkedIn's ugcPost / activity /
+  // share IDs differ for the same post, so a reconstructed /feed/update/ link can
+  // resolve to the wrong place (or nowhere).
+  it('links "View on LinkedIn" to the stored sourceUrl when present', () => {
+    const sourceUrl = 'https://www.linkedin.com/posts/test'
+    render(
+      <PostCard
+        post={{ ...mockPost, sourceUrl }}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
+    expect(screen.getByRole('link', { name: /view on linkedin/i })).toHaveAttribute('href', sourceUrl)
   })
 })

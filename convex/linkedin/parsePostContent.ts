@@ -1,4 +1,5 @@
 // convex/linkedin/parsePostContent.ts
+import { isAllowedLinkedInUrl } from './parsePostUrl'
 
 export type PostMedia = { type: 'image' | 'article' | 'document'; url: string }
 
@@ -106,14 +107,45 @@ function extractMedia(html: string, blocks: Record<string, unknown>[]): PostMedi
     }
 
     if (isArticleType(b['@type']) && typeof b.url === 'string') add('article', b.url)
-    add('article', asRecord(b.sharedContent)?.url)
     add('document', asRecord(b.associatedMedia)?.contentUrl)
   }
 
   // Document/slides: direct PDF links in the page
   for (const url of findPdfLinks(html)) add('document', url)
 
+  // Shared article (e.g. a Pulse post): LinkedIn does NOT expose this in JSON-LD —
+  // the link lives only in the post body anchor. extractArticleUrl picks the primary
+  // one and ignores "more from author" links. See its doc comment.
+  const articleUrl = extractArticleUrl(html)
+  if (articleUrl) add('article', articleUrl)
+
   return media
+}
+
+/**
+ * Extracts the URL of the article a post shares (e.g. a LinkedIn Pulse article).
+ *
+ * LinkedIn does NOT expose the shared article in the post's JSON-LD (the post is typed
+ * `SocialMediaPosting`, whose only urls are the post's own `@id`, the author profile, and
+ * the cover image). The article link lives only in the post body as an <a> tag marked
+ * `data-test-id="article-content"` with a `feed-article-content` class/tracking name. Other
+ * /pulse/ links on the page ("more from this author") lack those markers and must be ignored.
+ *
+ * Returns a clean canonical URL (tracking query/hash stripped) or null. The result is validated
+ * against the LinkedIn host allowlist because the caller fetches it server-side (SSRF guard).
+ */
+export function extractArticleUrl(html: string): string | null {
+  const anchorRe = /<a\b[^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = anchorRe.exec(html)) !== null) {
+    const tag = m[0]
+    if (!/data-test-id=["']article-content["']/i.test(tag) && !/feed-article-content/i.test(tag)) continue
+    const href = tag.match(/\bhref=["']([^"']+)["']/i)?.[1]
+    if (!href) continue
+    const clean = decodeEntities(href).split(/[?#]/)[0]
+    if (isAllowedLinkedInUrl(clean)) return clean
+  }
+  return null
 }
 
 /**
@@ -123,6 +155,145 @@ function extractMedia(html: string, blocks: Record<string, unknown>[]): PostMedi
 export function parsePostContent(html: string): ParsedPostContent {
   const blocks = extractJsonLd(html)
   return { text: extractText(html, blocks), media: extractMedia(html, blocks) }
+}
+
+export interface ParsedArticle {
+  /** Article title — JSON-LD `name`, falling back to og:title. */
+  title?: string
+  /** Short intro/summary — JSON-LD `headline`/`description`, falling back to og:description. */
+  summary?: string
+  /**
+   * Full article body as plain text — paragraphs (blank-line separated), headings, list items
+   * (`- ` bullets), and code blocks (fenced with ```), extracted from the SSR `article-content-blocks`.
+   */
+  text?: string
+  /** Author display name — JSON-LD `author.name`. */
+  author?: string
+  /** Public article images (cover + og:image + inline body images), de-duplicated. */
+  imageUrls: string[]
+}
+
+/**
+ * Parses a LinkedIn article (Pulse) guest page into title / summary / full body text / author /
+ * images.
+ *
+ * The guest SSR page renders the FULL article body — despite the post JSON-LD's
+ * `isAccessibleForFree:false` flag — inside `<div data-test-id="article-content-blocks">` as a
+ * sequence of `publishing-text-block`s, so `extractArticleBody` recovers the whole text, isolated
+ * from the surrounding sign-in / comments / "more articles" chrome. Title / summary / author come
+ * from the article's `@type:Article` JSON-LD (LinkedIn unusually maps `name`→title and
+ * `headline`→summary), with og: tags as a fallback. Best-effort and non-fatal: unrecognized HTML
+ * yields empty fields. This data seeds a future AI-comment feature; it is not displayed in-app.
+ */
+export function parseArticle(html: string): ParsedArticle {
+  const blocks = extractJsonLd(html)
+  const article = blocks.find(b => isArticleType(b['@type']))
+
+  const ldString = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+
+  const title = ldString(article?.name) ?? getMeta(html, 'og:title')?.trim() ?? undefined
+  const summary =
+    ldString(article?.headline) ??
+    ldString(article?.description) ??
+    getMeta(html, 'og:description')?.trim() ??
+    undefined
+  const author = ldString(asRecord(article?.author)?.name)
+  const text = extractArticleBody(html) || undefined
+
+  const imageUrls: string[] = []
+  const seen = new Set<string>()
+  const addImage = (u: unknown): void => {
+    if (typeof u === 'string' && u && !seen.has(u)) {
+      seen.add(u)
+      imageUrls.push(u)
+    }
+  }
+  const img = article?.image
+  if (typeof img === 'string') addImage(img)
+  else addImage(asRecord(img)?.url)
+  for (const u of getAllMeta(html, 'og:image')) addImage(u)
+  for (const u of extractArticleBodyImages(html)) addImage(u)
+
+  return { title, summary, text, author, imageUrls }
+}
+
+/** Strips all HTML tags (and `<!---->` comments) from a fragment. */
+function stripTags(s: string): string {
+  return s.replace(/<[^>]*>/g, '')
+}
+
+/** Tag-free, entity-decoded text with all whitespace collapsed to single spaces. */
+function collapseWs(s: string): string {
+  return decodeEntities(stripTags(s)).replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Extracts the full article body as plain text from a LinkedIn article guest page.
+ *
+ * The body lives in `<div data-test-id="article-content-blocks"> … </div>` (inside `<article>`),
+ * as a flat list of `<p>` / `<h1-6>` / `<pre>` elements. We isolate that region (up to `</article>`)
+ * to exclude the header, sign-in chrome, comments, and "more articles" cards, then render each
+ * element in document order:
+ *   - `<pre>`  → fenced code block (internal whitespace preserved)
+ *   - `<h1-6>` → heading text on its own line
+ *   - `<p>` containing `<li>` → one `- ` bullet per list item
+ *   - `<p>`    → a paragraph
+ * Blocks are joined by blank lines. Returns '' when no article body is present.
+ */
+function extractArticleBody(html: string): string {
+  const si = html.indexOf('data-test-id="article-content-blocks"')
+  if (si === -1) return ''
+  const ei = html.indexOf('</article>', si)
+  const region = html.slice(si, ei === -1 ? undefined : ei)
+
+  const parts: string[] = []
+  const re = /<pre\b[^>]*>([\s\S]*?)<\/pre>|<h([1-6])\b[^>]*>([\s\S]*?)<\/h\2>|<p\b[^>]*>([\s\S]*?)<\/p>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(region)) !== null) {
+    if (m[1] !== undefined) {
+      // Code block — preserve internal whitespace; trim trailing space per line + outer blank lines.
+      const code = decodeEntities(stripTags(m[1]))
+        .replace(/[ \t]+$/gm, '')
+        .replace(/^\n+|\s+$/g, '')
+      if (code) parts.push('```\n' + code + '\n```')
+    } else if (m[3] !== undefined) {
+      const heading = collapseWs(m[3])
+      if (heading) parts.push(heading)
+    } else if (m[4] !== undefined) {
+      const p = m[4]
+      if (/<li[\s>]/i.test(p)) {
+        const items: string[] = []
+        const li = /<li\b[^>]*>([\s\S]*?)<\/li>/gi
+        let lm: RegExpExecArray | null
+        while ((lm = li.exec(p)) !== null) {
+          const item = collapseWs(lm[1])
+          if (item) items.push(`- ${item}`)
+        }
+        if (items.length) parts.push(items.join('\n'))
+      } else {
+        const paragraph = collapseWs(p)
+        if (paragraph) parts.push(paragraph)
+      }
+    }
+  }
+  return parts.join('\n\n').trim()
+}
+
+/**
+ * Inline article images (media.licdn.com) found within the article body region. Scoped to
+ * `article-content-blocks` so it excludes the cover (already captured via og:image) and the
+ * author avatar (in the header) — leaving only genuine in-body images.
+ */
+function extractArticleBodyImages(html: string): string[] {
+  const si = html.indexOf('data-test-id="article-content-blocks"')
+  if (si === -1) return []
+  const ei = html.indexOf('</article>', si)
+  const region = html.slice(si, ei === -1 ? undefined : ei)
+  const urls: string[] = []
+  const re = /(?:src|data-delayed-url)=["'](https:\/\/media\.licdn\.com\/[^"']+)["']/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(region)) !== null) urls.push(decodeEntities(m[1]))
+  return urls
 }
 
 export interface PostEngagement {

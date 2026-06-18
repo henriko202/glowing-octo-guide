@@ -3,7 +3,7 @@ import { internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
 import type { ActionCtx } from '../convexTypes.js'
-import { runApifyTask, isApifyPostSyncEnabled } from '../lib/apify.js'
+import { isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js'
 
 // ─── Types for Apify LinkedIn post scraper output ────────────────────────────
 
@@ -136,8 +136,6 @@ export const syncAllPostsViaApify = internalAction({
         actionCtx.runAction(internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId: u._id as string })
       )
     )
-
-    console.log(results)
 
     const failed = results.filter(r => r.status === 'rejected')
     if (failed.length > 0) {

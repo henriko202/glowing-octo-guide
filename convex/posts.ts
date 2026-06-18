@@ -3,12 +3,13 @@ import { action, internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
-import { parseLinkedInPostUrl } from './linkedin/parsePostUrl'
-import { verifyPostOwnership, type OwnershipResult } from './linkedin/verifyPostOwnership'
+import { isAllowedLinkedInUrl, parseLinkedInPostUrl } from './linkedin/parsePostUrl'
+import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
-import { parsePostContent, parsePostEngagement, appendMediaLinks } from './linkedin/parsePostContent'
+import { appendMediaLinks, parseArticle, parsePostContent, parsePostEngagement } from './linkedin/parsePostContent'
+import { type ArticleData } from './lib/articleValidator'
 
 /**
  * Whether the admin "share any post" override is active for this submitter.
@@ -211,6 +212,25 @@ export const submitPost = action({
     // zero engagement rather than failing the submit.
     const engagement = parsePostEngagement(rawLinkedinText)
 
+    // 4d. Best-effort article enrichment. If the post shares a LinkedIn article (e.g. a
+    // Pulse post), fetch that article page and capture its title/summary/author/images to
+    // seed a future AI-comment feature. Non-fatal: no article link, a network error, or a
+    // parse miss simply leaves `article` undefined. SSRF: only fetch URLs that pass the
+    // LinkedIn host allowlist (extractArticleUrl already enforces this; re-checked here as
+    // defense-in-depth because this URL is fetched server-side). The full article body is
+    // auth-walled, so parseArticle returns only the reliably-public subset.
+    let article: ArticleData | undefined
+    const articleUrl = parsedContent.media.find(m => m.type === 'article')?.url
+    if (articleUrl && isAllowedLinkedInUrl(articleUrl)) {
+      try {
+        const articleResponse = await fetch(articleUrl)
+        const articleHtml = await articleResponse.text()
+        article = { url: articleUrl, ...parseArticle(articleHtml) }
+      } catch {
+        // best-effort — article enrichment must never block a submission
+      }
+    }
+
     // 5. Upsert the post — returns the post _id
     const postId = await ctx.runMutation(internal.jobs.syncPosts.upsertPost, {
       linkedinPostUrn: urn,
@@ -226,7 +246,9 @@ export const submitPost = action({
       hidden: user.subscriptionStatus === 'trialing',
       // Preserve the original submitted URL so we can link back correctly —
       // reconstructing from URN loses information (activity ID ≠ ugcPost ID).
-      sourceUrl: postUrl
+      sourceUrl: postUrl,
+      // Best-effort article data (undefined when the post shares no article).
+      article
     })
 
     if (!postId) {
