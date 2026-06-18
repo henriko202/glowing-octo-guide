@@ -15,7 +15,7 @@ interface CascadeDb {
     withIndex(
       name: string,
       fn: (q: unknown) => unknown
-    ): { collect(): Promise<Array<Record<string, unknown> & { _id: string }>> }
+    ): { take(n: number): Promise<Array<Record<string, unknown> & { _id: string }>> }
   }
   get(id: string): Promise<(Record<string, unknown> & { _id: string }) | null>
   patch(id: string, fields: Record<string, unknown>): Promise<void>
@@ -45,59 +45,78 @@ const ANONYMIZED: Array<{ table: string; index: string; field: string }> = [
   { table: 'feedback', index: 'by_user', field: 'userId' }
 ]
 
-export async function cascadeDeleteUser(db: CascadeDb, storage: CascadeStorage, userId: string): Promise<void> {
+// One cascade pass deletes/anonymizes at most this many rows per owned table — bounded so a single
+// mutation stays within Convex's read/write budget even for a user with an unbounded number of posts.
+const CASCADE_BATCH = 100
+
+/**
+ * Deletes / anonymizes up to `batch` rows per owned table for `userId`. Returns `true` only once
+ * every table is fully drained — at which point it writes the final system audit row and deletes
+ * the user document. Returns `false` when any table still had a full batch (more rows remain), so
+ * `processAccountDeletions` reschedules another pass. The user document is the LAST thing deleted,
+ * so a half-drained account stays "due" and is re-selected until fully erased. Pure (narrow db +
+ * storage interface) so the whole multi-table erasure stays unit-testable.
+ */
+export async function cascadeDeleteUser(
+  db: CascadeDb,
+  storage: CascadeStorage,
+  userId: string,
+  batch: number = CASCADE_BATCH
+): Promise<boolean> {
+  let moreWork = false
+
   // 1. Delete export jobs + their stored files first (needs storage cleanup).
-  const exports = [
-    ...(await db
-      .query('dataExportRequests')
-      .withIndex('by_user', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('userId', userId))
-      .collect())
-  ]
+  const exports = await db
+    .query('dataExportRequests')
+    .withIndex('by_user', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('userId', userId))
+    .take(batch)
   for (const e of exports) {
     if (typeof e.fileStorageId === 'string') await storage.delete(e.fileStorageId)
     await db.delete(e._id)
   }
+  if (exports.length === batch) moreWork = true
 
   // 2. Delete all other owned rows.
   for (const { table, index, field } of OWNED) {
-    const rows = [
-      ...(await db
-        .query(table)
-        .withIndex(index, (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq(field, userId))
-        .collect())
-    ]
+    const rows = await db
+      .query(table)
+      .withIndex(index, (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq(field, userId))
+      .take(batch)
     for (const r of rows) await db.delete(r._id)
+    if (rows.length === batch) moreWork = true
   }
 
   // 2b. Anonymize feedback rows (clear userId but retain content).
   for (const { table, index, field } of ANONYMIZED) {
-    const rows = [
-      ...(await db
-        .query(table)
-        .withIndex(index, (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq(field, userId))
-        .collect())
-    ]
+    const rows = await db
+      .query(table)
+      .withIndex(index, (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq(field, userId))
+      .take(batch)
     for (const r of rows) await db.patch(r._id, { [field]: undefined })
+    if (rows.length === batch) moreWork = true
   }
 
   // 3. Pseudonymize audit rows that target this user (keep action/metadata for accountability).
-  const audits = [
-    ...(await db
-      .query('auditLogs')
-      .withIndex('by_target', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('targetUserId', userId))
-      .collect())
-  ]
+  const audits = await db
+    .query('auditLogs')
+    .withIndex('by_target', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('targetUserId', userId))
+    .take(batch)
   for (const a of audits) await db.patch(a._id, { targetUserId: undefined, actorId: undefined })
+  if (audits.length === batch) moreWork = true
+
+  // At least one table still had a full batch — more rows remain. Leave the user document in place
+  // (it stays "due", so the cron re-selects this account) and signal the caller to reschedule.
+  if (moreWork) return false
 
   // 4. Record the deletion itself (no PII).
   await writeAuditLog(db, { actor: 'system', action: 'account.deleted', metadata: JSON.stringify({ at: Date.now() }) })
 
   // 5. Delete the user document LAST.
   await db.delete(userId)
+  return true
 }
 
 const GRACE_MS = 30 * 24 * 60 * 60 * 1000
-const DELETION_BATCH = 50
 
 function formatDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10) // YYYY-MM-DD
@@ -190,26 +209,38 @@ export const getUserEmail = internalQuery({
   }
 })
 
-// Daily cron: hard-delete accounts past their grace window. Batched + self-rescheduling.
+// Daily cron: hard-delete accounts past their grace window. Processes ONE account per invocation and
+// self-reschedules: cascadeDeleteUser drains a bounded batch of rows per pass and only deletes the
+// user document once every table is clear, so a single account with an unbounded number of posts is
+// erased across as many passes as it takes — each within one transaction's budget — before the cron
+// moves on to the next due account.
 export const processAccountDeletions = internalMutation({
   args: {},
   handler: async ctx => {
     const now = Date.now()
-    // Indexed range on the leading field of by_deletion_and_last_login. gte(1) skips rows
-    // where deletionScheduledAt is unset (undefined sorts before all numbers), so this reads
-    // only accounts actually due for deletion — not the whole users table.
+    // Indexed range on the leading field of by_deletion_and_last_login. gte(1) skips rows where
+    // deletionScheduledAt is unset (undefined sorts before all numbers), so this reads only accounts
+    // actually due for deletion — not the whole users table. take(1): the earliest-due account, which
+    // keeps being re-selected (its document is deleted last) until it is fully erased.
     const due = await ctx.db
       .query('users')
       .withIndex('by_deletion_and_last_login', q => q.gte('deletionScheduledAt', 1).lte('deletionScheduledAt', now))
-      .take(DELETION_BATCH)
-    for (const user of due) {
-      const email = user.email as string | undefined
-      await cascadeDeleteUser(ctx.db as unknown as CascadeDb, ctx.storage as unknown as CascadeStorage, user._id)
-      if (email) await ctx.scheduler.runAfter(0, internal.privacy.deletion.sendDeletionCompleted, { email })
+      .take(1)
+    if (due.length === 0) return
+
+    const user = due[0]
+    const email = user.email as string | undefined
+    const done = await cascadeDeleteUser(
+      ctx.db as unknown as CascadeDb,
+      ctx.storage as unknown as CascadeStorage,
+      user._id
+    )
+    if (done && email) {
+      await ctx.scheduler.runAfter(0, internal.privacy.deletion.sendDeletionCompleted, { email })
     }
-    if (due.length === DELETION_BATCH) {
-      await ctx.scheduler.runAfter(0, internal.privacy.deletion.processAccountDeletions, {})
-    }
+    // Keep going until the due-set is empty: either this account needs more passes (done === false)
+    // or there may be further due accounts (done === true).
+    await ctx.scheduler.runAfter(0, internal.privacy.deletion.processAccountDeletions, {})
   }
 })
 

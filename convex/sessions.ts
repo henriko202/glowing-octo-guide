@@ -47,7 +47,7 @@ export const deleteExpiredSessions = internalMutation({
     const now = Date.now()
     const expired = await ctx.db
       .query('sessions')
-      .filter(q => q.lt(q.field('expiresAt'), now))
+      .withIndex('by_expires_at', q => q.lt('expiresAt', now))
       .take(200)
     await Promise.all(expired.map(s => ctx.db.delete(s._id)))
   }
@@ -101,7 +101,7 @@ export const deleteExpiredOAuthStates = internalMutation({
     const now = Date.now()
     const expired = await ctx.db
       .query('oauthStates')
-      .filter(q => q.lt(q.field('expiresAt'), now))
+      .withIndex('by_expires_at', q => q.lt('expiresAt', now))
       .take(200)
     await Promise.all(expired.map(s => ctx.db.delete(s._id)))
   }

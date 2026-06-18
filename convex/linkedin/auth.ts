@@ -1,8 +1,20 @@
 // convex/linkedin/auth.ts
 import { internalMutationGeneric as internalMutation } from 'convex/server'
 import { v } from 'convex/values'
-import type { UpsertDb } from '../convexTypes.js'
 import { POLICY_VERSION } from '../lib/policy.js'
+
+// Narrow db surface for upsertUserHandler — defined locally (not from generated types) so the
+// handler stays unit-testable with a plain in-memory mock. Mirrors only the ctx.db calls it makes.
+interface UpsertIndexQuery {
+  eq(field: string, value: unknown): UpsertIndexQuery
+}
+interface UpsertDb {
+  query(table: string): {
+    withIndex(name: string, fn: (q: UpsertIndexQuery) => UpsertIndexQuery): { first(): Promise<{ _id: string } | null> }
+  }
+  patch(id: string, fields: Record<string, unknown>): Promise<void>
+  insert(table: string, doc: Record<string, unknown>): Promise<string>
+}
 
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000
 

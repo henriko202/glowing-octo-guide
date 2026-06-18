@@ -48,10 +48,14 @@ export const getMyPosts = query({
     } catch {
       return []
     }
+    // Bounded read: take the 500 most-recently-added posts for this author instead of an
+    // unbounded .collect(). Ordered desc on the by_author index (_creationTime) so the cap
+    // keeps the newest posts; we re-sort by publishedAt below for display.
     const posts = await ctx.db
       .query('posts')
       .withIndex('by_author', q => q.eq('authorId', user._id))
-      .collect()
+      .order('desc')
+      .take(500)
     // Returns this user's posts EXCEPT soft-deleted ones. Hidden posts ARE included —
     // "hidden" means hidden from other users' feeds, not from the author's own My Posts
     // page (where they can unhide). Soft-deleted posts are dropped from this view, but

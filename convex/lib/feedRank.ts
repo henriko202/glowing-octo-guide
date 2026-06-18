@@ -4,7 +4,9 @@
 // truth for a post's `feedRank` + `inFeed`; every writer that touches a post calls it
 // so the two fields can never drift from the post's real state.
 
-import type { MutationCtx } from '../_generated/server'
+import { internalMutation, type MutationCtx } from '../_generated/server'
+import { internal } from '../_generated/api'
+import { v } from 'convex/values'
 import type { Id } from '../_generated/dataModel'
 
 /**
@@ -60,8 +62,11 @@ export function computeFeedFields(post: FeedFieldInputs): FeedFields {
  * paths — Stripe `syncUserSubscription`/`cancelUserSubscription` AND the admin `setUserTier`
  * override — so a post's stored tier rank can never lag the user's real tier.
  *
- * Reads the user's posts once and patches them in a single pass. When `unhideHidden` is set
- * (subscription became active), hidden posts are also un-hidden, which flips their `inFeed`.
+ * Kicks off a batched, self-rescheduling restamp (`restampUserPostsTierRankPage`) rather than
+ * patching every post inline: a user with an unbounded number of posts would otherwise exceed a
+ * single mutation's write budget and the whole tier change would fail. Tradeoff: brief eventual
+ * consistency — the tier change commits first, and this author's posts are re-ranked a moment later.
+ * When `unhideHidden` is set (subscription became active), hidden posts are also un-hidden.
  */
 export async function restampUserPostsTierRank(
   ctx: MutationCtx,
@@ -69,13 +74,39 @@ export async function restampUserPostsTierRank(
   authorTierRank: number,
   opts: { unhideHidden?: boolean } = {}
 ): Promise<void> {
-  const posts = await ctx.db
-    .query('posts')
-    .withIndex('by_author', q => q.eq('authorId', userId))
-    .collect()
-  await Promise.all(
-    posts.map(p => {
-      const willUnhide = opts.unhideHidden === true && p.hidden
+  await ctx.scheduler.runAfter(0, internal.lib.feedRank.restampUserPostsTierRankPage, {
+    userId,
+    authorTierRank,
+    unhideHidden: opts.unhideHidden === true,
+    cursor: null
+  })
+}
+
+// One restamp pass patches at most this many of an author's posts, then reschedules for the next
+// page — bounding each mutation's writes regardless of how many posts the author has.
+const RESTAMP_BATCH = 100
+
+/**
+ * Re-ranks one page of an author's posts and reschedules itself for the next page until the whole
+ * history is covered. Internal — only reached via `restampUserPostsTierRank`. Patching doesn't shrink
+ * the by_author result set, so this advances with a `.paginate()` cursor (not `.take()`). The explicit
+ * `Promise<void>` return type breaks the same-file `internal.*` type cycle the generated ctx introduces.
+ */
+export const restampUserPostsTierRankPage = internalMutation({
+  args: {
+    userId: v.id('users'),
+    authorTierRank: v.number(),
+    unhideHidden: v.boolean(),
+    cursor: v.union(v.string(), v.null())
+  },
+  handler: async (ctx, { userId, authorTierRank, unhideHidden, cursor }): Promise<void> => {
+    const page = await ctx.db
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', userId))
+      .paginate({ numItems: RESTAMP_BATCH, cursor })
+
+    for (const p of page.page) {
+      const willUnhide = unhideHidden && p.hidden
       const feed = computeFeedFields({
         isFeatured: p.isFeatured,
         publishedAt: p.publishedAt,
@@ -89,7 +120,16 @@ export async function restampUserPostsTierRank(
         ...feed
       }
       if (willUnhide) fields.hidden = false
-      return ctx.db.patch(p._id, fields)
-    })
-  )
-}
+      await ctx.db.patch(p._id, fields)
+    }
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.lib.feedRank.restampUserPostsTierRankPage, {
+        userId,
+        authorTierRank,
+        unhideHidden,
+        cursor: page.continueCursor
+      })
+    }
+  }
+})

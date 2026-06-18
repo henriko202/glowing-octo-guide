@@ -2,7 +2,8 @@
 import { internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
-import type { ActionCtx } from '../convexTypes.js'
+import type { ActionCtx } from '../_generated/server'
+import type { Id } from '../_generated/dataModel'
 import { isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js'
 
 // ─── Types for Apify LinkedIn post scraper output ────────────────────────────
@@ -32,7 +33,7 @@ interface ApifyPostResult {
 
 // ─── Parse Apify result into our post shape ──────────────────────────────────
 
-function apifyPostToUpsertArgs(post: ApifyPostResult, authorId: string, hidden: boolean) {
+function apifyPostToUpsertArgs(post: ApifyPostResult, authorId: Id<'users'>, hidden: boolean) {
   const urn = post.shareUrn
   const mediaUrls = (post.postImages ?? [])
     .map(img => img.url)
@@ -58,7 +59,10 @@ function apifyPostToUpsertArgs(post: ApifyPostResult, authorId: string, hidden: 
 
 export const syncUserPostsViaApify = internalAction({
   args: { userId: v.id('users') },
-  handler: async (ctx, { userId }: { userId: string }) => {
+  // Explicit return type breaks the same-file type cycle: syncAllPostsViaApify references this
+  // function via `internal`, and the generated ActionCtx's runQuery/runAction return types depend
+  // on the api — see the Convex guideline on same-file ctx.run* circularity (cf. posts.submitPost).
+  handler: async (ctx, { userId }: { userId: Id<'users'> }): Promise<void> => {
     const actionCtx = ctx as unknown as ActionCtx
     const token = process.env.APIFY_API_TOKEN
     const actorId = process.env.APIFY_TASK_ID
@@ -67,7 +71,7 @@ export const syncUserPostsViaApify = internalAction({
       return
     }
 
-    const user = (await actionCtx.runQuery(internal.users.getWithTokens, { userId })) as Record<string, unknown> | null
+    const user = await actionCtx.runQuery(internal.users.getWithTokens, { userId })
     if (!user?.linkedinPublicIdentifier) {
       console.warn(`User ${userId} has no linkedinPublicIdentifier — skipping Apify sync`)
       return
@@ -117,24 +121,19 @@ export const syncUserPostsViaApify = internalAction({
 
 export const syncAllPostsViaApify = internalAction({
   args: {},
-  handler: async ctx => {
+  handler: async (ctx): Promise<void> => {
     const actionCtx = ctx as unknown as ActionCtx
 
-    const settings = (await actionCtx.runQuery(internal.admin.getSettingsInternal, {})) as Record<
-      string,
-      unknown
-    > | null
+    const settings = await actionCtx.runQuery(internal.admin.getSettingsInternal, {})
     if (!isApifyPostSyncEnabled(settings)) {
       console.log('[Apify] Sync is disabled — skipping')
       return
     }
 
-    const users = (await actionCtx.runQuery(internal.users.getActiveSubscribers, {})) as Array<Record<string, unknown>>
+    const users = await actionCtx.runQuery(internal.users.getActiveSubscribers, {})
 
     const results = await Promise.allSettled(
-      users.map(u =>
-        actionCtx.runAction(internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId: u._id as string })
-      )
+      users.map(u => actionCtx.runAction(internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId: u._id }))
     )
 
     const failed = results.filter(r => r.status === 'rejected')

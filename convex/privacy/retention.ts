@@ -64,7 +64,7 @@ export const enforceDataRetention = internalMutation({
     // 2. Expire + delete old export files.
     const readyExports = await ctx.db
       .query('dataExportRequests')
-      .filter(q => q.eq(q.field('status'), 'ready'))
+      .withIndex('by_status', q => q.eq('status', 'ready'))
       .take(RETENTION_BATCH)
     for (const r of readyExports as Array<{
       _id: string

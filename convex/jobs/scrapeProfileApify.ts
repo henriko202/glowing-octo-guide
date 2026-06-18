@@ -3,7 +3,8 @@
 import { internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
-import type { ActionCtx } from '../convexTypes.js'
+import type { ActionCtx } from '../_generated/server'
+import type { Id } from '../_generated/dataModel'
 import { isApifyProfileScrapeEnabled, runApifyTask } from '../lib/apify.js' // Only the fields we read from the (much larger) profile-scraper payload.
 
 // Only the fields we read from the (much larger) profile-scraper payload.
@@ -34,7 +35,9 @@ export function parseProfileScrapeResult(items: unknown): ParsedProfile {
 
 export const scrapeUserProfile = internalAction({
   args: { userId: v.id('users') },
-  handler: async (ctx, { userId }: { userId: string }) => {
+  // Explicit return type breaks the same-file type cycle (scrapeAllProfilesViaApify references this
+  // via `internal`); see the Convex guideline on same-file ctx.run* circularity (cf. posts.submitPost).
+  handler: async (ctx, { userId }: { userId: Id<'users'> }): Promise<void> => {
     const actionCtx = ctx as unknown as ActionCtx
     const token = process.env.APIFY_API_TOKEN
     const actorId = process.env.APIFY_TASK_ID_PROFILE_SCRAPE
@@ -43,16 +46,13 @@ export const scrapeUserProfile = internalAction({
       return
     }
 
-    const settings = (await actionCtx.runQuery(internal.admin.getSettingsInternal, {})) as Record<
-      string,
-      unknown
-    > | null
+    const settings = await actionCtx.runQuery(internal.admin.getSettingsInternal, {})
     if (!isApifyProfileScrapeEnabled(settings)) {
       console.log('[Apify] Profile scrape disabled — skipping')
       return
     }
 
-    const user = (await actionCtx.runQuery(internal.users.getWithTokens, { userId })) as Record<string, unknown> | null
+    const user = await actionCtx.runQuery(internal.users.getWithTokens, { userId })
     if (!user?.linkedinPublicIdentifier) {
       console.warn(`User ${userId} has no linkedinPublicIdentifier — skipping profile scrape`)
       return
@@ -78,19 +78,16 @@ export const scrapeUserProfile = internalAction({
 // it too). Records its own last-run + error on appSettings, parallel to the post-sync status.
 export const scrapeAllProfilesViaApify = internalAction({
   args: {},
-  handler: async ctx => {
+  handler: async (ctx): Promise<void> => {
     const actionCtx = ctx as unknown as ActionCtx
 
-    const settings = (await actionCtx.runQuery(internal.admin.getSettingsInternal, {})) as Record<
-      string,
-      unknown
-    > | null
+    const settings = await actionCtx.runQuery(internal.admin.getSettingsInternal, {})
     if (!isApifyProfileScrapeEnabled(settings)) {
       console.log('[Apify] Profile scrape disabled — skipping')
       return
     }
 
-    const users = (await actionCtx.runQuery(internal.users.getUsersWithLinkedin, {})) as Array<{ _id: string }>
+    const users = await actionCtx.runQuery(internal.users.getUsersWithLinkedin, {})
 
     const results = await Promise.allSettled(
       users.map(u => actionCtx.runAction(internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: u._id }))

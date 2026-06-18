@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { toSafeMe } from './users'
-import type { UserDoc } from './convexTypes'
+import type { Doc, Id } from './_generated/dataModel'
 
-function makeUser(overrides: Partial<UserDoc> = {}): UserDoc {
+function makeUser(overrides: Partial<Doc<'users'>> = {}): Doc<'users'> {
   return {
     _id: 'u1',
     _creationTime: 0,
@@ -15,7 +15,7 @@ function makeUser(overrides: Partial<UserDoc> = {}): UserDoc {
     tokenExpiresAt: 123,
     createdAt: 0,
     ...overrides
-  } as UserDoc
+  } as Doc<'users'>
 }
 
 describe('toSafeMe', () => {
@@ -40,7 +40,13 @@ describe('toSafeMe', () => {
 
   it('strips stripeCustomerId and ban audit fields but keeps bannedReason', () => {
     const safe = toSafeMe(
-      makeUser({ stripeCustomerId: 'cus_1', isBanned: true, bannedAt: 123, bannedBy: 'admin1', bannedReason: 'Spam' })
+      makeUser({
+        stripeCustomerId: 'cus_1',
+        isBanned: true,
+        bannedAt: 123,
+        bannedBy: 'admin1' as Id<'users'>,
+        bannedReason: 'Spam'
+      })
     ) as Record<string, unknown>
     expect(safe.stripeCustomerId).toBeUndefined()
     expect(safe.bannedBy).toBeUndefined()

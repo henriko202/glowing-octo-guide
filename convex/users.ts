@@ -1,7 +1,7 @@
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import { components, internal } from './_generated/api'
-import type { UserDoc } from './convexTypes'
+import type { Doc } from './_generated/dataModel'
 import { requireAuth, resolveSession } from './lib/auth'
 import { isValidCountry, isValidIndustry } from './lib/profileOptions'
 import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
@@ -36,7 +36,15 @@ export const getActiveSubscribers = internalQuery({
 export const getUsersWithLinkedin = internalQuery({
   args: {},
   handler: async ctx => {
-    const users = await ctx.db.query('users').take(500)
+    const SCAN_CAP = 500
+    const users = await ctx.db.query('users').take(SCAN_CAP)
+    // Non-silent cap: surface when the bounded scan saturates so users beyond the ceiling aren't
+    // dropped silently. Revisit (index or pagination) if/when the Apify profile scrape is re-enabled.
+    if (users.length === SCAN_CAP) {
+      console.warn(
+        `[profile-scrape] getUsersWithLinkedin hit the ${SCAN_CAP}-user scan cap — some users may be skipped`
+      )
+    }
     return users.filter(u => !!u.linkedinPublicIdentifier).map(u => ({ _id: u._id }))
   }
 })
@@ -45,7 +53,7 @@ export const getUsersWithLinkedin = internalQuery({
 // Strips tokens + the raw isAdmin flag; re-adds isAdmin:true only for admins
 // (needed by the frontend route guard); passes the ban signal through so the
 // client can render the banned screen.
-export function toSafeMe(user: UserDoc) {
+export function toSafeMe(user: Doc<'users'>) {
   // Strip secrets + internal fields. bannedReason stays (shown on the banned screen).
   /* eslint-disable @typescript-eslint/no-unused-vars -- destructure-and-discard sensitive fields */
   const {
@@ -125,7 +133,7 @@ export function assertCanRefresh(user: { linkedinPublicIdentifier?: string }, se
 export const getMe = query({
   args: { sessionToken: v.optional(v.string()) },
   handler: async (ctx, { sessionToken }) => {
-    const user = (await resolveSession(ctx, sessionToken)) as UserDoc | null
+    const user = await resolveSession(ctx, sessionToken)
     if (!user) return null
     return toSafeMe(user)
   }
@@ -137,9 +145,9 @@ export const getSubscriptionInfo = query({
   args: { sessionToken: v.optional(v.string()) },
   handler: async (ctx, { sessionToken }) => {
     if (!sessionToken) return null
-    let user: UserDoc
+    let user: Doc<'users'>
     try {
-      user = (await requireAuth(ctx, sessionToken)) as UserDoc
+      user = await requireAuth(ctx, sessionToken)
     } catch {
       return null
     }

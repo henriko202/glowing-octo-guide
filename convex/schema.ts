@@ -122,11 +122,11 @@ export default defineSchema({
   })
     .index('by_author', ['authorId'])
     .index('by_urn', ['linkedinPostUrn'])
-    .index('by_featured', ['isFeatured', 'featuredAt'])
-    .index('by_published', ['hidden', 'publishedAt'])
     .index('by_author_and_publishedAt', ['authorId', 'publishedAt'])
-    .index('by_feed', ['hidden', 'isFeatured', 'featuredAt'])
     // Cursor-pagination index for getFeed: walk inFeed=true posts in feedRank desc order.
+    // NOTE: the older by_featured / by_published / by_feed indexes were removed once the
+    // feed migrated to by_feed_rank — they had no remaining withIndex callers and every
+    // index adds write amplification on this (highest-write) table.
     .index('by_feed_rank', ['inFeed', 'feedRank']),
 
   subscriptions: defineTable({
@@ -165,7 +165,10 @@ export default defineSchema({
     expiresAt: v.number()
   })
     .index('by_token', ['token'])
-    .index('by_userId', ['userId']),
+    .index('by_userId', ['userId'])
+    // Indexed range for the expired-session cleanup cron (expiresAt < now) — replaces a
+    // full-table .filter() scan that would read every live session to find the expired tail.
+    .index('by_expires_at', ['expiresAt']),
 
   rateLimits: defineTable({
     userId: v.id('users'),
@@ -180,7 +183,10 @@ export default defineSchema({
   oauthStates: defineTable({
     state: v.string(),
     expiresAt: v.number()
-  }).index('by_state', ['state']),
+  })
+    .index('by_state', ['state'])
+    // Indexed range for the expired-OAuth-state cleanup cron — replaces a full-table .filter() scan.
+    .index('by_expires_at', ['expiresAt']),
 
   // Subscription-tier limits for post interactions and weekly post volume.
   // The contact tier supports optional per-user overrides via userId.
@@ -232,7 +238,10 @@ export default defineSchema({
     requestedAt: v.number(),
     fileStorageId: v.optional(v.id('_storage')),
     expiresAt: v.optional(v.number())
-  }).index('by_user', ['userId']),
+  })
+    .index('by_user', ['userId'])
+    // Lets the retention cron pull 'ready' exports via index instead of a full-table .filter() scan.
+    .index('by_status', ['status']),
 
   // Accountability log (GDPR Art. 5(2)) for DSR actions, consent changes, and admin access
   // to personal data. A pseudonymized subset is retained past account deletion.

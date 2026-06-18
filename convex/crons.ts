@@ -7,12 +7,14 @@ import { internal } from './_generated/api.js'
 const crons = cronJobs()
 
 // ─── Post sync ───────────────────────────────────────────────────────────────
-// Runs daily at 3:00 UTC — fetches latest LinkedIn posts for all active users
-crons.interval('sync LinkedIn posts', { hours: 24 }, internal.jobs.syncPosts.syncAllPosts, {})
+// Runs daily at 03:00 UTC — fetches latest LinkedIn posts for all active users.
+// crons.cron pins a wall-clock time; crons.interval would drift relative to deploy time.
+crons.cron('sync LinkedIn posts', '0 3 * * *', internal.jobs.syncPosts.syncAllPosts, {})
 
-// Promote queued posts to the feed when authors regain capacity (runs at 4:00 UTC,
-// one hour after the post sync so new posts are already settled).
-crons.interval('process post queue', { hours: 25 }, internal.jobs.processQueue.processPostQueue, {})
+// Promote queued posts to the feed when authors regain capacity. Runs daily at 04:00 UTC —
+// one hour after the post sync so newly-synced posts are already settled. A fixed cron time keeps
+// that 1-hour gap stable (an interval offset like { hours: 25 } would slowly drift the two apart).
+crons.cron('process post queue', '0 4 * * *', internal.jobs.processQueue.processPostQueue, {})
 
 // ─── Session & OAuth state cleanup ───────────────────────────────────────────
 // Purge expired session tokens every 6 hours to prevent unbounded table growth.

@@ -207,7 +207,6 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │   ├── billing.ts               # Stripe Checkout + Customer Portal sessions
 │   ├── stripe.ts                # webhook-driven subscription sync mutations
 │   ├── admin.ts                 # admin queries/mutations (users, plan limits, ban)
-│   ├── convexTypes.ts           # hand-written ctx/db type shims (transitional)
 │   ├── lib/
 │   │   ├── auth.ts              # requireAuth / requireAuthAction / resolveSession / assertNotBanned
 │   │   ├── planLimits.ts        # plan-limit lookup + tierToRank
@@ -353,7 +352,8 @@ undefined)` + range on `lastLoginAt`).
 
 Inserted by `jobs/syncPosts.upsertPost` (manual + Apify) and `jobs/processQueue` (queue promotion).
 Patched by `stripe.ts` **and** `admin.setUserTier` (re‑stamp `authorTierRank` + `feedRank` on tier
-change, via the shared `restampUserPostsTierRank` helper), `interactions.ts`
+change, via the shared `restampUserPostsTierRank` helper — which schedules a batched, self‑rescheduling
+re‑stamp so a high‑volume author never exceeds one mutation's write budget), `interactions.ts`
 (`interactionLimitReached`), and `posts.ts` (`setPostHidden` → `hidden`; `deletePost` → `deletedAt`).
 Every post writer keeps the denormalized `feedRank` / `inFeed` fields in sync through the single
 `computeFeedFields` helper (`lib/feedRank.ts`).
@@ -380,12 +380,12 @@ Every post writer keeps the denormalized `feedRank` / `inFeed` fields in sync th
 | `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                      |
 | `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                  |
 
-Indexes: `by_author [authorId]`, `by_urn [linkedinPostUrn]`, `by_published [hidden, publishedAt]`,
-`by_author_and_publishedAt [authorId, publishedAt]`, plus **`by_featured [isFeatured, featuredAt]`
-and `by_feed [hidden, isFeatured, featuredAt]` which are defined but currently unused** (feed reads
-via `by_published`). `by_feed_rank [inFeed, feedRank]` backs the **live cursor‑paginated feed** — `getFeed` reads via
-this
-index (`eq(inFeed, true)`, `feedRank` desc), so `by_published` is no longer used by the feed. See
+Indexes: `by_author [authorId]`, `by_urn [linkedinPostUrn]`,
+`by_author_and_publishedAt [authorId, publishedAt]`, and `by_feed_rank [inFeed, feedRank]` which backs
+the **live cursor‑paginated feed** — `getFeed` reads via this index (`eq(inFeed, true)`, `feedRank`
+desc). The older `by_featured`, `by_published`, and `by_feed` indexes were **removed** once the feed
+migrated to `by_feed_rank` (they had no remaining `withIndex` callers, and every index adds write
+amplification on this high‑write table). See
 [feed-cursor-pagination-plan.md](feed-cursor-pagination-plan.md).
 
 #### `subscriptions` — Stripe subscription mirror
@@ -435,20 +435,20 @@ On promotion, `authorTierRank` is recomputed and `interactionLimitReached` is se
 
 Random UUID tokens issued by the OAuth callback. 30‑day TTL.
 
-| Field       | Type          | Req | Meaning                            |
-|-------------|---------------|:---:|------------------------------------|
-| `token`     | string        |  ✓  | Opaque session token (`by_token`). |
-| `userId`    | `id('users')` |  ✓  | Session owner (`by_userId`).       |
-| `expiresAt` | number        |  ✓  | Expiry (ms).                       |
+| Field       | Type          | Req | Meaning                                                                                                                 |
+|-------------|---------------|:---:|-------------------------------------------------------------------------------------------------------------------------|
+| `token`     | string        |  ✓  | Opaque session token (`by_token`).                                                                                      |
+| `userId`    | `id('users')` |  ✓  | Session owner (`by_userId`).                                                                                            |
+| `expiresAt` | number        |  ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-session cleanup cron (range scan, not a full-table `.filter()`). |
 
 #### `oauthStates` — CSRF nonces
 
 Single‑use OAuth `state` values; ~10‑minute TTL; deleted on validation.
 
-| Field       | Type   | Req | Meaning                    |
-|-------------|--------|:---:|----------------------------|
-| `state`     | string |  ✓  | Random nonce (`by_state`). |
-| `expiresAt` | number |  ✓  | Expiry (ms).               |
+| Field       | Type   | Req | Meaning                                                                    |
+|-------------|--------|:---:|----------------------------------------------------------------------------|
+| `state`     | string |  ✓  | Random nonce (`by_state`).                                                 |
+| `expiresAt` | number |  ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron. |
 
 #### `rateLimits` — fixed‑window counters
 
@@ -511,7 +511,8 @@ objects.
 | `fileStorageId` | `id('_storage')`                          |  –  | Convex storage id for the generated export bundle. Set when `status = 'ready'`. |
 | `expiresAt`     | number                                    |  –  | When the download link/bundle expires (ms).                                     |
 
-Index: `by_user [userId]`.
+Indexes: `by_user [userId]`, `by_status [status]` — the latter lets the retention cron pull `'ready'`
+exports via index instead of a full‑table `.filter()` scan.
 
 #### `auditLogs` — accountability log (GDPR Art. 5(2))
 
@@ -619,17 +620,19 @@ live in `convex/lib/auth.ts`:
 - External‑call failures are **logged server‑side with the real error** and surfaced to clients as
   **generic sanitized messages** (see [§17](#17-security-posture)).
 
-### Type‑shim landscape (all transitional, replaced by codegen)
+### Type‑shim landscape
 
-Three separate stopgaps exist because handwritten types stand in until `npx convex dev` regenerates
-`convex/_generated/`:
+The former `convex/convexTypes.ts` hand‑mirror of `DataModel`/`ctx`/`db` shapes has been **removed**;
+all backend code now imports generated `Doc<>`/`Id<>`/`QueryCtx`/`MutationCtx`/`ActionCtx` from
+`convex/_generated/`. Two intentional patterns remain:
 
-1. `convex/convexTypes.ts` — hand‑mirrors `DataModel`/`ctx`/`db` shapes. Contains some **drift**
-   (e.g. a `UserConnectionsDoc` for a non‑existent table; out‑of‑date `PostDoc`/`SubscriptionDoc`).
-2. `convex/jobs/syncPostsApify.ts` — the only backend file that imports `internalActionGeneric as
-internalAction` and casts `ctx as unknown as ActionCtx`, matching what the `convex-mocks`
-   Vitest alias is built to satisfy.
-3. `app/src/convex.ts` — re‑exports `{ api }` from `convex/_generated/api` for a stable app‑side
+1. **Test mock seam.** `convex/lib/audit.ts` and the two Apify jobs (`jobs/syncPostsApify.ts`,
+   `jobs/scrapeProfileApify.ts`) import `internalActionGeneric` / `internalMutationGeneric` from
+   `convex/server` (the registration generic the `convex-mocks` Vitest alias replaces) and cast
+   `ctx as unknown as ActionCtx` using the **generated** `ActionCtx`. Each fan‑out handler annotates
+   its return type (`Promise<void>`) to break the same‑file `internal.*` type cycle that the precise
+   generated ctx would otherwise introduce.
+2. `app/src/convex.ts` — re‑exports `{ api }` from `convex/_generated/api` for a stable app‑side
    import path.
 
 ---
@@ -1023,19 +1026,19 @@ flowchart TD
 
 ### Post‑related functions
 
-| Function                                    | Kind              | Purpose                                                                                    |
-|---------------------------------------------|-------------------|--------------------------------------------------------------------------------------------|
-| `posts.submitPost`                          | action (public)   | Manual submission (above).                                                                 |
-| `posts.getMyPosts`                          | query (public)    | Author's posts incl. hidden, **excl. soft‑deleted**, sorted by `publishedAt` desc.         |
-| `posts.setPostHidden`                       | mutation (public) | Hide/unhide a post (author or admin via `canModifyPost`). Doesn't change the weekly count. |
-| `posts.deletePost`                          | mutation (public) | Soft‑delete a post (author or admin). Row kept → weekly count unchanged. Idempotent.       |
-| `posts.getWeeklyUsage`                      | query (public)    | `{ postsThisWeek, postsPerWeek }` over the same rolling 7‑day window submitPost enforces.  |
-| `posts.countRecentPosts`                    | internalQuery     | Count posts since a timestamp (shared by enforcement + usage pill).                        |
-| `jobs/syncPosts.upsertPost`                 | internalMutation  | Insert/update gatekeeper with atomic weekly‑limit + optional queueing.                     |
-| `jobs/syncPosts.syncAllPosts`               | internalAction    | Cron router → Apify (if enabled).                                                          |
-| `jobs/syncPostsApify.syncUserPostsViaApify` | internalAction    | Scrape one user's recent posts via Apify REST.                                             |
-| `jobs/syncPostsApify.syncAllPostsViaApify`  | internalAction    | Fan‑out over active subscribers; records sync status.                                      |
-| `jobs/processQueue.processPostQueue`        | internalMutation  | Drain overflow queue when capacity opens.                                                  |
+| Function                                    | Kind              | Purpose                                                                                                             |
+|---------------------------------------------|-------------------|---------------------------------------------------------------------------------------------------------------------|
+| `posts.submitPost`                          | action (public)   | Manual submission (above).                                                                                          |
+| `posts.getMyPosts`                          | query (public)    | Author's posts incl. hidden, **excl. soft‑deleted**, sorted by `publishedAt` desc (bounded to the 500 most‑recent). |
+| `posts.setPostHidden`                       | mutation (public) | Hide/unhide a post (author or admin via `canModifyPost`). Doesn't change the weekly count.                          |
+| `posts.deletePost`                          | mutation (public) | Soft‑delete a post (author or admin). Row kept → weekly count unchanged. Idempotent.                                |
+| `posts.getWeeklyUsage`                      | query (public)    | `{ postsThisWeek, postsPerWeek }` over the same rolling 7‑day window submitPost enforces.                           |
+| `posts.countRecentPosts`                    | internalQuery     | Count posts since a timestamp (shared by enforcement + usage pill).                                                 |
+| `jobs/syncPosts.upsertPost`                 | internalMutation  | Insert/update gatekeeper with atomic weekly‑limit + optional queueing.                                              |
+| `jobs/syncPosts.syncAllPosts`               | internalAction    | Cron router → Apify (if enabled).                                                                                   |
+| `jobs/syncPostsApify.syncUserPostsViaApify` | internalAction    | Scrape one user's recent posts via Apify REST.                                                                      |
+| `jobs/syncPostsApify.syncAllPostsViaApify`  | internalAction    | Fan‑out over active subscribers; records sync status.                                                               |
+| `jobs/processQueue.processPostQueue`        | internalMutation  | Drain overflow queue when capacity opens.                                                                           |
 
 ---
 
@@ -1341,17 +1344,18 @@ flowchart TD
 
 ## 13. Scheduled Jobs (Crons)
 
-`convex/crons.ts` is the **only** file Convex reads for scheduled work. All are fixed‑interval
-(`crons.interval`), not wall‑clock (the inline "3:00 UTC" comments are aspirational).
+`convex/crons.ts` is the **only** file Convex reads for scheduled work. The two post‑sync jobs run at
+fixed wall‑clock times in UTC (`crons.cron`); the session/OAuth cleanup, account‑deletion, and
+retention jobs run on fixed intervals from deploy time (`crons.interval`).
 
-| Cron name                      | Interval      | Target                                     | Effect                                                                                                                                                                                                             |
-|--------------------------------|---------------|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sync LinkedIn posts`          | every **24h** | `jobs/syncPosts.syncAllPosts`              | Apify sync **iff** `apifySyncEnabled` (else no‑op).                                                                                                                                                                |
-| `process post queue`           | every **25h** | `jobs/processQueue.processPostQueue`       | Promote queued posts when authors regain weekly capacity.                                                                                                                                                          |
-| `cleanup expired sessions`     | every **6h**  | `sessions.deleteExpiredSessions`           | Purge expired sessions (≤ 200/run).                                                                                                                                                                                |
-| `cleanup expired oauth states` | every **1h**  | `sessions.deleteExpiredOAuthStates`        | Purge expired CSRF nonces (≤ 200/run).                                                                                                                                                                             |
-| `process account deletions`    | every **24h** | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; batched, self-rescheduling.                        |
-| `enforce data retention`       | every **24h** | `privacy/retention.enforceDataRetention`   | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps. |
+| Cron name                      | Schedule            | Target                                     | Effect                                                                                                                                                                                                                                                                     |
+|--------------------------------|---------------------|--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sync LinkedIn posts`          | daily **03:00 UTC** | `jobs/syncPosts.syncAllPosts`              | Apify sync **iff** `apifySyncEnabled` (else no‑op).                                                                                                                                                                                                                        |
+| `process post queue`           | daily **04:00 UTC** | `jobs/processQueue.processPostQueue`       | Promote queued posts when authors regain weekly capacity.                                                                                                                                                                                                                  |
+| `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`           | Purge expired sessions (≤ 200/run).                                                                                                                                                                                                                                        |
+| `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`        | Purge expired CSRF nonces (≤ 200/run).                                                                                                                                                                                                                                     |
+| `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty. |
+| `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`   | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps.                                                         |
 
 ---
 
@@ -1461,11 +1465,14 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
   (`feed.ts`) — their posts disappear immediately and **reappear automatically on cancel**, with no
   post mutation.
 - `cancelAccountDeletion` clears the deletion fields (the user must re-subscribe for paid features).
-- `processAccountDeletions` (daily cron, batched) runs the pure `cascadeDeleteUser` for accounts past
-  their grace window: deletes every owned row (posts, postQueue, subscriptions, sessions, rateLimits,
-  featuredPostUsage, planLimits, consentRecords, dataExportRequests + their storage files),
-  **pseudonymizes `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata), writes an
-  `account.deleted` system audit entry, deletes the `users` row **last**, then emails
+- `processAccountDeletions` (daily cron) erases accounts past their grace window, **one account per
+  invocation**. The pure `cascadeDeleteUser` deletes up to a bounded batch of rows **per table per
+  pass** — every owned row (posts, postQueue, subscriptions, sessions, rateLimits, featuredPostUsage,
+  planLimits, consentRecords, dataExportRequests + their storage files) — and **pseudonymizes
+  `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata). The `users` row is deleted
+  **last**, so a half-drained account stays "due" and the cron re-selects it until every table is
+  clear — keeping each pass within one transaction's budget even for an author with an unbounded
+  number of posts. On the final pass it writes an `account.deleted` system audit entry, then emails
   `deletionCompletedEmail`. **Billing invoices are retained inside Stripe** for tax/accounting law.
 - A schema-derived completeness test asserts the cascade covers every user-referencing table, so a
   future table cannot silently orphan personal data.
@@ -1482,7 +1489,7 @@ flowchart TD
   GRACE -->|"re-auth (Phase 2b screen)"| CANCELSCR["cancelAccountDeletion"]
   CANCELSCR --> RESTORE["clear fields → feed auto-restores"]
   GRACE -->|"elapsed"| CRON["processAccountDeletions cron"]
-  CRON --> CASCADE["cascadeDeleteUser: delete owned rows + export files; pseudonymize auditLogs; delete user last"]
+  CRON --> CASCADE["cascadeDeleteUser (bounded passes, re-run until drained): delete owned rows + export files; pseudonymize auditLogs; delete user last"]
   CASCADE --> DONE["deletion-completed email; Stripe retains invoices"]
 ```
 
@@ -2008,10 +2015,8 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 
 ### Dead / vestigial code
 
-- `posts` indexes **`by_featured`** and **`by_feed`** are defined but unused (feed reads `by_published`).
 - **`featuredPostUsage`** table — defined and tested but has **no read/write call sites**.
-- `convexTypes.ts` **`UserConnectionsDoc`** — references a non‑existent `userConnections` table;
-  `linkedin/types.ts` legacy `LinkedInProfile`/`LinkedInConnectionElement`/`LinkedInConnectionsResponse`
+- `linkedin/types.ts` legacy `LinkedInProfile`/`LinkedInConnectionElement`/`LinkedInConnectionsResponse`
   are unused remnants of the abandoned `r_network` connections feature.
 - `tailwind.config.ts`'s `slotRoll` keyframe is overridden by the one in `globals.css` (dead).
 

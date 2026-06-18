@@ -10,7 +10,6 @@
 
 import type * as admin from "../admin.js";
 import type * as billing from "../billing.js";
-import type * as convexTypes from "../convexTypes.js";
 import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as feedback_emails from "../feedback/emails.js";
@@ -59,7 +58,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   billing: typeof billing;
-  convexTypes: typeof convexTypes;
   crons: typeof crons;
   feed: typeof feed;
   "feedback/emails": typeof feedback_emails;

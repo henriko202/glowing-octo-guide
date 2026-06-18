@@ -10,7 +10,9 @@ function createMockDb(seed: Record<string, any[]>) {
   return {
     query: (table: string) => ({
       withIndex: (_name: string, _fn: any) => ({
-        collect: async () => tables[table] ?? []
+        // Return a fresh array (like real Convex .take()), not the live table reference — the
+        // cascade iterates this result while deleting rows, which would otherwise splice mid-loop.
+        take: async (_n: number) => [...(tables[table] ?? [])]
       })
     }),
     get: async (id: string) =>
