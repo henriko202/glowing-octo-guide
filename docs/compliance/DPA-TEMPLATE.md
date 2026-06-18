@@ -3,7 +3,7 @@
 
 > **TEMPLATE NOTICE:** This document is a template only. It does not constitute legal advice and must be reviewed,
 > adapted, and executed by qualified legal counsel before use as a binding agreement. All bracketed placeholders (
-`[LIKE_THIS]`) must be completed before signature.
+> `[LIKE_THIS]`) must be completed before signature.
 
 # Data Processing Agreement (DPA) Template
 
@@ -441,25 +441,25 @@ their respective organisation._
 
 **[CONTROLLER]**
 
-Signed: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Signed: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
-Name: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Name: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
-Title: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Title: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
-Date: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Date: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
 ---
 
 **[PROCESSOR] ([LEGAL_ENTITY_NAME])**
 
-Signed: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Signed: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
-Name: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Name: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
-Title: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Title: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
-Date: ****\*\*\*\*****\_\_\_****\*\*\*\*****
+Date: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
 ---
 

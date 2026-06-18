@@ -51,7 +51,11 @@ or business justification for that period, and the enforcement mechanism. It sho
 > **Human action required:**
 >
 > - Fill `[bracketed]` provider-specific log-retention periods by reviewing each sub-processor's data-processing
+
     agreement or documentation.
+
 > - Confirm that the 24-month dormancy and audit-log periods are appropriate under applicable law, particularly for
+
     Brazilian (LGPD) and UK users.
+
 > - Legal review required before publishing this policy externally.

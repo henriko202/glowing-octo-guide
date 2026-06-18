@@ -41,13 +41,13 @@ Dismissal is stored in `sessionStorage` under a single key `motdDismissed`, hold
 - The active MOTD is hidden **only if**
   `stored.token === currentSessionToken && stored.motdId === activeMotd._id`.
 - **Page reload** keeps the same `sessionToken` → stays dismissed (correct — not a re-login).
-- **Re-login** (even same-tab, after the cross-origin OAuth round-trip) writes a *fresh*
+- **Re-login** (even same-tab, after the cross-origin OAuth round-trip) writes a _fresh_
   token via `AuthSuccessPage` (`app/src/pages/AuthSuccessPage.tsx`) → stored token no
   longer matches → **re-shows**.
 - **A newly published MOTD** mid-session has a different `_id` → re-shows even if the
   previous one was dismissed.
 
-Rationale: keying on the *token value* (not merely "is something dismissed") is what makes
+Rationale: keying on the _token value_ (not merely "is something dismissed") is what makes
 same-tab re-login work — `sessionStorage` survives a same-tab navigation out to LinkedIn
 and back, so a bare boolean would wrongly persist. The session token rotates on every
 login, so it is the natural per-login fingerprint.
@@ -65,9 +65,9 @@ motds: defineTable({
   // and is the fallback for any locale without its own body. A record (not a fixed
   // object) so new locales can be added with no schema migration.
   bodies: v.record(v.string(), v.string()),
-  important: v.boolean(),            // false -> banner, true -> blocking modal
-  enabled: v.boolean(),              // admin on/off switch
-  startAt: v.optional(v.number()),   // optional scheduled start (ms epoch)
+  important: v.boolean(), // false -> banner, true -> blocking modal
+  enabled: v.boolean(), // admin on/off switch
+  startAt: v.optional(v.number()), // optional scheduled start (ms epoch)
   expiresAt: v.optional(v.number()), // optional "limited date" (ms epoch)
   createdBy: v.id('users'),
   createdAt: v.number(),
@@ -142,7 +142,7 @@ type Props = {
   children: ReactNode
   panelClassName?: string
   dismissOnBackdrop?: boolean // default true
-  dismissOnEscape?: boolean   // default true
+  dismissOnEscape?: boolean // default true
 }
 ```
 
@@ -198,7 +198,7 @@ positioning, so tree placement does not affect it.
 
 - Add to the `app/` workspace via **pnpm**: `pnpm --filter app add react-markdown remark-gfm`.
 - Add keys to `app/src/i18n/locales/{en,pt,es}.json` under a `motd` namespace
-  (`motd.dismiss`, `motd.ok`, plus admin-tab labels). The MOTD *body* itself is admin
+  (`motd.dismiss`, `motd.ok`, plus admin-tab labels). The MOTD _body_ itself is admin
   content, not an i18n key.
 
 ## 7. Testing

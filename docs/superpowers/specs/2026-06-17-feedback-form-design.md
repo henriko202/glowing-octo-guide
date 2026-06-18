@@ -54,20 +54,25 @@ New `feedback` table in `convex/schema.ts`:
 feedback: defineTable({
   userId: v.optional(v.id('users')), // submitter; set on submit, CLEARED on account deletion (anonymize)
   category: v.union(
-    v.literal('feature_request'), v.literal('bug'), v.literal('comment'),
-    v.literal('criticism'), v.literal('praise'), v.literal('question'),
-    v.literal('suggestion'), v.literal('other')
+    v.literal('feature_request'),
+    v.literal('bug'),
+    v.literal('comment'),
+    v.literal('criticism'),
+    v.literal('praise'),
+    v.literal('question'),
+    v.literal('suggestion'),
+    v.literal('other')
   ),
-  message: v.string(),              // 1–4000 chars, validated + trimmed server-side
+  message: v.string(), // 1–4000 chars, validated + trimmed server-side
   status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
   createdAt: v.number(),
   // Response tracking (set when an admin replies)
   responseText: v.optional(v.string()),
   respondedAt: v.optional(v.number()),
-  respondedBy: v.optional(v.id('users')),
+  respondedBy: v.optional(v.id('users'))
 })
-  .index('by_user', ['userId'])                 // export + locate rows to anonymize on deletion
-  .index('by_status', ['status', 'createdAt'])  // admin triage, newest-first per status
+  .index('by_user', ['userId']) // export + locate rows to anonymize on deletion
+  .index('by_status', ['status', 'createdAt']) // admin triage, newest-first per status
 ```
 
 Categories are stored as stable snake_case keys. Display labels come from i18n on the
@@ -91,8 +96,8 @@ Mirrors the structure of `convex/privacy/`.
 - **`respondToFeedback`** (mutation, admin): `assertAdmin` → validate reply text
   (non-empty, reasonable cap e.g. ≤4000) → patch `status: 'responded'`, `responseText`,
   `respondedAt`, `respondedBy` → `writeAuditLog({ actor: 'admin', actorId, action:
-  'feedback.responded', targetUserId })` → `ctx.scheduler.runAfter(0,
-  internal.feedback.feedback.sendFeedbackReply, { feedbackId })`.
+'feedback.responded', targetUserId })` → `ctx.scheduler.runAfter(0,
+internal.feedback.feedback.sendFeedbackReply, { feedbackId })`.
 - **`archiveFeedback` / `reopenFeedback`** (mutations, admin): flip `status` between
   `archived` and `new`/`responded` for items that need no reply (e.g. praise).
 - **`sendFeedbackReply`** (internalAction): load submitter email + reply text via internal

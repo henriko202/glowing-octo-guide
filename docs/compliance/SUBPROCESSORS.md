@@ -11,7 +11,6 @@ This document lists all third-party organisations that process personal data on 
 controller. It is maintained in accordance with GDPR Art. 28(3)(e) and equivalent obligations under UK GDPR, LGPD, and
 applicable US state law.
 
-
 ---
 
 ## Sub-Processor Table

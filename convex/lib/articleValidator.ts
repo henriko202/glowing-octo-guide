@@ -1,5 +1,5 @@
 // convex/lib/articleValidator.ts
-import {type Infer, v} from 'convex/values'
+import { type Infer, v } from 'convex/values'
 
 /**
  * Structured data for the article a post links to (e.g. a LinkedIn Pulse article),

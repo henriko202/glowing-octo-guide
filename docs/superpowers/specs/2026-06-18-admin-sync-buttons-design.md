@@ -115,7 +115,7 @@ export const syncUserProfile = mutation({
 
 > **Why the flag check lives in the wrapper:** `syncUserPostsViaApify` does **not** self-check the flag (the
 > existing fan-out checks it before calling), so for the per-user posts trigger the wrapper's check is the only
-> server gate. `scrapeUserProfile` and the `syncAllPosts` internal action *do* self-check, so for those the
+> server gate. `scrapeUserProfile` and the `syncAllPosts` internal action _do_ self-check, so for those the
 > wrapper check is defense-in-depth plus a way to surface a clear error to the admin instead of a silent no-op.
 
 `isApifyPostSyncEnabled` / `isApifyProfileScrapeEnabled` are imported from `./lib/apify` (already used by the jobs).
@@ -207,7 +207,7 @@ presentational banner (≈15 lines), `app/src/components/useFlash.tsx`:
 - A `<Flash flash={flash} />` element renders a dismissible slate/green/red inline banner consistent with the
   existing card styling. Respects `prefers-reduced-motion` (no slide animation when set).
 
-Errors thrown by the wrappers (e.g. *"Profile scrape is disabled…"*) are caught at the call site and passed to
+Errors thrown by the wrappers (e.g. _"Profile scrape is disabled…"_) are caught at the call site and passed to
 `showFlash('error', err.message)`.
 
 ### Settings tab (`AdminPage.tsx`)
@@ -226,7 +226,7 @@ Button states:
 | Feature on, idle             | Secondary button (slate border, white bg) reading **Sync all now**       |
 | Feature off (flag or master) | `disabled`, grayed, `title="Enable <feature> to run a manual sync"`      |
 | Scheduling in flight         | `disabled`, label **Starting…** (brief — the schedule call returns fast) |
-| After schedule succeeds      | flash: *"Post sync started — running in the background."*                |
+| After schedule succeeds      | flash: _"Post sync started — running in the background."_                |
 | Wrapper throws               | flash (error): the thrown message                                        |
 
 Enabled-ness is computed in `AdminPage` from `settings` (`postSyncOn = settings?.apifyEnabled !== false &&
@@ -243,11 +243,11 @@ props (so it doesn't re-query settings).
 
 Each item is `disabled` (grayed, with a `title` reason) when:
 
-- the relevant feature flag is off → *"Enable post sync / profile scrape in Settings"*, **or**
-- `user.linkedinPublicIdentifier` is absent → *"No LinkedIn URL on file"*.
+- the relevant feature flag is off → _"Enable post sync / profile scrape in Settings"_, **or**
+- `user.linkedinPublicIdentifier` is absent → _"No LinkedIn URL on file"_.
 
 On click (when enabled): call the mutation, then `showFlash('success', 'Profile sync started for <name>.')`;
-on throw, `showFlash('error', err.message)`. Because the mutation only *schedules* the job, the result surfaces
+on throw, `showFlash('error', err.message)`. Because the mutation only _schedules_ the job, the result surfaces
 later via the user's data updating (Convex reactivity) — the flash just confirms the request was accepted.
 
 ### `RowActionsMenu` enhancement (`RowActionsMenu.tsx`)
@@ -259,8 +259,8 @@ export type RowAction = {
   label: string
   onClick: () => void
   danger?: boolean
-  disabled?: boolean   // new
-  title?: string       // new — tooltip explaining a disabled item
+  disabled?: boolean // new
+  title?: string // new — tooltip explaining a disabled item
 }
 ```
 
@@ -290,7 +290,7 @@ fire `onClick` and do not close the menu. Existing call sites are unaffected.
 ## Testing
 
 > **Build-time correction:** this repo does **not** use `convex-test`. Its Convex tests alias `convex/server`
-> to a stub (`convex-mocks/`) and unit-test the *pure* logic extracted from handlers; registered wrappers are
+> to a stub (`convex-mocks/`) and unit-test the _pure_ logic extracted from handlers; registered wrappers are
 > validated by `convex codegen`'s TypeScript pass. The plan below follows that established convention rather than
 > introducing a harness the project has deliberately avoided.
 
@@ -308,7 +308,7 @@ fire `onClick` and do not close the menu. Existing call sites are unaffected.
 
 - `/admin` → **Settings**: with Post Sync **off**, "Sync all now" on that card is disabled with a hint; enabling
   the toggle enables the button.
-- Click "Sync all now" (Post Sync) → flash *"Post sync started…"*; after the background run, `Last sync` updates.
+- Click "Sync all now" (Post Sync) → flash _"Post sync started…"_; after the background run, `Last sync` updates.
 - Apify Profile Scrape card shows a **Sync all now** button and a `Last profile sync` line; behaves the same and
   the line populates after the first manual run.
 - Master kill-switch **off** → both "Sync all now" buttons and both row items are disabled.

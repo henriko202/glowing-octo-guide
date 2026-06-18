@@ -18,8 +18,9 @@ app: jsdom + Testing Library), Resend.
 
 ## Global Constraints
 
-- **NEVER run `git commit` or `git push`.** Per the repo's CLAUDE.md, Henriko makes all commits. Each task ends with a *
-  *Checkpoint** (run lint + tests, report green) and leaves the changes uncommitted for Henriko. This overrides the
+- **NEVER run `git commit` or `git push`.** Per the repo's CLAUDE.md, Henriko makes all commits. Each task ends with
+  a \*
+  \*Checkpoint\*\* (run lint + tests, report green) and leaves the changes uncommitted for Henriko. This overrides the
   writing-plans default "Commit" step.
 - **Read `convex/_generated/ai/guidelines.md` before writing Convex code** (already reflected below).
 - **Keep `docs/PLATFORM.md` in sync** — Task 9 is part of "done", not optional (CLAUDE.md rule).
@@ -47,40 +48,40 @@ app: jsdom + Testing Library), Resend.
 
 **Backend (`convex/`)**
 
-- `schema.ts` — *modify*: add `feedback` table (Task 1).
-- `feedback/feedback.ts` — *create*: validation helper + `submitFeedback`, `listFeedback`, `respondToFeedback`,
+- `schema.ts` — _modify_: add `feedback` table (Task 1).
+- `feedback/feedback.ts` — _create_: validation helper + `submitFeedback`, `listFeedback`, `respondToFeedback`,
   `archiveFeedback`, `reopenFeedback`, `getFeedbackForReply` (internalQuery), `sendFeedbackReply` (internalAction) (Task
   4).
-- `feedback/feedback.test.ts` — *create*: unit tests for `validateFeedbackMessage` (Task 4).
-- `feedback/emails.ts` — *create*: `escapeHtml` + `feedbackReplyEmail` builder (Task 2).
-- `feedback/emails.test.ts` — *create*: builder tests (Task 2).
-- `lib/email.ts` — *modify*: optional `replyTo` (Task 3).
-- `lib/email.test.ts` — *modify*: `replyTo` assertion (Task 3).
-- `admin.ts` — *modify*: `export` the existing `assertAdmin` (Task 4).
-- `privacy/deletion.ts` — *modify*: anonymize feedback in `cascadeDeleteUser` (Task 5).
-- `privacy/deletion.test.ts` — *modify*: anonymization assertion (Task 5).
-- `privacy/export.ts` — *modify*: gather + bundle feedback (Task 5).
-- `privacy/export.test.ts` — *modify*: bundle assertion (Task 5).
-- `schema.test.ts` — *modify*: assert `feedback` table (Task 1).
+- `feedback/feedback.test.ts` — _create_: unit tests for `validateFeedbackMessage` (Task 4).
+- `feedback/emails.ts` — _create_: `escapeHtml` + `feedbackReplyEmail` builder (Task 2).
+- `feedback/emails.test.ts` — _create_: builder tests (Task 2).
+- `lib/email.ts` — _modify_: optional `replyTo` (Task 3).
+- `lib/email.test.ts` — _modify_: `replyTo` assertion (Task 3).
+- `admin.ts` — _modify_: `export` the existing `assertAdmin` (Task 4).
+- `privacy/deletion.ts` — _modify_: anonymize feedback in `cascadeDeleteUser` (Task 5).
+- `privacy/deletion.test.ts` — _modify_: anonymization assertion (Task 5).
+- `privacy/export.ts` — _modify_: gather + bundle feedback (Task 5).
+- `privacy/export.test.ts` — _modify_: bundle assertion (Task 5).
+- `schema.test.ts` — _modify_: assert `feedback` table (Task 1).
 
 **Frontend (`app/src/`)**
 
-- `components/Modal.tsx` — *modify*: optional `panelClassName` (Task 6).
-- `components/FeedbackButton.tsx` — *create*: floating button (Task 7).
-- `components/FeedbackModal.tsx` — *create*: submission modal (Task 7).
-- `components/FeedbackModal.test.tsx` — *create* (Task 7).
-- `components/FeedbackTab.tsx` — *create*: admin list/triage (Task 8).
-- `components/FeedbackTab.test.tsx` — *create* (Task 8).
-- `components/RespondFeedbackModal.tsx` — *create*: admin reply modal (Task 8).
-- `components/RespondFeedbackModal.test.tsx` — *create* (Task 8).
-- `pages/AdminPage.tsx` — *modify*: add `feedback` tab (Task 8).
-- `App.tsx` — *modify*: render `<FeedbackButton />` in `RequireAuth` (Task 7).
-- `i18n/locales/{en,pt,es}.json` — *modify*: `feedback.*` keys (Task 7).
+- `components/Modal.tsx` — _modify_: optional `panelClassName` (Task 6).
+- `components/FeedbackButton.tsx` — _create_: floating button (Task 7).
+- `components/FeedbackModal.tsx` — _create_: submission modal (Task 7).
+- `components/FeedbackModal.test.tsx` — _create_ (Task 7).
+- `components/FeedbackTab.tsx` — _create_: admin list/triage (Task 8).
+- `components/FeedbackTab.test.tsx` — _create_ (Task 8).
+- `components/RespondFeedbackModal.tsx` — _create_: admin reply modal (Task 8).
+- `components/RespondFeedbackModal.test.tsx` — _create_ (Task 8).
+- `pages/AdminPage.tsx` — _modify_: add `feedback` tab (Task 8).
+- `App.tsx` — _modify_: render `<FeedbackButton />` in `RequireAuth` (Task 7).
+- `i18n/locales/{en,pt,es}.json` — _modify_: `feedback.*` keys (Task 7).
 
 **Docs**
 
-- `docs/PLATFORM.md` — *modify*: §12A Feedback + §16 env var + §21 maintaining map (Task 9).
-- `docs/compliance/DATA-INVENTORY.md`, `docs/compliance/RETENTION-POLICY.md` — *modify* (Task 9).
+- `docs/PLATFORM.md` — _modify_: §12A Feedback + §16 env var + §21 maintaining map (Task 9).
+- `docs/compliance/DATA-INVENTORY.md`, `docs/compliance/RETENTION-POLICY.md` — _modify_ (Task 9).
 
 ---
 
@@ -100,9 +101,9 @@ app: jsdom + Testing Library), Resend.
 - [ ] **Step 1: Write the failing test** — append inside `convex/schema.test.ts`:
 
 ```ts
-  it('defines the feedback table', () => {
-    expect(schema.tables).toHaveProperty('feedback')
-  })
+it('defines the feedback table', () => {
+  expect(schema.tables).toHaveProperty('feedback')
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -114,31 +115,31 @@ Expected: FAIL — `feedback` property missing.
   the `auditLogs` table, before the closing `})`; add a comma after the previous table):
 
 ```ts
-  // User-submitted product feedback. Authenticated submitters; admins reply by email
-  // (status → 'responded'). On account deletion the row is ANONYMIZED, not deleted:
-  // userId is cleared (→ undefined) while the content is retained. See convex/privacy/deletion.ts.
-  feedback: defineTable({
-    userId: v.optional(v.id('users')), // submitter; set on submit, CLEARED on account deletion (anonymize)
-    category: v.union(
-      v.literal('feature_request'),
-      v.literal('bug'),
-      v.literal('comment'),
-      v.literal('criticism'),
-      v.literal('praise'),
-      v.literal('question'),
-      v.literal('suggestion'),
-      v.literal('other')
-    ),
-    message: v.string(),
-    status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
-    createdAt: v.number(),
-    // Response tracking — set when an admin replies.
-    responseText: v.optional(v.string()),
-    respondedAt: v.optional(v.number()),
-    respondedBy: v.optional(v.id('users'))
-  })
-    .index('by_user', ['userId']) // export + locate rows to anonymize on deletion
-    .index('by_status', ['status', 'createdAt']) // reserved for future server-side status triage
+// User-submitted product feedback. Authenticated submitters; admins reply by email
+// (status → 'responded'). On account deletion the row is ANONYMIZED, not deleted:
+// userId is cleared (→ undefined) while the content is retained. See convex/privacy/deletion.ts.
+feedback: defineTable({
+  userId: v.optional(v.id('users')), // submitter; set on submit, CLEARED on account deletion (anonymize)
+  category: v.union(
+    v.literal('feature_request'),
+    v.literal('bug'),
+    v.literal('comment'),
+    v.literal('criticism'),
+    v.literal('praise'),
+    v.literal('question'),
+    v.literal('suggestion'),
+    v.literal('other')
+  ),
+  message: v.string(),
+  status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
+  createdAt: v.number(),
+  // Response tracking — set when an admin replies.
+  responseText: v.optional(v.string()),
+  respondedAt: v.optional(v.number()),
+  respondedBy: v.optional(v.id('users'))
+})
+  .index('by_user', ['userId']) // export + locate rows to anonymize on deletion
+  .index('by_status', ['status', 'createdAt']) // reserved for future server-side status triage
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -269,29 +270,29 @@ Expected: PASS.
   `convex/lib/email.test.ts`:
 
 ```ts
-  it('forwards replyTo to Resend as reply_to when provided', async () => {
-    vi.stubEnv('RESEND_API_KEY', 'key_123')
-    vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
-    const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
-    vi.stubGlobal('fetch', fetchMock)
+it('forwards replyTo to Resend as reply_to when provided', async () => {
+  vi.stubEnv('RESEND_API_KEY', 'key_123')
+  vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
+  const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
+  vi.stubGlobal('fetch', fetchMock)
 
-    await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>', replyTo: 'support@linkintothessi.com' })
+  await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>', replyTo: 'support@linkintothessi.com' })
 
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.reply_to).toBe('support@linkintothessi.com')
-  })
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+  expect(body.reply_to).toBe('support@linkintothessi.com')
+})
 
-  it('omits reply_to when replyTo is not provided', async () => {
-    vi.stubEnv('RESEND_API_KEY', 'key_123')
-    vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
-    const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
-    vi.stubGlobal('fetch', fetchMock)
+it('omits reply_to when replyTo is not provided', async () => {
+  vi.stubEnv('RESEND_API_KEY', 'key_123')
+  vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
+  const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
+  vi.stubGlobal('fetch', fetchMock)
 
-    await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>' })
+  await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>' })
 
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect('reply_to' in body).toBe(false)
-  })
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+  expect('reply_to' in body).toBe(false)
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -316,14 +317,14 @@ export interface SendEmailArgs {
 Replace the `body: JSON.stringify({ ... })` block with:
 
 ```ts
-    body: JSON.stringify({
-      from,
-      to: args.to,
-      subject: args.subject,
-      html: args.html,
-      text: args.text,
-      ...(args.replyTo ? { reply_to: args.replyTo } : {})
-    })
+body: JSON.stringify({
+  from,
+  to: args.to,
+  subject: args.subject,
+  html: args.html,
+  text: args.text,
+  ...(args.replyTo ? { reply_to: args.replyTo } : {})
+})
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -634,15 +635,15 @@ for Henriko.)
 Then add a new test inside `describe('cascadeDeleteUser', ...)`:
 
 ```ts
-  it('anonymizes feedback (clears userId) instead of deleting it', async () => {
-    const db = createMockDb(SEED)
-    const storage = { delete: async (_id: string) => {} }
-    await cascadeDeleteUser(db, storage, 'u1')
-    // Not deleted…
-    expect(db._deleted.map(d => d.id)).not.toContain('fb1')
-    // …but userId cleared.
-    expect(db._patched).toContainEqual({ id: 'fb1', data: { userId: undefined } })
-  })
+it('anonymizes feedback (clears userId) instead of deleting it', async () => {
+  const db = createMockDb(SEED)
+  const storage = { delete: async (_id: string) => {} }
+  await cascadeDeleteUser(db, storage, 'u1')
+  // Not deleted…
+  expect(db._deleted.map(d => d.id)).not.toContain('fb1')
+  // …but userId cleared.
+  expect(db._patched).toContainEqual({ id: 'fb1', data: { userId: undefined } })
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -654,14 +655,14 @@ Expected: FAIL — `fb1` not patched.
   the `auditLogs` pseudonymization (step 3) and `writeAuditLog` (step 4):
 
 ```ts
-  // 3b. Anonymize feedback: keep the content for product use, drop the submitter link.
-  const feedbacks = [
-    ...(await db
-      .query('feedback')
-      .withIndex('by_user', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('userId', userId))
-      .collect())
-  ]
-  for (const f of feedbacks) await db.patch(f._id, { userId: undefined })
+// 3b. Anonymize feedback: keep the content for product use, drop the submitter link.
+const feedbacks = [
+  ...(await db
+    .query('feedback')
+    .withIndex('by_user', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('userId', userId))
+    .collect())
+]
+for (const f of feedbacks) await db.patch(f._id, { userId: undefined })
 ```
 
 (Do NOT add `feedback` to the `OWNED` array.)
@@ -677,19 +678,19 @@ Expected: PASS.
   `describe('buildExportBundle', ...)`:
 
 ```ts
-  it('includes the user feedback verbatim', () => {
-    const bundle = buildExportBundle({
-      user: USER,
-      posts: [],
-      subscriptions: [],
-      consents: [],
-      audits: [],
-      feedback: [{ _id: 'fb1', category: 'bug', message: 'broken', status: 'responded', responseText: 'fixed' }]
-    })
-    expect(bundle.feedback).toHaveLength(1)
-    expect(bundle.feedback[0].message).toBe('broken')
-    expect(bundle.feedback[0].responseText).toBe('fixed')
+it('includes the user feedback verbatim', () => {
+  const bundle = buildExportBundle({
+    user: USER,
+    posts: [],
+    subscriptions: [],
+    consents: [],
+    audits: [],
+    feedback: [{ _id: 'fb1', category: 'bug', message: 'broken', status: 'responded', responseText: 'fixed' }]
   })
+  expect(bundle.feedback).toHaveLength(1)
+  expect(bundle.feedback[0].message).toBe('broken')
+  expect(bundle.feedback[0].responseText).toBe('fixed')
+})
 ```
 
 - [ ] **Step 6: Run test to verify it fails**
@@ -722,14 +723,14 @@ In `buildExportBundle`'s returned object, add (after the `consents` line):
 In `gatherUserData`, add the query (after the `consents` query) and include it in the return:
 
 ```ts
-    const feedback = await ctx.db
-      .query('feedback')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .collect()
+const feedback = await ctx.db
+  .query('feedback')
+  .withIndex('by_user', q => q.eq('userId', userId))
+  .collect()
 ```
 
 ```ts
-    return { user, posts, subscriptions, consents, audits, feedback }
+return { user, posts, subscriptions, consents, audits, feedback }
 ```
 
 - [ ] **Step 8: Run test to verify it passes**
@@ -922,16 +923,7 @@ describe('FeedbackModal', () => {
 
   it('renders all 8 category pills', () => {
     render(<FeedbackModal onClose={() => {}} />)
-    for (const c of [
-      'feature_request',
-      'bug',
-      'comment',
-      'criticism',
-      'praise',
-      'question',
-      'suggestion',
-      'other'
-    ]) {
+    for (const c of ['feature_request', 'bug', 'comment', 'criticism', 'praise', 'question', 'suggestion', 'other']) {
       expect(screen.getByText(`feedback.categories.${c}`)).toBeInTheDocument()
     }
   })
@@ -1135,13 +1127,13 @@ import FeedbackButton from './components/FeedbackButton'
 Replace the `RequireAuth` success return:
 
 ```tsx
-  return (
-    <>
-      <AppNav />
-      {children}
-      <FeedbackButton />
-    </>
-  )
+return (
+  <>
+    <AppNav />
+    {children}
+    <FeedbackButton />
+  </>
+)
 ```
 
 - [ ] **Step 8: Checkpoint** — `pnpm lint` and `pnpm --filter app test` green. Leave uncommitted.
@@ -1190,7 +1182,10 @@ const row = (over: Partial<Record<string, unknown>> = {}) => ({
 beforeEach(() => {
   mocks.respondToFeedback.mockReset().mockResolvedValue(undefined)
   vi.mocked(useMutation).mockImplementation((ref: unknown) => {
-    const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0]).split(':').pop() ?? ''
+    const name =
+      getFunctionName(ref as Parameters<typeof getFunctionName>[0])
+        .split(':')
+        .pop() ?? ''
     return (mocks[name as keyof typeof mocks] ?? vi.fn()) as never
   })
 })
@@ -1281,11 +1276,9 @@ export default function RespondFeedbackModal({ feedback, sessionToken, onClose }
       onClose={onClose}
       panelClassName="max-w-lg"
     >
-      <h3 className="text-[15px] font-semibold text-slate-900">
-        Respond to {feedback.userName ?? '(deleted user)'}
-      </h3>
+      <h3 className="text-[15px] font-semibold text-slate-900">Respond to {feedback.userName ?? '(deleted user)'}</h3>
 
-      <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm whitespace-pre-wrap text-slate-700">
+      <div className="mt-3 whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
         {feedback.message}
       </div>
 
@@ -1378,7 +1371,10 @@ beforeEach(() => {
   Object.values(mocks).forEach(m => m.mockReset().mockResolvedValue(undefined))
   vi.mocked(useQuery).mockReturnValue(mockRows)
   vi.mocked(useMutation).mockImplementation((ref: unknown) => {
-    const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0]).split(':').pop() ?? ''
+    const name =
+      getFunctionName(ref as Parameters<typeof getFunctionName>[0])
+        .split(':')
+        .pop() ?? ''
     return (mocks[name as keyof typeof mocks] ?? vi.fn()) as never
   })
 })
@@ -1531,7 +1527,9 @@ export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                   {row.category}
                 </span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_COLOURS[row.status]}`}>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_COLOURS[row.status]}`}
+                >
                   {row.status}
                 </span>
               </div>
@@ -1576,32 +1574,36 @@ import FeedbackTab from '../components/FeedbackTab'
 Widen the tab state type:
 
 ```tsx
-  const [tab, setTab] = useState<'settings' | 'planLimits' | 'users' | 'feedback'>('settings')
+const [tab, setTab] = useState<'settings' | 'planLimits' | 'users' | 'feedback'>('settings')
 ```
 
 Add a tab button after the `users` tab button:
 
 ```tsx
-        <button
-          onClick={() => setTab('feedback')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'feedback' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Feedback
-        </button>
+<button
+  onClick={() => setTab('feedback')}
+  className={`px-4 py-2 text-sm font-medium transition-colors ${
+    tab === 'feedback' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
+  }`}
+>
+  Feedback
+</button>
 ```
 
 Add the tab body after the `users` tab block:
 
 ```tsx
-      {/* Feedback tab */}
-      {tab === 'feedback' && (
-        <FeedbackTab
-          sessionToken={sessionToken}
-          isAdmin={isAdmin}
-        />
-      )}
+{
+  /* Feedback tab */
+}
+{
+  tab === 'feedback' && (
+    <FeedbackTab
+      sessionToken={sessionToken}
+      isAdmin={isAdmin}
+    />
+  )
+}
 ```
 
 - [ ] **Step 10: Run the AdminPage test to verify no regression**
@@ -1631,7 +1633,7 @@ Expected: PASS.
 
 - [ ] **Step 2: Add the new section** — insert after §12 (Admin & Moderation) and before §13 (Scheduled Jobs):
 
-```markdown
+````markdown
 ## 12A. Feedback
 
 Authenticated users submit free-text feedback (≤4000 chars) tagged with a single category
@@ -1645,6 +1647,7 @@ response tracking (`responseText`, `respondedAt`, `respondedBy`). Indexes: `by_u
 `by_status`.
 
 **Backend** (`convex/feedback/`):
+
 - `feedback.ts` — `submitFeedback` (user; validates, throttles **10/hour**, admins exempt),
   `listFeedback` (admin; newest-first, enriched with submitter name/email),
   `respondToFeedback` (admin; stores reply, writes a `feedback.responded` audit log,
@@ -1675,14 +1678,15 @@ flowchart TD
   S -->|sendEmail · Reply-To=FEEDBACK_REPLY_TO| MAIL[(User receives email)]
   DEL[Account deletion cascade] -.anonymize.-> DB2[feedback.userId = undefined · content kept]
 ```
+````
 
-```
+````
 
 - [ ] **Step 3: Document the env var** — in `docs/PLATFORM.md` §16 (Environment Variables), under the Convex-backend list, add a row/line:
 
 ```markdown
 - `FEEDBACK_REPLY_TO` *(optional)* — `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).
-```
+````
 
 - [ ] **Step 4: Update the maintaining map** — in `docs/PLATFORM.md` §21 (Maintaining This Document), add a line mapping
   the feedback code areas (`convex/feedback/`, `app/src/components/Feedback*`,

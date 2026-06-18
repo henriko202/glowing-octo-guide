@@ -942,11 +942,11 @@ capture `{ url, title?, summary?, text?, author?, imageUrls }` into the post's `
 
 - **`text`** — the **full article body** as plain text. The guest SSR page renders the whole body
   (despite the post JSON‑LD's `isAccessibleForFree:false` flag) inside `<div
-  data-test-id="article-content-blocks">` as a flat list of `publishing-text-block` elements.
+data-test-id="article-content-blocks">` as a flat list of `publishing-text-block` elements.
   `extractArticleBody` isolates that container (up to `</article>`) — excluding the header, sign‑in
   modal, comments, and "more articles" cards — and renders each `<p>` / `<h1‑6>` / `<pre>` / list in
   document order: paragraphs (blank‑line separated), headings on their own line, `- ` bullets, and
-  ``` ``` ``‑fenced code blocks (internal whitespace preserved, entities decoded).
+  ` ` ``‑fenced code blocks (internal whitespace preserved, entities decoded).
 - **`title` / `summary` / `author`** — from the article's `@type:Article` JSON‑LD (where LinkedIn
   unusually maps `name`→title and `headline`→summary), with `og:` tag fallbacks.
 - **`imageUrls`** — cover (`og:image` / JSON‑LD) plus inline body images (`media.licdn.com` URLs inside
