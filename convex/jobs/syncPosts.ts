@@ -20,6 +20,7 @@ export const upsertPost = internalMutation({
     likeCount: v.number(),
     commentCount: v.number(),
     mediaUrls: v.array(v.string()),
+    imageUrls: v.optional(v.array(v.string())),
     isFeatured: v.boolean(),
     visibilityIndustries: v.array(v.string()),
     visibilityCountries: v.array(v.string()),

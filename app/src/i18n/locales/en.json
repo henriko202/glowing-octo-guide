@@ -30,11 +30,26 @@
     "like": "Like",
     "comment": "Comment"
   },
+  "reactions": {
+    "react": "React",
+    "like": "Like",
+    "celebrate": "Celebrate",
+    "love": "Love",
+    "insightful": "Insightful",
+    "support": "Support",
+    "funny": "Funny"
+  },
   "comment": {
-    "placeholder": "Write a comment... (AI suggestions coming soon)",
+    "placeholder": "Write a comment…",
     "cancel": "Cancel",
     "submit": "Post to LinkedIn",
-    "submitting": "Posting..."
+    "submitting": "Posting...",
+    "generate": "Generate with AI",
+    "regenerate": "Regenerate",
+    "generating": "Generating…",
+    "language": "Comment language",
+    "languageAuto": "Auto — match the post",
+    "generateError": "Couldn't generate a comment. Please try again."
   },
   "settings": {
     "title": "Settings",
@@ -54,7 +69,10 @@
     "visibility": "Who can see your posts",
     "visibilityNote": "Restrict which industries and countries can see your posts in the feed. Leave empty to show to all users.",
     "visibilityComingSoon": "Coming in next task",
-    "upgradePrompt": "Upgrade to Pro to control who sees your posts."
+    "upgradePrompt": "Upgrade to Pro to control who sees your posts.",
+    "aiComments": "AI Comments",
+    "aiCommentsNote": "Default language for AI-drafted comments. You can override it per comment.",
+    "commentLanguage": "Default comment language"
   },
   "billing": {
     "title": "Subscription",

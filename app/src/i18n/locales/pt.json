@@ -30,11 +30,26 @@
     "like": "Gostar",
     "comment": "Comentar"
   },
+  "reactions": {
+    "react": "Reagir",
+    "like": "Gostei",
+    "celebrate": "Parabéns",
+    "love": "Adorei",
+    "insightful": "Genial",
+    "support": "Apoio",
+    "funny": "Engraçado"
+  },
   "comment": {
-    "placeholder": "Escreva um comentário... (sugestões de IA em breve)",
+    "placeholder": "Escreva um comentário…",
     "cancel": "Cancelar",
     "submit": "Publicar no LinkedIn",
-    "submitting": "A publicar..."
+    "submitting": "A publicar...",
+    "generate": "Gerar com IA",
+    "regenerate": "Gerar novamente",
+    "generating": "A gerar…",
+    "language": "Idioma do comentário",
+    "languageAuto": "Automático — idioma da publicação",
+    "generateError": "Não foi possível gerar um comentário. Tente novamente."
   },
   "settings": {
     "title": "Configurações",
@@ -54,7 +69,10 @@
     "visibility": "Quem pode ver suas publicações",
     "visibilityNote": "Restrinja quais setores e países podem ver suas publicações no feed. Deixe vazio para mostrar a todos.",
     "visibilityComingSoon": "Em breve",
-    "upgradePrompt": "Faça upgrade para o Pro para controlar quem vê suas publicações."
+    "upgradePrompt": "Faça upgrade para o Pro para controlar quem vê suas publicações.",
+    "aiComments": "Comentários com IA",
+    "aiCommentsNote": "Idioma padrão dos comentários gerados por IA. Você pode alterá-lo em cada comentário.",
+    "commentLanguage": "Idioma padrão do comentário"
   },
   "billing": {
     "title": "Assinatura",

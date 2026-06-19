@@ -8,12 +8,29 @@ import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { shouldFlipInteractionLimit } from './lib/interactionLimit'
 import { callMemberApi } from './linkedin/client'
+import { reactionValidator } from './lib/reactions'
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
   args: { postId: v.id('posts') },
   handler: async (ctx, { postId }) => {
     return ctx.db.get(postId)
+  }
+})
+
+// Append a per-user engagement record (one reaction or comment) to `userInteractions`. Feeds the
+// DSR export + a future admin dashboard. Callers wrap this best-effort so a logging failure never
+// fails the user's already-completed LinkedIn action.
+export const recordInteraction = internalMutation({
+  args: {
+    userId: v.id('users'),
+    postId: v.id('posts'),
+    kind: v.union(v.literal('reaction'), v.literal('comment')),
+    reaction: v.optional(reactionValidator),
+    comment: v.optional(v.string())
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert('userInteractions', { ...args, createdAt: Date.now() })
   }
 })
 
@@ -130,6 +147,16 @@ export const commentOnPost = action({
     )
 
     await ctx.runMutation(internal.interactions.incrementCommentCount, { postId })
+    try {
+      await ctx.runMutation(internal.interactions.recordInteraction, {
+        userId: user._id,
+        postId,
+        kind: 'comment',
+        comment: commentText
+      })
+    } catch (e) {
+      console.error('recordInteraction (comment) failed:', e)
+    }
     return { success: true }
   }
 })
@@ -138,14 +165,7 @@ export const commentOnPost = action({
 export const reactToPost = action({
   args: {
     postId: v.id('posts'),
-    reactionType: v.union(
-      v.literal('LIKE'),
-      v.literal('CELEBRATE'),
-      v.literal('SUPPORT'),
-      v.literal('FUNNY'),
-      v.literal('LOVE'),
-      v.literal('INSIGHTFUL')
-    ),
+    reactionType: reactionValidator,
     sessionToken: v.string()
   },
   handler: async (ctx, { postId, reactionType, sessionToken }) => {
@@ -178,6 +198,16 @@ export const reactToPost = action({
     )
 
     await ctx.runMutation(internal.interactions.incrementLikeCount, { postId })
+    try {
+      await ctx.runMutation(internal.interactions.recordInteraction, {
+        userId: user._id,
+        postId,
+        kind: 'reaction',
+        reaction: reactionType
+      })
+    } catch (e) {
+      console.error('recordInteraction (reaction) failed:', e)
+    }
     return { success: true }
   }
 })

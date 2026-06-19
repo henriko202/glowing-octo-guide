@@ -27,6 +27,7 @@
 9. [Plan Limits System](#9-plan-limits-system)
 10. [Posts & Content Pipeline](#10-posts--content-pipeline)
 11. [Feed & Engagement](#11-feed--engagement)
+    11A. [AI Reaction & Comment Assistance](#11a-ai-reaction--comment-assistance)
 12. [Admin & Moderation](#12-admin--moderation)
     12A. [Feedback](#12a-feedback)
     12B. [Message of the Day (MOTD)](#12b-message-of-the-day-motd)
@@ -307,39 +308,40 @@ erDiagram
 One row per authenticated LinkedIn member. Inserted on first login (`linkedin/auth.ts:upsertUser`),
 patched thereafter (profile, subscription, ban). Read almost everywhere.
 
-| Field                        | Type                                                   | Req | Meaning                                                                                                                                                                               |
-|------------------------------|--------------------------------------------------------|:---:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinId`                 | string                                                 |  ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                  |
-| `name`                       | string                                                 |  ✓  | Display name.                                                                                                                                                                         |
-| `headline`                   | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                    |
-| `profilePictureUrl`          | string                                                 |  –  | Avatar URL.                                                                                                                                                                           |
-| `industry`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                   |
-| `country`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                   |
-| `location`                   | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                 |
-| `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                              |
-| `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                             |
-| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. `trialing` hides the user's posts from the feed.                                                      |
-| `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                    |
-| `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                               |
-| `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                               |
-| `linkedinRefreshToken`       | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                               |
-| `tokenExpiresAt`             | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                             |
-| `linkedinPublicIdentifier`   | string                                                 |  –  | LinkedIn vanity name; captured via the first‑login `PublicIdentifierPromptScreen` or set in Settings, used for post‑ownership verification without Partner API.                       |
-| `isAdmin`                    | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                 |
-| `isBanned`                   | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                       |
-| `bannedAt`                   | number                                                 |  –  | Ban timestamp.                                                                                                                                                                        |
-| `bannedBy`                   | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                    |
-| `bannedReason`               | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                             |
-| `email`                      | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                   |
-| `emailVerified`              | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                          |
-| `deletionRequestedAt`        | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                        |
-| `deletionScheduledAt`        | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                             |
-| `deletionReason`             | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                       |
-| `lastLoginAt`                | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                         |
-| `acknowledgedPolicyVersion`  | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                  |
-| `consentPromptedAt`          | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                       |
-| `publicIdentifierPromptedAt` | number                                                 |  –  | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login. |
-| `createdAt`                  | number                                                 |  ✓  | Creation timestamp (ms).                                                                                                                                                              |
+| Field                        | Type                                                   | Req | Meaning                                                                                                                                                                                                                         |
+|------------------------------|--------------------------------------------------------|:---:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinId`                 | string                                                 |  ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                            |
+| `name`                       | string                                                 |  ✓  | Display name.                                                                                                                                                                                                                   |
+| `headline`                   | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                              |
+| `profilePictureUrl`          | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                     |
+| `industry`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                             |
+| `country`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                             |
+| `location`                   | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                           |
+| `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                        |
+| `commentLanguage`            | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance). |
+| `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                       |
+| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. `trialing` hides the user's posts from the feed.                                                                                                |
+| `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                              |
+| `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                         |
+| `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                         |
+| `linkedinRefreshToken`       | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                         |
+| `tokenExpiresAt`             | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                       |
+| `linkedinPublicIdentifier`   | string                                                 |  –  | LinkedIn vanity name; captured via the first‑login `PublicIdentifierPromptScreen` or set in Settings, used for post‑ownership verification without Partner API.                                                                 |
+| `isAdmin`                    | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                           |
+| `isBanned`                   | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                 |
+| `bannedAt`                   | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                  |
+| `bannedBy`                   | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                              |
+| `bannedReason`               | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                       |
+| `email`                      | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                             |
+| `emailVerified`              | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                    |
+| `deletionRequestedAt`        | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                  |
+| `deletionScheduledAt`        | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                       |
+| `deletionReason`             | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                 |
+| `lastLoginAt`                | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                   |
+| `acknowledgedPolicyVersion`  | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                            |
+| `consentPromptedAt`          | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                 |
+| `publicIdentifierPromptedAt` | number                                                 |  –  | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login.                                           |
+| `createdAt`                  | number                                                 |  ✓  | Creation timestamp (ms).                                                                                                                                                                                                        |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
 `by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
@@ -358,27 +360,29 @@ re‑stamp so a high‑volume author never exceeds one mutation's write budget),
 Every post writer keeps the denormalized `feedRank` / `inFeed` fields in sync through the single
 `computeFeedFields` helper (`lib/feedRank.ts`).
 
-| Field                     | Type          | Req | Meaning                                                                                                                                                                                                                                                                                |
-|---------------------------|---------------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinPostUrn`         | string        |  ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                                                                                                                                                                   |
-| `authorId`                | `id('users')` |  ✓  | Post author.                                                                                                                                                                                                                                                                           |
-| `content`                 | string        |  ✓  | Post text (composed text + appended media links).                                                                                                                                                                                                                                      |
-| `publishedAt`             | number        |  ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                                                                                                                                                                    |
-| `likeCount`               | number        |  ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                                                                                                                                                             |
-| `commentCount`            | number        |  ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                                                                                                                                                               |
-| `mediaUrls`               | string[]      |  ✓  | Extracted media URLs (images, documents, and the shared‑article link when the post links a LinkedIn article).                                                                                                                                                                          |
-| `isFeatured`              | boolean       |  ✓  | Pinned to top of feed.                                                                                                                                                                                                                                                                 |
-| `featuredAt`              | number        |  –  | When featured (secondary sort for featured).                                                                                                                                                                                                                                           |
-| `visibilityIndustries`    | string[]      |  ✓  | Author allowlist — only viewers in these industries see it.                                                                                                                                                                                                                            |
-| `visibilityCountries`     | string[]      |  ✓  | Author allowlist — only viewers in these countries see it.                                                                                                                                                                                                                             |
-| `hidden`                  | boolean       |  ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                    |
-| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                  |
-| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                      |
-| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                         |
-| `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Seeds a future AI‑comment feature; not displayed. Absent when the post shares no article or enrichment failed. |
-| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.                                                                                                                                                  |
-| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                      |
-| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                  |
+| Field                     | Type          | Req | Meaning                                                                                                                                                                                                                                                                                    |
+|---------------------------|---------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinPostUrn`         | string        |  ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                                                                                                                                                                       |
+| `authorId`                | `id('users')` |  ✓  | Post author.                                                                                                                                                                                                                                                                               |
+| `content`                 | string        |  ✓  | Post text (composed text + appended media links).                                                                                                                                                                                                                                          |
+| `publishedAt`             | number        |  ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                                                                                                                                                                        |
+| `likeCount`               | number        |  ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                                                                                                                                                                 |
+| `commentCount`            | number        |  ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                                                                                                                                                                   |
+| `mediaUrls`               | string[]      |  ✓  | Extracted media URLs (images, documents, and the shared‑article link when the post links a LinkedIn article).                                                                                                                                                                              |
+| `imageUrls`               | string[]      |  –  | Image‑typed media URLs only (subset of `mediaUrls`), captured at manual submit and sent to the AI as **vision input** (see [§11A](#11a-ai-reaction--comment-assistance)). Absent on synced/legacy posts.                                                                                   |
+| `isFeatured`              | boolean       |  ✓  | Pinned to top of feed.                                                                                                                                                                                                                                                                     |
+| `featuredAt`              | number        |  –  | When featured (secondary sort for featured).                                                                                                                                                                                                                                               |
+| `visibilityIndustries`    | string[]      |  ✓  | Author allowlist — only viewers in these industries see it.                                                                                                                                                                                                                                |
+| `visibilityCountries`     | string[]      |  ✓  | Author allowlist — only viewers in these countries see it.                                                                                                                                                                                                                                 |
+| `hidden`                  | boolean       |  ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                        |
+| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                      |
+| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                          |
+| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                             |
+| `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Feeds the AI reaction/comment prompts; not displayed. Absent when the post shares no article or enrichment failed. |
+| `suggestedReaction`       | enum          |  –  | AI‑predicted most‑likely reaction (`LIKE\|PRAISE\|EMPATHY\|INTEREST\|APPRECIATION\|ENTERTAINMENT`), set async after submit. Absent ⇒ the UI picker treats it as `LIKE`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                  |
+| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.                                                                                                                                                      |
+| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                          |
+| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                      |
 
 Indexes: `by_author [authorId]`, `by_urn [linkedinPostUrn]`,
 `by_author_and_publishedAt [authorId, publishedAt]`, and `by_feed_rank [inFeed, feedRank]` which backs
@@ -580,6 +584,24 @@ on removal (admin content, not personal data).
 | `updatedAt` | number                   |  ✓  | Last-edit timestamp (ms).                                                                        |
 
 Index: `by_enabled_and_created [enabled, createdAt]` — the viewer query walks `enabled=true` newest-first.
+
+#### `userInteractions` — per-user engagement log
+
+One row per reaction or comment a user made on a post (written best-effort by `recordInteraction` after a
+successful `reactToPost` / `commentOnPost`). Distinct from the aggregate `posts.likeCount` / `commentCount`.
+Powers the **DSR export** (§13B — included in the user's data bundle, deleted in the erasure cascade) and a
+future admin dashboard.
+
+| Field       | Type                      | Req | Meaning                                          |
+|-------------|---------------------------|:---:|--------------------------------------------------|
+| `userId`    | `id('users')`             |  ✓  | Who reacted / commented.                         |
+| `postId`    | `id('posts')`             |  ✓  | The target post.                                 |
+| `kind`      | `'reaction' \| 'comment'` |  ✓  | Which interaction this row records.              |
+| `reaction`  | enum                      |  –  | Reaction value (set when `kind === 'reaction'`). |
+| `comment`   | string                    |  –  | Comment text (set when `kind === 'comment'`).    |
+| `createdAt` | number                    |  ✓  | Interaction timestamp (ms).                      |
+
+Indexes: `by_user [userId]` (DSR export + a user's activity), `by_post [postId]` (admin: who engaged with a post).
 
 ---
 
@@ -1099,16 +1121,22 @@ flowchart TD
 
 Both are **actions** that call LinkedIn with the **acting user's own token**, then increment the
 local count (which may flip `interactionLimitReached`). Counts propagate to all viewers in real time
-via Convex reactivity. The interaction‑limit flip decision is the pure helper
+via Convex reactivity. On success each action also appends a per‑user row to **`userInteractions`**
+(`internal.interactions.recordInteraction`, best‑effort — a logging failure never fails the action) —
+the reaction type or comment text keyed by `userId`/`postId` — for the DSR export (§13B) and a future
+admin dashboard. The interaction‑limit flip decision is the pure helper
 `lib/interactionLimit.ts` `shouldFlipInteractionLimit(likeCount, commentCount, interactionsPerPost, alreadyReached)`.
 
-| Action                                             | Validation                                                      | Rate limit | LinkedIn endpoint                                                           |
-|----------------------------------------------------|-----------------------------------------------------------------|------------|-----------------------------------------------------------------------------|
-| `commentOnPost(postId, commentText, sessionToken)` | text ≤ 3000 chars                                               | 20/hour    | `POST /v2/socialActions/{urn}/comments`, actor `urn:li:person:{linkedinId}` |
-| `reactToPost(postId, reactionType, sessionToken)`  | `reactionType ∈ {LIKE,CELEBRATE,SUPPORT,FUNNY,LOVE,INSIGHTFUL}` | 30/hour    | `POST /rest/reactions?actor=…`, header `Linkedin-Version: 202603`           |
+| Action                                             | Validation                                                                 | Rate limit | LinkedIn endpoint                                                           |
+|----------------------------------------------------|----------------------------------------------------------------------------|------------|-----------------------------------------------------------------------------|
+| `commentOnPost(postId, commentText, sessionToken)` | text ≤ 3000 chars                                                          | 20/hour    | `POST /v2/socialActions/{urn}/comments`, actor `urn:li:person:{linkedinId}` |
+| `reactToPost(postId, reactionType, sessionToken)`  | `reactionType ∈ {LIKE,PRAISE,EMPATHY,INTEREST,APPRECIATION,ENTERTAINMENT}` | 30/hour    | `POST /rest/reactions?actor=…`, header `Linkedin-Version: 202603`           |
 
 > Endpoint **asymmetry**: comments use the legacy `/v2/socialActions` API; reactions use the
-> versioned `/rest/reactions` API. The app UI currently hard‑codes the reaction type to `LIKE`.
+> versioned `/rest/reactions` API. `reactionType` uses the **real `/rest/reactions` enum values**
+> (the UI shows friendly labels Like/Celebrate/Love/Insightful/Support/Funny). The feed's reaction
+> control is a **picker pre‑selected to the AI‑suggested reaction** (`posts.suggestedReaction`,
+> default `LIKE`) — see [§11A](#11a-ai-reaction--comment-assistance).
 
 ```mermaid
 sequenceDiagram
@@ -1139,15 +1167,100 @@ the current window row; if `windowStart` is older than the window it resets, oth
 and throws once `count` reaches the limit (`maxPerWindow`). (The header comment says "sliding window" but the
 implementation is fixed‑window.) `checkRateLimit` now accepts an optional `windowMs` + `windowLabel`
 (defaults to 1h / "hour") so callers can specify non-hourly windows. Limits: `submitPost` 10/h,
-`commentOnPost` 20/h, `reactToPost` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget is
+`commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget
+is
 **shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the
 non-throwing `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier.
-**Admins (`user.isAdmin`) bypass the rate limit on `commentOnPost`, `reactToPost`, and
-`profile_refresh`** — those call sites unconditionally skip the check for admins. **`submitPost` is the
+**Admins (`user.isAdmin`) bypass the rate limit on `commentOnPost`, `reactToPost`, `generateComment`,
+and `profile_refresh`** — those call sites unconditionally skip the check for admins. **`submitPost` is the
 exception:** its rate‑limit, weekly‑limit, and ownership bypass apply **only under the dev‑gated admin
 override** (`ALLOW_ADMIN_SHARE_ANY_POST` — see
 [§10 — Manual post submission](#manual-post-submission-postssubmitpost-action)). In production that
 var is unset, so an admin submits posts under exactly the same limits as everyone else.
+
+---
+
+## 11A. AI Reaction & Comment Assistance
+
+OpenRouter (OpenAI-compatible) powers two assists: (1) predicting each submitted post's most-likely
+reaction, and (2) drafting comments on demand. The model is Google's open **Gemma**
+(`google/gemma-4-26b-a4b-it`), served via OpenRouter's privacy-constrained provider routing. All calls go through one
+seam —
+`convex/ai/openrouter.ts` `callOpenRouter(messages, { action })` — which mirrors `linkedin/client.ts`
+(auth + log-real-error→throw-sanitized). The prompts are **multimodal**: the post's images
+(`posts.imageUrls`, the image-typed media captured at submit) + the linked article's images are attached as
+vision input, and the **full article body** (`posts.article.text`) is sent as text — so the model must be
+**vision-capable** (`OPENROUTER_MODEL` must point at a multimodal model). Non-image media (documents/links)
+are listed as text context, not attached.
+
+> **Compliance — AI inference runs via OpenRouter with zero data retention (dynamic provider routing).**
+> `OPENROUTER_API_KEY` enables the AI features (unset ⇒ reactions no-op to `LIKE`, Generate reports "AI
+> unavailable"). The seam (`convex/ai/openrouter.ts`) constrains routing **in code** to providers that honour
+> **zero data retention** (`zdr: true`) and **no data collection / no training** (`data_collection: "deny"`) —
+> not env-overridable — and OpenRouter picks the cheapest qualifying provider (`:floor`). The model is Google's
+> open **Gemma** (`google/gemma-4-26b-a4b-it`). **OpenRouter** (US) is the named sub-processor; the **downstream
+> inference provider (e.g. DeepInfra) and its region are selected per request, not pinned** — so region is not
+> guaranteed and the controller relies on OpenRouter's DPA flowing down to its providers. Documented in
+> `docs/compliance/`: ROPA **Activity 13** (`DATA-INVENTORY.md`), the **OpenRouter** rows in `SUBPROCESSORS.md`,
+> **item 10** in `GAP-ASSESSMENT.md`, and the public `/privacy` disclosure. **Human/legal before go-live:**
+> execute OpenRouter's DPA, confirm ZDR/no-training flows down to its providers, and assess the transfer
+> position given the non-pinned region (add region constraints if needed).
+
+### Reaction prediction (async, best-effort)
+
+`posts.submitPost`, after the upsert, schedules `internal.ai.reactions.predictReaction` — submit returns
+immediately; OpenRouter latency/cost/failure never touch it. The prediction reads the post, builds the
+reaction prompt (content + article), calls OpenRouter, coerces the reply with `parseReaction` (whole-word
+match against the 6-enum allow-list, **default `LIKE`**), and patches `posts.suggestedReaction`. Any
+failure is swallowed (logged) — the post keeps the default `LIKE`. Only manual submits predict (that's
+where `article` context exists); synced/legacy posts default to `LIKE`.
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant SP as posts.submitPost (action)
+  participant DB as Convex DB
+  participant PR as ai.reactions.predictReaction (scheduled)
+  participant DS as OpenRouter
+  U->>SP: submit URL
+  SP->>DB: upsertPost → postId (suggestedReaction absent ⇒ LIKE)
+  SP->>PR: scheduler.runAfter(0, { postId })
+  SP-->>U: { postId } (returns immediately)
+  PR->>DB: getPost
+  PR->>DS: buildReactionPrompt → keyword
+  DS-->>PR: e.g. "PRAISE"
+  PR->>DB: patch suggestedReaction (parseReaction, default LIKE)
+  Note over DB,U: PostCard picker pre-selects it live via Convex reactivity
+```
+
+The feed's reaction control (`PostCard`) is a **picker** pre-selecting `suggestedReaction ?? 'LIKE'`; the
+viewer confirms or changes before `reactToPost` sends the chosen reaction (§11).
+
+### Comment drafting (on-demand)
+
+`api.ai.comments.generateComment({ sessionToken, postId, language? })` → `{ comment }`. It auth-checks,
+rate-limits (30/h, admins exempt), loads the post + the author's public name/headline
+(`internal.users.getPublicAuthor`), resolves the language, builds the comment prompt (≤2 paragraphs,
+concise, no hashtags/@-mentions; article + media URLs included), calls OpenRouter, and returns the draft.
+**Nothing is persisted** — comments are generated fresh per user per click (identical reused text would
+trip LinkedIn spam detection). `CommentBox` prefills the textarea (Generate / Regenerate) for the user to
+edit, then posts via the unchanged `commentOnPost`.
+
+### Comment language
+
+All **ISO 639-1** codes (`convex/lib/languages.ts`, codes-only + `Intl.DisplayNames`, mirroring
+`profileOptions.ts`) plus an **`auto`** sentinel ("match the post"). Stored as `users.commentLanguage`
+(`v.string()`, validated in the handler — same pattern as `country`/`industry`). The default chain is
+**per-comment select → saved `commentLanguage` → `auto`**, all via the pure `resolveCommentLanguage`
+(shared by the action and both selects). Settings has a default picker (`setCommentLanguage`); the comment
+box picker overrides per-comment without writing back.
+
+### Files
+
+`convex/ai/{openrouter,prompts,reactions,comments}.ts`, `convex/lib/{reactions,languages}.ts`,
+`posts.submitPost` (schedule hook), `interactions.reactToPost` (enum fix), `users.{setCommentLanguage,
+getPublicAuthor}`, `getMe` (exposes `commentLanguage` via `toSafeMe`); frontend `PostCard` (picker),
+`CommentBox` (draft + language), `SettingsPage` ("AI Comments"), i18n `reactions.*` / `comment.*`.
 
 ---
 
@@ -1843,25 +1956,28 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 ### Convex backend — set in the **Convex dashboard** (Settings → Environment Variables)
 
-| Variable                       |                Required                 | Consumed in                          | Purpose                                                                                                                                                                                               |
-|--------------------------------|:---------------------------------------:|--------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `LINKEDIN_CLIENT_ID`           |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client id (authorize URL + token exchange).                                                                                                                                                     |
-| `LINKEDIN_CLIENT_SECRET`       |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client secret (server‑side token exchange).                                                                                                                                                     |
-| `LINKEDIN_REDIRECT_URI`        |                    ✓                    | `linkedin/oauth.ts`                  | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                          |
-| `APP_URL`                      |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`              | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                       |
-| `STRIPE_STARTER_PRICE_ID`      |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                       |
-| `STRIPE_GROWTH_PRICE_ID`       |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `growth` tier.                                                                                                                                                                             |
-| `STRIPE_PRO_PRICE_ID`          |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `pro` tier.                                                                                                                                                                                |
-| `STRIPE_SECRET_KEY`            |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Stripe API secret — not referenced directly in our source.                                                                                                                                            |
-| `STRIPE_WEBHOOK_SECRET`        |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Verifies webhook signatures at `/stripe/webhook`.                                                                                                                                                     |
-| `APIFY_API_TOKEN`              |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                   |
-| `APIFY_TASK_ID`                |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Apify actor (`harvestapi~linkedin-profile-posts`).                                                                                                                                                    |
-| `APIFY_TASK_ID_PROFILE_SCRAPE` |           ✓ (profile scrape)            | `jobs/scrapeProfileApify.ts`         | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment).                                                                                                                      |
-| `RESEND_API_KEY`               |        – (email no‑ops if unset)        | `lib/email.ts`                       | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                          |
-| `EMAIL_FROM`                   |        – (email no‑ops if unset)        | `lib/email.ts`                       | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                             |
-| `CONVEX_DEPLOYMENT`            |                 ✓ (CLI)                 | Convex CLI                           | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                     |
-| `ALLOW_ADMIN_SHARE_ANY_POST`   | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)            | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
-| `FEEDBACK_REPLY_TO`            |              – (optional)               | `convex/feedback/feedback.ts`        | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                     |
+| Variable                         |                Required                 | Consumed in                          | Purpose                                                                                                                                                                                               |
+|----------------------------------|:---------------------------------------:|--------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `LINKEDIN_CLIENT_ID`             |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client id (authorize URL + token exchange).                                                                                                                                                     |
+| `LINKEDIN_CLIENT_SECRET`         |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client secret (server‑side token exchange).                                                                                                                                                     |
+| `LINKEDIN_REDIRECT_URI`          |                    ✓                    | `linkedin/oauth.ts`                  | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                          |
+| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`              | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                       |
+| `STRIPE_STARTER_PRICE_ID`        |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                       |
+| `STRIPE_GROWTH_PRICE_ID`         |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `growth` tier.                                                                                                                                                                             |
+| `STRIPE_PRO_PRICE_ID`            |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `pro` tier.                                                                                                                                                                                |
+| `STRIPE_SECRET_KEY`              |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Stripe API secret — not referenced directly in our source.                                                                                                                                            |
+| `STRIPE_WEBHOOK_SECRET`          |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Verifies webhook signatures at `/stripe/webhook`.                                                                                                                                                     |
+| `APIFY_API_TOKEN`                |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                   |
+| `APIFY_TASK_ID`                  |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Apify actor (`harvestapi~linkedin-profile-posts`).                                                                                                                                                    |
+| `APIFY_TASK_ID_PROFILE_SCRAPE`   |           ✓ (profile scrape)            | `jobs/scrapeProfileApify.ts`         | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment).                                                                                                                      |
+| `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                       | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                          |
+| `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                       | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                             |
+| `CONVEX_DEPLOYMENT`              |                 ✓ (CLI)                 | Convex CLI                           | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                     |
+| `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)            | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
+| `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`        | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                     |
+| `OPENROUTER_API_KEY`             |   ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`            | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                |
+| `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`            | Optional model slug override. Provider routing (ZDR + no-data-collection, cheapest qualifying provider) is enforced in code, not via env.                                                             |
+| `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`            | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                     |
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 

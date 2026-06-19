@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import PostCard, { type PostWithAuthor } from './PostCard'
+import PostCard, { ReactionOptions, type PostWithAuthor } from './PostCard'
 
 const mockPost: PostWithAuthor = {
   _id: 'post123' as never,
@@ -54,17 +54,39 @@ describe('PostCard', () => {
     expect(screen.getByText(/featured/i)).toBeInTheDocument()
   })
 
-  it('wires the Like button to onReact with the post id', () => {
+  it('renders all six reactions and calls onSelect with the chosen value', () => {
+    const onSelect = vi.fn()
+    render(
+      <ReactionOptions
+        suggested="LIKE"
+        onSelect={onSelect}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /celebrate/i }))
+    expect(onSelect).toHaveBeenCalledWith('PRAISE')
+  })
+
+  it('pre-highlights the suggested reaction', () => {
+    render(
+      <ReactionOptions
+        suggested="INTEREST"
+        onSelect={() => {}}
+      />
+    )
+    expect(screen.getByRole('button', { name: /insightful/i })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('reacts with the suggested reaction when the trigger is clicked', () => {
     const onReact = vi.fn()
     render(
       <PostCard
-        post={mockPost}
+        post={{ ...mockPost, suggestedReaction: 'PRAISE' }}
         onComment={() => {}}
         onReact={onReact}
       />
     )
-    fireEvent.click(screen.getByRole('button', { name: /like/i }))
-    expect(onReact).toHaveBeenCalledWith(mockPost._id)
+    fireEvent.click(screen.getByRole('button', { name: /react/i }))
+    expect(onReact).toHaveBeenCalledWith(mockPost._id, 'PRAISE')
   })
 
   it('wires the Comment button to onComment with the post id', () => {
@@ -89,7 +111,7 @@ describe('PostCard', () => {
       />
     )
     expect(screen.getByTitle('LinkedIn post')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /like/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /react/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
   })
 
@@ -101,7 +123,7 @@ describe('PostCard', () => {
         onReact={() => {}}
       />
     )
-    expect(screen.getByRole('button', { name: /10.*like/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /react/i })).toHaveTextContent('10')
     expect(screen.getByRole('button', { name: /3.*comment/i })).toBeInTheDocument()
   })
 

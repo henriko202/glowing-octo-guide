@@ -210,6 +210,8 @@ export const submitPost = action({
     const baseText = ownership.content || parsedContent.text
     const composedContent = appendMediaLinks(baseText, parsedContent.media)
     const mediaUrls = parsedContent.media.map(m => m.url)
+    // Image-typed media only — sent to the AI as vision input (a non-image URL would error the model).
+    const imageUrls = parsedContent.media.filter(m => m.type === 'image').map(m => m.url)
 
     // 4c. Pull current engagement (reactions + comments) from the same page HTML's
     // JSON-LD. Best-effort: missing data degrades to 0, so the post just starts at
@@ -244,6 +246,7 @@ export const submitPost = action({
       likeCount: engagement.likeCount,
       commentCount: engagement.commentCount,
       mediaUrls,
+      imageUrls,
       isFeatured: false,
       visibilityIndustries: [],
       visibilityCountries: [],
@@ -258,6 +261,10 @@ export const submitPost = action({
     if (!postId) {
       throw new Error('Failed to upsert post')
     }
+
+    // Best-effort, async: predict the most-likely reaction without blocking the submit.
+    // Failure (incl. missing OPENROUTER_API_KEY) leaves the post at its default LIKE.
+    await ctx.scheduler.runAfter(0, internal.ai.reactions.predictReaction, { postId })
 
     return { postId }
   }

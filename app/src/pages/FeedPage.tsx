@@ -46,7 +46,7 @@ export default function FeedPage() {
             <PostCard
               post={post}
               onComment={id => setCommentingOn(id === commentingOn ? null : id)}
-              onReact={id => react({ postId: id, reactionType: 'LIKE', sessionToken: sessionToken ?? '' })}
+              onReact={(id, reactionType) => react({ postId: id, reactionType, sessionToken: sessionToken ?? '' })}
             />
             {commentingOn === post._id && (
               <CommentBox

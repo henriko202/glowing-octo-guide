@@ -4,6 +4,7 @@ import { components, internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth, resolveSession } from './lib/auth'
 import { isValidCountry, isValidIndustry } from './lib/profileOptions'
+import { isValidCommentLanguage } from './lib/languages'
 import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
 import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
 
@@ -12,6 +13,16 @@ export const getWithTokens = internalQuery({
   args: { userId: v.id('users') },
   handler: async (ctx, { userId }) => {
     return ctx.db.get(userId)
+  }
+})
+
+// Internal: display-only author fields for the AI comment prompt (no tokens or other PII
+// beyond the public profile name/headline). Used by ai/comments.generateComment.
+export const getPublicAuthor = internalQuery({
+  args: { userId: v.id('users') },
+  handler: async (ctx, { userId }) => {
+    const u = await ctx.db.get(userId)
+    return u ? { name: u.name, headline: u.headline } : null
   }
 })
 
@@ -283,6 +294,17 @@ export const updateProfile = mutation({
       user._id,
       { industry, country }
     )
+  }
+})
+
+// Public: set the default language for AI-generated comments ('auto' or an ISO 639-1 code).
+// Validated against convex/lib/languages.ts. The per-comment picker can still override this.
+export const setCommentLanguage = mutation({
+  args: { sessionToken: v.string(), commentLanguage: v.string() },
+  handler: async (ctx, { sessionToken, commentLanguage }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    if (!isValidCommentLanguage(commentLanguage)) throw new Error('Unsupported language')
+    await ctx.db.patch(user._id, { commentLanguage })
   }
 })
 

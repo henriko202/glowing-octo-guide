@@ -104,4 +104,32 @@ describe('buildExportBundle', () => {
     })
     expect(bundle.feedbackResponses).toEqual([])
   })
+
+  it('includes the user interactions (reactions + comments) verbatim', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      interactions: [
+        { _id: 'ui1', kind: 'reaction', reaction: 'PRAISE', postId: 'p1', createdAt: 1 },
+        { _id: 'ui2', kind: 'comment', comment: 'Great post', postId: 'p1', createdAt: 2 }
+      ]
+    })
+    expect(bundle.interactions).toHaveLength(2)
+    expect(bundle.interactions[0].reaction).toBe('PRAISE')
+    expect(bundle.interactions[1].comment).toBe('Great post')
+  })
+
+  it('defaults interactions to empty array when omitted', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: []
+    })
+    expect(bundle.interactions).toEqual([])
+  })
 })

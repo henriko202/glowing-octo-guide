@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 import { articleValidator } from './lib/articleValidator'
+import { reactionValidator } from './lib/reactions'
 
 export default defineSchema({
   users: defineTable({
@@ -15,6 +16,10 @@ export default defineSchema({
     location: v.optional(v.string()),
     // Scraped LinkedIn primary-locale language code (e.g. "en"). Drives the UI i18n seed only.
     primaryLocale: v.optional(v.string()),
+    // Default language for AI-generated comments: an ISO 639-1 code or 'auto'. Absent ⇒ 'auto'.
+    // Validated against convex/lib/languages.ts in setCommentLanguage. Distinct from primaryLocale
+    // (which only seeds the UI i18n language, not what the AI writes comments in).
+    commentLanguage: v.optional(v.string()),
     tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))),
     subscriptionStatus: v.union(
       v.literal('trialing'),
@@ -86,6 +91,9 @@ export default defineSchema({
     likeCount: v.number(),
     commentCount: v.number(),
     mediaUrls: v.array(v.string()),
+    // Image-typed media URLs only (subset of mediaUrls), captured at manual submit for the AI
+    // vision prompts. Optional: absent on cron/Apify-synced posts and legacy rows.
+    imageUrls: v.optional(v.array(v.string())),
     isFeatured: v.boolean(),
     featuredAt: v.optional(v.number()),
     visibilityIndustries: v.array(v.string()),
@@ -118,7 +126,10 @@ export default defineSchema({
     feedRank: v.optional(v.number()),
     // True iff the post passes the non-viewer-specific feed filters
     // (hidden === false && !interactionLimitReached && deletedAt === undefined).
-    inFeed: v.optional(v.boolean())
+    inFeed: v.optional(v.boolean()),
+    // AI-predicted most-likely reaction (set async by convex/ai/reactions.ts after submit).
+    // Absent ⇒ the UI picker treats it as LIKE. See docs AI Reaction & Comment Assistance.
+    suggestedReaction: v.optional(reactionValidator)
   })
     .index('by_author', ['authorId'])
     .index('by_urn', ['linkedinPostUrn'])
@@ -308,5 +319,19 @@ export default defineSchema({
     createdBy: v.id('users'),
     createdAt: v.number(),
     updatedAt: v.number()
-  }).index('by_enabled_and_created', ['enabled', 'createdAt'])
+  }).index('by_enabled_and_created', ['enabled', 'createdAt']),
+
+  // Per-user engagement log: one row per reaction or comment the user made on a post. Powers the
+  // DSR export (user data request) and a future admin dashboard. Distinct from the aggregate
+  // posts.likeCount/commentCount. `reaction` is set when kind==='reaction'; `comment` when 'comment'.
+  userInteractions: defineTable({
+    userId: v.id('users'),
+    postId: v.id('posts'),
+    kind: v.union(v.literal('reaction'), v.literal('comment')),
+    reaction: v.optional(reactionValidator),
+    comment: v.optional(v.string()),
+    createdAt: v.number()
+  })
+    .index('by_user', ['userId']) // DSR export + a user's activity
+    .index('by_post', ['postId']) // admin: who engaged with a post
 })

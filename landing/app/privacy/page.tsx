@@ -116,6 +116,11 @@ export default function PrivacyPage() {
           <li>
             <strong className="text-cream">Resend</strong> &mdash; transactional email delivery.
           </li>
+          <li>
+            <strong className="text-cream">OpenRouter (AI inference)</strong> &mdash; generating reaction suggestions
+            and draft comments from your public post content, including its images. OpenRouter routes only to inference
+            providers with zero data retention (prompts are not stored or used for training).
+          </li>
         </ul>
         <p>
           <strong className="text-cream">We do NOT sell or share your personal information</strong> for cross-context

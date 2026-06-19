@@ -9,6 +9,10 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as ai_comments from "../ai/comments.js";
+import type * as ai_openrouter from "../ai/openrouter.js";
+import type * as ai_prompts from "../ai/prompts.js";
+import type * as ai_reactions from "../ai/reactions.js";
 import type * as billing from "../billing.js";
 import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
@@ -27,11 +31,13 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_feedRank from "../lib/feedRank.js";
 import type * as lib_interactionLimit from "../lib/interactionLimit.js";
+import type * as lib_languages from "../lib/languages.js";
 import type * as lib_planLimits from "../lib/planLimits.js";
 import type * as lib_policy from "../lib/policy.js";
 import type * as lib_postLimit from "../lib/postLimit.js";
 import type * as lib_profileOptions from "../lib/profileOptions.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
+import type * as lib_reactions from "../lib/reactions.js";
 import type * as linkedin_auth from "../linkedin/auth.js";
 import type * as linkedin_client from "../linkedin/client.js";
 import type * as linkedin_oauth from "../linkedin/oauth.js";
@@ -60,6 +66,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  "ai/comments": typeof ai_comments;
+  "ai/openrouter": typeof ai_openrouter;
+  "ai/prompts": typeof ai_prompts;
+  "ai/reactions": typeof ai_reactions;
   billing: typeof billing;
   crons: typeof crons;
   feed: typeof feed;
@@ -78,11 +88,13 @@ declare const fullApi: ApiFromModules<{
   "lib/email": typeof lib_email;
   "lib/feedRank": typeof lib_feedRank;
   "lib/interactionLimit": typeof lib_interactionLimit;
+  "lib/languages": typeof lib_languages;
   "lib/planLimits": typeof lib_planLimits;
   "lib/policy": typeof lib_policy;
   "lib/postLimit": typeof lib_postLimit;
   "lib/profileOptions": typeof lib_profileOptions;
   "lib/rateLimit": typeof lib_rateLimit;
+  "lib/reactions": typeof lib_reactions;
   "linkedin/auth": typeof linkedin_auth;
   "linkedin/client": typeof linkedin_client;
   "linkedin/oauth": typeof linkedin_oauth;

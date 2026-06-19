@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { COUNTRY_CODES, INDUSTRIES, countryLabel } from '../../../convex/lib/profileOptions'
 import { VirtualizedCombobox } from '../components/VirtualizedCombobox'
 import { extractVanityName } from '../lib/linkedinProfile'
+import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -18,6 +19,7 @@ interface MeProfile {
   country?: string
   location?: string
   primaryLocale?: string
+  commentLanguage?: string
   tier: 'starter' | 'growth' | 'pro' | 'contact'
   subscriptionStatus: 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
   trialEndsAt?: number
@@ -32,6 +34,7 @@ export default function SettingsPage() {
   const setPublicIdentifier = useMutation(api.users.setPublicIdentifier)
   const updateProfile = useMutation(api.users.updateProfile)
   const refreshProfile = useMutation(api.users.refreshProfileFromLinkedIn)
+  const setCommentLanguage = useMutation(api.users.setCommentLanguage)
 
   const [profileUrl, setProfileUrl] = useState('')
   const [identifierSaving, setIdentifierSaving] = useState(false)
@@ -44,6 +47,10 @@ export default function SettingsPage() {
   const [profileSaved, setProfileSaved] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
+  const [commentLang, setCommentLang] = useState<string>(AUTO_LANGUAGE)
+  const [commentLangDirty, setCommentLangDirty] = useState(false)
+  const [commentLangSaving, setCommentLangSaving] = useState(false)
+  const [commentLangSaved, setCommentLangSaved] = useState(false)
 
   // Mirror the server value for each field so a backend scrape that fills country/industry shows up
   // live — but stop mirroring a field once the user edits it (their unsaved edit wins until save).
@@ -57,6 +64,11 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
     if (!countryDirty) setCountry(meCountry ?? '')
   }, [meCountry, countryDirty])
+  const meCommentLanguage = me?.commentLanguage
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value until the user picks a language
+    if (!commentLangDirty) setCommentLang(resolveCommentLanguage(meCommentLanguage))
+  }, [meCommentLanguage, commentLangDirty])
 
   if (!me) {
     return <LoadingSpinner />
@@ -70,6 +82,12 @@ export default function SettingsPage() {
   const countryOptions = COUNTRY_CODES.map(code => ({ value: code, label: countryLabel(code, lang) })).sort((a, b) =>
     a.label.localeCompare(b.label)
   )
+  const commentLangOptions = [
+    { value: AUTO_LANGUAGE, label: t('comment.languageAuto') },
+    ...LANGUAGE_CODES.map(code => ({ value: code, label: languageLabel(code, lang) })).sort((a, b) =>
+      a.label.localeCompare(b.label)
+    )
+  ]
 
   async function handleSaveProfile() {
     if (!sessionToken) return
@@ -83,6 +101,19 @@ export default function SettingsPage() {
       setTimeout(() => setProfileSaved(false), 3000)
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  async function handleSaveCommentLanguage() {
+    if (!sessionToken) return
+    setCommentLangSaving(true)
+    try {
+      await setCommentLanguage({ sessionToken, commentLanguage: commentLang })
+      setCommentLangDirty(false)
+      setCommentLangSaved(true)
+      setTimeout(() => setCommentLangSaved(false), 3000)
+    } finally {
+      setCommentLangSaving(false)
     }
   }
 
@@ -228,6 +259,31 @@ export default function SettingsPage() {
             Will save as: <strong>{extractedVanity}</strong>
           </p>
         )}
+      </section>
+
+      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-1 mt-0 text-base font-semibold text-slate-900">{t('settings.aiComments')}</h2>
+        <p className="mb-3 mt-0 text-[13px] text-slate-500">{t('settings.aiCommentsNote')}</p>
+        <div className="mb-1 text-sm font-medium text-slate-700">{t('settings.commentLanguage')}</div>
+        <VirtualizedCombobox
+          options={commentLangOptions}
+          value={commentLang}
+          onChange={value => {
+            setCommentLang(value === '' ? AUTO_LANGUAGE : value)
+            setCommentLangDirty(true)
+          }}
+          ariaLabel={t('settings.commentLanguage')}
+          placeholder={t('comment.languageAuto')}
+        />
+        <div className="mt-3">
+          <button
+            onClick={handleSaveCommentLanguage}
+            disabled={commentLangSaving}
+            className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${commentLangSaved ? 'bg-green-500' : 'bg-blue-500'} ${commentLangSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          >
+            {commentLangSaved ? t('settings.saved') : commentLangSaving ? t('settings.saving') : t('settings.save')}
+          </button>
+        </div>
       </section>
 
       {isPro ? (

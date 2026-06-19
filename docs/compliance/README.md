@@ -1,6 +1,6 @@
 > **DRAFT — requires legal review.**
 >
-> Last updated: 2026-06-16
+> Last updated: 2026-06-19
 
 # Privacy & Compliance Documentation — Link Into The SSI
 
@@ -14,14 +14,14 @@ recording, data-subject rights endpoints, retention crons, audit logs) is descri
 
 ## Index
 
-| File                                       | Summary                                                                                                                                                                           |
-|--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [DATA-INVENTORY.md](DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — catalogues every personal-data category, purpose, legal basis, retention period, and data-flow under GDPR Art. 30.                       |
-| [SUBPROCESSORS.md](SUBPROCESSORS.md)       | Sub-processor list — names every third-party organisation that processes personal data on behalf of the controller (Convex, Stripe, LinkedIn, Resend).                            |
-| [RETENTION-POLICY.md](RETENTION-POLICY.md) | Data retention policy — states the retention window for each data category, the legal/business justification, and the automated enforcement mechanism in the codebase.            |
-| [GAP-ASSESSMENT.md](GAP-ASSESSMENT.md)     | Compliance gap assessment — maps the post-Phase-3 implementation against GDPR, UK GDPR, LGPD, and CCPA/CPRA requirements; identifies residual gaps and required human actions.    |
-| [BREACH-RUNBOOK.md](BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook — step-by-step detection, triage, containment, authority notification (72-hour GDPR deadline), and post-incident review procedure. |
-| [DPA-TEMPLATE.md](DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37) — must be signed with each sub-processor before they process personal data on the controller's behalf.           |
+| File                                       | Summary                                                                                                                                                                                                                                                                                      |
+|--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [DATA-INVENTORY.md](DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — catalogues every personal-data category, purpose, legal basis, retention period, and data-flow under GDPR Art. 30.                                                                                                                                  |
+| [SUBPROCESSORS.md](SUBPROCESSORS.md)       | Sub-processor list — names every third-party organisation that processes personal data on behalf of the controller (Convex, Stripe, LinkedIn, Resend). Also lists **OpenRouter** (US AI gateway) + its dynamically-routed, zero-data-retention inference providers as active sub-processors. |
+| [RETENTION-POLICY.md](RETENTION-POLICY.md) | Data retention policy — states the retention window for each data category, the legal/business justification, and the automated enforcement mechanism in the codebase.                                                                                                                       |
+| [GAP-ASSESSMENT.md](GAP-ASSESSMENT.md)     | Compliance gap assessment — maps the post-Phase-3 implementation against GDPR, UK GDPR, LGPD, and CCPA/CPRA requirements; identifies residual gaps and required human actions.                                                                                                               |
+| [BREACH-RUNBOOK.md](BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook — step-by-step detection, triage, containment, authority notification (72-hour GDPR deadline), and post-incident review procedure.                                                                                                            |
+| [DPA-TEMPLATE.md](DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37) — must be signed with each sub-processor before they process personal data on the controller's behalf.                                                                                                                      |
 
 ---
 
@@ -106,6 +106,15 @@ Whenever a new processing activity, data category, or third-party integration is
 
 The mapping in `docs/PLATFORM.md` §21 ("Maintaining This Document") includes a reminder to keep
 compliance docs in sync.
+
+### 8. AI features — OpenRouter, zero data retention (dynamic provider routing)
+
+The AI reaction/comment feature is **live in production**: prompts go to **OpenRouter** (US), which routes each request
+to a downstream provider it selects, constrained in code to **zero data retention** + **no training** (cheapest
+qualifying provider; e.g. DeepInfra — provider + region **not pinned**). Remaining human/legal: execute OpenRouter's
+DPA,
+confirm the ZDR / no-training terms flow down to its providers, and assess the transfer position given the non-pinned
+region (add region constraints if needed). See `SUBPROCESSORS.md`, ROPA Activity 13, and GAP-ASSESSMENT item 10.
 
 ## Cross-references
 
