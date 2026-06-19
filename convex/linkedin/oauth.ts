@@ -1,4 +1,5 @@
 import type { LinkedInTokenResponse, LinkedInUserInfo } from './types.js'
+import { callMemberApi } from './client'
 
 const SCOPES = ['openid', 'profile', 'email', 'r_basicprofile', 'w_member_social_feed', 'w_member_social'].join(' ')
 
@@ -43,14 +44,10 @@ export async function exchangeCodeForTokens(code: string): Promise<LinkedInToken
 // OpenID Connect userinfo endpoint — works with openid/profile/email scopes.
 // Replaces the deprecated /v2/me + r_liteprofile approach.
 export async function fetchLinkedInUserInfo(accessToken: string): Promise<LinkedInUserInfo> {
-  const res = await fetch('https://api.linkedin.com/v2/userinfo', {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    console.error(`LinkedIn userinfo fetch failed: ${res.status}`, body)
-    throw new Error('Failed to retrieve LinkedIn profile. Please try again.')
-  }
-  return res.json() as Promise<LinkedInUserInfo>
+  const res = await callMemberApi(
+    accessToken,
+    { method: 'GET', path: '/v2/userinfo' },
+    { action: 'retrieve LinkedIn profile' }
+  )
+  return (await res!.json()) as LinkedInUserInfo
 }

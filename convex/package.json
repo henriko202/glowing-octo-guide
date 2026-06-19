@@ -10,11 +10,11 @@
   },
   "dependencies": {
     "@convex-dev/stripe": "^0.1.4",
-    "convex": "^1.33.1",
+    "convex": "^1.41.0",
     "stripe": "^20.4.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.9"
   }
 }

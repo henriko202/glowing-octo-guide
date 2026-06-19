@@ -1,5 +1,6 @@
 // convex/linkedin/posts.ts
 import type { LinkedInUGCPost, LinkedInUGCPostsResponse } from './types.js'
+import { callMemberApi } from './client'
 
 export interface ParsedPost {
   linkedinPostUrn: string
@@ -34,21 +35,16 @@ export function parseLinkedInPost(raw: LinkedInUGCPost): ParsedPost {
 // until approved, post syncing will be a no-op for all users.
 export async function fetchUserPosts(accessToken: string, linkedinPersonId: string): Promise<ParsedPost[] | null> {
   const authorUrn = encodeURIComponent(`urn:li:person:${linkedinPersonId}`)
-  const res = await fetch(`https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(${authorUrn})&count=20`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'X-Restli-Protocol-Version': '2.0.0'
-    }
-  })
-  if (res.status === 403) {
-    // r_member_social scope not granted — needs LinkedIn MDP approval
-    return null
-  }
-  if (!res.ok) {
-    const body = await res.text()
-    console.error(`Posts fetch failed: ${res.status}`, body)
-    throw new Error(`Posts fetch failed: ${res.status}`)
-  }
+  const res = await callMemberApi(
+    accessToken,
+    {
+      method: 'GET',
+      path: `/v2/ugcPosts?q=authors&authors=List(${authorUrn})&count=20`,
+      headers: { 'X-Restli-Protocol-Version': '2.0.0' }
+    },
+    { action: 'fetch posts', soft: [403] }
+  )
+  if (res === null) return null // 403 = r_member_social not granted → skip silently
   const data = (await res.json()) as LinkedInUGCPostsResponse
   return (data.elements ?? []).map(parseLinkedInPost)
 }

@@ -33,6 +33,7 @@ export default function BillingPage() {
 
   const isTrialing = me?.subscriptionStatus === 'trialing'
   const trialEndsAt = me?.trialEndsAt
+  // eslint-disable-next-line react-hooks/purity -- intentional: Date.now() used for trial-expiry comparison; stale-by-one-render is acceptable
   const isTrialExpired = isTrialing && !!trialEndsAt && trialEndsAt <= Date.now()
   const isExpired = me?.subscriptionStatus === 'canceled' || me?.subscriptionStatus === 'none' || isTrialExpired
   const trialDaysRemaining = isTrialing ? getTrialDaysRemaining(trialEndsAt) : 0

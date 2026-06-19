@@ -6,7 +6,7 @@
 > **Repo rule (`CLAUDE.md`): NEVER commit or push.** Make and save file changes only; the user commits.
 >
 > **Drift check (run first)**:
-`git diff --stat 90a90ad..HEAD -- package.json convex/tsconfig.json app/tsconfig.json landing/tsconfig.json`
+> `git diff --stat 90a90ad..HEAD -- package.json convex/tsconfig.json app/tsconfig.json landing/tsconfig.json`
 > If any of these changed since `90a90ad`, compare the "Current state" excerpts to the live files
 > before proceeding; on a mismatch, treat it as a STOP condition.
 

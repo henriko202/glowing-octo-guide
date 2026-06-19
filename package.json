@@ -12,7 +12,9 @@
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm --filter convex exec tsc --noEmit -p tsconfig.json && pnpm --filter app exec tsc --noEmit && pnpm --filter landing exec tsc --noEmit",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm -r test"
   },
   "dependencies": {
     "convex": "^1.41.0"

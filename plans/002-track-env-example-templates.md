@@ -21,7 +21,7 @@
 `docs/PLATFORM.md` §16 states "the `.env*.example` files document the required set" — but the root
 `.gitignore` rule `.env*` (line 2) also matches `.env.example` / `.env.local.example`, so **none of
 the template files are actually tracked**. A new contributor (or an agent) cloning the repo gets no
-env template at all. This plan narrows the ignore rule so the *example templates* are tracked while
+env template at all. This plan narrows the ignore rule so the _example templates_ are tracked while
 real secret files (`.env`, `.env.local`) stay ignored.
 
 ## Current state
@@ -81,7 +81,7 @@ and confirm every value is a placeholder (e.g. `your_key_here`, `whsec_...`, emp
 secret**. Real secrets look like live tokens (`sk_live_…`, `sk_test_…` with long random tails,
 `WPL_AP1.…`, `apify_api_…`).
 **STOP** if any template contains what looks like a real credential — report the `file:line` and the
-credential *type* only (never copy the value), and recommend the value be replaced with a placeholder
+credential _type_ only (never copy the value), and recommend the value be replaced with a placeholder
 and rotated before the file is tracked.
 
 ### Step 3: Check `convex/.gitignore` doesn't re-ignore the convex template

@@ -27,10 +27,10 @@ part of "done"). It currently undercounts the schema: it says "15 tables" / "13-
 
 - `convex/schema.ts` defines exactly **16** tables (one `defineTable(...)` each):
   `users, posts, subscriptions, featuredPostUsage, appSettings, sessions, rateLimits, oauthStates,
-  planLimits, postQueue, consentRecords, dataExportRequests, auditLogs, feedback, feedbackResponses,
-  motds`.
+planLimits, postQueue, consentRecords, dataExportRequests, auditLogs, feedback, feedbackResponses,
+motds`.
   (Quick check: `grep -c 'defineTable' convex/schema.ts` returns 17 — that counts the `import {
-  defineSchema, defineTable }` line too, so subtract 1 → **16 tables**.)
+defineSchema, defineTable }` line too, so subtract 1 → **16 tables**.)
 - `docs/PLATFORM.md` stale claims:
     - line ~115 (architecture Mermaid): `DB[("Convex DB<br/>15 tables")]`
     - line ~198 (repo layout): `│   ├── schema.ts                # 13-table database schema`

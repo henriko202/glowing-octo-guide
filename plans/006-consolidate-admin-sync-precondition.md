@@ -22,7 +22,7 @@ Four admin mutations in `convex/admin.ts` — `syncAllPosts`, `syncUserPosts`, `
 `syncUserProfile` — repeat the same precondition: `requireAuth → assertAdmin → read appSettings →
 check the feature flag → throw if disabled`. The flag check is the **authoritative server gate** (the
 UI also gates, but a stale client / direct API call must not run a disabled integration), so this code
-is security-relevant *and* duplicated. Consolidating it into one helper means the gate is defined once
+is security-relevant _and_ duplicated. Consolidating it into one helper means the gate is defined once
 (locality) and the next Apify trigger reuses it (leverage); each mutation shrinks to "gate + schedule".
 
 This is a behavior-preserving refactor. Convex registers each mutation separately, so the four entry
@@ -34,8 +34,8 @@ points stay — only the shared precondition moves behind one function.
 
 ```ts
 export const syncAllPosts = mutation({
-  args: {sessionToken: v.string()},
-  handler: async (ctx, {sessionToken}) => {
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
     const user = await requireAuth(ctx, sessionToken)
     assertAdmin(user)
     const settings = await ctx.db.query('appSettings').first()
@@ -51,9 +51,9 @@ export const syncAllPosts = mutation({
 The "user" pair (`syncUserPosts`, `syncUserProfile`) is the same precondition PLUS:
 
 ```ts
-    const target = await ctx.db.get(userId)
-    if (!target) throw new Error('User not found')
-    if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')
+const target = await ctx.db.get(userId)
+if (!target) throw new Error('User not found')
+if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')
 ```
 
 Gate helpers already exist and are pure + tested: `isApifyPostSyncEnabled` / `isApifyProfileScrapeEnabled`

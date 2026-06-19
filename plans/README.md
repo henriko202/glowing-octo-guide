@@ -10,16 +10,16 @@ the user (Henriko) makes all commits. Do not run `git commit`/`git push`. Also: 
 
 ## Execution order & status
 
-| Plan | Title                                                         | Priority | Effort | Depends on         | Status                                                  |
-|------|---------------------------------------------------------------|----------|--------|--------------------|---------------------------------------------------------|
-| 001  | Verification baseline — `typecheck`/`verify` scripts + CI     | P1       | M      | —                  | DONE (worktree) — gate green after 008                  |
-| 004  | Characterization tests — extract & test pure limit decisions  | P1       | M      | 001 (nice-to-have) | DONE (worktree)                                         |
-| 002  | Track `.env*.example` templates (fix over-broad `.gitignore`) | P2       | S      | —                  | DONE (worktree)                                         |
-| 003  | Fix `PLATFORM.md` table count + §4 note                       | P3       | S      | —                  | DONE (worktree)                                         |
-| 005  | Align `convex` + `vitest` versions across workspaces          | P2       | M      | 001 (verify after) | DONE (worktree)* — needs `npx convex dev` regen by user |
-| 006  | Consolidate the admin Apify sync-trigger precondition         | P3       | S      | 004 (nice-to-have) | DONE (worktree)                                         |
-| 007  | Extract a LinkedIn member-API client seam                     | P2       | M      | 004 (recommended)  | DONE (worktree)                                         |
-| 008  | Green the `pnpm verify` gate (format + lint)                  | P1       | S      | 001–007            | DONE (worktree) — `pnpm verify` exits 0                 |
+| Plan | Title                                                         | Priority | Effort | Depends on         | Status                                                   |
+|------|---------------------------------------------------------------|----------|--------|--------------------|----------------------------------------------------------|
+| 001  | Verification baseline — `typecheck`/`verify` scripts + CI     | P1       | M      | —                  | DONE (worktree) — gate green after 008                   |
+| 004  | Characterization tests — extract & test pure limit decisions  | P1       | M      | 001 (nice-to-have) | DONE (worktree)                                          |
+| 002  | Track `.env*.example` templates (fix over-broad `.gitignore`) | P2       | S      | —                  | DONE (worktree)                                          |
+| 003  | Fix `PLATFORM.md` table count + §4 note                       | P3       | S      | —                  | DONE (worktree)                                          |
+| 005  | Align `convex` + `vitest` versions across workspaces          | P2       | M      | 001 (verify after) | DONE (worktree)\* — needs `npx convex dev` regen by user |
+| 006  | Consolidate the admin Apify sync-trigger precondition         | P3       | S      | 004 (nice-to-have) | DONE (worktree)                                          |
+| 007  | Extract a LinkedIn member-API client seam                     | P2       | M      | 004 (recommended)  | DONE (worktree)                                          |
+| 008  | Green the `pnpm verify` gate (format + lint)                  | P1       | S      | 001–007            | DONE (worktree) — `pnpm verify` exits 0                  |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale).
 

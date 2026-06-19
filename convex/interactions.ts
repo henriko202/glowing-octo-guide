@@ -6,6 +6,8 @@ import type { Doc } from './_generated/dataModel'
 import { requireAuthAction } from './lib/auth'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
+import { shouldFlipInteractionLimit } from './lib/interactionLimit'
+import { callMemberApi } from './linkedin/client'
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
@@ -25,11 +27,17 @@ export const incrementCommentCount = internalMutation({
     await ctx.db.patch(postId, { commentCount: newCommentCount })
 
     // Check if combined interactions have reached the author's limit
-    const total = newCommentCount + post.likeCount
     const author = await ctx.db.get(post.authorId)
     if (author) {
       const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
-      if (total >= limits.interactionsPerPost && !post.interactionLimitReached) {
+      if (
+        shouldFlipInteractionLimit(
+          post.likeCount,
+          newCommentCount,
+          limits.interactionsPerPost,
+          post.interactionLimitReached === true
+        )
+      ) {
         // Hitting the interaction limit removes the post from the feed — refresh feed fields.
         const feed = computeFeedFields({
           isFeatured: post.isFeatured,
@@ -55,11 +63,17 @@ export const incrementLikeCount = internalMutation({
     await ctx.db.patch(postId, { likeCount: newLikeCount })
 
     // Check if combined interactions have reached the author's limit
-    const total = post.commentCount + newLikeCount
     const author = await ctx.db.get(post.authorId)
     if (author) {
       const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
-      if (total >= limits.interactionsPerPost && !post.interactionLimitReached) {
+      if (
+        shouldFlipInteractionLimit(
+          newLikeCount,
+          post.commentCount,
+          limits.interactionsPerPost,
+          post.interactionLimitReached === true
+        )
+      ) {
         // Hitting the interaction limit removes the post from the feed — refresh feed fields.
         const feed = computeFeedFields({
           isFeatured: post.isFeatured,
@@ -104,26 +118,16 @@ export const commentOnPost = action({
     if (post.hidden) throw new Error('This post is not available.')
     if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
 
-    const res = await fetch(
-      `https://api.linkedin.com/v2/socialActions/${encodeURIComponent(post.linkedinPostUrn)}/comments`,
+    await callMemberApi(
+      user.linkedinAccessToken,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${user.linkedinAccessToken}`,
-          'Content-Type': 'application/json',
-          'X-Restli-Protocol-Version': '2.0.0'
-        },
-        body: JSON.stringify({
-          actor: `urn:li:person:${user.linkedinId}`,
-          message: { text: commentText }
-        })
-      }
+        path: `/v2/socialActions/${encodeURIComponent(post.linkedinPostUrn)}/comments`,
+        body: { actor: `urn:li:person:${user.linkedinId}`, message: { text: commentText } },
+        headers: { 'X-Restli-Protocol-Version': '2.0.0' }
+      },
+      { action: 'post comment' }
     )
-    if (!res.ok) {
-      const err = await res.text()
-      console.error(`LinkedIn comment failed: ${res.status}`, err)
-      throw new Error('Failed to post comment. Please try again.')
-    }
 
     await ctx.runMutation(internal.interactions.incrementCommentCount, { postId })
     return { success: true }
@@ -162,27 +166,16 @@ export const reactToPost = action({
     if (post.hidden) throw new Error('This post is not available.')
     if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
 
-    const res = await fetch(
-      `https://api.linkedin.com/rest/reactions?actor=${encodeURIComponent(`urn:li:person:${user.linkedinId}`)}`,
+    await callMemberApi(
+      user.linkedinAccessToken,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${user.linkedinAccessToken}`,
-          'Content-Type': 'application/json',
-          'X-Restli-Protocol-Version': '2.0.0',
-          'Linkedin-Version': '202603'
-        },
-        body: JSON.stringify({
-          root: post.linkedinPostUrn,
-          reactionType
-        })
-      }
+        path: `/rest/reactions?actor=${encodeURIComponent(`urn:li:person:${user.linkedinId}`)}`,
+        body: { root: post.linkedinPostUrn, reactionType },
+        headers: { 'X-Restli-Protocol-Version': '2.0.0', 'Linkedin-Version': '202603' }
+      },
+      { action: 'post reaction' }
     )
-    if (!res.ok) {
-      const err = await res.text()
-      console.error(`LinkedIn reaction failed: ${res.status}`, err)
-      throw new Error('Failed to post reaction. Please try again.')
-    }
 
     await ctx.runMutation(internal.interactions.incrementLikeCount, { postId })
     return { success: true }

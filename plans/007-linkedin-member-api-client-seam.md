@@ -36,7 +36,7 @@ contract is unit-tested once via a stubbed `fetch`).
   different auth shape; folding it in would make the interface lie. (The `BASE = api.linkedin.com`
   constant enforces this — token exchange targets a different host.)
 - **Error model**: the module owns `!ok → log real error → throw "Failed to {action}. Please try
-  again."`, with an **opt-in `soft: number[]`** escape hatch returning `null` (for `fetchUserPosts`'s
+again."`, with an **opt-in `soft: number[]`** escape hatch returning `null` (for `fetchUserPosts`'s
   "403 = scope not granted, skip" case). Chosen over a never-throwing result type because the latter
   spreads the throw decision back across callers (less locality).
 - **Owned vs per-call**: the module owns Authorization + `Content-Type` (when there's a body) + the
@@ -57,12 +57,12 @@ contract is unit-tested once via a stubbed `fetch`).
 - `convex/linkedin/posts.ts:37` `fetchUserPosts`:
   `GET https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(${authorUrn})&count=20`,
   headers `Authorization: Bearer`, `X-Restli-Protocol-Version: 2.0.0`; **`if (res.status === 403)
-  return null`** (scope not granted), else `console.error(...)` + `throw new Error('Posts fetch failed:
-  ${res.status}')`; on ok parses JSON and maps `parseLinkedInPost`.
+return null`** (scope not granted), else `console.error(...)` + `throw new Error('Posts fetch failed:
+${res.status}')`; on ok parses JSON and maps `parseLinkedInPost`.
 - `convex/linkedin/oauth.ts:45` `fetchLinkedInUserInfo`:
   `GET https://api.linkedin.com/v2/userinfo`, header `Authorization: Bearer` **only** (no `X-Restli`);
   on `!ok`: `console.error(...)` + `throw new Error('Failed to retrieve LinkedIn profile. Please try
-  again.')`; on ok returns parsed JSON.
+again.')`; on ok returns parsed JSON.
 
 **Stays out of scope** — `convex/linkedin/oauth.ts:23` `exchangeCodeForTokens`
 (`POST https://www.linkedin.com/oauth/v2/accessToken`, form body, `client_secret`). Do NOT touch it.
@@ -195,11 +195,14 @@ await callMemberApi(
 ```ts
 const res = await callMemberApi(
   accessToken,
-  { method: 'GET', path: `/v2/ugcPosts?q=authors&authors=List(${authorUrn})&count=20`,
-    headers: { 'X-Restli-Protocol-Version': '2.0.0' } },
+  {
+    method: 'GET',
+    path: `/v2/ugcPosts?q=authors&authors=List(${authorUrn})&count=20`,
+    headers: { 'X-Restli-Protocol-Version': '2.0.0' }
+  },
   { action: 'fetch posts', soft: [403] }
 )
-if (res === null) return null            // 403 = r_member_social not granted → skip silently
+if (res === null) return null // 403 = r_member_social not granted → skip silently
 const data = (await res.json()) as LinkedInUGCPostsResponse
 return (data.elements ?? []).map(parseLinkedInPost)
 ```
@@ -211,7 +214,11 @@ Please try again.` — acceptable because this is an **internal** action error (
 ### Step 6: Rewrite `fetchLinkedInUserInfo` (oauth.ts) — no extra headers
 
 ```ts
-const res = await callMemberApi(accessToken, { method: 'GET', path: '/v2/userinfo' }, { action: 'retrieve LinkedIn profile' })
+const res = await callMemberApi(
+  accessToken,
+  { method: 'GET', path: '/v2/userinfo' },
+  { action: 'retrieve LinkedIn profile' }
+)
 return (await res!.json()) as LinkedInUserInfo
 ```
 
@@ -223,8 +230,8 @@ is sent (parity with today). Do NOT touch `exchangeCodeForTokens` in the same fi
 
 - `docs/PLATFORM.md` §20 Glossary — add:
   `- **Member API call** — an authenticated request to api.linkedin.com made as the user (Bearer =
-  the user's token). All member-API calls route through the single `linkedin/client.ts` `callMemberApi`
-  seam; the OAuth token exchange (client-secret flow) is separate.`
+the user's token). All member-API calls route through the single `linkedin/client.ts` `callMemberApi`
+seam; the OAuth token exchange (client-secret flow) is separate.`
 - §6 (Backend Architecture & Conventions) — add one line: LinkedIn member-API calls go through
   `linkedin/client.ts`; only the OAuth token exchange calls LinkedIn directly.
 

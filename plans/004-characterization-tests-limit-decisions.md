@@ -36,7 +36,7 @@ helpers, wire the handlers to them, and unit-test the boundaries.
 - `convex/interactions.ts` — the limit-flip decision is inline in BOTH `incrementCommentCount` and
   `incrementLikeCount` (lines ~28–43 and ~57–73):
   ```ts
-  const total = newCommentCount + post.likeCount          // (or post.commentCount + newLikeCount)
+  const total = newCommentCount + post.likeCount // (or post.commentCount + newLikeCount)
   const author = await ctx.db.get(post.authorId)
   if (author) {
     const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
@@ -48,11 +48,14 @@ helpers, wire the handlers to them, and unit-test the boundaries.
   ```
 - `convex/jobs/syncPosts.ts` — the weekly-limit decision is inline in `upsertPost` (lines ~63–96):
   ```ts
-  const recentPosts = await ctx.db.query('posts')
+  const recentPosts = await ctx.db
+    .query('posts')
     .withIndex('by_author_and_publishedAt', q => q.eq('authorId', args.authorId).gte('publishedAt', sevenDaysAgo))
     .take(limits.postsPerWeek)
   const recentCount = recentPosts.length
-  if (recentCount >= limits.postsPerWeek) { /* queue or throw */ }
+  if (recentCount >= limits.postsPerWeek) {
+    /* queue or throw */
+  }
   ```
 - Convention exemplars to MATCH:
     - Pure helper + test: `convex/jobs/processQueue.ts` `computeCapacity(recentCount, postsPerWeek)` and
@@ -97,7 +100,11 @@ Create `convex/lib/interactionLimit.ts`:
 // Pure decision: should a post's interaction limit flip to "reached" on this interaction?
 // `reached` is true once total interactions hit the plan cap; the flip only matters if the
 // post is not ALREADY marked, so the caller passes `alreadyReached`.
-export function hasReachedInteractionLimit(likeCount: number, commentCount: number, interactionsPerPost: number): boolean {
+export function hasReachedInteractionLimit(
+  likeCount: number,
+  commentCount: number,
+  interactionsPerPost: number
+): boolean {
   return likeCount + commentCount >= interactionsPerPost
 }
 export function shouldFlipInteractionLimit(

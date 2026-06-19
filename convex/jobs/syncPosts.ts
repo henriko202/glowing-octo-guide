@@ -6,6 +6,7 @@ import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
 import { computeFeedFields } from '../lib/feedRank'
 import { type ApifyFlags, isApifyPostSyncEnabled } from '../lib/apify'
 import { articleValidator } from '../lib/articleValidator'
+import { isWeeklyLimitReached } from '../lib/postLimit'
 
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
@@ -67,7 +68,7 @@ export const upsertPost = internalMutation({
       .take(limits.postsPerWeek)
     const recentCount = recentPosts.length
 
-    if (recentCount >= limits.postsPerWeek) {
+    if (isWeeklyLimitReached(recentCount, limits.postsPerWeek)) {
       if (args.queueOnLimitReached) {
         // Apify path: route to postQueue (dedup by URN)
         const existingInQueue = await ctx.db

@@ -7,7 +7,7 @@
 > (not npm).
 >
 > **Drift check (run first)**:
-`git diff --stat 90a90ad..HEAD -- package.json app/package.json convex/package.json pnpm-lock.yaml`
+> `git diff --stat 90a90ad..HEAD -- package.json app/package.json convex/package.json pnpm-lock.yaml`
 > If any changed since `90a90ad`, re-read the version fields below before editing.
 
 ## Status

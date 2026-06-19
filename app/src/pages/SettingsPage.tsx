@@ -50,9 +50,11 @@ export default function SettingsPage() {
   const meIndustry = me?.industry
   const meCountry = me?.country
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
     if (!industryDirty) setIndustry(meIndustry ?? '')
   }, [meIndustry, industryDirty])
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
     if (!countryDirty) setCountry(meCountry ?? '')
   }, [meCountry, countryDirty])
 

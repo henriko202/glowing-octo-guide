@@ -1,4 +1,4 @@
-import type { DatabaseWriter } from './_generated/server'
+import type { DatabaseWriter, MutationCtx } from './_generated/server'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import type { Doc, Id } from './_generated/dataModel'
@@ -6,7 +6,7 @@ import { internal } from './_generated/api'
 import { requireAuth } from './lib/auth'
 import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
-import { isApifyPostSyncEnabled, isApifyProfileScrapeEnabled } from './lib/apify'
+import { type ApifyFlags, isApifyPostSyncEnabled, isApifyProfileScrapeEnabled } from './lib/apify'
 
 // SECURITY: Every admin endpoint MUST call this.
 // Accepts the user doc already resolved by requireAuth — never re-fetches from client ID.
@@ -33,6 +33,20 @@ async function getOrCreateSettings(db: DatabaseWriter): Promise<Doc<'appSettings
   const created = await db.get(id)
   if (!created) throw new Error('Failed to create settings')
   return created
+}
+
+// Shared gate for the admin-initiated Apify triggers: auth + admin + the feature flag.
+// Throws the same messages the four triggers threw inline. Returns nothing — callers schedule.
+async function assertApifyTriggerEnabled(
+  ctx: MutationCtx,
+  sessionToken: string,
+  isEnabled: (s: ApifyFlags) => boolean,
+  disabledMessage: string
+): Promise<void> {
+  const user = await requireAuth(ctx, sessionToken)
+  assertAdmin(user)
+  const settings = await ctx.db.query('appSettings').first()
+  if (!isEnabled(settings)) throw new Error(disabledMessage)
 }
 
 export const checkIsAdmin = query({
@@ -107,12 +121,12 @@ export const toggleApifyProfileScrape = mutation({
 export const syncAllPosts = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    assertAdmin(user)
-    const settings = await ctx.db.query('appSettings').first()
-    if (!isApifyPostSyncEnabled(settings)) {
-      throw new Error('Post sync is disabled — enable it in Settings first.')
-    }
+    await assertApifyTriggerEnabled(
+      ctx,
+      sessionToken,
+      isApifyPostSyncEnabled,
+      'Post sync is disabled — enable it in Settings first.'
+    )
     await ctx.scheduler.runAfter(0, internal.jobs.syncPosts.syncAllPosts, {})
   }
 })
@@ -120,14 +134,14 @@ export const syncAllPosts = mutation({
 export const syncUserPosts = mutation({
   args: { sessionToken: v.string(), userId: v.id('users') },
   handler: async (ctx, { sessionToken, userId }) => {
-    const admin = await requireAuth(ctx, sessionToken)
-    assertAdmin(admin)
-    const settings = await ctx.db.query('appSettings').first()
     // syncUserPostsViaApify does NOT self-check the flag (the fan-out checks before calling),
     // so for the per-user trigger this wrapper is the only server gate.
-    if (!isApifyPostSyncEnabled(settings)) {
-      throw new Error('Post sync is disabled — enable it in Settings first.')
-    }
+    await assertApifyTriggerEnabled(
+      ctx,
+      sessionToken,
+      isApifyPostSyncEnabled,
+      'Post sync is disabled — enable it in Settings first.'
+    )
     const target = await ctx.db.get(userId)
     if (!target) throw new Error('User not found')
     if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')
@@ -138,12 +152,12 @@ export const syncUserPosts = mutation({
 export const syncAllProfiles = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    assertAdmin(user)
-    const settings = await ctx.db.query('appSettings').first()
-    if (!isApifyProfileScrapeEnabled(settings)) {
-      throw new Error('Profile scrape is disabled — enable it in Settings first.')
-    }
+    await assertApifyTriggerEnabled(
+      ctx,
+      sessionToken,
+      isApifyProfileScrapeEnabled,
+      'Profile scrape is disabled — enable it in Settings first.'
+    )
     await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeAllProfilesViaApify, {})
   }
 })
@@ -151,12 +165,12 @@ export const syncAllProfiles = mutation({
 export const syncUserProfile = mutation({
   args: { sessionToken: v.string(), userId: v.id('users') },
   handler: async (ctx, { sessionToken, userId }) => {
-    const admin = await requireAuth(ctx, sessionToken)
-    assertAdmin(admin)
-    const settings = await ctx.db.query('appSettings').first()
-    if (!isApifyProfileScrapeEnabled(settings)) {
-      throw new Error('Profile scrape is disabled — enable it in Settings first.')
-    }
+    await assertApifyTriggerEnabled(
+      ctx,
+      sessionToken,
+      isApifyProfileScrapeEnabled,
+      'Profile scrape is disabled — enable it in Settings first.'
+    )
     const target = await ctx.db.get(userId)
     if (!target) throw new Error('User not found')
     if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')

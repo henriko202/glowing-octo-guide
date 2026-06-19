@@ -112,7 +112,7 @@ flowchart LR
     direction TB
     Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
     Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-    DB[("Convex DB<br/>15 tables")]
+    DB[("Convex DB<br/>16 tables")]
     Crons["Cron scheduler"]
     Cloud --- DB
     Site --- DB
@@ -195,7 +195,7 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │       └── i18n/                # i18next init + locales/{en,pt,es}.json
 │
 ├── convex/                      # Convex backend (shared by both apps)
-│   ├── schema.ts                # 13-table database schema
+│   ├── schema.ts                # 16-table database schema
 │   ├── convex.config.ts         # registers @convex-dev/stripe component
 │   ├── crons.ts                 # the ONLY file Convex reads for scheduled jobs
 │   ├── http.ts                  # LinkedIn OAuth + Stripe webhook HTTP routes
@@ -237,7 +237,7 @@ the app. This is the backbone of the [security model](#17-security-posture).
 
 ## 5. Data Model
 
-All state lives in **Convex** (`convex/schema.ts`). There are **15 tables**. Every document also
+All state lives in **Convex** (`convex/schema.ts`). There are **16 tables**. Every document also
 carries Convex‑managed `_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
 
 Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential
@@ -620,6 +620,14 @@ live in `convex/lib/auth.ts`:
 - External‑call failures are **logged server‑side with the real error** and surfaced to clients as
   **generic sanitized messages** (see [§17](#17-security-posture)).
 
+### LinkedIn member‑API calls
+
+All authenticated requests to `api.linkedin.com` (Bearer = the user's token) route through the
+single `linkedin/client.ts` `callMemberApi` seam, which owns the `Authorization` header, the
+`Content-Type` header (when a body is present), and the log-real-error → throw-sanitized error
+policy. Only the OAuth token exchange (`exchangeCodeForTokens`) calls LinkedIn directly — it targets
+`www.linkedin.com` with a `client_secret` form‑POST and is a different auth shape.
+
 ### Type‑shim landscape
 
 The former `convex/convexTypes.ts` hand‑mirror of `DataModel`/`ctx`/`db` shapes has been **removed**;
@@ -858,7 +866,8 @@ Posts enter the `posts` table through **three paths**, all funneling into the si
 
 `upsertPost` is the gatekeeper: on an **existing** URN it only patches `likeCount/commentCount/hidden`
 (no limit re‑check); on **insert** it performs an **atomic weekly‑limit check** in the same
-transaction and either inserts, throws, or (Apify path) diverts to `postQueue`.
+transaction and either inserts, throws, or (Apify path) diverts to `postQueue`. The weekly‑limit
+decision is the pure helper `lib/postLimit.ts` `isWeeklyLimitReached(recentCount, postsPerWeek)`.
 
 ### Manual post submission (`posts.submitPost`, action)
 
@@ -1090,7 +1099,8 @@ flowchart TD
 
 Both are **actions** that call LinkedIn with the **acting user's own token**, then increment the
 local count (which may flip `interactionLimitReached`). Counts propagate to all viewers in real time
-via Convex reactivity.
+via Convex reactivity. The interaction‑limit flip decision is the pure helper
+`lib/interactionLimit.ts` `shouldFlipInteractionLimit(likeCount, commentCount, interactionsPerPost, alreadyReached)`.
 
 | Action                                             | Validation                                                      | Rate limit | LinkedIn endpoint                                                           |
 |----------------------------------------------------|-----------------------------------------------------------------|------------|-----------------------------------------------------------------------------|
@@ -1182,7 +1192,8 @@ Each **respects the same toggles the crons honor**: it schedules the (slow, paid
 immediately, but only when its feature flag (+ the master kill‑switch) is on — otherwise it throws
 `"<feature> is disabled — enable it in Settings first."` The UI also gates each control, but the
 **server check is authoritative** (a stale client or a direct API call still can't run a disabled
-integration).
+integration). All four triggers share a single `assertApifyTriggerEnabled` precondition (auth + admin
+assertion + flag check) so the server gate is defined once in `admin.ts`.
 
 | Trigger                   | Schedules                                           | Surface (admin panel)                               |
 |---------------------------|-----------------------------------------------------|-----------------------------------------------------|
@@ -2053,6 +2064,9 @@ SSI‑trend analytics dashboard, proactive token‑refresh cron.
   connections and home‑feed APIs the product does **not** currently use.
 - **Tier rank** — denormalized numeric tier on a post (4 contact … 1 starter) for feed sorting
   without a join.
+- **Member API call** — an authenticated request to `api.linkedin.com` made as the user (Bearer =
+  the user's token). All member‑API calls route through the single `linkedin/client.ts`
+  `callMemberApi` seam; the OAuth token exchange (client‑secret flow) is separate.
 
 ---
 
