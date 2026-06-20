@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react'
-import { useMutation, useQuery } from 'convex/react'
-import { useTranslation } from 'react-i18next'
-import { api } from '../convex'
+import {useEffect, useState} from 'react'
+import {useMutation, useQuery} from 'convex/react'
+import {useTranslation} from 'react-i18next'
+import {api} from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { COUNTRY_CODES, INDUSTRIES, countryLabel } from '../../../convex/lib/profileOptions'
-import { VirtualizedCombobox } from '../components/VirtualizedCombobox'
-import { extractVanityName } from '../lib/linkedinProfile'
-import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
+import {COUNTRY_CODES, countryLabel, INDUSTRIES} from '../../../convex/lib/profileOptions'
+import {VirtualizedCombobox} from '@/components/VirtualizedCombobox'
+import {extractVanityName} from '@/lib/linkedinProfile'
+import {AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage} from '../../../convex/lib/languages'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
