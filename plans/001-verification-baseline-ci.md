@@ -123,7 +123,7 @@ Create `.github/workflows/ci.yml`:
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
 jobs:
   verify:
