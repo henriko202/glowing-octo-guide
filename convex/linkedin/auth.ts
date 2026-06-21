@@ -16,8 +16,6 @@ interface UpsertDb {
   insert(table: string, doc: Record<string, unknown>): Promise<string>
 }
 
-const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000
-
 export interface UpsertUserArgs {
   linkedinId: string
   name: string
@@ -54,7 +52,6 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     return existing._id
   }
 
-  const trialEndsAt = Date.now() + TRIAL_DURATION_MS
   return await db.insert('users', {
     // SECURITY: isAdmin is intentionally excluded — only settable via direct DB edit
     linkedinId: args.linkedinId,
@@ -62,8 +59,7 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     headline: args.headline,
     profilePictureUrl: args.profilePictureUrl,
     tier: 'starter' as const,
-    subscriptionStatus: 'trialing' as const,
-    trialEndsAt,
+    subscriptionStatus: 'none' as const,
     linkedinAccessToken: args.accessToken,
     linkedinRefreshToken: args.refreshToken,
     tokenExpiresAt: args.tokenExpiresAt,

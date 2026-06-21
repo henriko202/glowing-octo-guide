@@ -6,6 +6,7 @@ import type { Doc, Id } from './_generated/dataModel'
 import { isAllowedLinkedInUrl, parseLinkedInPostUrl } from './linkedin/parsePostUrl'
 import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
+import { assertCanEngage } from './lib/access'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { appendMediaLinks, parseArticle, parsePostContent, parsePostEngagement } from './linkedin/parsePostContent'
@@ -141,6 +142,7 @@ export const submitPost = action({
     if (!user?.linkedinAccessToken) {
       throw new Error('No LinkedIn access token. Please sign in again.')
     }
+    assertCanEngage(user)
 
     // Admin "share any post" override — TESTING ONLY, enabled only on the local /
     // dev deployment via the ALLOW_ADMIN_SHARE_ANY_POST env var. When off (always
@@ -250,7 +252,7 @@ export const submitPost = action({
       isFeatured: false,
       visibilityIndustries: [],
       visibilityCountries: [],
-      hidden: user.subscriptionStatus === 'trialing',
+      hidden: false,
       // Preserve the original submitted URL so we can link back correctly —
       // reconstructing from URN loses information (activity ID ≠ ugcPost ID).
       sourceUrl: postUrl,

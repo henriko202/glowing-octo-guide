@@ -11,7 +11,7 @@ function subscribe(callback: () => void) {
 
 // Client snapshot reads the dismissal flag; the server snapshot reports "dismissed" so nothing
 // renders during SSR. useSyncExternalStore hydrates with the server snapshot (matching the server
-// HTML) and then re-renders with the client value — avoiding a hydration mismatch, unlike a lazy
+// HTML) and then re-renders with the client value, avoiding a hydration mismatch, unlike a lazy
 // useState initializer.
 function getSnapshot(): boolean {
   return localStorage.getItem(KEY) === '1'

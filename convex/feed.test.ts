@@ -103,9 +103,9 @@ describe('isAuthorFeedEligible', () => {
   it('includes an active author', () => {
     expect(isAuthorFeedEligible({ subscriptionStatus: 'active' })).toBe(true)
   })
-  it('excludes a trialing author', () => {
+  it('includes a trialing author (card-backed Growth trial — reciprocity)', () => {
     expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: undefined })).toBe(true)
-    expect(isAuthorFeedEligible({ subscriptionStatus: 'trialing' })).toBe(false)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'trialing' })).toBe(true)
   })
   it('excludes an author pending deletion', () => {
     expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: 123 })).toBe(false)

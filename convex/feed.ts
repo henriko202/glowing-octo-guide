@@ -69,16 +69,15 @@ export function toFeedAuthor(author: Doc<'users'>) {
 }
 
 /**
- * Author eligibility for the shared feed. Excludes trialing authors (their posts are hidden
- * until they activate) AND authors pending account deletion (their content disappears from the
- * feed the moment they request erasure, and reappears automatically if they cancel — no post
- * mutation needed).
+ * Author eligibility for the shared feed. Excludes authors pending account deletion (their
+ * content disappears from the feed the moment they request erasure, and reappears automatically
+ * if they cancel — no post mutation needed). Trialing authors ARE eligible: they hold a
+ * card-backed Growth trial (Task 4 / Plan 2B) so their posts belong in the feed (reciprocity).
  */
 export function isAuthorFeedEligible(
   author: { subscriptionStatus?: string; deletionScheduledAt?: number } | null
 ): boolean {
   if (!author) return false
-  if (author.subscriptionStatus === 'trialing') return false
   if (author.deletionScheduledAt) return false
   return true
 }

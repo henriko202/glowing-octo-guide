@@ -1,14 +1,41 @@
 // convex/interactions.ts
 import { action, internalMutation, internalQuery } from './_generated/server'
+import type { MutationCtx } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { requireAuthAction } from './lib/auth'
+import { assertCanEngage } from './lib/access'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { shouldFlipInteractionLimit } from './lib/interactionLimit'
+import { crossesThreshold } from './lib/trialMilestone'
 import { callMemberApi } from './linkedin/client'
 import { reactionValidator } from './lib/reactions'
+
+// Bump one side of a trialing user's interaction counter; when their combined count first
+// reaches the threshold, schedule the early end of their Stripe trial (billing starts now).
+async function bumpTrialInteraction(ctx: MutationCtx, userId: Id<'users'>, kind: 'made' | 'received'): Promise<void> {
+  const u = await ctx.db.get(userId)
+  if (!u || u.subscriptionStatus !== 'trialing') return
+  const made = u.trialInteractionsMade ?? 0
+  const received = u.trialInteractionsReceived ?? 0
+  const combined = made + received
+  if (kind === 'made') await ctx.db.patch(userId, { trialInteractionsMade: made + 1 })
+  else await ctx.db.patch(userId, { trialInteractionsReceived: received + 1 })
+
+  if (crossesThreshold(combined, 1)) {
+    const sub = await ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .first()
+    if (sub?.stripeSubscriptionId) {
+      await ctx.scheduler.runAfter(0, internal.billingNode.endTrialEarly, {
+        stripeSubscriptionId: sub.stripeSubscriptionId
+      })
+    }
+  }
+}
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
@@ -36,12 +63,15 @@ export const recordInteraction = internalMutation({
 
 // Internal mutation to increment comment count
 export const incrementCommentCount = internalMutation({
-  args: { postId: v.id('posts') },
-  handler: async (ctx, { postId }) => {
+  args: { postId: v.id('posts'), actorId: v.id('users') },
+  handler: async (ctx, { postId, actorId }) => {
     const post = await ctx.db.get(postId)
     if (!post) return
     const newCommentCount = post.commentCount + 1
     await ctx.db.patch(postId, { commentCount: newCommentCount })
+
+    await bumpTrialInteraction(ctx, actorId, 'made')
+    if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
 
     // Check if combined interactions have reached the author's limit
     const author = await ctx.db.get(post.authorId)
@@ -72,12 +102,15 @@ export const incrementCommentCount = internalMutation({
 
 // Internal mutation to increment like count
 export const incrementLikeCount = internalMutation({
-  args: { postId: v.id('posts') },
-  handler: async (ctx, { postId }) => {
+  args: { postId: v.id('posts'), actorId: v.id('users') },
+  handler: async (ctx, { postId, actorId }) => {
     const post = await ctx.db.get(postId)
     if (!post) return
     const newLikeCount = post.likeCount + 1
     await ctx.db.patch(postId, { likeCount: newLikeCount })
+
+    await bumpTrialInteraction(ctx, actorId, 'made')
+    if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
 
     // Check if combined interactions have reached the author's limit
     const author = await ctx.db.get(post.authorId)
@@ -120,6 +153,7 @@ export const commentOnPost = action({
 
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
+    assertCanEngage(user)
 
     // Rate limit: 20 comments/hour (admins are exempt)
     if (!user.isAdmin) {
@@ -146,7 +180,7 @@ export const commentOnPost = action({
       { action: 'post comment' }
     )
 
-    await ctx.runMutation(internal.interactions.incrementCommentCount, { postId })
+    await ctx.runMutation(internal.interactions.incrementCommentCount, { postId, actorId: user._id })
     try {
       await ctx.runMutation(internal.interactions.recordInteraction, {
         userId: user._id,
@@ -171,6 +205,7 @@ export const reactToPost = action({
   handler: async (ctx, { postId, reactionType, sessionToken }) => {
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
+    assertCanEngage(user)
 
     // Rate limit: 30 reactions/hour (admins are exempt)
     if (!user.isAdmin) {
@@ -197,7 +232,7 @@ export const reactToPost = action({
       { action: 'post reaction' }
     )
 
-    await ctx.runMutation(internal.interactions.incrementLikeCount, { postId })
+    await ctx.runMutation(internal.interactions.incrementLikeCount, { postId, actorId: user._id })
     try {
       await ctx.runMutation(internal.interactions.recordInteraction, {
         userId: user._id,

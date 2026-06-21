@@ -68,22 +68,35 @@ controls, featured posts, and higher engagement/post‑volume limits. See
 
 ### Subscription tiers (business view)
 
-| Capability                          |  Starter   |        Growth         |     Pro     |     Contact (Enterprise)     |
-|-------------------------------------|:----------:|:---------------------:|:-----------:|:----------------------------:|
-| Price                               |   $5/mo    |        $15/mo         |   $50/mo    |            Custom            |
-| Access shared feed                  |     ✓      |           ✓           |      ✓      |              ✓               |
-| 3‑day free trial                    |     ✓      |           —           |      —      |              —               |
-| Feed filtered by industry + country |     ✗      | ✓ (auto from profile) | ✓ (custom)  |          ✓ (custom)          |
-| Control who sees your posts         |     ✗      |           ✗           | ✓ (planned) |         ✓ (planned)          |
-| Interactions counted per post (cap) |     25     |          50           |     200     | 200 (per‑user override‑able) |
-| Posts admitted to feed / week       |     1      |           2           |      5      |  5 (per‑user override‑able)  |
-| Featured posts / month              |     0      |      1 (planned)      | 3 (planned) |       Custom (planned)       |
-| AI comment generator                | ✗ (future) |      ✓ (future)       | ✓ (future)  |          ✓ (future)          |
+| Capability                          |  Starter   |               Growth                |     Pro     |     Contact (Enterprise)     |
+|-------------------------------------|:----------:|:-----------------------------------:|:-----------:|:----------------------------:|
+| Price                               |   $5/mo    |               $15/mo                |   $50/mo    |            Custom            |
+| Access shared feed                  |     ✓      |                  ✓                  |      ✓      |              ✓               |
+| 7‑day Growth trial (card required)  |     —      | ✓ (add card → Growth trial, see §8) |      —      |              —               |
+| Feed filtered by industry + country |     ✗      |        ✓ (auto from profile)        | ✓ (custom)  |          ✓ (custom)          |
+| Control who sees your posts         |     ✗      |                  ✗                  | ✓ (planned) |         ✓ (planned)          |
+| Interactions counted per post (cap) |     25     |                 50                  |     200     | 200 (per‑user override‑able) |
+| Posts admitted to feed / week       |     1      |                  2                  |      5      |  5 (per‑user override‑able)  |
+| Featured posts / month              |     0      |             1 (planned)             | 3 (planned) |       Custom (planned)       |
+| AI comment generator                | ✗ (future) |             ✓ (future)              | ✓ (future)  |          ✓ (future)          |
 
 The numeric limits (interactions/post, posts/week) are the **enforced** values from the
 `planLimits` table; the featured‑post and AI rows are **marketing‑level/planned** (the
 `featuredPostUsage` table exists but is not yet wired; AI is a UI placeholder). See
 [§19](#19-known-discrepancies-dead-code--roadmap).
+
+**Trial model (Plan 2B).** New users start at `subscriptionStatus: 'none'` with no app-side trial.
+The trial begins when they add a card via Stripe Checkout, which creates a real **Growth**
+subscription in `trialing` status (`tier: 'growth'` is set by the webhook). Billing starts at
+**50 combined interactions (made + received) OR 7 days, whichever comes first**: the 7-day side
+is Stripe's own `trial_period_days`; the 50-interaction milestone fires `endTrialEarly`
+(server-side) to convert the trial immediately. Because the trial is a real Growth subscription,
+trialing users get **Growth plan limits naturally** — no tier mapping shim is needed.
+**Engaging** (comment / react / submit a post) is **card-gated server-side** via `assertCanEngage`
+in `convex/lib/access.ts`, which requires `subscriptionStatus ∈ {trialing, active}`; users at
+`none`, `canceled`, or `past_due` receive a `PAYMENT_REQUIRED` error. The app-facing UI for this
+gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C, deferred
+to after the app/ UI revamp**.
 
 ---
 
@@ -322,7 +335,7 @@ patched thereafter (profile, subscription, ban). Read almost everywhere.
 | `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                        |
 | `commentLanguage`            | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance). |
 | `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                       |
-| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. `trialing` hides the user's posts from the feed.                                                                                                |
+| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Growth Stripe trial); trialing users' posts are now **visible** in the feed.          |
 | `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                              |
 | `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                         |
 | `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                         |
@@ -826,9 +839,18 @@ sequenceDiagram
 `createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an
 existing `stripeCustomerId`).
 
-**Plan 2B note:** `billingNode.endTrialEarly` (internalAction) sets `trial_end: 'now'` on a
-subscription. Plan 2B will schedule this when a trialing user reaches 50 combined interactions; it
-is not triggered by any current code path.
+**50-interaction milestone (Plan 2B).** `billingNode.endTrialEarly` (internalAction) sets
+`trial_end: 'now'` on a Stripe subscription, converting the trial to a paid subscription
+immediately. It is scheduled by the `bumpTrialInteraction` helper in `interactions.ts` whenever a
+trialing user's **combined** `trialInteractionsMade + trialInteractionsReceived` first reaches 50
+(the `TRIAL_INTERACTION_THRESHOLD` constant, enforced by the pure `crossesThreshold` helper in
+`convex/lib/trialMilestone.ts`). Counters are bumped in `incrementCommentCount` /
+`incrementLikeCount` (awaited, reliable mutations — not the best-effort `recordInteraction` path).
+The check fires **at most once** per user: the `subscriptionStatus !== 'trialing'` guard inside
+`bumpTrialInteraction` skips any increment once the trial has already converted. The combined
+"50 interactions OR 7 days" rule is therefore split: the 7-day side is Stripe's
+`trial_period_days` (from Checkout); the 50-interaction side fires `endTrialEarly` to end it
+early.
 
 ### Webhook‑driven subscription sync
 
@@ -870,6 +892,10 @@ console warning).
 ---
 
 ## 9. Plan Limits System
+
+> **Trial users.** Because the trial is a real Growth Stripe subscription (see §8), `users.tier`
+> is set to `'growth'` by the webhook from the moment the card is added. Trial users therefore
+> receive **Growth limits naturally** — no `effectiveTier` shim or special-case lookup is needed.
 
 Two enforced limits per tier, stored in `planLimits` and looked up via
 `lib/planLimits.getPlanLimitsHelper`:
@@ -948,7 +974,7 @@ flowchart TD
   ART -->|no| UP
   ART -->|yes| AF["fetch(articleUrl) → parseArticle → article<br/>(best‑effort, SSRF‑guarded, non‑fatal)"]
   AF --> UP
-  UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = subscriptionStatus=='trialing', sourceUrl=postUrl, article?)"]
+  UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = false, sourceUrl=postUrl, article?)"]
   UP --> R["return { postId }"]
 ```
 
@@ -1065,9 +1091,9 @@ flowchart TD
   FAN --> ST["updateSyncStatus(lastApifySyncAt, error?)"]
 ```
 
-> Because `getActiveSubscribers` returns only `active` users, the Apify path's `hidden =
-subscriptionStatus === 'trialing'` is effectively always `false` on the cron — trial‑hiding
-> matters mainly for the **manual submit** and **on‑activation** paths.
+> Because `getActiveSubscribers` returns only `active` users, the Apify path's `hidden` is
+> effectively always `false` on the cron. Since Plan 2B, `submitPost` also sets `hidden: false`
+> unconditionally (trialing users must have a card on file and their posts are visible in the feed).
 
 ### Queue drain (`jobs/processQueue.processPostQueue`, daily cron)
 
@@ -1131,7 +1157,7 @@ flowchart TD
   AUTHF --> F2["post visibility: visibilityIndustries/Countries must include viewer's"]
   F2 --> F3["viewer industry filter (growth/pro)"]
   F3 --> F4["viewer country filter (pro)"]
-  F4 --> F5["drop posts whose author is trialing / pending deletion"]
+  F4 --> F5["drop posts whose author is pending deletion"]
   F5 --> ENR["enrich page with author (strip tokens)"]
   ENR --> RET["return { ...result, page: enriched } — cursor preserved"]
 ```
@@ -1143,6 +1169,22 @@ flowchart TD
 > fields are kept in sync by every post writer (`computeFeedFields`). Heavy viewer filters can yield
 > short pages; the client's **Load more** (`usePaginatedQuery`) requests the next page. Design + rollout:
 > [feed-cursor-pagination-plan.md](./feed-cursor-pagination-plan.md).
+
+**Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible` helper (`feed.ts`)
+now excludes only authors with `deletionScheduledAt` set — **trialing authors are no longer
+excluded**. Because trialing users must have a card on file (the trial is a real Growth Stripe
+subscription), their posts belong in the feed as a reciprocity incentive. `submitPost` sets
+`hidden: false` for all card-backed submitters (the previous `hidden: subscriptionStatus ===
+'trialing'` flag has been removed). Existing hidden posts from before Plan 2B are not backfilled
+(pre-launch, no prod data). The `syncUserSubscription` webhook still un-hides the author's posts on
+`active` transition, which remains correct.
+
+**Card gate on engagement.** `commentOnPost`, `reactToPost`, and `submitPost` all call
+`assertCanEngage(user)` (from `convex/lib/access.ts`) immediately after resolving the caller.
+Users at `subscriptionStatus ∈ {none, canceled, past_due}` receive a `PAYMENT_REQUIRED` error;
+only `trialing` and `active` users may engage; admins (`isAdmin`) always bypass the gate. The in-app UI for this gate (
+disabled buttons,
+progress bar, CTA) is **Plan 2C, deferred to after the app/ UI revamp**.
 
 ### Sort priority (effective order)
 
@@ -1305,28 +1347,28 @@ edit** — no application code writes it. Every admin function calls `assertAdmi
 
 ### Admin functions (`convex/admin.ts`)
 
-| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                  |
-|--------------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                    |
-| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                               |
-| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                              |
-| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                |
-| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                      |
-| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                    |
-| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                              |
-| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                  |
-| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                         |
-| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                  |
-| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                 |
-| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab — chiefly to take a user out of `trialing` (which hides their posts). Manual override; a later Stripe webhook can overwrite it. |
-| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                       |
-| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                         |
-| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Backend‑only (no UI).                                                                                                                    |
-| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                              |
-| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                      |
-| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                              |
-| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                    |
-| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                 |
+| Function                                                                 | Kind     | Purpose                                                                                                                                                                 |
+|--------------------------------------------------------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                   |
+| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                              |
+| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                             |
+| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                               |
+| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                     |
+| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).   |
+| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                             |
+| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                 |
+| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                        |
+| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions. |
+| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                |
+| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                     |
+| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                      |
+| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                        |
+| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Backend‑only (no UI).                                                                                   |
+| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                             |
+| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                     |
+| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                             |
+| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                   |
+| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                |
 
 `validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`. `effectiveContactLimits`
 (pure, unit‑tested) resolves a contact user's display limits as `override ?? contact default ?? hardcoded`.

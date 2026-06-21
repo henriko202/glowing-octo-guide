@@ -9,6 +9,7 @@ import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
+import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
 // any status that does not clearly grant access (incomplete, unpaid, paused, unknown)
@@ -34,20 +35,6 @@ export function toSubscriptionStatus(raw: string): Doc<'users'>['subscriptionSta
 
 // These internal mutations are called from webhook callbacks registered in http.ts
 // to keep our users table in sync with Stripe subscription state.
-
-function getTierFromPriceId(priceId: string): 'starter' | 'growth' | 'pro' {
-  // Build the map skipping unset env vars, so a missing var can't collapse into an
-  // empty-string key that a blank priceId would match. Unknown/blank → 'starter' (safe default).
-  const map: Record<string, 'starter' | 'growth' | 'pro'> = {}
-  if (process.env.STRIPE_STARTER_PRICE_ID) map[process.env.STRIPE_STARTER_PRICE_ID] = 'starter'
-  if (process.env.STRIPE_GROWTH_PRICE_ID) map[process.env.STRIPE_GROWTH_PRICE_ID] = 'growth'
-  if (process.env.STRIPE_PRO_PRICE_ID) map[process.env.STRIPE_PRO_PRICE_ID] = 'pro'
-  if (!priceId || !(priceId in map)) {
-    console.error(`getTierFromPriceId: unknown/blank priceId "${priceId}" — defaulting to starter`)
-    return 'starter'
-  }
-  return map[priceId]
-}
 
 /** Sync user tier and subscription status after Stripe subscription changes */
 export const syncUserSubscription = internalMutation({
@@ -80,11 +67,15 @@ export const syncUserSubscription = internalMutation({
     const becameActive = status === 'active'
     await restampUserPostsTierRank(ctx, user._id, tierToRank(args.tier), { unhideHidden: becameActive })
 
-    // Trigger immediate post fetch when subscription becomes active
+    // Trigger immediate post fetch when subscription becomes active — ONLY if Apify is enabled.
+    // Apify is dormant at launch (compliance gate); this guard prevents re-enabling it via billing.
     if (becameActive) {
-      await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncUserPostsViaApify, {
-        userId: user._id
-      })
+      const settings = await ctx.db.query('appSettings').first()
+      if (isApifyPostSyncEnabled(settings as ApifyFlags)) {
+        await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncUserPostsViaApify, {
+          userId: user._id
+        })
+      }
     }
 
     // Upsert our own subscriptions table
@@ -147,5 +138,3 @@ export const markPastDue = internalMutation({
     if (sub) await ctx.db.patch(sub._id, { status: 'past_due' })
   }
 })
-
-export { getTierFromPriceId }

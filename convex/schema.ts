@@ -29,6 +29,8 @@ export default defineSchema({
       v.literal('none')
     ),
     trialEndsAt: v.optional(v.number()),
+    trialInteractionsMade: v.optional(v.number()),
+    trialInteractionsReceived: v.optional(v.number()),
     stripeCustomerId: v.optional(v.string()),
     linkedinAccessToken: v.optional(v.string()),
     linkedinRefreshToken: v.optional(v.string()),

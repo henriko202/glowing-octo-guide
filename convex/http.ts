@@ -5,7 +5,7 @@ import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
-import { getTierFromPriceId } from './stripe'
+import { getTierFromPriceId } from './lib/stripePrices'
 
 const http = httpRouter()
 
@@ -112,7 +112,7 @@ http.route({
 // ─── Stripe Webhooks (via @convex-dev/stripe component) ─────────────────────
 // The component auto-syncs customers, subscriptions, payments, and invoices.
 // Custom handlers below keep our app's users + subscriptions tables in sync.
-// getTierFromPriceId is imported from ./stripe (single source of truth).
+// getTierFromPriceId is imported from ./lib/stripePrices (single source of truth).
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
 type StripeEvent = any

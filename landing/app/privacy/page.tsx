@@ -1,5 +1,5 @@
 {
-  /* DRAFT — requires legal review. */
+  /* DRAFT: requires legal review. */
 }
 export default function PrivacyPage() {
   return (

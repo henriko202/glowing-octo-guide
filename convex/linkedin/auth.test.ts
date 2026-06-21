@@ -36,15 +36,15 @@ const BASE_ARGS: UpsertUserArgs = {
 }
 
 describe('upsertUserHandler', () => {
-  it('creates a new user on Starter trial when no existing user', async () => {
+  it('creates a new user with status none (trial begins only on card-add)', async () => {
     const db = createMockDb()
     const id = await upsertUserHandler(db, BASE_ARGS)
     expect(id).toBe('new-user-id')
     expect(db._inserts).toHaveLength(1)
     const inserted = db._inserts[0]
     expect(inserted.tier).toBe('starter')
-    expect(inserted.subscriptionStatus).toBe('trialing')
-    expect(inserted.trialEndsAt).toBeGreaterThan(Date.now())
+    expect(inserted.subscriptionStatus).toBe('none')
+    expect(inserted.trialEndsAt).toBeUndefined()
     expect(inserted.linkedinId).toBe('li-123')
   })
 
