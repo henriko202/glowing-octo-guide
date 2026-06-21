@@ -759,24 +759,25 @@ flowchart TD
 
 ### Identity / user functions (`convex/users.ts`, `linkedin/auth.ts`, `sessions.ts`)
 
-| Function                                                      | Kind              | Purpose                                                                                                                                                          |
-|---------------------------------------------------------------|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedin.auth.upsertUser`                                    | internalMutation  | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                    |
-| `users.getMe`                                                 | query (public)    | Safe profile via `resolveSession` + `toSafeMe` (strips tokens + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`).        |
-| `users.getWithTokens`                                         | internalQuery     | Full record **incl. tokens** — server‑only.                                                                                                                      |
-| `users.getActiveSubscribers`                                  | internalQuery     | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                    |
-| `users.getSubscriptionInfo`                                   | query (public)    | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                   |
-| `users.setPublicIdentifier`                                   | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased).                                                                                   |
-| `users.dismissPublicIdentifierPrompt`                         | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path).                                 |
-| `users.updateProfile`                                         | mutation (public) | User edits their own `industry`/`country` (validated against canonical lists; empty string clears).                                                              |
-| `users.refreshProfileFromLinkedIn`                            | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action. |
-| `users.applyScrapedProfile`                                   | internalMutation  | Writes scraped fields: `country` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                 |
-| `users.logout`                                                | mutation (public) | Deletes the current session token.                                                                                                                               |
-| `users.forceLogoutAll`                                        | mutation (public) | Deletes **all** sessions for the user (compromise response).                                                                                                     |
-| `sessions.create` / `getByToken` / `deleteByToken`            | internal          | Session lifecycle.                                                                                                                                               |
-| `sessions.deleteAllForUser`                                   | internalMutation  | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                       |
-| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation  | CSRF nonce lifecycle.                                                                                                                                            |
-| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` | internalMutation  | Cron cleanup (batches of 200).                                                                                                                                   |
+| Function                                                      | Kind              | Purpose                                                                                                                                                                                                                                                                                                                    |
+|---------------------------------------------------------------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedin.auth.upsertUser`                                    | internalMutation  | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                                                                                                                                                                              |
+| `users.getMe`                                                 | query (public)    | Safe profile via `resolveSession` + `toSafeMe` (strips tokens + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`).                                                                                                                                                                  |
+| `users.getWithTokens`                                         | internalQuery     | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                |
+| `users.getActiveSubscribers`                                  | internalQuery     | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                              |
+| `users.getSubscriptionInfo`                                   | query (public)    | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                             |
+| `users.getTrialProgress`                                      | query (public)    | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern. |
+| `users.setPublicIdentifier`                                   | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased).                                                                                                                                                                                                                                             |
+| `users.dismissPublicIdentifierPrompt`                         | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path).                                                                                                                                                                                           |
+| `users.updateProfile`                                         | mutation (public) | User edits their own `industry`/`country` (validated against canonical lists; empty string clears).                                                                                                                                                                                                                        |
+| `users.refreshProfileFromLinkedIn`                            | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
+| `users.applyScrapedProfile`                                   | internalMutation  | Writes scraped fields: `country` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                                           |
+| `users.logout`                                                | mutation (public) | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
+| `users.forceLogoutAll`                                        | mutation (public) | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
+| `sessions.create` / `getByToken` / `deleteByToken`            | internal          | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
+| `sessions.deleteAllForUser`                                   | internalMutation  | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                 |
+| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation  | CSRF nonce lifecycle.                                                                                                                                                                                                                                                                                                      |
+| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` | internalMutation  | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                             |
 
 > **No token‑refresh flow exists.** Despite README claims, nothing refreshes LinkedIn tokens near
 > expiry; `refreshToken`/`tokenExpiresAt` are stored but unused. See [§19](#19-known-discrepancies-dead-code--roadmap).
@@ -1861,6 +1862,9 @@ flowchart TD
 - **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); a list of `PostCard`s, each
   rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
   shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card.
+  Uses `useCardGate()` and passes the resulting `gated` boolean to every `<PostCard>`. The
+  `react()` call is wrapped in try/catch: a `PAYMENT_REQUIRED` error surfaces an inline gate hint
+  (previously the call failed silently).
 - **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getMyPosts` + `submitPost`. Usage pill ("N of M
   posts this week") turns **amber** at the cap and disables the composer (`atLimit`). Renders each
   post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
@@ -1871,9 +1875,21 @@ flowchart TD
   a **"Refresh from LinkedIn"** button re-scrapes the profile (disabled without a public identifier;
   shows the server error inline when the scrape flag is off). Pro/contact see a **stubbed** "who can
   see your posts" card ("Coming in next task").
-- **BillingPage** — `getMe` + `getSubscriptionInfo` + `createCheckoutSession` + `createPortalSession`.
-  Trial/expired banners; per‑plan Subscribe CTAs (disabled if the plan's `VITE_STRIPE_*_PRICE_ID` is
-  missing); "Manage Subscription" → Stripe portal; Enterprise → `mailto:`.
+- **BillingPage** — `getMe` + `getSubscriptionInfo` + `createCheckoutSession` + `createPortalSession`
+    + `api.users.getTrialProgress` (see §11 — query returns `{ made, received, combined, threshold,
+  reached, status, trialEndsAt }`). Layout varies by subscription state:
+
+    - **No-card** (`none`/`canceled`/`past_due`): the three-tier plan cards are hidden; instead a
+      single prominent "Start your free 7-day Growth trial" CTA is shown, which always checks out the
+      **Growth** price (`PLAN_PRICE_IDS[interval].growth`) while honouring the monthly/annual toggle.
+    - **Trialing** (`trialing`): the trial banner shows an **X / 50 interactions** progress meter
+      (`progress.combined` / `progress.threshold`, with a simple bar), the "or 7 days" secondary
+      count-down (`trialEndsAt`), and a **"View your SSI on LinkedIn" ↗** link-out
+      (`https://linkedin.com/sales/ssi`, new tab). The three-tier cards are visible; when the user
+      acts on the **Starter** card, an inline "what you'll miss" block lists Growth advantages
+      (industry-filtered feed, 50 vs 25 interactions/post, 2 vs 1 posts/week).
+    - **Active**: standard plan cards + "Manage Subscription" → Stripe portal.
+      Enterprise → `mailto:`.
 - **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Four tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync
   status), **Plan Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's
@@ -1901,7 +1917,9 @@ flowchart TD
 `Sidebar` (feed/my‑posts/settings/billing/**privacy** links; **no admin link**), `TopBar` (search,
 theme toggle, language menu, user menu trigger), `UserMenu` (profile & settings + sign‑out via
 `performSignOut`), `LanguageMenu` (Radix dropdown replacing the old native `<select>`),
-`PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`), `Modal`,
+`PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`; accepts
+`gated?: boolean` — disables submit/generate when gated; replaces a raw `PAYMENT_REQUIRED` error
+with a friendly message + a `<Link to="/billing">` prompt), `Modal`,
 `BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + per‑row modals + `banUser`/`unbanUser`),
 `FeedbackTab` (status filter pills + per‑row `RowActionsMenu` + `RespondFeedbackModal`),
 `RespondFeedbackModal` (shows original message read-only + reply textarea; Respond disabled when submitter has no email
@@ -1956,12 +1974,62 @@ plus the two LinkedIn‑embed components:
   `share` IDs differ for the same post and a reconstructed `/feed/update/<urn>/` link can resolve
   wrongly. (`MyPostsPage` keeps a `buildLinkedInUrl` with a reconstruction fallback for cron‑synced
   posts.) **`PostCard` does not render `post.content` or `mediaUrls`** — the post body comes entirely
-  from the embed.
+  from the embed. Accepts a `gated?: boolean` prop (from `FeedPage` via `useCardGate()`): when
+  gated, the Like and Comment buttons are `disabled` with a `title` tooltip pointing to the Billing
+  page; "View on LinkedIn ↗" is rendered as a disabled `<button>` rather than an `<a>` (anchors
+  cannot be disabled).
 
 > As of `1fcc123`, `MyPostsPage` uses this shared `LinkedInEmbed` directly (its old local
 > `buildEmbedUrl` that force‑normalized to `activity` was removed, eliminating the previous
 > duplicate). `MyPostsPage` keeps only `buildLinkedInUrl` (prefers the stored `sourceUrl`, falls back
 > to a `/feed/update/<urn>/` link) and `timeAgo` for its embed footer's "View on LinkedIn ↗" link.
+
+### Trial UI (Plan 2C)
+
+The trial UI layer sits on top of the authenticated app and enforces a soft **card-gate** — it does
+not replace backend enforcement (`assertCanEngage`), it mirrors it in the UI.
+
+#### `useCardGate()` hook (`app/src/hooks/useCardGate.ts`)
+
+Shared hook consumed by `FeedPage`, `Sidebar`, and `BillingPage`. Reads `api.users.getMe` (same
+`sessionToken` pattern as every other page) and derives:
+
+```
+gated  ⇔  me loaded  AND  !me.isAdmin  AND  status ∉ { trialing, active }
+```
+
+Admins are never gated. Returns `{ gated, isTrialing, status, isAdmin, me }`.
+
+#### Card-gate on the feed
+
+`FeedPage` calls `useCardGate()` and passes `gated` to every `<PostCard>`. When `gated`:
+
+- The **Like** and **Comment** buttons in `PostCard` are `disabled` with a tooltip pointing to the
+  Billing page (`feed.cardGate` i18n key: "Add a payment method on the Billing page to start
+  engaging.").
+- The **View on LinkedIn ↗** control is rendered as a `disabled` `<button>` instead of an `<a>`
+  (anchors cannot carry the `disabled` attribute).
+- `CommentBox` disables its submit and generate buttons; a `PAYMENT_REQUIRED` response from the
+  backend replaces the raw error text with the gate message + a `<Link to="/billing">`.
+- The `react()` call in `FeedPage` (previously un-caught) is wrapped in try/catch; a
+  `PAYMENT_REQUIRED` error now surfaces an inline gate hint rather than failing silently.
+
+#### Pulsing Billing nav + SSI link-out (`Sidebar`)
+
+`Sidebar` calls `useCardGate()`. When `gated`, the **Billing** nav item receives `animate-pulse
+text-primary` (gold pulse via Tailwind v4 tokens) to draw attention. A persistent
+**"View your SSI on LinkedIn ↗"** link (`https://linkedin.com/sales/ssi`, new tab) is rendered in
+the sidebar footer above `<UserMenu>` using `text-gold-text` styling; it is always visible
+regardless of gate state. SSI is a link-out only — no score is fetched or displayed.
+
+#### BillingPage — trial progress, always-Growth CTA, downgrade prompt
+
+See the **BillingPage** bullet in the Pages section above for the full state-dependent layout.
+Backend query: `api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s
+session-resolution pattern; returns `{ made, received, combined, threshold, reached, status,
+trialEndsAt }`). Cross-reference: §8 (subscription state machine) and §9 (plan limits).
+
+---
 
 ### i18n (`i18n/index.ts`)
 
@@ -1981,6 +2049,14 @@ confirmation copy used by `PrivacyDataPage` and `CancelDeletionScreen`; present 
 
 **Keys added with new-user consent prompt:** `privacy.consentPrompt.*` (heading, body, toggle
 labels, and "Save & continue" button copy for `ConsentPromptScreen`); all three locales
+(`en`/`pt`/`es`).
+
+**Keys added with Plan 2C trial UI:** `nav.viewSsi` (sidebar SSI link-out label);
+`feed.cardGate` (gate tooltip and CommentBox billing prompt); `billing.trialProgress`
+(X / N interactions meter, uses `{{combined}}` and `{{threshold}}` interpolation),
+`billing.ssiLink` (SSI link-out label in the trial banner), `billing.whatYouLlMiss` (inline
+loss-framing block shown on the Starter card while trialing), `billing.trialBanner` (updated to
+mention the 50-interaction milestone alongside the 7-day window); all three locales
 (`en`/`pt`/`es`).
 
 ---

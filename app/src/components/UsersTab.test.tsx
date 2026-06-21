@@ -143,7 +143,7 @@ describe('UsersTab — change tier', () => {
     openActionsFor(/actions for jordan maxwell/i)
     fireEvent.click(screen.getByText('Change tier…'))
 
-    const modal = screen.getByTestId('modal-backdrop')
+    const modal = screen.getByRole('dialog')
     fireEvent.click(within(modal).getByRole('button', { name: /^pro$/i }))
     fireEvent.click(within(modal).getByRole('button', { name: /^save$/i }))
 
@@ -159,7 +159,7 @@ describe('UsersTab — change status', () => {
     openActionsFor(/actions for jordan maxwell/i)
     fireEvent.click(screen.getByText('Change status…'))
 
-    const modal = screen.getByTestId('modal-backdrop')
+    const modal = screen.getByRole('dialog')
     fireEvent.change(within(modal).getByRole('combobox'), { target: { value: 'none' } })
     fireEvent.click(within(modal).getByRole('button', { name: /^save$/i }))
 

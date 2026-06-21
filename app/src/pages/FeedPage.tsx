@@ -11,12 +11,14 @@ import PostComposer from '../components/PostComposer'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/ui/button'
+import { useCardGate } from '../hooks/useCardGate'
 
 const FEED_PAGE_SIZE = 20
 
 export default function FeedPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
+  const { gated } = useCardGate()
   // Cursor-paginated feed (convex/feed.ts getFeed over the by_feed_rank index). `results`
   // accumulates loaded pages; `loadMore` advances the cursor on demand.
   const { results, status, loadMore } = usePaginatedQuery(
@@ -27,6 +29,7 @@ export default function FeedPage() {
   const react = useAction(api.interactions.reactToPost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
+  const [reactError, setReactError] = useState<string | null>(null)
 
   async function handlePostSubmit(url: string) {
     if (!sessionToken) throw new Error('Not signed in')
@@ -122,15 +125,28 @@ export default function FeedPage() {
                   <PostCard
                     post={post}
                     onComment={id => handleToggleComment(id)}
-                    onReact={(id, reactionType) =>
-                      react({ postId: id, reactionType, sessionToken: sessionToken ?? '' })
-                    }
+                    onReact={async (id, reactionType) => {
+                      setReactError(null)
+                      try {
+                        await react({ postId: id, reactionType, sessionToken: sessionToken ?? '' })
+                      } catch (err: unknown) {
+                        const msg = err instanceof Error ? err.message : String(err)
+                        if (msg.startsWith('PAYMENT_REQUIRED')) {
+                          setReactError(t('feed.cardGate'))
+                        } else {
+                          setReactError(msg)
+                        }
+                      }
+                    }}
+                    gated={gated}
                   />
+                  {reactError && <p className="text-destructive px-1 pt-1 text-xs">{reactError}</p>}
                   {isCommentOpen && (
                     <CommentBox
                       postId={post._id}
                       sessionToken={sessionToken ?? ''}
                       onClose={() => setCommentingOn(null)}
+                      gated={gated}
                     />
                   )}
                 </div>

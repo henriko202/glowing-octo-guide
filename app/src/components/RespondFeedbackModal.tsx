@@ -53,7 +53,7 @@ export default function RespondFeedbackModal({ feedback, sessionToken, onClose }
   return (
     <Modal
       onClose={onClose}
-      panelClassName="max-w-lg"
+      panelClassName="sm:max-w-lg"
     >
       <h3 className="text-foreground text-[15px] font-semibold">Respond to {feedback.userName ?? '(deleted user)'}</h3>
 

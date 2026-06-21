@@ -38,6 +38,7 @@ export default function BillingPage() {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
   const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, sessionToken ? { sessionToken } : 'skip')
+  const progress = useQuery(api.users.getTrialProgress, sessionToken ? { sessionToken } : 'skip')
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
   const [portalLoading, setPortalLoading] = useState(false)
@@ -50,15 +51,20 @@ export default function BillingPage() {
   const isExpired = me?.subscriptionStatus === 'canceled' || me?.subscriptionStatus === 'none' || isTrialExpired
   const trialDaysRemaining = isTrialing ? getTrialDaysRemaining(trialEndsAt) : 0
 
-  // Derived label shown next to "Current plan:"
-  const planLabel =
-    isTrialing && !isTrialExpired
-      ? `${t('billing.freeTrial')} (${t('billing.daysRemaining', { count: trialDaysRemaining })})`
-      : isExpired
-        ? t('billing.none')
-        : me?.tier
-          ? me.tier.charAt(0).toUpperCase() + me.tier.slice(1)
-          : '...'
+  // A user "has a card" if they are trialing or active — these are the only card-backed states.
+  const hasCard = me?.subscriptionStatus === 'trialing' || me?.subscriptionStatus === 'active'
+
+  // Derived label shown next to "Current plan:" — lead with X/50 when trialing
+  const planLabel = (() => {
+    if (isTrialing && !isTrialExpired) {
+      const combined = progress?.combined ?? 0
+      const threshold = progress?.threshold ?? 50
+      return `${t('billing.freeTrial')} · ${combined}/${threshold} ${t('billing.trialProgress', { combined, threshold })} · ${t('billing.daysRemaining', { count: trialDaysRemaining })}`
+    }
+    if (isExpired) return t('billing.none')
+    if (me?.tier) return me.tier.charAt(0).toUpperCase() + me.tier.slice(1)
+    return '...'
+  })()
 
   async function handleUpgrade(priceId: string) {
     try {
@@ -84,6 +90,8 @@ export default function BillingPage() {
   }
 
   const lead = `${t('billing.currentPlan')}: ${planLabel}`
+
+  const growthPriceId = PLAN_PRICE_IDS[interval].growth
 
   return (
     <div className="mx-auto max-w-[900px] px-4 py-8 font-sans">
@@ -119,10 +127,38 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Trial banner */}
+      {/* Trial banner — shown when actively trialing */}
       {isTrialing && !isTrialExpired && (
         <div className="border-border bg-accent text-accent-foreground mb-6 rounded-xl border p-4 text-sm">
-          ⏳ {t('billing.trialBanner')}
+          <p className="m-0">⏳ {t('billing.trialBanner')}</p>
+          {/* X/50 interaction progress meter */}
+          {progress != null && (
+            <div className="mt-3">
+              <p className="text-accent-foreground/80 mb-1.5 text-xs font-medium">
+                {t('billing.trialProgress', {
+                  combined: progress.combined,
+                  threshold: progress.threshold
+                })}
+              </p>
+              <div className="bg-accent-foreground/20 h-2 w-full overflow-hidden rounded-full">
+                <div
+                  className="bg-primary h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, Math.round((progress.combined / progress.threshold) * 100))}%`
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {/* SSI link-out */}
+          <a
+            href="https://linkedin.com/sales/ssi"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary mt-3 inline-flex items-center gap-1 text-xs hover:underline"
+          >
+            {t('billing.ssiLink')} ↗
+          </a>
         </div>
       )}
 
@@ -133,6 +169,7 @@ export default function BillingPage() {
         </div>
       )}
 
+      {/* Monthly / Annual toggle — always visible */}
       <div className="mb-4 inline-flex items-center gap-2 rounded-full border p-1 text-sm">
         <button
           onClick={() => setInterval('annual')}
@@ -148,49 +185,86 @@ export default function BillingPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
-        {PLAN_IDS.map(planId => {
-          // Trialing users on starter should see the Subscribe button (they haven't paid yet)
-          const isCurrent = me?.tier === planId && me?.subscriptionStatus !== 'trialing'
-          const priceId = PLAN_PRICE_IDS[interval][planId]
-          return (
-            <div
-              key={planId}
-              className={`rounded-xl p-5 ${isCurrent ? 'border-primary bg-accent border-2' : 'border-border bg-card border'}`}
-            >
-              <h2 className="text-foreground mt-0 text-lg font-bold">{t(`billing.plans.${planId}.name`)}</h2>
-              <p className="text-foreground my-2 text-2xl font-bold">{PLAN_PRICES[interval][planId]}</p>
-              <p className="text-muted-foreground mb-4 text-[13px]">{t(`billing.plans.${planId}.description`)}</p>
-              {isCurrent ? (
-                <div className="flex justify-center">
-                  <Badge variant="warning">{t('billing.currentPlanLabel')}</Badge>
-                </div>
-              ) : (
-                <Button
-                  onClick={() => priceId && handleUpgrade(priceId)}
-                  disabled={!priceId}
-                  className={`w-full text-[13px] ${priceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
-                >
-                  {t(`billing.plans.${planId}.cta`)}
-                </Button>
-              )}
-            </div>
-          )
-        })}
-
-        {/* Enterprise / Contact */}
-        <div className="border-border bg-card rounded-xl border p-5">
-          <h2 className="text-foreground mt-0 text-lg font-bold">{t('billing.plans.contact.name')}</h2>
-          <p className="text-foreground my-2 text-2xl font-bold">Custom</p>
-          <p className="text-muted-foreground mb-4 text-[13px]">{t('billing.plans.contact.description')}</p>
+      {/* NO CARD branch — single prominent CTA, plan cards hidden */}
+      {!hasCard && (
+        <div className="flex flex-col items-center gap-4 py-6">
           <Button
-            variant="outline"
-            asChild
+            size="lg"
+            onClick={() => growthPriceId && handleUpgrade(growthPriceId)}
+            disabled={!growthPriceId}
+            className={`px-8 py-4 text-base font-semibold ${growthPriceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
           >
-            <a href="mailto:hello@linkintothessi.com">{t('billing.plans.contact.cta')}</a>
+            {t('billing.startTrialCta')}
           </Button>
+          <p className="text-muted-foreground max-w-sm text-center text-[13px]">
+            {t('billing.trialCtaNote', { price: PLAN_PRICES[interval].growth })}
+          </p>
+          <div className="border-border bg-muted mt-2 w-full max-w-sm rounded-xl border p-4 text-[13px]">
+            <p className="text-foreground mb-2 font-semibold">{t('billing.growthIncludesTitle')}</p>
+            <ul className="text-muted-foreground list-inside list-disc space-y-1">
+              <li>{t('billing.growthInclude1')}</li>
+              <li>{t('billing.growthInclude2')}</li>
+              <li>{t('billing.growthInclude3')}</li>
+            </ul>
+            <p className="text-muted-foreground mt-3 text-[11px]">{t('billing.comparisonNote')}</p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* HAS CARD branch — show all 3 plan cards + Enterprise */}
+      {hasCard && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
+          {PLAN_IDS.map(planId => {
+            // Trialing users on starter should see the Subscribe button (they haven't paid yet)
+            const isCurrent = me?.tier === planId && me?.subscriptionStatus !== 'trialing'
+            const priceId = PLAN_PRICE_IDS[interval][planId]
+            const showWhatYouLlMiss = isTrialing && planId === 'starter'
+            return (
+              <div
+                key={planId}
+                className={`rounded-xl p-5 ${isCurrent ? 'border-primary bg-accent border-2' : 'border-border bg-card border'}`}
+              >
+                <h2 className="text-foreground mt-0 text-lg font-bold">{t(`billing.plans.${planId}.name`)}</h2>
+                <p className="text-foreground my-2 text-2xl font-bold">{PLAN_PRICES[interval][planId]}</p>
+                <p className="text-muted-foreground mb-4 text-[13px]">{t(`billing.plans.${planId}.description`)}</p>
+                {/* "What you'll miss" loss-framing for Starter when trialing */}
+                {showWhatYouLlMiss && (
+                  <div className="border-destructive/30 bg-destructive/10 text-destructive mb-3 rounded-lg border p-3 text-[12px]">
+                    {t('billing.whatYouLlMiss')}
+                  </div>
+                )}
+                {isCurrent ? (
+                  <div className="flex justify-center">
+                    <Badge variant="warning">{t('billing.currentPlanLabel')}</Badge>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={() => priceId && handleUpgrade(priceId)}
+                    disabled={!priceId}
+                    className={`w-full text-[13px] ${priceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
+                  >
+                    {t(`billing.plans.${planId}.cta`)}
+                  </Button>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Enterprise / Contact */}
+          <div className="border-border bg-card rounded-xl border p-5">
+            <h2 className="text-foreground mt-0 text-lg font-bold">{t('billing.plans.contact.name')}</h2>
+            <p className="text-foreground my-2 text-2xl font-bold">Custom</p>
+            <p className="text-muted-foreground mb-4 text-[13px]">{t('billing.plans.contact.description')}</p>
+            <Button
+              variant="outline"
+              asChild
+            >
+              <a href="mailto:hello@linkintothessi.com">{t('billing.plans.contact.cta')}</a>
+            </Button>
+          </div>
+        </div>
+      )}
+
       <p className="text-muted-foreground mt-6 text-[13px]">{t('billing.enterprise')}</p>
     </div>
   )

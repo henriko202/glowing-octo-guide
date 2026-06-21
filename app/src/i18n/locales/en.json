@@ -8,7 +8,8 @@
     "signOut": "Sign out",
     "openMenu": "Open user menu",
     "groups": { "main": "Main", "manage": "Manage" },
-    "primary": "Primary navigation"
+    "primary": "Primary navigation",
+    "viewSsi": "View your SSI on LinkedIn"
   },
   "shell": {
     "search": "Search posts, people",
@@ -42,7 +43,8 @@
     "loadMore": "Load more",
     "featured": "★ Featured",
     "like": "Like",
-    "comment": "Comment"
+    "comment": "Comment",
+    "cardGate": "Add a payment method on the Billing page to start engaging."
   },
   "reactions": {
     "react": "React",
@@ -108,7 +110,17 @@
     "expiredBanner": "Your subscription has ended. Choose a plan below to continue.",
     "none": "None",
     "noActivePlan": "No active plan",
-    "trialBanner": "You're on a free trial. Subscribe to a plan to make your posts visible and unlock all features.",
+    "trialBanner": "You're on a free Growth trial. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
+    "trialProgress": "{{combined}} / {{threshold}} interactions",
+    "ssiLink": "View your SSI on LinkedIn",
+    "whatYouLlMiss": "On Starter you lose your industry-filtered feed, drop from 50 to 25 interactions per post, and from 2 to 1 posts per week.",
+    "startTrialCta": "Start your free 7-day Growth trial",
+    "trialCtaNote": "Then {{price}} · cancel anytime. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
+    "growthIncludesTitle": "Your Growth trial includes:",
+    "growthInclude1": "Industry & country feed filter",
+    "growthInclude2": "Up to 50 interactions per post",
+    "growthInclude3": "2 posts per week",
+    "comparisonNote": "Compare plans after your trial — upgrade, downgrade, or cancel anytime.",
     "annual": "Annual · 2 months free",
     "monthly": "Monthly",
     "plans": {

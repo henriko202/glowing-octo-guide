@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAction, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
@@ -12,11 +13,13 @@ import type { Id } from '../../../convex/_generated/dataModel'
 export default function CommentBox({
   postId,
   sessionToken,
-  onClose
+  onClose,
+  gated
 }: {
   postId: Id<'posts'>
   sessionToken: string
   onClose: () => void
+  gated?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const [text, setText] = useState('')
@@ -100,7 +103,8 @@ export default function CommentBox({
           type="button"
           variant="outline"
           onClick={handleGenerate}
-          disabled={generating}
+          disabled={generating || gated}
+          title={gated ? t('feed.cardGate') : undefined}
           className="px-3 py-1.5 text-[13px] font-semibold"
         >
           {generating ? t('comment.generating') : hasDraft ? t('comment.regenerate') : t('comment.generate')}
@@ -114,7 +118,20 @@ export default function CommentBox({
         disabled={submitting}
         rows={3}
       />
-      {error && <p className="text-destructive my-1 text-xs">{error}</p>}
+      {error &&
+        (error.startsWith('PAYMENT_REQUIRED') ? (
+          <p className="text-destructive my-1 text-xs">
+            {t('feed.cardGate')}{' '}
+            <Link
+              to="/billing"
+              className="underline"
+            >
+              {t('nav.billing')}
+            </Link>
+          </p>
+        ) : (
+          <p className="text-destructive my-1 text-xs">{error}</p>
+        ))}
       <div className="mt-2 flex justify-end gap-2">
         <Button
           type="button"
@@ -126,7 +143,8 @@ export default function CommentBox({
         </Button>
         <Button
           type="submit"
-          disabled={submitting || !text.trim()}
+          disabled={submitting || !text.trim() || gated}
+          title={gated ? t('feed.cardGate') : undefined}
           className="px-4 py-1.5 text-[13px] font-semibold"
         >
           {submitting ? t('comment.submitting') : t('comment.submit')}

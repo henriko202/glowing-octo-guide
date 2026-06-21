@@ -48,7 +48,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal
       onClose={onClose}
-      panelClassName="max-w-lg"
+      panelClassName="sm:max-w-lg"
     >
       {done ? (
         <div className="py-6 text-center">

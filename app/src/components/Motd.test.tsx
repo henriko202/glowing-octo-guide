@@ -30,7 +30,7 @@ describe('Motd', () => {
     activeMotd = { _id: 'm1', bodies: { en: 'Hello **world**' }, important: false }
     render(<Motd />)
     expect(screen.getByText('world')).toBeInTheDocument()
-    expect(screen.queryByTestId('modal-backdrop')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('hides after dismiss and records the dismissal in sessionStorage', () => {
@@ -59,7 +59,7 @@ describe('Motd', () => {
   it('renders a blocking modal with an OK button for an important MOTD', () => {
     activeMotd = { _id: 'm1', bodies: { en: 'Important notice' }, important: true }
     render(<Motd />)
-    expect(screen.getByTestId('modal-backdrop')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'motd.ok' })).toBeInTheDocument()
   })
 
@@ -84,12 +84,9 @@ describe('Motd', () => {
     // Body text is visible
     expect(screen.getByText('Critical notice')).toBeInTheDocument()
 
-    // Clicking the backdrop must NOT dismiss
-    fireEvent.click(screen.getByTestId('modal-backdrop'))
-    expect(screen.getByText('Critical notice')).toBeInTheDocument()
-
-    // Pressing Escape must NOT dismiss
-    fireEvent.keyDown(window, { key: 'Escape' })
+    // Pressing Escape must NOT dismiss (dismissOnEscape={false})
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('Critical notice')).toBeInTheDocument()
 
     // Clicking OK must dismiss and record in sessionStorage

@@ -8,7 +8,8 @@
     "signOut": "Cerrar sesión",
     "openMenu": "Abrir menú de usuario",
     "groups": { "main": "Principal", "manage": "Gestionar" },
-    "primary": "Navegación principal"
+    "primary": "Navegación principal",
+    "viewSsi": "Ver tu SSI en LinkedIn"
   },
   "shell": {
     "search": "Buscar publicaciones, personas",
@@ -42,7 +43,8 @@
     "loadMore": "Cargar más",
     "featured": "★ Destacado",
     "like": "Me gusta",
-    "comment": "Comentar"
+    "comment": "Comentar",
+    "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar."
   },
   "reactions": {
     "react": "Reaccionar",
@@ -108,7 +110,17 @@
     "expiredBanner": "Tu suscripción ha finalizado. Elige un plan a continuación para continuar.",
     "none": "Ninguno",
     "noActivePlan": "Sin plan activo",
-    "trialBanner": "Estás en prueba gratuita. Suscríbete a un plan para hacer visibles tus publicaciones y desbloquear todas las funciones.",
+    "trialBanner": "Estás en una prueba gratuita de Growth. Se te facturará cuando alcances 50 interacciones o tras 7 días, lo que ocurra primero.",
+    "trialProgress": "{{combined}} / {{threshold}} interacciones",
+    "ssiLink": "Ver tu SSI en LinkedIn",
+    "whatYouLlMiss": "Con Starter pierdes el feed filtrado por sector, bajas de 50 a 25 interacciones por publicación y de 2 a 1 publicación por semana.",
+    "startTrialCta": "Iniciar tu prueba gratuita de 7 días en Growth",
+    "trialCtaNote": "Luego {{price}} · cancela cuando quieras. Se te facturará cuando alcances 50 interacciones o tras 7 días, lo que ocurra primero.",
+    "growthIncludesTitle": "Tu prueba de Growth incluye:",
+    "growthInclude1": "Filtro de feed por sector y país",
+    "growthInclude2": "Hasta 50 interacciones por publicación",
+    "growthInclude3": "2 publicaciones por semana",
+    "comparisonNote": "Compara los planes tras tu prueba — mejora, cambia a un plan inferior o cancela cuando quieras.",
     "annual": "Anual · 2 meses gratis",
     "monthly": "Mensual",
     "plans": {

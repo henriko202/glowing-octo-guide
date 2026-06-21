@@ -32,10 +32,12 @@ export type PostWithAuthor = {
  */
 export function ReactionOptions({
   suggested,
-  onSelect
+  onSelect,
+  gated
 }: {
   suggested: Reaction
   onSelect: (reaction: Reaction) => void
+  gated?: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -45,9 +47,10 @@ export function ReactionOptions({
           key={r.value}
           type="button"
           aria-pressed={r.value === suggested}
-          title={t(r.labelKey)}
-          onClick={() => onSelect(r.value)}
-          className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border text-lg outline-none ${r.value === suggested ? 'border-primary ring-ring ring-2' : 'hover:bg-muted border-transparent'}`}
+          title={gated ? t('feed.cardGate') : t(r.labelKey)}
+          onClick={gated ? undefined : () => onSelect(r.value)}
+          disabled={gated}
+          className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border text-lg outline-none ${r.value === suggested ? 'border-primary ring-ring ring-2' : 'hover:bg-muted border-transparent'} disabled:cursor-not-allowed disabled:opacity-50`}
         >
           <span aria-hidden="true">{r.emoji}</span>
           <span className="sr-only">{t(r.labelKey)}</span>
@@ -67,12 +70,14 @@ function ReactionPicker({
   postId,
   suggested,
   likeCount,
-  onReact
+  onReact,
+  gated
 }: {
   postId: Id<'posts'>
   suggested: Reaction
   likeCount: number
   onReact: (postId: Id<'posts'>, reaction: Reaction) => void
+  gated?: boolean
 }) {
   const { t } = useTranslation()
   const current = REACTIONS.find(r => r.value === suggested) ?? REACTIONS[0]
@@ -87,22 +92,27 @@ function ReactionPicker({
           type="button"
           variant="ghost"
           aria-label={t('reactions.react')}
-          onClick={() => onReact(postId, current.value)}
+          onClick={gated ? undefined : () => onReact(postId, current.value)}
+          disabled={gated}
+          title={gated ? t('feed.cardGate') : undefined}
           className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
         >
           <span aria-hidden="true">{current.emoji}</span> {likeCount}
         </Button>
       </HoverCardTrigger>
-      <HoverCardContent
-        side="top"
-        align="start"
-        className="p-1"
-      >
-        <ReactionOptions
-          suggested={suggested}
-          onSelect={r => onReact(postId, r)}
-        />
-      </HoverCardContent>
+      {!gated && (
+        <HoverCardContent
+          side="top"
+          align="start"
+          className="p-1"
+        >
+          <ReactionOptions
+            suggested={suggested}
+            onSelect={r => onReact(postId, r)}
+            gated={gated}
+          />
+        </HoverCardContent>
+      )}
     </HoverCard>
   )
 }
@@ -110,11 +120,13 @@ function ReactionPicker({
 export default function PostCard({
   post,
   onComment,
-  onReact
+  onReact,
+  gated
 }: {
   post: PostWithAuthor
   onComment: (postId: Id<'posts'>) => void
   onReact: (postId: Id<'posts'>, reaction: Reaction) => void
+  gated?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -159,26 +171,39 @@ export default function PostCard({
               suggested={post.suggestedReaction ?? 'LIKE'}
               likeCount={post.likeCount}
               onReact={onReact}
+              gated={gated}
             />
             <Button
               type="button"
               variant="ghost"
-              onClick={() => onComment(post._id)}
+              onClick={gated ? undefined : () => onComment(post._id)}
+              disabled={gated}
+              title={gated ? t('feed.cardGate') : undefined}
               className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
             >
               💬 {post.commentCount} {t('feed.comment')}
             </Button>
 
-            {!!post.sourceUrl && (
-              <a
-                href={post.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gold-text no-underline hover:underline"
-              >
-                View on LinkedIn ↗
-              </a>
-            )}
+            {!!post.sourceUrl &&
+              (gated ? (
+                <button
+                  type="button"
+                  disabled
+                  title={t('feed.cardGate')}
+                  className="text-gold-text cursor-not-allowed opacity-50"
+                >
+                  View on LinkedIn ↗
+                </button>
+              ) : (
+                <a
+                  href={post.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gold-text no-underline hover:underline"
+                >
+                  View on LinkedIn ↗
+                </a>
+              ))}
           </div>
         }
       />

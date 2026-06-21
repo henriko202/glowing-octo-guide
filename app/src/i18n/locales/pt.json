@@ -8,7 +8,8 @@
     "signOut": "Sair",
     "openMenu": "Abrir menu do usuário",
     "groups": { "main": "Principal", "manage": "Gerenciar" },
-    "primary": "Navegação principal"
+    "primary": "Navegação principal",
+    "viewSsi": "Ver o seu SSI no LinkedIn"
   },
   "shell": {
     "search": "Pesquisar publicações, pessoas",
@@ -42,7 +43,8 @@
     "loadMore": "Carregar mais",
     "featured": "★ Destacado",
     "like": "Gostar",
-    "comment": "Comentar"
+    "comment": "Comentar",
+    "cardGate": "Adicione um método de pagamento na página de Assinatura para começar a interagir."
   },
   "reactions": {
     "react": "Reagir",
@@ -108,7 +110,17 @@
     "expiredBanner": "A sua assinatura terminou. Escolha um plano abaixo para continuar.",
     "none": "Nenhum",
     "noActivePlan": "Sem plano ativo",
-    "trialBanner": "Está no período de teste gratuito. Subscreva um plano para tornar as suas publicações visíveis e desbloquear todas as funcionalidades.",
+    "trialBanner": "Está no período de teste gratuito do Growth. Será faturado quando atingir 50 interações ou após 7 dias, o que ocorrer primeiro.",
+    "trialProgress": "{{combined}} / {{threshold}} interações",
+    "ssiLink": "Ver o seu SSI no LinkedIn",
+    "whatYouLlMiss": "No Starter perde o feed filtrado por setor, cai de 50 para 25 interações por publicação e de 2 para 1 publicação por semana.",
+    "startTrialCta": "Iniciar o período de teste gratuito de 7 dias no Growth",
+    "trialCtaNote": "Depois {{price}} · cancele a qualquer momento. Será faturado quando atingir 50 interações ou após 7 dias, o que ocorrer primeiro.",
+    "growthIncludesTitle": "O seu período de teste Growth inclui:",
+    "growthInclude1": "Filtro de feed por setor e país",
+    "growthInclude2": "Até 50 interações por publicação",
+    "growthInclude3": "2 publicações por semana",
+    "comparisonNote": "Compare os planos após o seu período de teste — faça upgrade, downgrade ou cancele a qualquer momento.",
     "annual": "Anual · 2 meses grátis",
     "monthly": "Mensal",
     "plans": {

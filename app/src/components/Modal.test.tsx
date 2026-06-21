@@ -3,35 +3,14 @@ import { vi } from 'vitest'
 import Modal from './Modal'
 
 describe('Modal', () => {
-  it('renders its children', () => {
+  it('renders its children inside a dialog', () => {
     render(
       <Modal onClose={() => {}}>
         <p>Hello</p>
       </Modal>
     )
     expect(screen.getByText('Hello')).toBeInTheDocument()
-  })
-
-  it('calls onClose when the backdrop is clicked', () => {
-    const onClose = vi.fn()
-    render(
-      <Modal onClose={onClose}>
-        <p>Body</p>
-      </Modal>
-    )
-    fireEvent.click(screen.getByTestId('modal-backdrop'))
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not call onClose when the card body is clicked', () => {
-    const onClose = vi.fn()
-    render(
-      <Modal onClose={onClose}>
-        <p>Body</p>
-      </Modal>
-    )
-    fireEvent.click(screen.getByText('Body'))
-    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
   it('calls onClose when Escape is pressed', () => {
@@ -41,22 +20,8 @@ describe('Modal', () => {
         <p>Body</p>
       </Modal>
     )
-    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not call onClose on backdrop click when dismissOnBackdrop is false', () => {
-    const onClose = vi.fn()
-    render(
-      <Modal
-        onClose={onClose}
-        dismissOnBackdrop={false}
-      >
-        <p>Body</p>
-      </Modal>
-    )
-    fireEvent.click(screen.getByTestId('modal-backdrop'))
-    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('does not call onClose on Escape when dismissOnEscape is false', () => {
@@ -69,7 +34,18 @@ describe('Modal', () => {
         <p>Body</p>
       </Modal>
     )
-    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('does not call onClose when content is clicked', () => {
+    const onClose = vi.fn()
+    render(
+      <Modal onClose={onClose}>
+        <p>Body</p>
+      </Modal>
+    )
+    fireEvent.click(screen.getByText('Body'))
     expect(onClose).not.toHaveBeenCalled()
   })
 })

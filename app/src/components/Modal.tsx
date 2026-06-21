@@ -1,4 +1,6 @@
-import { type ReactNode, useEffect } from 'react'
+import type { ReactNode } from 'react'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 
 type Props = {
   onClose: () => void
@@ -6,36 +8,34 @@ type Props = {
   panelClassName?: string
   dismissOnBackdrop?: boolean
   dismissOnEscape?: boolean
+  /** Accessible name for screen readers — radix Dialog requires a title; rendered visually hidden. */
+  title?: string
 }
 
 export default function Modal({
   onClose,
   children,
-  panelClassName = 'max-w-sm',
+  panelClassName = '',
   dismissOnBackdrop = true,
-  dismissOnEscape = true
+  dismissOnEscape = true,
+  title = 'Dialog'
 }: Props) {
-  useEffect(() => {
-    if (!dismissOnEscape) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, dismissOnEscape])
-
   return (
-    <div
-      data-testid="modal-backdrop"
-      onClick={dismissOnBackdrop ? onClose : undefined}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    <Dialog
+      open
+      onOpenChange={open => {
+        if (!open) onClose()
+      }}
     >
-      <div
-        onClick={e => e.stopPropagation()}
-        className={`w-full ${panelClassName} bg-card rounded-xl p-5 shadow-2xl`}
+      <DialogContent
+        showCloseButton={false}
+        className={cn('block', panelClassName)}
+        onEscapeKeyDown={dismissOnEscape ? undefined : e => e.preventDefault()}
+        onInteractOutside={dismissOnBackdrop ? undefined : e => e.preventDefault()}
       >
+        <DialogTitle className="sr-only">{title}</DialogTitle>
         {children}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -7,6 +7,7 @@ import { isValidCountry, isValidIndustry } from './lib/profileOptions'
 import { isValidCommentLanguage } from './lib/languages'
 import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
 import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
+import { TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -147,6 +148,29 @@ export const getMe = query({
     const user = await resolveSession(ctx, sessionToken)
     if (!user) return null
     return toSafeMe(user)
+  }
+})
+
+// Public: returns trial progress counters for the trial-UI meter.
+// Auth: mirrors getMe — resolves via resolveSession (not requireAuth) so banned users
+// can still see their progress; returns null when not authenticated.
+export const getTrialProgress = query({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await resolveSession(ctx, sessionToken)
+    if (!user) return null
+    const made = user.trialInteractionsMade ?? 0
+    const received = user.trialInteractionsReceived ?? 0
+    const combined = made + received
+    return {
+      made,
+      received,
+      combined,
+      threshold: TRIAL_INTERACTION_THRESHOLD,
+      reached: combined >= TRIAL_INTERACTION_THRESHOLD,
+      status: user.subscriptionStatus,
+      trialEndsAt: user.trialEndsAt
+    }
   }
 })
 

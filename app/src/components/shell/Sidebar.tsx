@@ -4,10 +4,12 @@ import { cn } from '@/lib/utils'
 import { NAV_GROUPS, isActivePath } from './navItems'
 import UserMenu from './UserMenu'
 import BrandMark from '../BrandMark'
+import { useCardGate } from '../../hooks/useCardGate'
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation()
   const { t } = useTranslation()
+  const { gated } = useCardGate()
 
   return (
     <div className="bg-sidebar text-sidebar-foreground flex h-full flex-col">
@@ -40,7 +42,8 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium no-underline transition-colors',
                     active
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60'
+                      : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60',
+                    item.path === '/billing' && gated && 'text-primary animate-pulse'
                   )}
                 >
                   <Icon
@@ -56,6 +59,14 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="border-sidebar-border border-t p-3">
+        <a
+          href="https://linkedin.com/sales/ssi"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-gold-text mb-2 flex items-center gap-2 px-3 py-1.5 text-[13px] hover:underline"
+        >
+          {t('nav.viewSsi')} ↗
+        </a>
         <UserMenu />
       </div>
     </div>

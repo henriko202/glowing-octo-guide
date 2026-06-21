@@ -46,7 +46,7 @@ export default function Motd() {
         onClose={dismiss}
         dismissOnBackdrop={false}
         dismissOnEscape={false}
-        panelClassName="max-w-lg"
+        panelClassName="sm:max-w-lg"
       >
         <div className="[&_a]:text-gold-text [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:font-semibold">
           <MarkdownView
