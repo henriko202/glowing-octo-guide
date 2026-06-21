@@ -1,9 +1,23 @@
 {
   "nav": {
     "feed": "Feed",
+    "myPosts": "Mis Publicaciones",
     "settings": "Configuración",
     "billing": "Suscripción",
-    "signOut": "Cerrar sesión"
+    "privacy": "Privacidad y Datos",
+    "signOut": "Cerrar sesión",
+    "openMenu": "Abrir menú de usuario",
+    "groups": { "main": "Principal", "manage": "Gestionar" },
+    "primary": "Navegación principal"
+  },
+  "shell": {
+    "search": "Buscar publicaciones, personas",
+    "searchComingSoon": "La búsqueda llegará pronto.",
+    "language": "Idioma",
+    "theme": "Cambiar tema",
+    "profile": "Perfil y ajustes",
+    "openSidebar": "Abrir navegación",
+    "skipToContent": "Saltar al contenido"
   },
   "login": {
     "title": "Link Into The SSI",

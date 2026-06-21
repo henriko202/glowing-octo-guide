@@ -1,9 +1,14 @@
 // app/src/pages/MyPostsPage.tsx
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 
+import { PageHeader } from '@/components/PageHeader'
+import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PostComposer from '../components/PostComposer'
 import LinkedInEmbed from '../components/LinkedInEmbed'
@@ -48,6 +53,7 @@ function timeAgo(ts: number): string {
 }
 
 export default function MyPostsPage() {
+  const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
 
   const me = useQuery(api.users.getMe, { sessionToken })
@@ -102,29 +108,30 @@ export default function MyPostsPage() {
 
   return (
     <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">My Posts</h1>
+      <PageHeader title={t('nav.myPosts')} />
 
       {/* Profile header — with the weekly-usage pill on the right */}
       {me && (
         <div className="mb-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="color-[#94a3b8] flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 font-bold">
-              {me.name[0]}
-            </div>
+            <Avatar
+              name={me.name}
+              src={me.profilePictureUrl}
+              size="md"
+            />
             <div>
-              <div className="text-sm font-semibold text-slate-900">{me.name}</div>
-              <div className="text-xs capitalize text-slate-500">{me.tier} plan</div>
+              <div className="text-foreground text-sm font-semibold">{me.name}</div>
+              <div className="text-muted-foreground text-xs capitalize">{me.tier} plan</div>
             </div>
           </div>
           {usage && (
-            <span
+            <Badge
               title="In the last 7 days"
-              className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                atLimit ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
-              }`}
+              variant={atLimit ? 'warning' : 'default'}
+              className="shrink-0 rounded-full px-3 py-1 text-xs"
             >
               {usage.postsThisWeek} of {usage.postsPerWeek} posts this week
-            </span>
+            </Badge>
           )}
         </div>
       )}
@@ -132,75 +139,79 @@ export default function MyPostsPage() {
       {/* Manual share — copied from the Feed page, re-themed light to match this page.
           Disabled at the weekly limit so we don't trigger a guaranteed-to-fail submit. */}
       <PostComposer
-        theme="light"
         atLimit={atLimit}
         limitHint="Weekly limit reached"
         onSubmit={handleSubmit}
       />
 
       {/* Section header */}
-      <div className="mb-3 text-[10px] uppercase tracking-wider text-slate-500">Your posts ({posts.length})</div>
+      <div className="text-muted-foreground mb-3 text-[10px] uppercase tracking-wider">Your posts ({posts.length})</div>
 
       {/* Transient error from a hide/delete action */}
       {actionError && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div className="border-destructive/30 bg-destructive/10 text-destructive mb-3 rounded-md border px-3 py-2 text-xs">
           {actionError}
         </div>
       )}
 
       {/* Post list */}
       {posts.length === 0 ? (
-        <div className="border-t border-slate-200 pt-5 text-center">
-          <p className="text-[13px] text-slate-500">Share your first post using the composer above ↑</p>
+        <div className="border-border border-t pt-5 text-center">
+          <p className="text-muted-foreground text-[13px]">Share your first post using the composer above ↑</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           {posts.map(post => (
             <div
               key={post._id}
-              className={`overflow-hidden rounded-lg border border-slate-200 bg-white ${post.hidden ? 'opacity-60' : ''}`}
+              className={`border-border bg-card overflow-hidden rounded-lg border ${post.hidden ? 'opacity-60' : ''}`}
             >
               {/* Owner action bar: visibility state + Hide/Unhide + Delete */}
-              <div className="flex items-center justify-between border-b border-slate-200 px-[14px] py-2">
+              <div className="border-border flex items-center justify-between border-b px-[14px] py-2">
                 {post.hidden ? (
-                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                  <Badge
+                    variant="warning"
+                    className="rounded-full px-2 py-0.5 text-[11px]"
+                  >
                     Hidden from feed
-                  </span>
+                  </Badge>
                 ) : (
-                  <span className="text-[11px] text-slate-400">Visible in feed</span>
+                  <span className="text-muted-foreground text-[11px]">Visible in feed</span>
                 )}
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleToggleHidden(post)}
-                    className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                   >
                     {post.hidden ? 'Unhide' : 'Hide'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="destructive"
+                    size="sm"
                     onClick={() => handleDelete(post)}
-                    className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
                   >
                     Delete
-                  </button>
+                  </Button>
                 </div>
               </div>
               <LinkedInEmbed
                 urn={post.linkedinPostUrn}
                 footer={
-                  <div className="flex h-[52px] items-center justify-between border-t border-slate-200 bg-white px-[14px]">
+                  <div className="border-border bg-card flex h-[52px] items-center justify-between border-t px-[14px]">
                     {/* Engagement stats from our own tracking data */}
-                    <span className="text-xs text-slate-500">
+                    <span className="text-muted-foreground text-xs">
                       👍 {post.likeCount} · 💬 {post.commentCount}
                     </span>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-muted-foreground text-xs">
                       {timeAgo(post.publishedAt)} ·{' '}
                       <a
                         href={buildLinkedInUrl(post)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-500 no-underline"
+                        className="text-gold-text no-underline hover:underline"
                       >
                         View on LinkedIn ↗
                       </a>

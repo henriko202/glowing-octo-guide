@@ -1,12 +1,15 @@
-import {useEffect, useState} from 'react'
-import {useMutation, useQuery} from 'convex/react'
-import {useTranslation} from 'react-i18next'
-import {api} from '../convex'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery } from 'convex/react'
+import { useTranslation } from 'react-i18next'
+import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
-import {COUNTRY_CODES, countryLabel, INDUSTRIES} from '../../../convex/lib/profileOptions'
-import {VirtualizedCombobox} from '@/components/VirtualizedCombobox'
-import {extractVanityName} from '@/lib/linkedinProfile'
-import {AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage} from '../../../convex/lib/languages'
+import { COUNTRY_CODES, countryLabel, INDUSTRIES } from '../../../convex/lib/profileOptions'
+import { VirtualizedCombobox } from '@/components/VirtualizedCombobox'
+import { extractVanityName } from '@/lib/linkedinProfile'
+import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -145,12 +148,12 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-[560px] px-4 py-8 font-sans">
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">{t('settings.title')}</h1>
+      <PageHeader title={t('settings.title')} />
 
-      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 mt-0 text-base font-semibold text-slate-900">{t('settings.profile')}</h2>
+      <section className="border-border bg-card mb-4 rounded-xl border p-5">
+        <h2 className="text-foreground mb-3 mt-0 text-base font-semibold">{t('settings.profile')}</h2>
 
-        <div className="mb-1 text-sm font-medium text-slate-700">{t('settings.industry')}</div>
+        <div className="text-foreground mb-1 text-sm font-medium">{t('settings.industry')}</div>
         <div className="mb-3">
           <VirtualizedCombobox
             options={industryOptions}
@@ -166,7 +169,7 @@ export default function SettingsPage() {
           />
         </div>
 
-        <div className="mb-1 text-sm font-medium text-slate-700">{t('settings.country')}</div>
+        <div className="text-foreground mb-1 text-sm font-medium">{t('settings.country')}</div>
         <div className="mb-3">
           <VirtualizedCombobox
             options={countryOptions}
@@ -183,35 +186,35 @@ export default function SettingsPage() {
         </div>
 
         {me.location && (
-          <p className="my-1 text-sm text-slate-500">
-            {t('settings.location')}: <span className="text-slate-700">{me.location}</span>
+          <p className="text-muted-foreground my-1 text-sm">
+            {t('settings.location')}: <span className="text-foreground">{me.location}</span>
           </p>
         )}
 
         <div className="mt-3 flex items-center gap-2">
-          <button
+          <Button
             onClick={handleSaveProfile}
             disabled={profileSaving}
-            className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${profileSaved ? 'bg-green-500' : 'bg-blue-500'} ${profileSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
+            className={profileSaved ? 'bg-success text-success-foreground' : undefined}
           >
             {profileSaved ? t('settings.saved') : profileSaving ? t('settings.saving') : t('settings.save')}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleRefresh}
             disabled={refreshing || !me.linkedinPublicIdentifier}
-            className={`rounded-md border border-slate-300 bg-white px-4 py-[7px] text-[13px] text-slate-700 ${refreshing || !me.linkedinPublicIdentifier ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
           >
             {refreshing ? t('settings.refreshing') : t('settings.refresh')}
-          </button>
+          </Button>
         </div>
-        {refreshError && <p className="mb-0 mt-2 text-xs text-red-500">{refreshError}</p>}
-        <p className="mb-0 mt-2 text-xs text-slate-400">{t('settings.profileNote')}</p>
+        {refreshError && <p className="text-destructive mb-0 mt-2 text-xs">{refreshError}</p>}
+        <p className="text-muted-foreground mb-0 mt-2 text-xs">{t('settings.profileNote')}</p>
       </section>
 
       {/* LinkedIn identity — required for post ownership verification */}
-      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-1 mt-0 text-base font-semibold text-slate-900">LinkedIn Identity</h2>
-        <p className="mb-3 mt-0 text-[13px] text-slate-500">
+      <section className="border-border bg-card mb-4 rounded-xl border p-5">
+        <h2 className="text-foreground mb-1 mt-0 text-base font-semibold">LinkedIn Identity</h2>
+        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">
           {me.linkedinPublicIdentifier ? (
             <>
               Verified as{' '}
@@ -219,7 +222,7 @@ export default function SettingsPage() {
                 href={`https://www.linkedin.com/in/${me.linkedinPublicIdentifier}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-blue-500 no-underline"
+                className="text-gold-text font-semibold no-underline hover:underline"
               >
                 {me.linkedinPublicIdentifier}
               </a>
@@ -230,8 +233,9 @@ export default function SettingsPage() {
           )}
         </p>
         <div className="flex gap-2">
-          <input
-            type="text"
+          <Input
+            type="url"
+            inputMode="url"
             value={profileUrl}
             onChange={e => setProfileUrl(e.target.value)}
             placeholder={
@@ -239,32 +243,32 @@ export default function SettingsPage() {
                 ? `https://www.linkedin.com/in/${me.linkedinPublicIdentifier}`
                 : 'https://www.linkedin.com/in/your-name'
             }
-            className="flex-1 rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
+            className="flex-1"
           />
-          <button
+          <Button
             onClick={handleSaveIdentifier}
             disabled={!extractedVanity || identifierSaving}
-            className={`whitespace-nowrap rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${identifierSaved ? 'bg-green-500' : 'bg-blue-500'} ${!extractedVanity || identifierSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
+            className={`whitespace-nowrap ${identifierSaved ? 'bg-success text-success-foreground' : ''}`}
           >
             {identifierSaved ? 'Saved ✓' : identifierSaving ? 'Saving…' : 'Save'}
-          </button>
+          </Button>
         </div>
         {profileUrl && !extractedVanity && (
-          <p className="mb-0 mt-[6px] text-xs text-red-500">
+          <p className="text-destructive mb-0 mt-[6px] text-xs">
             Couldn't extract a username from that URL. Try: https://www.linkedin.com/in/your-name
           </p>
         )}
         {extractedVanity && (
-          <p className="mb-0 mt-[6px] text-xs text-slate-500">
+          <p className="text-muted-foreground mb-0 mt-[6px] text-xs">
             Will save as: <strong>{extractedVanity}</strong>
           </p>
         )}
       </section>
 
-      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-1 mt-0 text-base font-semibold text-slate-900">{t('settings.aiComments')}</h2>
-        <p className="mb-3 mt-0 text-[13px] text-slate-500">{t('settings.aiCommentsNote')}</p>
-        <div className="mb-1 text-sm font-medium text-slate-700">{t('settings.commentLanguage')}</div>
+      <section className="border-border bg-card mb-4 rounded-xl border p-5">
+        <h2 className="text-foreground mb-1 mt-0 text-base font-semibold">{t('settings.aiComments')}</h2>
+        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('settings.aiCommentsNote')}</p>
+        <div className="text-foreground mb-1 text-sm font-medium">{t('settings.commentLanguage')}</div>
         <VirtualizedCombobox
           options={commentLangOptions}
           value={commentLang}
@@ -276,25 +280,25 @@ export default function SettingsPage() {
           placeholder={t('comment.languageAuto')}
         />
         <div className="mt-3">
-          <button
+          <Button
             onClick={handleSaveCommentLanguage}
             disabled={commentLangSaving}
-            className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${commentLangSaved ? 'bg-green-500' : 'bg-blue-500'} ${commentLangSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+            className={commentLangSaved ? 'bg-success text-success-foreground' : undefined}
           >
             {commentLangSaved ? t('settings.saved') : commentLangSaving ? t('settings.saving') : t('settings.save')}
-          </button>
+          </Button>
         </div>
       </section>
 
       {isPro ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5">
-          <h2 className="mb-2 mt-0 text-base font-semibold text-slate-900">{t('settings.visibility')}</h2>
-          <p className="mb-3 text-sm text-slate-500">{t('settings.visibilityNote')}</p>
-          <p className="text-[13px] text-blue-500">{t('settings.visibilityComingSoon')}</p>
+        <section className="border-border bg-card rounded-xl border p-5">
+          <h2 className="text-foreground mb-2 mt-0 text-base font-semibold">{t('settings.visibility')}</h2>
+          <p className="text-muted-foreground mb-3 text-sm">{t('settings.visibilityNote')}</p>
+          <p className="text-gold-text text-[13px]">{t('settings.visibilityComingSoon')}</p>
         </section>
       ) : (
-        <section className="rounded-xl border border-blue-200 bg-blue-50 p-5">
-          <p className="m-0 text-sm text-blue-700">{t('settings.upgradePrompt')}</p>
+        <section className="border-border bg-accent rounded-xl border p-5">
+          <p className="text-accent-foreground m-0 text-sm">{t('settings.upgradePrompt')}</p>
         </section>
       )}
     </div>

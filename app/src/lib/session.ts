@@ -49,3 +49,23 @@ export function signOut(): void {
   sessionStorage.removeItem('sessionToken')
   window.location.assign(LANDING_URL)
 }
+
+/**
+ * Full sign-out orchestration used by the app shell's user menu: set the explicit-sign-out marker
+ * BEFORE logout (so the reactive getMe→null doesn't trip auto-OAuth), invalidate the session
+ * server-side when a token exists, then leave the SPA for the landing site.
+ */
+export async function performSignOut(
+  logout: (args: { sessionToken: string }) => Promise<unknown>,
+  token: string | null
+): Promise<void> {
+  beginSignOut()
+  if (token) {
+    try {
+      await logout({ sessionToken: token })
+    } catch {
+      /* ignore — we sign out locally regardless */
+    }
+  }
+  signOut()
+}

@@ -45,14 +45,9 @@ describe('PostComposer', () => {
     expect((input as HTMLInputElement).value).toBe('')
   })
 
-  it('renders the light theme on a white surface', () => {
-    const { container } = render(
-      <PostComposer
-        onSubmit={async () => {}}
-        theme="light"
-      />
-    )
-    expect(container.querySelector('form')?.className).toContain('bg-white')
+  it('renders on a card surface', () => {
+    const { container } = render(<PostComposer onSubmit={async () => {}} />)
+    expect(container.querySelector('form')?.className).toContain('bg-card')
     expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument()
   })
 

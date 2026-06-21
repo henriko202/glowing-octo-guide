@@ -3,6 +3,9 @@ import type { Id } from '../../../convex/_generated/dataModel'
 import { REACTIONS, type Reaction } from '../../../convex/lib/reactions'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
 import LinkedInEmbed from './LinkedInEmbed'
+import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 export type PostWithAuthor = {
   _id: Id<'posts'>
@@ -44,7 +47,7 @@ export function ReactionOptions({
           aria-pressed={r.value === suggested}
           title={t(r.labelKey)}
           onClick={() => onSelect(r.value)}
-          className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border text-lg outline-none ${r.value === suggested ? 'border-blue-500 ring-2 ring-blue-300' : 'border-transparent hover:bg-slate-100'}`}
+          className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border text-lg outline-none ${r.value === suggested ? 'border-primary ring-ring ring-2' : 'hover:bg-muted border-transparent'}`}
         >
           <span aria-hidden="true">{r.emoji}</span>
           <span className="sr-only">{t(r.labelKey)}</span>
@@ -80,14 +83,15 @@ function ReactionPicker({
       closeDelay={150}
     >
       <HoverCardTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           aria-label={t('reactions.react')}
           onClick={() => onReact(postId, current.value)}
-          className="flex cursor-pointer items-center gap-1 border-none bg-none text-[13px] text-slate-500 outline-none"
+          className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
         >
           <span aria-hidden="true">{current.emoji}</span> {likeCount}
-        </button>
+        </Button>
       </HoverCardTrigger>
       <HoverCardContent
         side="top"
@@ -115,32 +119,29 @@ export default function PostCard({
   const { t } = useTranslation()
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white font-sans">
+    <div className="border-border bg-card overflow-hidden rounded-xl border font-sans">
       {/* App-owned header: Featured badge + author. The iframe can't render the
           app's Featured concept, so it lives here above the embed. */}
       <div className="p-4 pb-3">
         {post.isFeatured && (
-          <span className="mb-2 inline-block text-[11px] font-bold uppercase tracking-wider text-amber-600">
+          <Badge
+            variant="warning"
+            className="mb-2 text-[11px] uppercase tracking-wider"
+          >
             {t('feed.featured')}
-          </span>
+          </Badge>
         )}
 
         {post.author && (
           <div className="flex items-center gap-2.5">
-            {post.author.profilePictureUrl ? (
-              <img
-                src={post.author.profilePictureUrl}
-                alt=""
-                className="h-10 w-10 rounded-full object-cover"
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-base font-bold text-blue-700">
-                {post.author.name[0]}
-              </div>
-            )}
+            <Avatar
+              name={post.author.name}
+              src={post.author.profilePictureUrl}
+              size="md"
+            />
             <div>
-              <p className="m-0 text-sm font-semibold text-slate-900">{post.author.name}</p>
-              {post.author.headline && <p className="m-0 text-xs text-slate-500">{post.author.headline}</p>}
+              <p className="text-foreground m-0 text-sm font-semibold">{post.author.name}</p>
+              {post.author.headline && <p className="text-muted-foreground m-0 text-xs">{post.author.headline}</p>}
             </div>
           </div>
         )}
@@ -152,27 +153,28 @@ export default function PostCard({
       <LinkedInEmbed
         urn={post.linkedinPostUrn}
         footer={
-          <div className="flex h-[52px] items-center gap-4 border-t border-slate-200 bg-white px-4">
+          <div className="border-border bg-card flex h-[52px] items-center gap-4 border-t px-4">
             <ReactionPicker
               postId={post._id}
               suggested={post.suggestedReaction ?? 'LIKE'}
               likeCount={post.likeCount}
               onReact={onReact}
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => onComment(post._id)}
-              className="flex cursor-pointer items-center gap-1 border-none bg-none text-[13px] text-slate-500 outline-none"
+              className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
             >
               💬 {post.commentCount} {t('feed.comment')}
-            </button>
+            </Button>
 
             {!!post.sourceUrl && (
               <a
                 href={post.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-500 no-underline"
+                className="text-gold-text no-underline hover:underline"
               >
                 View on LinkedIn ↗
               </a>

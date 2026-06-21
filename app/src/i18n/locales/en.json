@@ -1,9 +1,23 @@
 {
   "nav": {
     "feed": "Feed",
+    "myPosts": "My Posts",
     "settings": "Settings",
     "billing": "Billing",
-    "signOut": "Sign out"
+    "privacy": "Privacy & Data",
+    "signOut": "Sign out",
+    "openMenu": "Open user menu",
+    "groups": { "main": "Main", "manage": "Manage" },
+    "primary": "Primary navigation"
+  },
+  "shell": {
+    "search": "Search posts, people",
+    "searchComingSoon": "Search is coming soon.",
+    "language": "Language",
+    "theme": "Toggle theme",
+    "profile": "Profile & settings",
+    "openSidebar": "Open navigation",
+    "skipToContent": "Skip to content"
   },
   "login": {
     "title": "Link Into The SSI",

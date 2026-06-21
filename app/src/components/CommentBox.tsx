@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAction, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { VirtualizedCombobox } from './VirtualizedCombobox'
 import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
 
@@ -94,39 +96,41 @@ export default function CommentBox({
             placeholder={t('comment.languageAuto')}
           />
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={handleGenerate}
           disabled={generating}
-          className={`rounded-md border border-blue-500 px-3 py-1.5 text-[13px] font-semibold text-blue-600 ${generating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          className="px-3 py-1.5 text-[13px] font-semibold"
         >
           {generating ? t('comment.generating') : hasDraft ? t('comment.regenerate') : t('comment.generate')}
-        </button>
+        </Button>
       </div>
-      <textarea
+      <Textarea
         value={text}
         onChange={e => setText(e.target.value)}
         placeholder={t('comment.placeholder')}
-        className="font-inherit box-border min-h-[72px] w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none"
+        className="min-h-[72px] resize-y text-[13px]"
         disabled={submitting}
         rows={3}
       />
-      {error && <p className="my-1 text-xs text-red-500">{error}</p>}
+      {error && <p className="text-destructive my-1 text-xs">{error}</p>}
       <div className="mt-2 flex justify-end gap-2">
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={onClose}
-          className="cursor-pointer border-none bg-none text-[13px] text-slate-500 outline-none"
+          className="text-[13px]"
         >
           {t('comment.cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
           disabled={submitting || !text.trim()}
-          className={`rounded-md border-none px-4 py-1.5 text-[13px] font-semibold text-white ${submitting || !text.trim() ? 'cursor-not-allowed bg-blue-300' : 'cursor-pointer bg-blue-600'}`}
+          className="px-4 py-1.5 text-[13px] font-semibold"
         >
           {submitting ? t('comment.submitting') : t('comment.submit')}
-        </button>
+        </Button>
       </div>
     </form>
   )

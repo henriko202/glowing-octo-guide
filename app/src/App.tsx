@@ -10,7 +10,7 @@ import BillingPage from './pages/BillingPage'
 import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
 import AdminPage from './pages/AdminPage'
-import AppNav from './components/AppNav'
+import AppShell from './components/shell/AppShell'
 import Motd from './components/Motd'
 import FeedbackButton from './components/FeedbackButton'
 import LoadingSpinner from './components/LoadingSpinner'
@@ -57,12 +57,11 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt) return <PublicIdentifierPromptScreen />
 
   return (
-    <>
+    <AppShell>
       <Motd />
-      <AppNav />
       {children}
       <FeedbackButton />
-    </>
+    </AppShell>
   )
 }
 

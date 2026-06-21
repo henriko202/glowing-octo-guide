@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { signOut, beginSignOut, isSignedOut, markSignedOut, clearSignedOut, LANDING_URL } from './session'
+import { performSignOut } from './session'
 
 describe('signed-out marker', () => {
   beforeEach(() => {
@@ -47,5 +48,35 @@ describe('signOut', () => {
     expect(isSignedOut()).toBe(true)
     expect(sessionStorage.getItem('sessionToken')).toBeNull()
     expect(assign).toHaveBeenCalledWith(LANDING_URL)
+  })
+})
+
+describe('performSignOut', () => {
+  it('marks signed out before logout, logs out with the token, then leaves for the landing site', async () => {
+    const order: string[] = []
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(k => {
+      if (k === 'signedOut') order.push('mark')
+    })
+    const assign = vi.fn(() => order.push('assign'))
+    ;(window as any).location = { assign, href: '/', origin: window.location.origin }
+    const logout = vi.fn(async () => {
+      order.push('logout')
+    })
+
+    await performSignOut(logout, 'tok-1')
+
+    expect(logout).toHaveBeenCalledWith({ sessionToken: 'tok-1' })
+    expect(order.indexOf('mark')).toBeLessThan(order.indexOf('logout'))
+    expect(order[order.length - 1]).toBe('assign')
+    vi.restoreAllMocks()
+  })
+
+  it('still leaves even when there is no token', async () => {
+    const assign = vi.fn()
+    ;(window as any).location = { assign, href: '/', origin: window.location.origin }
+    const logout = vi.fn()
+    await performSignOut(logout, null)
+    expect(logout).not.toHaveBeenCalled()
+    expect(assign).toHaveBeenCalled()
   })
 })

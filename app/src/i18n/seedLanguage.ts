@@ -1,7 +1,7 @@
 /**
  * Decide which UI language to seed from a scraped LinkedIn primaryLocale.
  * Returns null when the user already chose a language (stored pref) or when the
- * locale is missing/unsupported — so the existing AppNav switcher always wins.
+ * locale is missing/unsupported — so the existing language switcher always wins.
  */
 export function pickSeedLanguage(
   primaryLocale: string | undefined,

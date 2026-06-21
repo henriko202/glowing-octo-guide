@@ -17,6 +17,25 @@
     />
     <title>Link Into The SSI</title>
     <meta
+      content="#f2eee6"
+      name="theme-color"
+    />
+    <script>
+      // Pre-hydration theme guard: apply the stored/system theme before first paint so a
+      // dark-preferring user never sees a flash of the light theme. Mirrors the logic in
+      // src/lib/theme.ts (resolveTheme/applyTheme); kept inline because it must run pre-bundle.
+      ;(function () {
+        try {
+          var t = localStorage.getItem('theme')
+          var dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+          var m = document.querySelector('meta[name="theme-color"]')
+          if (m) m.setAttribute('content', dark ? '#0e1320' : '#f2eee6')
+        } catch (e) {}
+      })()
+    </script>
+    <meta
       content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; frame-src https://www.linkedin.com; connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self';"
       http-equiv="Content-Security-Policy"
     />

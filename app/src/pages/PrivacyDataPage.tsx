@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import Modal from '../components/Modal'
 import ConsentToggles from '../components/ConsentToggles'
+import { PageHeader } from '../components/PageHeader'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export default function PrivacyDataPage() {
   const { t } = useTranslation()
@@ -50,9 +53,11 @@ export default function PrivacyDataPage() {
   if (deletionDate) {
     return (
       <div className="mx-auto max-w-[560px] px-4 py-8 font-sans">
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-          <h2 className="mb-2 mt-0 text-base font-semibold text-slate-900">{t('privacy.deletionScheduledTitle')}</h2>
-          <p className="m-0 text-sm text-slate-700">
+        <section className="border-border bg-accent rounded-xl border p-5">
+          <h2 className="text-accent-foreground mb-2 mt-0 text-base font-semibold">
+            {t('privacy.deletionScheduledTitle')}
+          </h2>
+          <p className="text-foreground m-0 text-sm">
             {t('privacy.deletionScheduledBody', { date: new Date(deletionDate).toLocaleDateString() })}
           </p>
         </section>
@@ -62,80 +67,80 @@ export default function PrivacyDataPage() {
 
   return (
     <div className="mx-auto max-w-[560px] px-4 py-8 font-sans">
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">{t('privacy.title')}</h1>
+      <PageHeader title={t('privacy.title')} />
 
-      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-2 mt-0 text-base font-semibold text-slate-900">{t('privacy.exportTitle')}</h2>
-        <p className="mb-3 mt-0 text-[13px] text-slate-500">{t('privacy.exportNote')}</p>
+      <section className="border-border bg-card mb-4 rounded-xl border p-5">
+        <h2 className="text-foreground mb-2 mt-0 text-base font-semibold">{t('privacy.exportTitle')}</h2>
+        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('privacy.exportNote')}</p>
         <div className="flex items-center gap-3">
-          <button
+          <Button
             type="button"
             onClick={handleExport}
             disabled={exporting || exportStatus?.status === 'pending'}
-            className="rounded-md border-none bg-blue-500 px-4 py-[7px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {exporting ? t('privacy.requesting') : t('privacy.exportButton')}
-          </button>
+          </Button>
           {exportStatus?.status === 'pending' && (
-            <span className="text-xs text-slate-500">{t('privacy.exportPending')}</span>
+            <span className="text-muted-foreground text-xs">{t('privacy.exportPending')}</span>
           )}
           {exportStatus?.status === 'ready' && downloadUrl && (
             <a
               href={downloadUrl}
-              className="text-[13px] font-semibold text-blue-500 no-underline"
+              className="text-gold-text text-[13px] font-semibold no-underline hover:underline"
               download
             >
               {t('privacy.download')}
             </a>
           )}
           {exportStatus?.status === 'expired' && (
-            <span className="text-xs text-slate-400">{t('privacy.exportExpired')}</span>
+            <span className="text-muted-foreground text-xs">{t('privacy.exportExpired')}</span>
           )}
         </div>
       </section>
 
       <ConsentToggles />
 
-      <section className="rounded-xl border border-red-200 bg-white p-5">
-        <h2 className="mb-2 mt-0 text-base font-semibold text-red-700">{t('privacy.deleteTitle')}</h2>
-        <p className="mb-3 mt-0 text-[13px] text-slate-500">{t('privacy.deleteNote')}</p>
-        <button
+      <section className="border-destructive/40 bg-card rounded-xl border p-5">
+        <h2 className="text-destructive mb-2 mt-0 text-base font-semibold">{t('privacy.deleteTitle')}</h2>
+        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('privacy.deleteNote')}</p>
+        <Button
           type="button"
+          variant="destructive"
           onClick={() => setConfirmOpen(true)}
-          className="rounded-md border border-red-300 bg-white px-4 py-[7px] text-[13px] font-semibold text-red-600 hover:bg-red-50"
         >
           {t('privacy.deleteButton')}
-        </button>
+        </Button>
       </section>
 
       {confirmOpen && (
         <Modal onClose={() => setConfirmOpen(false)}>
-          <h2 className="mb-2 mt-0 text-base font-semibold text-slate-900">{t('privacy.confirmTitle')}</h2>
-          <p className="mb-3 text-sm text-slate-600">{t('privacy.confirmBody')}</p>
-          <input
+          <h2 className="text-foreground mb-2 mt-0 text-base font-semibold">{t('privacy.confirmTitle')}</h2>
+          <p className="text-muted-foreground mb-3 text-sm">{t('privacy.confirmBody')}</p>
+          <Input
             type="text"
             value={confirmText}
             onChange={e => setConfirmText(e.target.value)}
             placeholder="DELETE"
             aria-label={t('privacy.confirmInputLabel')}
-            className="mb-3 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
+            className="mb-3 text-[13px]"
           />
           <div className="flex items-center justify-end gap-3">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => setConfirmOpen(false)}
-              className="text-sm font-semibold text-slate-500"
             >
               {t('privacy.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="destructive"
               onClick={handleConfirmDelete}
               disabled={confirmText !== 'DELETE' || deleting}
-              className="rounded-md border-none bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? t('privacy.deleting') : t('privacy.confirmDeleteButton')}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}

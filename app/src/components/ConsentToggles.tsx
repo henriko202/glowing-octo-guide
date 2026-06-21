@@ -17,13 +17,13 @@ export default function ConsentToggles() {
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="mb-1 mt-0 text-base font-semibold text-slate-900">{t('privacy.consent.title')}</h2>
-      <p className="mb-3 mt-0 text-[13px] text-slate-500">{t('privacy.consent.note')}</p>
+    <section className="border-border bg-card mb-4 rounded-xl border p-5">
+      <h2 className="text-foreground mb-1 mt-0 text-base font-semibold">{t('privacy.consent.title')}</h2>
+      <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('privacy.consent.note')}</p>
       {PURPOSES.map(p => (
         <label
           key={p}
-          className="mb-2 flex items-center gap-3 text-sm text-slate-700"
+          className="text-foreground mb-2 flex items-center gap-3 text-sm"
         >
           <input
             type="checkbox"
