@@ -1,3 +1,24 @@
+/**
+ * UsersTab tests
+ *
+ * NOTE — RowActionsMenu interaction change:
+ * RowActionsMenu was reimplemented on the Radix DropdownMenu primitive (Task 3 of
+ * the Phase-4 plan). Radix opens the menu on `pointerdown` (not `click`), but
+ * `fireEvent.pointerDown` does not trigger the open handler in jsdom (no real pointer
+ * model). The keyboard path works: `fireEvent.keyDown(trigger, { key: 'Enter' })`
+ * calls `onOpenToggle()` synchronously and renders the portal into document.body.
+ *
+ * Every `fireEvent.click(trigger)` that opened the old hand-rolled menu has been
+ * replaced with an `openActionsFor()` helper that uses `fireEvent.keyDown(trigger,
+ * { key: 'Enter' })`.
+ *
+ * Items are now `role="menuitem"` (Radix portal) instead of `role="button"`, so
+ * `getByRole('button', { name: 'Sync posts' })` etc. have been updated to
+ * `getByRole('menuitem', { name: '...' })`. Disabled items are asserted via
+ * `data-disabled` attribute (Radix) rather than `.toBeDisabled()` (which checks the
+ * HTML disabled attribute, not set on div-based menu items).
+ */
+
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
@@ -66,6 +87,13 @@ function renderTab(overrides: { postSyncOn?: boolean; profileScrapeOn?: boolean 
   )
 }
 
+// Helper: open the RowActionsMenu for a given user via the keyboard path.
+// Radix opens on pointerdown, but fireEvent.pointerDown doesn't work in jsdom without
+// a real pointer model. keyDown Enter is the reliable cross-platform alternative.
+function openActionsFor(name: RegExp | string) {
+  fireEvent.keyDown(screen.getByRole('button', { name }), { key: 'Enter' })
+}
+
 beforeEach(() => {
   Object.values(mocks).forEach(m => {
     m.mockReset()
@@ -89,7 +117,7 @@ describe('UsersTab — ban/unban', () => {
 
   it('offers "Ban user…" for an active user and calls banUser with the reason', async () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    openActionsFor(/actions for jordan maxwell/i)
     fireEvent.click(screen.getByText('Ban user…'))
     fireEvent.change(screen.getByPlaceholderText(/spam/i), { target: { value: 'Spam' } })
     fireEvent.click(screen.getByRole('button', { name: /^ban user$/i }))
@@ -100,7 +128,7 @@ describe('UsersTab — ban/unban', () => {
 
   it('offers "Unban" for a banned user and calls unbanUser after confirm', async () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for priya nayar/i }))
+    openActionsFor(/actions for priya nayar/i)
     fireEvent.click(screen.getByText('Unban'))
     fireEvent.click(screen.getByRole('button', { name: /^unban$/i }))
     await waitFor(() => {
@@ -112,7 +140,7 @@ describe('UsersTab — ban/unban', () => {
 describe('UsersTab — change tier', () => {
   it('opens the tier modal and calls setUserTier with the chosen tier', async () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    openActionsFor(/actions for jordan maxwell/i)
     fireEvent.click(screen.getByText('Change tier…'))
 
     const modal = screen.getByTestId('modal-backdrop')
@@ -128,7 +156,7 @@ describe('UsersTab — change tier', () => {
 describe('UsersTab — change status', () => {
   it('opens the status modal and calls setUserSubscriptionStatus with the chosen status', async () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    openActionsFor(/actions for jordan maxwell/i)
     fireEvent.click(screen.getByText('Change status…'))
 
     const modal = screen.getByTestId('modal-backdrop')
@@ -149,13 +177,13 @@ describe('UsersTab — edit contact limits action', () => {
   it('offers "Edit limits…" only for contact-tier users', () => {
     renderTab()
     // Contact-tier user → action present
-    fireEvent.click(screen.getByRole('button', { name: /actions for dana lee/i }))
+    openActionsFor(/actions for dana lee/i)
     expect(screen.getByText('Edit limits…')).toBeInTheDocument()
   })
 
   it('does not offer "Edit limits…" for non-contact users', () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
+    openActionsFor(/actions for jordan maxwell/i)
     expect(screen.queryByText('Edit limits…')).not.toBeInTheDocument()
   })
 })
@@ -163,29 +191,31 @@ describe('UsersTab — edit contact limits action', () => {
 describe('UsersTab — manual sync actions', () => {
   it('offers "Sync posts" and "Sync profile" in the row menu', () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
-    expect(screen.getByRole('button', { name: 'Sync posts' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Sync profile' })).toBeInTheDocument()
+    openActionsFor(/actions for jordan maxwell/i)
+    // Items are now role="menuitem" (Radix DropdownMenuItem portal), not role="button"
+    expect(screen.getByRole('menuitem', { name: 'Sync posts' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Sync profile' })).toBeInTheDocument()
   })
 
   it('disables the sync actions when the user has no LinkedIn URL on file', () => {
     renderTab() // Dana Lee (u3) has no linkedinPublicIdentifier
-    fireEvent.click(screen.getByRole('button', { name: /actions for dana lee/i }))
-    expect(screen.getByRole('button', { name: 'Sync posts' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Sync profile' })).toBeDisabled()
+    openActionsFor(/actions for dana lee/i)
+    // Radix sets data-disabled on menuitem (not the HTML disabled attribute)
+    expect(screen.getByRole('menuitem', { name: 'Sync posts' })).toHaveAttribute('data-disabled')
+    expect(screen.getByRole('menuitem', { name: 'Sync profile' })).toHaveAttribute('data-disabled')
   })
 
   it('disables the matching action when its Apify feature is off', () => {
     renderTab({ postSyncOn: false, profileScrapeOn: true }) // Jordan has a LinkedIn URL
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
-    expect(screen.getByRole('button', { name: 'Sync posts' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Sync profile' })).toBeEnabled()
+    openActionsFor(/actions for jordan maxwell/i)
+    expect(screen.getByRole('menuitem', { name: 'Sync posts' })).toHaveAttribute('data-disabled')
+    expect(screen.getByRole('menuitem', { name: 'Sync profile' })).not.toHaveAttribute('data-disabled')
   })
 
   it('calls syncUserPosts when enabled and the user has a LinkedIn URL', async () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
-    fireEvent.click(screen.getByRole('button', { name: 'Sync posts' }))
+    openActionsFor(/actions for jordan maxwell/i)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sync posts' }))
     await waitFor(() => {
       expect(mocks.syncUserPosts).toHaveBeenCalledWith({ sessionToken: 'tok', userId: 'u1' })
     })
@@ -193,8 +223,8 @@ describe('UsersTab — manual sync actions', () => {
 
   it('calls syncUserProfile when enabled and the user has a LinkedIn URL', async () => {
     renderTab()
-    fireEvent.click(screen.getByRole('button', { name: /actions for jordan maxwell/i }))
-    fireEvent.click(screen.getByRole('button', { name: 'Sync profile' }))
+    openActionsFor(/actions for jordan maxwell/i)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sync profile' }))
     await waitFor(() => {
       expect(mocks.syncUserProfile).toHaveBeenCalledWith({ sessionToken: 'tok', userId: 'u1' })
     })

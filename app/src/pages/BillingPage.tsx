@@ -8,16 +8,24 @@ import { Badge } from '@/components/ui/badge'
 
 const PLAN_IDS = ['starter', 'growth', 'pro'] as const
 
-const PLAN_PRICE_IDS: Record<string, string | undefined> = {
-  starter: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID as string | undefined,
-  growth: import.meta.env.VITE_STRIPE_GROWTH_PRICE_ID as string | undefined,
-  pro: import.meta.env.VITE_STRIPE_PRO_PRICE_ID as string | undefined
+type Interval = 'monthly' | 'annual'
+
+const PLAN_PRICE_IDS: Record<Interval, Record<string, string | undefined>> = {
+  monthly: {
+    starter: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID as string | undefined,
+    growth: import.meta.env.VITE_STRIPE_GROWTH_PRICE_ID as string | undefined,
+    pro: import.meta.env.VITE_STRIPE_PRO_PRICE_ID as string | undefined
+  },
+  annual: {
+    starter: import.meta.env.VITE_STRIPE_STARTER_ANNUAL_PRICE_ID as string | undefined,
+    growth: import.meta.env.VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID as string | undefined,
+    pro: import.meta.env.VITE_STRIPE_PRO_ANNUAL_PRICE_ID as string | undefined
+  }
 }
 
-const PLAN_PRICES: Record<string, string> = {
-  starter: '$5/mo',
-  growth: '$15/mo',
-  pro: '$50/mo'
+const PLAN_PRICES: Record<Interval, Record<string, string>> = {
+  monthly: { starter: '$5/mo', growth: '$15/mo', pro: '$50/mo' },
+  annual: { starter: '$50/yr', growth: '$150/yr', pro: '$500/yr' }
 }
 
 function getTrialDaysRemaining(trialEndsAt: number | undefined): number {
@@ -30,9 +38,10 @@ export default function BillingPage() {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
   const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, sessionToken ? { sessionToken } : 'skip')
-  const createCheckout = useAction(api.billing.createCheckoutSession)
+  const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [interval, setInterval] = useState<Interval>('annual') // default annual
 
   const isTrialing = me?.subscriptionStatus === 'trialing'
   const trialEndsAt = me?.trialEndsAt
@@ -124,18 +133,33 @@ export default function BillingPage() {
         </div>
       )}
 
+      <div className="mb-4 inline-flex items-center gap-2 rounded-full border p-1 text-sm">
+        <button
+          onClick={() => setInterval('annual')}
+          className={`rounded-full px-3 py-1 ${interval === 'annual' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+        >
+          {t('billing.annual')}
+        </button>
+        <button
+          onClick={() => setInterval('monthly')}
+          className={`rounded-full px-3 py-1 ${interval === 'monthly' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+        >
+          {t('billing.monthly')}
+        </button>
+      </div>
+
       <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
         {PLAN_IDS.map(planId => {
           // Trialing users on starter should see the Subscribe button (they haven't paid yet)
           const isCurrent = me?.tier === planId && me?.subscriptionStatus !== 'trialing'
-          const priceId = PLAN_PRICE_IDS[planId]
+          const priceId = PLAN_PRICE_IDS[interval][planId]
           return (
             <div
               key={planId}
               className={`rounded-xl p-5 ${isCurrent ? 'border-primary bg-accent border-2' : 'border-border bg-card border'}`}
             >
               <h2 className="text-foreground mt-0 text-lg font-bold">{t(`billing.plans.${planId}.name`)}</h2>
-              <p className="text-foreground my-2 text-2xl font-bold">{PLAN_PRICES[planId]}</p>
+              <p className="text-foreground my-2 text-2xl font-bold">{PLAN_PRICES[interval][planId]}</p>
               <p className="text-muted-foreground mb-4 text-[13px]">{t(`billing.plans.${planId}.description`)}</p>
               {isCurrent ? (
                 <div className="flex justify-center">

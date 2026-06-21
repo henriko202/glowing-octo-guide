@@ -4,6 +4,8 @@ import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import Modal from './Modal'
 import LoadingSpinner from './LoadingSpinner'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 type PlanLimitRow = {
   _id: Id<'planLimits'>
@@ -100,60 +102,62 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
 
   return (
     <div>
-      <h3 className="mb-4 text-[15px] font-semibold text-slate-900">{title}</h3>
+      <h3 className="text-foreground mb-4 text-[15px] font-semibold">{title}</h3>
 
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
             Interactions per post
           </span>
-          <input
+          <Input
             type="number"
             min="1"
             value={interactions}
             onChange={e => setInteractions(e.target.value)}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
           />
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Posts per week</span>
-          <input
+          <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+            Posts per week
+          </span>
+          <Input
             type="number"
             min="1"
             value={posts}
             onChange={e => setPosts(e.target.value)}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
           />
         </label>
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+      {error && <p className="text-destructive mt-2 text-xs">{error}</p>}
 
       <div className="mt-4 flex gap-2">
-        <button
+        <Button
           onClick={handleSave}
           disabled={!isValid || saving}
-          className="flex-1 rounded-md bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          className="flex-1"
         >
           {saving ? '…' : 'Save'}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
           onClick={onClose}
-          className="flex-1 rounded-md bg-slate-100 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200"
+          className="flex-1"
         >
           Cancel
-        </button>
+        </Button>
       </div>
 
       {!isNew && (
-        <button
+        <Button
+          variant="ghost"
           onClick={handleReset}
           disabled={resetting}
-          className="mt-3 w-full text-center text-xs text-slate-400 hover:text-red-500 disabled:opacity-50"
+          className="hover:text-destructive mt-3 w-full text-xs"
         >
           {resetting ? '…' : 'Reset to default'}
-        </button>
+        </Button>
       )}
     </div>
   )

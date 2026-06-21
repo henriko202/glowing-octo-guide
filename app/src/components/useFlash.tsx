@@ -43,7 +43,9 @@ export function Flash({ flash, onDismiss }: { flash: FlashState; onDismiss: () =
       role={isError ? 'alert' : 'status'}
       aria-live={isError ? 'assertive' : 'polite'}
       className={`mb-4 flex items-start justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
-        isError ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'
+        isError
+          ? 'border-destructive/30 bg-destructive/10 text-destructive'
+          : 'border-[color:var(--success-foreground)]/30 bg-success text-success-foreground'
       }`}
     >
       <span>{flash.msg}</span>
@@ -51,7 +53,7 @@ export function Flash({ flash, onDismiss }: { flash: FlashState; onDismiss: () =
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss"
-        className={`shrink-0 leading-none ${isError ? 'text-red-400 hover:text-red-600' : 'text-green-500 hover:text-green-700'}`}
+        className={`shrink-0 leading-none ${isError ? 'text-destructive/70 hover:text-destructive' : 'text-success-foreground/70 hover:text-success-foreground'}`}
       >
         ✕
       </button>

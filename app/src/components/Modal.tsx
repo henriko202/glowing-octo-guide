@@ -28,11 +28,11 @@ export default function Modal({
     <div
       data-testid="modal-backdrop"
       onClick={dismissOnBackdrop ? onClose : undefined}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >
       <div
         onClick={e => e.stopPropagation()}
-        className={`w-full ${panelClassName} rounded-xl bg-white p-5 shadow-2xl`}
+        className={`w-full ${panelClassName} bg-card rounded-xl p-5 shadow-2xl`}
       >
         {children}
       </div>

@@ -1,16 +1,24 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../convex'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PlanLimitsTab from '../components/PlanLimitsTab'
 import UsersTab from '../components/UsersTab'
 import FeedbackTab from '../components/FeedbackTab'
 import MotdTab from '../components/MotdTab'
 import { Flash, useFlash } from '../components/useFlash'
+import { PageHeader } from '../components/PageHeader'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
+import { Button } from '../components/ui/button'
+
+type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd'
 
 export default function AdminPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = (searchParams.get('tab') ?? 'settings') as TabValue
+
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const isAdmin = useQuery(api.admin.checkIsAdmin, { sessionToken })
   const settings = useQuery(api.admin.getSettings, sessionToken && isAdmin ? { sessionToken } : 'skip')
@@ -25,7 +33,6 @@ export default function AdminPage() {
   const [syncingPosts, setSyncingPosts] = useState(false)
   const [syncingProfiles, setSyncingProfiles] = useState(false)
   const { flash, showFlash, clearFlash } = useFlash()
-  const [tab, setTab] = useState<'settings' | 'planLimits' | 'users' | 'feedback' | 'motd'>('settings')
 
   if (isAdmin === undefined) {
     return <LoadingSpinner />
@@ -97,186 +104,190 @@ export default function AdminPage() {
   const postSyncOn = masterOn && !!settings?.apifySyncEnabled
   const profileScrapeOn = masterOn && !!settings?.apifyProfileScrapeEnabled
 
+  function handleTabChange(value: string) {
+    setSearchParams({ tab: value }, { replace: true })
+  }
+
   return (
     <div className="mx-auto max-w-[640px] p-8 font-sans">
-      <h1 className="mb-4 text-[22px] font-bold text-slate-900">Admin Panel</h1>
+      <PageHeader title="Admin Panel" />
 
-      {/* Tab bar */}
-      <div className="mb-6 flex gap-1 border-b border-slate-200">
-        <button
-          onClick={() => setTab('settings')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'settings' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Settings
-        </button>
-        <button
-          onClick={() => setTab('planLimits')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'planLimits' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Plan Limits
-        </button>
-        <button
-          onClick={() => setTab('users')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'users' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Users
-        </button>
-        <button
-          onClick={() => setTab('feedback')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'feedback' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Feedback
-        </button>
-        <button
-          onClick={() => setTab('motd')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === 'motd' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          MOTD
-        </button>
-      </div>
+      <Tabs
+        value={tab}
+        onValueChange={handleTabChange}
+      >
+        <TabsList>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="planLimits">Plan Limits</TabsTrigger>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="feedback">Feedback</TabsTrigger>
+          <TabsTrigger value="motd">MOTD</TabsTrigger>
+        </TabsList>
 
-      {/* Settings tab */}
-      {tab === 'settings' && (
-        <>
+        {/* Settings tab */}
+        <TabsContent value="settings">
           <Flash
             flash={flash}
             onDismiss={clearFlash}
           />
-          <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
+          <div className="border-border bg-card mb-4 rounded-lg border p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="m-0 text-base font-semibold text-slate-900">Apify Post Sync</h2>
-                <p className="mt-1 text-[13px] text-slate-500">
+                <h2 className="text-foreground m-0 text-base font-semibold">Apify Post Sync</h2>
+                <p className="text-muted-foreground mt-1 text-[13px]">
                   Scrapes LinkedIn posts for all active users every hour via Apify.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button
+                <Button
+                  variant="outline"
                   onClick={handleSyncAllPosts}
                   disabled={!postSyncOn || syncingPosts || !settings}
                   title={postSyncOn ? undefined : 'Enable post sync to run a manual sync'}
-                  className="rounded-md border border-slate-200 px-4 py-2 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {syncingPosts ? 'Starting…' : 'Sync all now'}
-                </button>
-                <button
-                  onClick={handleToggle}
-                  disabled={toggling || !settings}
-                  className={`rounded-md border-none px-5 py-2 text-[13px] font-semibold text-white ${toggling ? 'cursor-wait' : 'cursor-pointer'} ${settings?.apifySyncEnabled ? 'bg-red-500' : 'bg-green-500'}`}
-                >
-                  {toggling ? '…' : settings?.apifySyncEnabled ? 'Disable' : 'Enable'}
-                </button>
+                </Button>
+                {settings?.apifySyncEnabled ? (
+                  <Button
+                    variant="destructive"
+                    onClick={handleToggle}
+                    disabled={toggling || !settings}
+                    className={toggling ? 'cursor-wait' : ''}
+                  >
+                    {toggling ? '…' : 'Disable'}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleToggle}
+                    disabled={toggling || !settings}
+                    className={toggling ? 'cursor-wait' : ''}
+                  >
+                    {toggling ? '…' : 'Enable'}
+                  </Button>
+                )}
               </div>
             </div>
             {settings?.lastApifySyncAt && (
-              <div className="mt-3 text-xs text-slate-400">
+              <div className="text-muted-foreground mt-3 text-xs">
                 Last sync: {new Date(settings.lastApifySyncAt).toLocaleString()}
                 {settings.lastApifySyncError && (
-                  <span className="ml-2 text-red-500">— {settings.lastApifySyncError}</span>
+                  <span className="text-destructive ml-2">— {settings.lastApifySyncError}</span>
                 )}
               </div>
             )}
           </div>
 
-          <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
+          <div className="border-border bg-card mb-4 rounded-lg border p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="m-0 text-base font-semibold text-slate-900">Apify (master)</h2>
-                <p className="mt-1 text-[13px] text-slate-500">
+                <h2 className="text-foreground m-0 text-base font-semibold">Apify (master)</h2>
+                <p className="text-muted-foreground mt-1 text-[13px]">
                   Global kill-switch. Turns off ALL Apify integration (post sync and profile scrape).
                 </p>
               </div>
-              <button
-                onClick={handleToggleMaster}
-                disabled={togglingMaster || !settings}
-                className={`rounded-md border-none px-5 py-2 text-[13px] font-semibold text-white ${togglingMaster ? 'cursor-wait' : 'cursor-pointer'} ${settings?.apifyEnabled !== false ? 'bg-red-500' : 'bg-green-500'}`}
-              >
-                {togglingMaster ? '…' : settings?.apifyEnabled !== false ? 'Disable' : 'Enable'}
-              </button>
+              {settings?.apifyEnabled !== false ? (
+                <Button
+                  variant="destructive"
+                  onClick={handleToggleMaster}
+                  disabled={togglingMaster || !settings}
+                  className={togglingMaster ? 'cursor-wait' : ''}
+                >
+                  {togglingMaster ? '…' : 'Disable'}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleToggleMaster}
+                  disabled={togglingMaster || !settings}
+                  className={togglingMaster ? 'cursor-wait' : ''}
+                >
+                  {togglingMaster ? '…' : 'Enable'}
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
+          <div className="border-border bg-card mb-4 rounded-lg border p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="m-0 text-base font-semibold text-slate-900">Apify Profile Scrape</h2>
-                <p className="mt-1 text-[13px] text-slate-500">
+                <h2 className="text-foreground m-0 text-base font-semibold">Apify Profile Scrape</h2>
+                <p className="text-muted-foreground mt-1 text-[13px]">
                   Scrapes profile country/location/locale when a user sets or refreshes their LinkedIn URL.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button
+                <Button
+                  variant="outline"
                   onClick={handleSyncAllProfiles}
                   disabled={!profileScrapeOn || syncingProfiles || !settings}
                   title={profileScrapeOn ? undefined : 'Enable profile scrape to run a manual sync'}
-                  className="rounded-md border border-slate-200 px-4 py-2 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {syncingProfiles ? 'Starting…' : 'Sync all now'}
-                </button>
-                <button
-                  onClick={handleToggleProfile}
-                  disabled={togglingProfile || !settings}
-                  className={`rounded-md border-none px-5 py-2 text-[13px] font-semibold text-white ${togglingProfile ? 'cursor-wait' : 'cursor-pointer'} ${settings?.apifyProfileScrapeEnabled ? 'bg-red-500' : 'bg-green-500'}`}
-                >
-                  {togglingProfile ? '…' : settings?.apifyProfileScrapeEnabled ? 'Disable' : 'Enable'}
-                </button>
+                </Button>
+                {settings?.apifyProfileScrapeEnabled ? (
+                  <Button
+                    variant="destructive"
+                    onClick={handleToggleProfile}
+                    disabled={togglingProfile || !settings}
+                    className={togglingProfile ? 'cursor-wait' : ''}
+                  >
+                    {togglingProfile ? '…' : 'Disable'}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleToggleProfile}
+                    disabled={togglingProfile || !settings}
+                    className={togglingProfile ? 'cursor-wait' : ''}
+                  >
+                    {togglingProfile ? '…' : 'Enable'}
+                  </Button>
+                )}
               </div>
             </div>
             {settings?.lastProfileScrapeAt && (
-              <div className="mt-3 text-xs text-slate-400">
+              <div className="text-muted-foreground mt-3 text-xs">
                 Last profile sync: {new Date(settings.lastProfileScrapeAt).toLocaleString()}
                 {settings.lastProfileScrapeError && (
-                  <span className="ml-2 text-red-500">— {settings.lastProfileScrapeError}</span>
+                  <span className="text-destructive ml-2">— {settings.lastProfileScrapeError}</span>
                 )}
               </div>
             )}
           </div>
-        </>
-      )}
+        </TabsContent>
 
-      {/* Plan Limits tab */}
-      {tab === 'planLimits' && (
-        <PlanLimitsTab
-          sessionToken={sessionToken}
-          isAdmin={isAdmin}
-        />
-      )}
+        {/* Plan Limits tab */}
+        <TabsContent value="planLimits">
+          <PlanLimitsTab
+            sessionToken={sessionToken}
+            isAdmin={isAdmin}
+          />
+        </TabsContent>
 
-      {/* Users tab */}
-      {tab === 'users' && (
-        <UsersTab
-          sessionToken={sessionToken}
-          isAdmin={isAdmin}
-          postSyncOn={postSyncOn}
-          profileScrapeOn={profileScrapeOn}
-        />
-      )}
+        {/* Users tab */}
+        <TabsContent value="users">
+          <UsersTab
+            sessionToken={sessionToken}
+            isAdmin={isAdmin}
+            postSyncOn={postSyncOn}
+            profileScrapeOn={profileScrapeOn}
+          />
+        </TabsContent>
 
-      {/* Feedback tab */}
-      {tab === 'feedback' && (
-        <FeedbackTab
-          sessionToken={sessionToken}
-          isAdmin={isAdmin}
-        />
-      )}
+        {/* Feedback tab */}
+        <TabsContent value="feedback">
+          <FeedbackTab
+            sessionToken={sessionToken}
+            isAdmin={isAdmin}
+          />
+        </TabsContent>
 
-      {/* MOTD tab */}
-      {tab === 'motd' && (
-        <MotdTab
-          sessionToken={sessionToken}
-          isAdmin={isAdmin}
-        />
-      )}
+        {/* MOTD tab */}
+        <TabsContent value="motd">
+          <MotdTab
+            sessionToken={sessionToken}
+            isAdmin={isAdmin}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

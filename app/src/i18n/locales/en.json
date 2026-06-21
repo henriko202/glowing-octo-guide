@@ -109,6 +109,8 @@
     "none": "None",
     "noActivePlan": "No active plan",
     "trialBanner": "You're on a free trial. Subscribe to a plan to make your posts visible and unlock all features.",
+    "annual": "Annual · 2 months free",
+    "monthly": "Monthly",
     "plans": {
       "starter": {
         "name": "Starter",

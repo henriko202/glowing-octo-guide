@@ -3,6 +3,7 @@ import { api } from '../convex'
 import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import Modal from './Modal'
+import { Button } from '@/components/ui/button'
 
 type Status = 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
 
@@ -45,17 +46,19 @@ export default function ChangeStatusModal({ user, sessionToken, onClose }: Props
 
   return (
     <Modal onClose={onClose}>
-      <h2 className="text-base font-semibold text-slate-900">Change status — {user.name}</h2>
-      <p className="mt-1 text-sm text-slate-500">
+      <h2 className="text-foreground text-base font-semibold">Change status — {user.name}</h2>
+      <p className="text-muted-foreground mt-1 text-sm">
         Manual override. <span className="font-medium">Trialing</span> hides the user's posts from the shared feed.
       </p>
 
       <label className="mt-4 flex flex-col gap-1">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Subscription status</span>
+        <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+          Subscription status
+        </span>
         <select
           value={status}
           onChange={e => setStatus(e.target.value as Status)}
-          className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+          className="border-border bg-card text-foreground rounded-md border px-3 py-2 text-sm focus:outline-none"
         >
           {STATUSES.map(s => (
             <option
@@ -68,24 +71,23 @@ export default function ChangeStatusModal({ user, sessionToken, onClose }: Props
         </select>
       </label>
 
-      {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
+      {error && <p className="text-destructive mt-3 text-xs">{error}</p>}
 
       <div className="mt-5 flex justify-end gap-2">
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={onClose}
-          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
         >
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           disabled={saving}
           onClick={() => void handleSave()}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {saving ? '…' : 'Save'}
-        </button>
+        </Button>
       </div>
     </Modal>
   )

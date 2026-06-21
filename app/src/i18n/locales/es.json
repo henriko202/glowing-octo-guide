@@ -109,6 +109,8 @@
     "none": "Ninguno",
     "noActivePlan": "Sin plan activo",
     "trialBanner": "Estás en prueba gratuita. Suscríbete a un plan para hacer visibles tus publicaciones y desbloquear todas las funciones.",
+    "annual": "Anual · 2 meses gratis",
+    "monthly": "Mensual",
     "plans": {
       "starter": {
         "name": "Starter",

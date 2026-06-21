@@ -5,6 +5,7 @@ import type { Id } from '../../../convex/_generated/dataModel'
 import LoadingSpinner from './LoadingSpinner'
 import RowActionsMenu, { type RowAction } from './RowActionsMenu'
 import RespondFeedbackModal from './RespondFeedbackModal'
+import { Badge } from '@/components/ui/badge'
 
 type Status = 'new' | 'responded' | 'archived'
 
@@ -34,10 +35,10 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'archived', label: 'Archived' }
 ]
 
-const STATUS_COLOURS: Record<Status, string> = {
-  new: 'bg-blue-100 text-blue-700',
-  responded: 'bg-green-100 text-green-700',
-  archived: 'bg-slate-100 text-slate-500'
+const STATUS_BADGE_VARIANT: Record<Status, 'default' | 'success' | 'outline'> = {
+  new: 'default',
+  responded: 'success',
+  archived: 'outline'
 }
 
 type Props = {
@@ -88,7 +89,9 @@ export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
             key={value}
             onClick={() => setFilter(value)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              filter === value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              filter === value
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/70'
             }`}
           >
             {label}
@@ -96,43 +99,37 @@ export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
         ))}
       </div>
 
-      <p className="mb-2 text-xs text-slate-400">
+      <p className="text-muted-foreground mb-2 text-xs">
         {filtered.length} {filtered.length === 1 ? 'item' : 'items'}
       </p>
 
-      <div className="rounded-lg border border-slate-200 bg-white">
+      <div className="border-border bg-card rounded-lg border">
         {filtered.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-400">No feedback matches this filter.</div>
+          <div className="text-muted-foreground px-4 py-8 text-center text-sm">No feedback matches this filter.</div>
         )}
 
         {filtered.map(row => (
           <div
             key={row._id}
-            className="flex items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0"
+            className="border-border flex items-start gap-3 border-b px-4 py-3 last:border-b-0"
           >
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-slate-800">{row.userName ?? '(deleted user)'}</span>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                  {row.category}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_COLOURS[row.status]}`}
-                >
-                  {row.status}
-                </span>
+                <span className="text-foreground font-medium">{row.userName ?? '(deleted user)'}</span>
+                <Badge variant="outline">{row.category}</Badge>
+                <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{row.status}</Badge>
               </div>
-              <p className="mt-1 line-clamp-2 text-sm text-slate-600">{row.message}</p>
+              <p className="text-foreground mt-1 line-clamp-2 text-sm">{row.message}</p>
               {row.responses.length > 0 && (
                 <div className="mt-1.5 flex flex-col gap-1">
                   {row.responses.map((r, i) => (
                     <div
                       key={i}
-                      className="border-l-2 border-green-300 pl-2"
+                      className="border-primary border-l-2 pl-2"
                     >
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-green-600">Reply</span>
-                      <p className="line-clamp-2 text-[12px] text-slate-500">{r.text}</p>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-gold-text text-[10px] font-semibold uppercase tracking-wide">Reply</span>
+                      <p className="text-muted-foreground line-clamp-2 text-[12px]">{r.text}</p>
+                      <span className="text-muted-foreground text-[11px]">
                         {r.responderName ? `${r.responderName} · ` : ''}
                         {new Date(r.createdAt).toLocaleString()}
                       </span>
@@ -140,7 +137,7 @@ export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
                   ))}
                 </div>
               )}
-              <div className="mt-1 text-[11px] text-slate-400">{new Date(row.createdAt).toLocaleString()}</div>
+              <div className="text-muted-foreground mt-1 text-[11px]">{new Date(row.createdAt).toLocaleString()}</div>
             </div>
             <RowActionsMenu
               label={`Actions for feedback from ${row.userName ?? 'deleted user'}`}

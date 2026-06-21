@@ -1,3 +1,20 @@
+/**
+ * FeedbackTab tests
+ *
+ * NOTE — RowActionsMenu interaction change:
+ * RowActionsMenu was reimplemented on the Radix DropdownMenu primitive (Task 3 of
+ * the Phase-4 plan). Radix opens the menu on `pointerdown` (not `click`), but
+ * `fireEvent.pointerDown` does not trigger the open handler in jsdom (no real pointer
+ * model). The keyboard path works: `fireEvent.keyDown(trigger, { key: 'Enter' })`
+ * calls `onOpenToggle()` synchronously and renders the portal into document.body.
+ *
+ * Every `fireEvent.click(trigger)` that opened the old hand-rolled menu has been
+ * replaced with `openActionsFor()` which uses `fireEvent.keyDown(trigger, { key: 'Enter' })`.
+ *
+ * Items are now `role="menuitem"` (Radix portal) instead of `role="button"`, so
+ * `getByRole('button', { name: /^archive$/i })` etc. have been updated accordingly.
+ */
+
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
@@ -56,6 +73,11 @@ beforeEach(() => {
   })
 })
 
+// Helper: open the RowActionsMenu for a given label via the keyboard path.
+function openActionsFor(name: RegExp | string) {
+  fireEvent.keyDown(screen.getByRole('button', { name }), { key: 'Enter' })
+}
+
 describe('FeedbackTab', () => {
   it('lists feedback rows with submitter and category', () => {
     render(
@@ -99,9 +121,9 @@ describe('FeedbackTab', () => {
       />
     )
     // Open the actions menu for Jane's row (status: 'new')
-    fireEvent.click(screen.getByRole('button', { name: /actions for feedback from jane/i }))
-    // Click the Archive action item
-    fireEvent.click(screen.getByRole('button', { name: /^archive$/i }))
+    openActionsFor(/actions for feedback from jane/i)
+    // Click the Archive action item — now role="menuitem" (Radix portal)
+    fireEvent.click(screen.getByRole('menuitem', { name: /^archive$/i }))
     expect(mocks.archiveFeedback).toHaveBeenCalledWith({ sessionToken: 'tok', feedbackId: 'fb1' })
   })
 
@@ -113,9 +135,9 @@ describe('FeedbackTab', () => {
       />
     )
     // Open the actions menu for Carol's row (status: 'archived')
-    fireEvent.click(screen.getByRole('button', { name: /actions for feedback from carol/i }))
-    // Click the Reopen action item
-    fireEvent.click(screen.getByRole('button', { name: /^reopen$/i }))
+    openActionsFor(/actions for feedback from carol/i)
+    // Click the Reopen action item — now role="menuitem" (Radix portal)
+    fireEvent.click(screen.getByRole('menuitem', { name: /^reopen$/i }))
     expect(mocks.reopenFeedback).toHaveBeenCalledWith({ sessionToken: 'tok', feedbackId: 'fb3' })
   })
 
@@ -127,9 +149,9 @@ describe('FeedbackTab', () => {
       />
     )
     // Open the actions menu for Jane's row (status: 'new')
-    fireEvent.click(screen.getByRole('button', { name: /actions for feedback from jane/i }))
-    // Click the Respond… action item (exact text with ellipsis character)
-    fireEvent.click(screen.getByRole('button', { name: 'Respond…' }))
+    openActionsFor(/actions for feedback from jane/i)
+    // Click the Respond… action item — now role="menuitem" (Radix portal)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Respond…' }))
     // RespondFeedbackModal should render with the submitter's name
     expect(screen.getByText(/respond to jane/i)).toBeInTheDocument()
   })

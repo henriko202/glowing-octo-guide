@@ -1,6 +1,7 @@
 import { useQuery } from 'convex/react'
 import { api } from '../convex'
 import LoadingSpinner from './LoadingSpinner'
+import { Badge } from '@/components/ui/badge'
 import type { Id } from '../../../convex/_generated/dataModel'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
@@ -25,12 +26,12 @@ type ContactUser = {
 // Fixed display order for tier default rows
 const TIER_ORDER: Tier[] = ['starter', 'growth', 'pro', 'contact']
 
-// Tier badge colour classes
-const TIER_COLOURS: Record<Tier, string> = {
-  starter: 'bg-slate-100 text-slate-600',
-  growth: 'bg-blue-100 text-blue-700',
-  pro: 'bg-green-100 text-green-700',
-  contact: 'bg-purple-100 text-purple-700'
+// Tier badge variant mapping
+const TIER_VARIANTS: Record<Tier, 'outline' | 'default' | 'success' | 'warning'> = {
+  starter: 'outline',
+  growth: 'default',
+  pro: 'success',
+  contact: 'warning'
 }
 
 type Props = {
@@ -59,62 +60,95 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
 
   return (
     <div>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div
+        className="border-border bg-card overflow-hidden rounded-lg border"
+        role="table"
+      >
         {/* Table header */}
-        <div className="grid grid-cols-[1fr_90px_90px_90px] border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          <div>Tier / User</div>
-          <div>Int / Post</div>
-          <div>Posts / Wk</div>
-          <div></div>
+        <div
+          className="border-border bg-muted text-muted-foreground grid grid-cols-[1fr_90px_90px_90px] border-b px-4 py-2 text-[11px] font-semibold uppercase tracking-wide"
+          role="row"
+        >
+          <div role="columnheader">Tier / User</div>
+          <div role="columnheader">Int / Post</div>
+          <div role="columnheader">Posts / Wk</div>
+          <div role="columnheader"></div>
         </div>
 
         {/* Tier default rows — read-only */}
         {defaults.map(row => (
           <div
             key={row._id}
-            className="grid grid-cols-[1fr_90px_90px_90px] items-center border-b border-slate-100 px-4 py-3 text-sm"
+            className="border-border grid grid-cols-[1fr_90px_90px_90px] items-center border-b px-4 py-3 text-sm"
+            role="row"
           >
-            <div>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TIER_COLOURS[row.tier]}`}>
-                {row.tier}
-              </span>
+            <div role="cell">
+              <Badge variant={TIER_VARIANTS[row.tier]}>{row.tier}</Badge>
             </div>
-            <div data-testid={`row-${row._id}-interactions`}>{row.interactionsPerPost}</div>
-            <div data-testid={`row-${row._id}-posts`}>{row.postsPerWeek}</div>
-            <div></div>
+            <div
+              role="cell"
+              data-testid={`row-${row._id}-interactions`}
+            >
+              {row.interactionsPerPost}
+            </div>
+            <div
+              role="cell"
+              data-testid={`row-${row._id}-posts`}
+            >
+              {row.postsPerWeek}
+            </div>
+            <div role="cell"></div>
           </div>
         ))}
 
         {/* Contact users — read-only, effective limits (override or contact default) */}
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-          Contact users
+        <div
+          className="border-border bg-muted text-muted-foreground border-b px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide"
+          role="row"
+        >
+          <div role="cell">Contact users</div>
         </div>
         {contactUsers.length === 0 ? (
-          <div className="px-4 py-6 text-center text-sm text-slate-400">No contact-tier users.</div>
+          <div
+            className="text-muted-foreground px-4 py-6 text-center text-sm"
+            role="row"
+          >
+            <div role="cell">No contact-tier users.</div>
+          </div>
         ) : (
           contactUsers.map(u => (
             <div
               key={u._id}
-              className="grid grid-cols-[1fr_90px_90px_90px] items-center border-b border-slate-100 px-4 py-3 text-sm last:border-b-0"
+              className="border-border grid grid-cols-[1fr_90px_90px_90px] items-center border-b px-4 py-3 text-sm last:border-b-0"
+              role="row"
             >
-              <div className="truncate text-slate-700">{u.name}</div>
-              <div data-testid={`contact-${u._id}-interactions`}>{u.interactionsPerPost}</div>
-              <div data-testid={`contact-${u._id}-posts`}>{u.postsPerWeek}</div>
-              <div>
-                {u.hasOverride && (
-                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
-                    override
-                  </span>
-                )}
+              <div
+                role="cell"
+                className="text-foreground truncate"
+              >
+                {u.name}
               </div>
+              <div
+                role="cell"
+                data-testid={`contact-${u._id}-interactions`}
+              >
+                {u.interactionsPerPost}
+              </div>
+              <div
+                role="cell"
+                data-testid={`contact-${u._id}-posts`}
+              >
+                {u.postsPerWeek}
+              </div>
+              <div role="cell">{u.hasOverride && <Badge variant="warning">override</Badge>}</div>
             </div>
           ))
         )}
       </div>
 
-      <p className="mt-3 text-xs text-slate-400">
+      <p className="text-muted-foreground mt-3 text-xs">
         Read-only. Change a user's tier or edit per-user contact limits from the{' '}
-        <span className="font-medium text-slate-500">Users</span> tab.
+        <span className="text-foreground font-medium">Users</span> tab.
       </p>
     </div>
   )

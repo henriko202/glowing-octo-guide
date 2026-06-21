@@ -3,6 +3,9 @@ import { useMutation, useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 import MarkdownView from './MarkdownView'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 const SUPPORTED_LOCALES = ['en', 'pt', 'es'] as const
 type Locale = (typeof SUPPORTED_LOCALES)[number]
@@ -94,138 +97,131 @@ export default function MotdTab({ sessionToken, isAdmin }: { sessionToken?: stri
     }
   }
 
-  if (motds === undefined) return <p className="text-sm text-slate-500">Loading…</p>
+  if (motds === undefined) return <p className="text-muted-foreground text-sm">Loading…</p>
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-900">Messages of the Day</h2>
-        <button
-          onClick={startCreate}
-          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
-        >
-          New MOTD
-        </button>
+        <h2 className="text-foreground text-base font-semibold">Messages of the Day</h2>
+        <Button onClick={startCreate}>New MOTD</Button>
       </div>
 
-      {motds.length === 0 && <p className="text-sm text-slate-500">No MOTDs yet.</p>}
+      {motds.length === 0 && <p className="text-muted-foreground text-sm">No MOTDs yet.</p>}
 
       <ul className="flex flex-col gap-2">
         {motds.map(m => (
           <li
             key={m._id}
-            className="rounded-lg border border-slate-200 bg-white p-3"
+            className="border-border bg-card rounded-lg border p-3"
           >
             <div className="flex items-center gap-2">
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${m.enabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}
-              >
-                {m.enabled ? 'Enabled' : 'Disabled'}
-              </span>
-              {m.important && (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                  Important
-                </span>
-              )}
-              <span className="ml-auto text-xs text-slate-400">
+              {m.enabled ? <Badge variant="success">Enabled</Badge> : <Badge variant="outline">Disabled</Badge>}
+              {m.important && <Badge variant="warning">Important</Badge>}
+              <span className="text-muted-foreground ml-auto text-xs">
                 {m.startAt ? `from ${new Date(m.startAt).toLocaleString()} ` : ''}
                 {m.expiresAt ? `until ${new Date(m.expiresAt).toLocaleString()}` : ''}
               </span>
             </div>
-            <p className="mt-2 line-clamp-2 text-sm text-slate-600">{m.bodies.en}</p>
-            <div className="mt-2 flex gap-3">
-              <button
+            <p className="text-muted-foreground mt-2 line-clamp-2 text-sm">{m.bodies.en}</p>
+            <div className="mt-2 flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => startEdit(m)}
-                className="text-xs font-semibold text-blue-600 hover:underline"
               >
                 Edit
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => sessionToken && void toggleEnabled({ sessionToken, motdId: m._id, enabled: !m.enabled })}
-                className="text-xs font-semibold text-slate-600 hover:underline"
               >
                 {m.enabled ? 'Disable' : 'Enable'}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
                 onClick={() => sessionToken && void deleteMotd({ sessionToken, motdId: m._id })}
-                className="text-xs font-semibold text-red-600 hover:underline"
               >
                 Delete
-              </button>
+              </Button>
             </div>
           </li>
         ))}
       </ul>
 
       {edit && (
-        <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-          <h3 className="text-sm font-semibold text-slate-900">{edit.id ? 'Edit MOTD' : 'New MOTD'}</h3>
+        <div className="border-border bg-card mt-5 rounded-lg border p-4">
+          <h3 className="text-foreground text-sm font-semibold">{edit.id ? 'Edit MOTD' : 'New MOTD'}</h3>
 
           {SUPPORTED_LOCALES.map(loc => (
             <label
               key={loc}
               className="mt-3 flex flex-col gap-1"
             >
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
                 {loc.toUpperCase()} {loc === 'en' ? '(required)' : '(optional)'}
               </span>
-              <textarea
+              <Textarea
                 value={edit.bodies[loc] ?? ''}
                 onChange={e => setEdit({ ...edit, bodies: { ...edit.bodies, [loc]: e.target.value } })}
                 rows={loc === 'en' ? 5 : 3}
                 placeholder="Markdown supported…"
-                className="resize-none rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                className="resize-none"
               />
             </label>
           ))}
 
           <div className="mt-3 flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
+            <label className="text-foreground flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={edit.important}
                 onChange={e => setEdit({ ...edit, important: e.target.checked })}
+                className="border-border rounded"
               />
               Important (blocking modal)
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
+            <label className="text-foreground flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={edit.enabled}
                 onChange={e => setEdit({ ...edit, enabled: e.target.checked })}
+                className="border-border rounded"
               />
               Enabled
             </label>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-4">
-            <label className="flex flex-col gap-1 text-xs text-slate-500">
+            <label className="text-muted-foreground flex flex-col gap-1 text-xs">
               Start (optional)
               <input
                 type="datetime-local"
                 value={edit.startLocal}
                 onChange={e => setEdit({ ...edit, startLocal: e.target.value })}
-                className="rounded-md border border-slate-200 px-2 py-1 text-sm"
+                className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-sm"
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs text-slate-500">
+            <label className="text-muted-foreground flex flex-col gap-1 text-xs">
               Expiry (optional)
               <input
                 type="datetime-local"
                 value={edit.expiresLocal}
                 onChange={e => setEdit({ ...edit, expiresLocal: e.target.value })}
-                className="rounded-md border border-slate-200 px-2 py-1 text-sm"
+                className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-sm"
               />
             </label>
           </div>
 
           <div className="mt-4">
             <div className="mb-1 flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Preview</span>
+              <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">Preview</span>
               <select
                 value={previewLocale}
                 onChange={e => setPreviewLocale(e.target.value as Locale)}
-                className="rounded border border-slate-200 text-xs"
+                className="border-border bg-card text-foreground rounded border text-xs"
               >
                 {SUPPORTED_LOCALES.map(l => (
                   <option
@@ -237,27 +233,26 @@ export default function MotdTab({ sessionToken, isAdmin }: { sessionToken?: stri
                 ))}
               </select>
             </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm [&_a]:text-blue-600 [&_a]:underline">
+            <div className="border-border bg-muted [&_a]:text-gold-text rounded-md border p-3 text-sm [&_a]:underline">
               <MarkdownView markdown={edit.bodies[previewLocale] || edit.bodies.en || ''} />
             </div>
           </div>
 
-          {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+          {error && <p className="text-destructive mt-2 text-xs">{error}</p>}
 
           <div className="mt-4 flex justify-end gap-2">
-            <button
+            <Button
+              variant="outline"
               onClick={() => setEdit(null)}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => void handleSave()}
               disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save'}
-            </button>
+            </Button>
           </div>
         </div>
       )}

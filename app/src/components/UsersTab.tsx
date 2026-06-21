@@ -10,6 +10,9 @@ import ContactLimitsModal from './ContactLimitsModal'
 import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { Flash, useFlash } from './useFlash'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
 
@@ -26,19 +29,19 @@ type UserRow = {
 
 type TierFilter = Tier | 'none' | 'all'
 
-const TIER_COLOURS: Record<Tier, string> = {
-  starter: 'bg-slate-100 text-slate-600',
-  growth: 'bg-blue-100 text-blue-700',
-  pro: 'bg-green-100 text-green-700',
-  contact: 'bg-purple-100 text-purple-700'
+const TIER_VARIANT: Record<Tier, 'outline' | 'default' | 'success' | 'warning'> = {
+  starter: 'outline',
+  growth: 'default',
+  pro: 'success',
+  contact: 'warning'
 }
 
-const STATUS_COLOURS: Record<UserRow['subscriptionStatus'], string> = {
-  active: 'text-green-600',
-  trialing: 'text-blue-600',
-  canceled: 'text-slate-400',
-  past_due: 'text-red-500',
-  none: 'text-slate-400'
+const STATUS_VARIANT: Record<UserRow['subscriptionStatus'], 'success' | 'default' | 'outline' | 'destructive'> = {
+  active: 'success',
+  trialing: 'default',
+  canceled: 'outline',
+  past_due: 'destructive',
+  none: 'outline'
 }
 
 const FILTER_LABELS: { value: TierFilter; label: string }[] = [
@@ -183,7 +186,9 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
               key={value}
               onClick={() => setFilter(value)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                filter === value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                filter === value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/70'
               }`}
             >
               {label}
@@ -191,69 +196,88 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
           ))}
         </div>
 
-        <input
+        <Input
           type="text"
           placeholder="Search by name..."
           value={nameSearch}
           onChange={e => setNameSearch(e.target.value)}
-          className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none sm:w-48"
+          className="w-full sm:w-48"
         />
       </div>
 
-      <p className="mb-2 text-xs text-slate-400">
+      <p className="text-muted-foreground mb-2 text-xs">
         {filtered.length} {filtered.length === 1 ? 'user' : 'users'}
         {filter !== 'all' && ` · filtered to ${filter === 'none' ? 'no tier' : filter}`}
       </p>
 
       {/* Table */}
-      <div className="rounded-lg border border-slate-200 bg-white">
-        <div className="grid grid-cols-[1fr_100px_90px_56px] rounded-t-lg border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          <div>Name</div>
-          <div>Tier</div>
-          <div>Status</div>
-          <div></div>
+      <div
+        className="border-border bg-card rounded-lg border"
+        role="table"
+      >
+        <div
+          className="border-border bg-muted text-muted-foreground grid grid-cols-[1fr_100px_90px_56px] rounded-t-lg border-b px-4 py-2 text-[11px] font-semibold uppercase tracking-wide"
+          role="row"
+        >
+          <div role="columnheader">Name</div>
+          <div role="columnheader">Tier</div>
+          <div role="columnheader">Status</div>
+          <div role="columnheader"></div>
         </div>
 
         {filtered.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-400">No users match this filter.</div>
+          <div className="text-muted-foreground px-4 py-8 text-center text-sm">No users match this filter.</div>
         )}
 
         {filtered.map(user => (
           <div
             key={user._id}
-            className="grid grid-cols-[1fr_100px_90px_56px] items-center border-b border-slate-100 px-4 py-3 text-sm last:border-b-0"
+            className="border-border grid grid-cols-[1fr_100px_90px_56px] items-center border-b px-4 py-3 text-sm last:border-b-0"
+            role="row"
           >
             {/* Name + headline */}
-            <div className="min-w-0">
+            <div
+              className="min-w-0"
+              role="cell"
+            >
               <div className="flex items-center gap-2">
-                <span className="truncate font-medium text-slate-800">{user.name}</span>
+                <span className="text-foreground truncate font-medium">{user.name}</span>
                 {user.isBanned && (
-                  <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                  <Badge
+                    variant="destructive"
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  >
                     Banned
-                  </span>
+                  </Badge>
                 )}
               </div>
-              {user.headline && <div className="truncate text-xs text-slate-400">{user.headline}</div>}
+              {user.headline && <div className="text-muted-foreground truncate text-xs">{user.headline}</div>}
             </div>
 
             {/* Tier badge */}
-            <div>
+            <div role="cell">
               {user.tier ? (
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TIER_COLOURS[user.tier]}`}>
-                  {user.tier}
-                </span>
+                <Badge variant={TIER_VARIANT[user.tier]}>{user.tier}</Badge>
               ) : (
-                <span className="text-xs text-slate-300">—</span>
+                <span className="text-muted-foreground text-xs">—</span>
               )}
             </div>
 
             {/* Subscription status */}
-            <div className={`text-xs font-medium capitalize ${STATUS_COLOURS[user.subscriptionStatus]}`}>
-              {user.subscriptionStatus}
+            <div role="cell">
+              <Badge
+                variant={STATUS_VARIANT[user.subscriptionStatus]}
+                className="capitalize"
+              >
+                {user.subscriptionStatus}
+              </Badge>
             </div>
 
             {/* Row actions */}
-            <div className="flex justify-end">
+            <div
+              className="flex justify-end"
+              role="cell"
+            >
               <RowActionsMenu
                 label={`Actions for ${user.name}`}
                 items={actionsFor(user)}
@@ -303,24 +327,25 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
       {/* Unban confirm */}
       {unbanTarget && (
         <Modal onClose={() => setUnbanTarget(null)}>
-          <h2 className="text-base font-semibold text-slate-900">Unban {unbanTarget.name}?</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-500">They'll regain access to the app immediately.</p>
+          <h2 className="text-foreground text-base font-semibold">Unban {unbanTarget.name}?</h2>
+          <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
+            They'll regain access to the app immediately.
+          </p>
           <div className="mt-5 flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => setUnbanTarget(null)}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               disabled={pendingId === unbanTarget._id}
               onClick={() => void handleUnban()}
-              className="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
             >
               {pendingId === unbanTarget._id ? '…' : 'Unban'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
