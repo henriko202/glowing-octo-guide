@@ -1,47 +1,32 @@
-import Link from 'next/link'
 import { SIGN_IN_URL } from '../lib/links'
 
 export default function Hero() {
   return (
-    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center">
+    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-ink px-6 text-center">
       {/* Radial glow */}
       <div
         className="pointer-events-none absolute inset-0"
-        style={{
-          background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0,119,181,0.10) 0%, transparent 70%)'
-        }}
+        style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0,119,181,0.10) 0%, transparent 70%)' }}
       />
-
-      {/* Decorative circle rings */}
+      {/* Decorative rings */}
       <div
         className="circle-ring"
         style={{
-          width: 480,
-          height: 480,
+          width: 560,
+          height: 560,
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%) translateY(-60px)'
+          transform: 'translate(-50%, -50%) translateY(-40px)'
         }}
       />
       <div
         className="circle-ring"
         style={{
-          width: 700,
-          height: 700,
+          width: 860,
+          height: 860,
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%) translateY(-60px)',
-          borderColor: 'rgba(201,150,62,0.04)'
-        }}
-      />
-      <div
-        className="circle-ring"
-        style={{
-          width: 960,
-          height: 960,
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%) translateY(-60px)',
+          transform: 'translate(-50%, -50%) translateY(-40px)',
           opacity: 0.5
         }}
       />
@@ -50,57 +35,42 @@ export default function Hero() {
         {/* Eyebrow */}
         <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/5 px-4 py-1.5 text-xs font-medium uppercase tracking-widest text-gold">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" />
-          LinkedIn Growth Community
+          Deliberate LinkedIn growth
         </div>
 
-        {/* Headline with slot machine */}
+        {/* Outcome-led headline */}
         <h1 className="font-display text-5xl font-semibold leading-tight text-cream md:text-7xl">
-          Because your SSI
+          Stop chasing jobs.
           <br />
-          matters to{' '}
-          <span
-            className="slot-container italic text-gold"
-            aria-label="you, recruiters, everyone else"
-          >
-            <span className="slot-words">
-              <span>you</span>
-              <span>recruiters</span>
-              <span>everyone else</span>
-              <span>you</span>
-            </span>
-          </span>
+          <span className="italic text-gold">Let them find you.</span>
         </h1>
 
-        {/* Supporting copy */}
+        {/* Sub-headline: tangible, credible, viable */}
         <div className="mx-auto max-w-xl space-y-3">
           <p className="text-lg leading-relaxed text-cream/70">
-            Increase your SSI organically with real interactions and comments from professionals in your industry.
+            A focused feed of the professionals and conversations in your field. Show up where it matters, and your SSI
+            climbs.
           </p>
           <p className="text-base leading-relaxed text-cream/50">
-            Automatically surface active recruiters looking for candidates in your area of expertise.
+            Every action is yours, posted under your own identity. Nothing automated.
           </p>
         </div>
 
-        {/* CTAs */}
-        <div className="flex flex-col items-center justify-center gap-4 pt-2 sm:flex-row">
+        {/* CTA */}
+        <div className="flex flex-col items-center justify-center gap-3 pt-2">
           <a
             href={SIGN_IN_URL}
             className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-ink shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)]"
           >
-            Join the circle — it&apos;s free
+            Start free with LinkedIn
             <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">→</span>
           </a>
-          <Link
-            href="#how-it-works"
-            className="text-sm text-cream/50 underline underline-offset-4 transition-colors hover:text-cream/80"
-          >
-            See how it works
-          </Link>
-        </div>
-
-        <div className="flex flex-col items-center gap-1.5">
-          <p className="text-xs tracking-wide text-cream/30">3-day free trial · No credit card required</p>
-          <p className="text-sm text-cream-muted">Join 500+ professionals already growing their SSI</p>
+          {/* Click trigger */}
+          <p className="text-xs tracking-wide text-cream/40">
+            Card required · No charge until 50 interactions or 7 days · Cancel anytime
+          </p>
+          {/* Above-fold trust line */}
+          <p className="text-sm text-cream-muted">We never post without your approval.</p>
         </div>
       </div>
 

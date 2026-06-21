@@ -30,13 +30,6 @@ const config: Config = {
         body: ['"DM Sans"', 'system-ui', 'sans-serif']
       },
       keyframes: {
-        slotRoll: {
-          '0%, 20%': { transform: 'translateY(0)' },
-          '28%, 48%': { transform: 'translateY(calc(-1 * var(--slot-h)))' },
-          '56%, 76%': { transform: 'translateY(calc(-2 * var(--slot-h)))' },
-          '84%, 96%': { transform: 'translateY(calc(-3 * var(--slot-h)))' },
-          '100%': { transform: 'translateY(calc(-4 * var(--slot-h)))' }
-        },
         fadeUp: {
           from: { opacity: '0', transform: 'translateY(24px)' },
           to: { opacity: '1', transform: 'translateY(0)' }
@@ -47,7 +40,6 @@ const config: Config = {
         }
       },
       animation: {
-        slotRoll: 'slotRoll 6s cubic-bezier(0.4, 0, 0.2, 1) infinite',
         fadeUp: 'fadeUp 0.7s ease forwards',
         shimmer: 'shimmer 3s linear infinite'
       }

@@ -3,8 +3,9 @@ import './globals.css'
 import CookieNotice from '../components/CookieNotice'
 
 export const metadata: Metadata = {
-  title: 'Link Into The SSI — Grow Your LinkedIn Influence',
-  description: 'Join the circle of professionals growing their LinkedIn SSI organically through real engagement.',
+  title: 'Link Into The SSI · Grow Your LinkedIn Influence',
+  description:
+    'Grow your LinkedIn SSI through genuine engagement with the professionals and conversations in your field.',
   openGraph: {
     title: 'Link Into The SSI',
     description: 'Grow your LinkedIn SSI organically with real interactions.',

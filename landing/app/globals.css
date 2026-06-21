@@ -3,10 +3,6 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --slot-h: 1.35em;
-}
-
 html {
   scroll-behavior: smooth;
 }
@@ -23,45 +19,4 @@ body {
   border: 1px solid rgba(245, 240, 232, 0.07);
   position: absolute;
   pointer-events: none;
-}
-
-.slot-container {
-  display: inline-block;
-  height: var(--slot-h);
-  overflow: hidden;
-  vertical-align: bottom;
-}
-
-.slot-words {
-  display: flex;
-  flex-direction: column;
-  animation: slotRoll 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-.slot-words span {
-  height: var(--slot-h);
-  display: block;
-  line-height: var(--slot-h);
-}
-
-/* Slot-machine cycling animation
-   Words: "you" → "recruiters" → "everyone else" → "you" (loop)
-   Each word pauses for ~1.8s, then snaps to the next in ~0.2s */
-@keyframes slotRoll {
-  0%,
-  28% {
-    transform: translateY(0);
-  }
-  33%,
-  61% {
-    transform: translateY(calc(-1 * var(--slot-h)));
-  }
-  66%,
-  94% {
-    transform: translateY(calc(-2 * var(--slot-h)));
-  }
-  99%,
-  100% {
-    transform: translateY(calc(-3 * var(--slot-h)));
-  }
 }

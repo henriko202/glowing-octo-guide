@@ -1,135 +1,176 @@
+'use client'
+import { useState } from 'react'
 import { SIGN_IN_URL } from '../lib/links'
 
-const PLANS = [
+type Plan = {
+  id: string
+  name: string
+  monthly: number
+  description: string
+  features: string[]
+  cta: string
+  highlight: boolean
+}
+
+const PLANS: Plan[] = [
   {
     id: 'starter',
     name: 'Starter',
-    price: '$5',
-    period: '/mo',
-    trial: '3-day free trial',
-    description: 'Get started and start engaging',
+    monthly: 5,
+    description: 'Get into the feed and start engaging',
     features: [
-      'Access the full post feed',
-      'Manual commenting and reactions',
+      'See the full live feed',
+      'Comment & react manually',
       'Mutual connections sorted first',
-      'Posts hidden during trial'
+      '25 interactions counted per post',
+      '1 post into the feed / week'
     ],
-    cta: 'Start free trial',
-    href: null,
+    cta: 'Start free',
     highlight: false
   },
   {
     id: 'growth',
     name: 'Growth',
-    price: '$15',
-    period: '/mo',
-    description: 'Targeted feed for faster results',
+    monthly: 15,
+    description: 'A targeted feed for faster results',
     features: [
+      'Feed filtered to your industry + country',
+      'Auto-tuned from your LinkedIn profile',
       'Everything in Starter',
-      'Feed filtered to your industry',
-      'Feed filtered to your country',
-      'Auto-set from your LinkedIn profile'
+      '50 interactions counted per post',
+      '2 posts into the feed / week'
     ],
-    cta: 'Get Growth',
-    href: null,
+    cta: 'Start free',
     highlight: true
   },
   {
     id: 'pro',
     name: 'Pro',
-    price: '$50',
-    period: '/mo',
-    description: 'Maximum visibility and control',
+    monthly: 50,
+    description: 'Maximum reach and control',
     features: [
-      'Everything in Growth',
       'Custom industry + country filters',
       'Control who sees your posts',
-      '3 featured posts per month'
+      'Everything in Growth',
+      '200 interactions counted per post',
+      '5 posts into the feed / week'
     ],
-    cta: 'Get Pro',
-    href: null,
-    highlight: false
-  },
-  {
-    id: 'contact',
-    name: 'Enterprise',
-    price: 'Custom',
-    period: '',
-    description: 'Tailored for teams and agencies',
-    features: ['Everything in Pro', 'More featured post slots', 'Custom targeting', 'Dedicated onboarding'],
-    cta: 'Contact us',
-    href: 'mailto:hello@linkintothessi.com',
+    cta: 'Start free',
     highlight: false
   }
 ]
 
+function priceLabel(plan: Plan, annual: boolean) {
+  if (annual) {
+    const perMonth = (plan.monthly * 10) / 12
+    return { big: `$${plan.monthly * 10}`, period: '/yr', sub: `$${perMonth.toFixed(2)}/mo billed annually` }
+  }
+  return { big: `$${plan.monthly}`, period: '/mo', sub: '2 months free if you pay annually' }
+}
+
 export default function Pricing() {
+  const [annual, setAnnual] = useState(true) // default annual
+
   return (
     <section
       id="pricing"
-      className="bg-ink-800 px-6 py-28"
+      className="bg-ink px-6 py-28"
     >
       <div className="mx-auto max-w-6xl">
-        <div className="mb-16 text-center">
+        <div className="mb-12 text-center">
           <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">Pricing</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
             Invest in your professional brand
           </h2>
           <p className="mx-auto mt-4 max-w-lg text-base text-cream/50">
-            Every tier unlocks the feed and the community. Higher tiers unlock precision.
+            Every plan includes the feed. Higher tiers add targeting and control.
           </p>
-        </div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-          {PLANS.map(plan => (
-            <div
-              key={plan.id}
-              className={`relative flex flex-col rounded-2xl p-7 transition-all duration-300 ${
-                plan.highlight
-                  ? 'border border-lnblue bg-lnblue/[0.08] shadow-[0_0_48px_rgba(0,119,181,0.2)]'
-                  : 'border border-cream/[0.08] bg-ink-600 hover:border-cream/15'
-              }`}
+
+          {/* Annual / monthly toggle (annual default) */}
+          <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-cream/10 bg-ink-800 p-1 text-sm">
+            <button
+              onClick={() => setAnnual(true)}
+              className={`rounded-full px-4 py-1.5 transition-colors ${annual ? 'bg-gold text-ink' : 'text-cream/60 hover:text-cream'}`}
             >
-              {plan.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full bg-lnblue px-3 py-1 text-xs font-semibold tracking-wide text-cream">
-                    Most popular
-                  </span>
-                </div>
-              )}
-              <div className="mb-6">
-                <h3 className="font-display text-xl font-semibold text-cream">{plan.name}</h3>
-                <p className="mt-1 text-sm text-cream/40">{plan.description}</p>
-              </div>
-              <div className="mb-6">
-                <span className="font-display text-4xl font-semibold text-cream">{plan.price}</span>
-                {plan.period && <span className="ml-1 text-sm text-cream/40">{plan.period}</span>}
-                {'trial' in plan && plan.trial && <p className="mt-2 text-xs text-gold">{plan.trial}</p>}
-              </div>
-              <ul className="mb-8 flex-1 space-y-2.5">
-                {plan.features.map(f => (
-                  <li
-                    key={f}
-                    className="flex items-start gap-2.5 text-sm text-cream/60"
-                  >
-                    <span className="mt-0.5 flex-shrink-0 text-gold">✓</span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <a
-                href={plan.href ?? SIGN_IN_URL}
-                className={`block rounded-xl py-3 text-center text-sm font-semibold transition-all duration-200 ${
+              Annual <span className="text-xs opacity-80">· 2 months free</span>
+            </button>
+            <button
+              onClick={() => setAnnual(false)}
+              className={`rounded-full px-4 py-1.5 transition-colors ${!annual ? 'bg-gold text-ink' : 'text-cream/60 hover:text-cream'}`}
+            >
+              Monthly
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-3">
+          {PLANS.map(plan => {
+            const p = priceLabel(plan, annual)
+            return (
+              <div
+                key={plan.id}
+                className={`relative flex flex-col rounded-2xl p-7 transition-all duration-300 ${
                   plan.highlight
-                    ? 'bg-lnblue text-cream shadow-[0_0_20px_rgba(0,119,181,0.4)] hover:bg-lnblue-light'
-                    : plan.id === 'contact'
-                      ? 'border border-gold/40 text-gold hover:bg-gold/10'
-                      : 'border border-cream/15 text-cream hover:border-cream/30 hover:bg-cream/5'
+                    ? 'border border-lnblue bg-lnblue/[0.08] shadow-[0_0_48px_rgba(0,119,181,0.2)] md:-translate-y-3'
+                    : 'border border-cream/[0.08] bg-ink-600 hover:border-cream/15'
                 }`}
               >
-                {plan.cta}
-              </a>
-            </div>
-          ))}
+                {plan.highlight && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="rounded-full bg-lnblue px-3 py-1 text-xs font-semibold tracking-wide text-cream">
+                      Recommended
+                    </span>
+                  </div>
+                )}
+                <div className="mb-6">
+                  <h3 className="font-display text-xl font-semibold text-cream">{plan.name}</h3>
+                  <p className="mt-1 text-sm text-cream/40">{plan.description}</p>
+                </div>
+                <div className="mb-6">
+                  <span className="font-display text-4xl font-semibold text-cream">{p.big}</span>
+                  <span className="ml-1 text-sm text-cream/40">{p.period}</span>
+                  <p className="mt-2 text-xs text-gold">{p.sub}</p>
+                </div>
+                <ul className="mb-8 flex-1 space-y-2.5">
+                  {plan.features.map(f => (
+                    <li
+                      key={f}
+                      className="flex items-start gap-2.5 text-sm text-cream/60"
+                    >
+                      <span className="mt-0.5 flex-shrink-0 text-gold">✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <a
+                  href={SIGN_IN_URL}
+                  className={`block rounded-xl py-3 text-center text-sm font-semibold transition-all duration-200 ${
+                    plan.highlight
+                      ? 'bg-lnblue text-cream shadow-[0_0_20px_rgba(0,119,181,0.4)] hover:bg-lnblue-light'
+                      : 'border border-cream/15 text-cream hover:border-cream/30 hover:bg-cream/5'
+                  }`}
+                >
+                  {plan.cta}
+                </a>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Trial framing + Enterprise line */}
+        <div className="mt-8 space-y-3 text-center">
+          <p className="text-sm text-cream/50">
+            Start free. No charge until 50 interactions or 7 days, whichever comes first. Card required, cancel anytime.
+          </p>
+          <p className="text-sm text-cream/40">
+            Teams &amp; agencies: Enterprise from <span className="text-cream/70">$100/mo</span>.{' '}
+            <a
+              href="mailto:hello@linkintothessi.com"
+              className="text-gold underline underline-offset-4 hover:text-gold-light"
+            >
+              Talk to us
+            </a>
+          </p>
         </div>
       </div>
     </section>

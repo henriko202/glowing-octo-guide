@@ -3,28 +3,28 @@ import { useState } from 'react'
 
 const FAQS = [
   {
-    q: 'What is LinkedIn SSI and how is it calculated?',
-    a: "Your Social Selling Index (SSI) is a score from 0–100 that LinkedIn updates daily. It's calculated across four equal pillars: establishing your professional brand, finding the right people, engaging with insights, and building relationships. Each pillar contributes 25 points to your total."
+    q: 'Is this safe? Will LinkedIn penalize me?',
+    a: 'Yes. You sign in through LinkedIn’s official OAuth, you choose what to engage with, and you write your own comments. Nothing acts on your behalf, so you stay within LinkedIn’s Terms of Service.'
   },
   {
-    q: 'Is Link Into The SSI safe? Will LinkedIn penalize me?',
-    a: "Yes — completely. We connect via LinkedIn's official OAuth, and every interaction is genuine: you choose what to engage with, and you write your own comments. There is no automation acting on your behalf, so you stay fully within LinkedIn's Terms of Service."
+    q: 'How is this different from automation or spam?',
+    a: 'You stay in control at all times. We surface relevant posts and make engaging fast, but every action needs your intent. No bots, no bulk actions, no auto-posting.'
   },
   {
-    q: 'How is this different from automation or spamming?',
-    a: 'You stay in control at all times. The platform surfaces relevant content and makes engagement fast and easy — but every action requires your intent. No bots, no auto-generated text, no bulk actions. Think of it as a well-organised feed of opportunities to engage authentically.'
+    q: 'What does the free trial include, and when am I charged?',
+    a: 'You get the full Growth-level experience. A card is required to start, but you are not charged until you’ve had 50 interactions (made or received) or 7 days pass, whichever comes first. Cancel anytime before then and you pay nothing.'
   },
   {
-    q: 'How quickly will I see my SSI improve?',
-    a: 'Most members see their first SSI movement within 1–2 weeks of consistent engagement. Our members average +8 SSI points in their first 30 days. Results vary based on how active you are and your starting score.'
+    q: 'What is SSI, and how fast will it move?',
+    a: 'Your Social Selling Index is LinkedIn’s 0–100 measure of how findable you are. You can check your real score on LinkedIn anytime. Most members see it move within 1–2 weeks of consistent engagement. Results vary with how active you are and where you start.'
   },
   {
     q: 'Do I need to be active every day?',
-    a: 'No. Our most consistent members spend around 3 minutes a few times a week. Small, regular interactions are more valuable to your SSI than occasional bursts — so a light habit beats marathon sessions.'
+    a: 'No. A few minutes a few times a week beats occasional marathons. Small, regular interactions are what move your SSI.'
   },
   {
     q: 'Can I cancel anytime?',
-    a: 'Yes. No contracts, no lock-in, no cancellation fees. Cancel from your account settings in one click. Your subscription stays active until the end of the current billing period.'
+    a: 'Yes. No contracts, no lock-in, no cancellation fees. Cancel from your account settings in one click; access lasts until the end of the current period.'
   }
 ]
 
@@ -34,12 +34,12 @@ export default function FAQ() {
   return (
     <section
       id="faq"
-      className="bg-ink px-6 py-28"
+      className="bg-ink-800 px-6 py-28"
     >
       <div className="mx-auto max-w-3xl">
         <div className="mb-16 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">Questions</p>
-          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">Everything you need to know</h2>
+          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">FAQ</p>
+          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">Common questions</h2>
         </div>
 
         <div className="divide-y divide-ink-600">

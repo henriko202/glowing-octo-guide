@@ -20,17 +20,20 @@ export default function FinalCTA() {
       />
       <div className="relative z-10 mx-auto max-w-xl space-y-6">
         <h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
-          Ready to start
+          Ready to stop chasing?
           <br />
-          <span className="italic text-gold">climbing?</span>
+          <span className="italic text-gold">Let them find you.</span>
         </h2>
-        <p className="text-base text-cream/50">Start your 3-day free trial. See your first SSI gains within a week.</p>
-        <a
-          href={SIGN_IN_URL}
-          className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-ink shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
-        >
-          Sign in with LinkedIn — it&apos;s free
-        </a>
+        <p className="text-base text-cream/50">Start free with LinkedIn. Build real SSI from day one.</p>
+        <div className="flex flex-col items-center gap-3">
+          <a
+            href={SIGN_IN_URL}
+            className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-ink shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
+          >
+            Start free with LinkedIn →
+          </a>
+          <p className="text-sm text-gold">Be one of the first in. Make it count.</p>
+        </div>
       </div>
     </section>
   )

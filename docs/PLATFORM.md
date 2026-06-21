@@ -35,6 +35,7 @@
     13A. [Profile Enrichment (LinkedIn Profile Scrape)](#13a-profile-enrichment-linkedin-profile-scrape)
     13B. [Privacy & Compliance](#13b-privacy--compliance)
 14. [Frontend — Authenticated App (`app/`)](#14-frontend--authenticated-app-app)
+    14A. [Design System](#14a-design-system)
 15. [Frontend — Landing Site (`landing/`)](#15-frontend--landing-site-landing)
 16. [Environment Variables](#16-environment-variables)
 17. [Security Posture](#17-security-posture)
@@ -191,7 +192,8 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │       ├── convex.ts            # re-export of convex/_generated/api
 │       ├── pages/               # AuthSuccess, Feed, MyPosts, Settings, Billing, Admin
 │       ├── components/          # PostCard, PostComposer, CommentBox, LinkedInEmbed,
-│       │                        #   AppNav, Modal, BannedScreen, BanUserDialog,
+│       │                        #   AppShell, Sidebar, TopBar, UserMenu, LanguageMenu,
+│       │                        #   Modal, BannedScreen, BanUserDialog,
 │       │                        #   UsersTab, PlanLimitsTab, RowActionsMenu, LoadingSpinner
 │       └── i18n/                # i18next init + locales/{en,pt,es}.json
 │
@@ -694,9 +696,9 @@ server‑side. After OAuth the app uses its **own opaque session tokens**.
   next successful login (`AuthSuccessPage`), so "auto‑redirect for login" resumes for fresh/expired
   sessions. To log back in, the landing site's CTAs point **straight at OAuth**
   (`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, §15) — not the app root — so a signed‑out visitor
-  doesn't ping‑pong between the landing site and the app. All three sign‑out buttons (`AppNav`,
-  `BannedScreen`, `CancelDeletionScreen`) route through the shared `signOut()` helper; `AppNav` also
-  `await`s `users.logout` to invalidate the session server‑side.
+  doesn't ping‑pong between the landing site and the app. All three sign‑out buttons (`UserMenu`,
+  `BannedScreen`, `CancelDeletionScreen`) route through the shared `performSignOut()` helper in
+  `app/src/lib/session.ts`, which `await`s `users.logout` to invalidate the session server‑side.
 
 ### OAuth login flow
 
@@ -1437,7 +1439,7 @@ required as the fallback; others optional and extensible with no schema migratio
 - `Motd` — subscribes to `getActiveMotd`, resolves the body for the active language
   (`bodies[lang] ?? bodies.en`), renders the banner or (when `important`) the blocking `Modal`
   (`dismissOnBackdrop={false}`, `dismissOnEscape={false}`, OK button). Mounted in `RequireAuth`
-  above `AppNav`. New i18n keys: `motd.dismiss`, `motd.ok` (en/pt/es).
+  above `AppShell`. New i18n keys: `motd.dismiss`, `motd.ok` (en/pt/es).
 - `MotdTab` — admin authoring (list + create/edit form with per-locale textareas, important/enabled
   toggles, optional `datetime-local` start/expiry, live `MarkdownView` preview). Added as the
   **MOTD** tab in `AdminPage` (admin chrome is English-only, like the other admin tabs).
@@ -1697,6 +1699,30 @@ flowchart TD
 
 ---
 
+## 14A. Design System
+
+The app (`app/`) uses a "warm premium" branded theme — the landing site's identity
+(gold, cream, ink-navy) expressed as a calm working surface, in light (default) and dark.
+
+- **Tokens:** semantic CSS variables in `app/src/index.css` (`:root` = light, `.dark` = dark),
+  mapped to shadcn names via `@theme inline`. Components consume tokens only — no hardcoded
+  palette colors.
+- **Two-gold rule:** `--primary` (bright gold `#c9963e`) for fills/borders/focus/underlines;
+  `--gold-text` (`#8a6418` light / `#e8c474` dark) for text, links, and small icons (bright gold
+  fails WCAG on white). Note: gold used as text *on* the gold tint (active nav, Featured pill)
+  uses the slightly darker `#7a5816` in light mode to pass WCAG AA.
+- **Typography:** DM Sans (`--font-sans`, body/UI) + Cormorant Garamond (`--font-display`,
+  page titles), both self-hosted via `@fontsource` (no Google CDN; `font-display: swap`).
+  Numeric data uses `tabular-nums`.
+- **Theme:** `app/src/lib/theme.ts` + `app/src/components/ThemeProvider.tsx` resolve
+  light/dark/system, persist the choice to `localStorage` (key `theme`), seed from
+  `prefers-color-scheme`, and set `color-scheme` + `<meta name="theme-color">`.
+- **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar) are shadcn-style
+  (cva + `cn`); `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline
+  used by every screen.
+
+---
+
 ## 14. Frontend — Authenticated App (`app/`)
 
 React 19 + Vite 6 SPA. Dev server runs on **port 5174**. Convex reactivity via `convex/react`.
@@ -1737,7 +1763,7 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
    `<ConsentPromptScreen>`
 7. **`!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt`** (first login, LinkedIn profile URL not yet
    captured) → `<PublicIdentifierPromptScreen>`
-8. **user ok** → `<AppNav>` + the requested page
+8. **user ok** → `<AppShell>` (sidebar + top bar) + the requested page
 
 ```mermaid
 flowchart TD
@@ -1752,7 +1778,7 @@ flowchart TD
   RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
   RA -->|"!consentPromptedAt"| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
   RA -->|"no public identifier & not prompted"| PID["PublicIdentifierPromptScreen → setPublicIdentifier / dismiss → reload"]
-  RA -->|user ok| SHELL["AppNav + page → page issues Convex queries"]
+  RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + page → page issues Convex queries"]
 ```
 
 ### Pages
@@ -1798,8 +1824,10 @@ flowchart TD
 
 ### Reusable components
 
-`AppNav` (feed/my‑posts/settings/billing/**privacy** links + language `<select>` + sign‑out; **no
-admin link**; the **"Privacy"** link navigates to `/privacy-data`),
+`AppShell` (authenticated shell: persistent sidebar on desktop, modal drawer on mobile) composed of:
+`Sidebar` (feed/my‑posts/settings/billing/**privacy** links; **no admin link**), `TopBar` (search,
+theme toggle, language menu, user menu trigger), `UserMenu` (profile & settings + sign‑out via
+`performSignOut`), `LanguageMenu` (Radix dropdown replacing the old native `<select>`),
 `PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`), `Modal`,
 `BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + per‑row modals + `banUser`/`unbanUser`),
 `FeedbackTab` (status filter pills + per‑row `RowActionsMenu` + `RespondFeedbackModal`),
@@ -1865,10 +1893,10 @@ plus the two LinkedIn‑embed components:
 ### i18n (`i18n/index.ts`)
 
 `i18next` + `react-i18next` + browser language detector. Resources `en`/`pt`/`es`, fallback `en`.
-**Detection order:** `localStorage` → `?lang=` querystring → `navigator`. The `AppNav` language
-selector persists the choice to `localStorage`. On the first authenticated load, if no
+**Detection order:** `localStorage` → `?lang=` querystring → `navigator`. The `LanguageMenu` (Radix
+dropdown in `TopBar`) persists the choice to `localStorage`. On the first authenticated load, if no
 `localStorage` `i18nextLng` key is present, the UI language is seeded once from `me.primaryLocale`
-(the scraped LinkedIn language); the `AppNav` switcher still overrides it thereafter.
+(the scraped LinkedIn language); the `LanguageMenu` switcher still overrides it thereafter.
 
 **Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and
 confirmation copy used by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
@@ -1887,24 +1915,36 @@ labels, and "Save & continue" button copy for `ConsentPromptScreen`); all three 
 ## 15. Frontend — Landing Site (`landing/`)
 
 Standalone **Next.js 15 (App Router)**, React 19, Tailwind 3.4. Pure marketing — **no API/Convex
-calls**; all content (pricing, testimonials, FAQ, stats) is hard‑coded in module constants.
+calls**; all content (pricing, FAQ, stats) is hard‑coded in module constants.
 
 ### Routes
 
-| Route      | Purpose                                                                                                                            |
-|------------|------------------------------------------------------------------------------------------------------------------------------------|
-| `/`        | Home — composes `Nav → Hero → SSIExplainer → StatsBar → HowItWorks → Features → Testimonials → Pricing → FAQ → FinalCTA → Footer`. |
-| `/pricing` | Standalone pricing (`Nav` + `Pricing`).                                                                                            |
-| `/privacy` | Privacy Policy — **required for LinkedIn app review**.                                                                             |
-| `/terms`   | Terms of Service — **required for LinkedIn app review**.                                                                           |
-| `/cookies` | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`.            |
+| Route      | Purpose                                                                                                                     |
+|------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `/`        | Home — composes `Nav → Hero → PainBeat → HowItWorks → SSIExplainer → Proof → Features → Pricing → FAQ → FinalCTA → Footer`. |
+| `/pricing` | Standalone pricing (`Nav` + `Pricing`).                                                                                     |
+| `/privacy` | Privacy Policy — **required for LinkedIn app review**.                                                                      |
+| `/terms`   | Terms of Service — **required for LinkedIn app review**.                                                                    |
+| `/cookies` | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`.     |
 
 `app/layout.tsx` defines static SEO metadata (title/description/OpenGraph), the dark "ink" theme,
 and renders `<CookieNotice>` (see below). **Notable section content** (encodes the business rules):
-Pricing lists "Posts hidden during trial"; Features tags tiers (Growth+/All tiers/Pro/Coming soon);
-FAQ states SSI is 0–100 across four 25‑point pillars, official OAuth, "no automation — you write
-your own comments". `Footer` links to `/privacy`, `/terms`, `/cookies`, and
-`mailto:hello@linkintothessi.com`.
+`PainBeat` frames the core problem (algorithm invisibility). `HowItWorks` describes the three-step
+engagement flow (connect → engage → get found) plus the network-effect line. `SSIExplainer` covers the four 25-point
+pillars
+with real LinkedIn-attributed statistics (45% more opportunities, 5× profile views, +51% recruiter
+contact for SSI > 70). `Proof` is an honest pre-launch block: a founder note, a link to check the
+user's own SSI on `linkedin.com/sales/ssi`, and an early-access line (no fabricated
+counts or testimonials). `Features` markets exactly three
+shipped capabilities (industry feed, AI-assisted comment/reaction, post targeting), outcome-framed
+and tier-labelled, with no "coming soon" items. `Pricing` is a `'use client'` component with an
+annual/monthly toggle (annual default, annual = monthly × 10 giving 2 months free); three tiers —
+Starter $5/$50, Growth $15/$150 (Recommended, elevated), Pro $50/$500 — plus an Enterprise
+contact-us line; trial copy reads "no charge until 50 interactions or 7 days, whichever comes
+first; card required, cancel anytime" (the card-capture and milestone-gate mechanics are
+implemented in Plan 2). `FAQ` is objection-led (safety first) with honest trial-scope and SSI
+answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to `/privacy`,
+`/terms`, `/cookies`, and `mailto:hello@linkintothessi.com`.
 
 ### CookieNotice (Phase 3b)
 
@@ -1933,8 +1973,8 @@ to-do list.
 
 ### CTAs → app
 
-Every conversion CTA (Nav "Join free", Hero, paid Pricing buttons, FinalCTA) is a plain `<a>` whose
-`href` is the shared **`SIGN_IN_URL`** (`landing/lib/links.ts`) — i.e.
+Every conversion CTA (Nav "Start free", Hero, Pricing, FinalCTA) is a plain `<a>` whose `href` is
+the shared **`SIGN_IN_URL`** (`landing/lib/links.ts`) — i.e.
 `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, sending visitors **straight into LinkedIn OAuth** (it
 falls back to `NEXT_PUBLIC_APP_URL` if the Convex site URL is unset). Going directly to OAuth (rather
 than the app root) is what lets a previously‑signed‑out visitor — whom the app bounces back to this
@@ -1945,7 +1985,8 @@ site (§7) — actually log in instead of ping‑ponging. Internal nav (logo, fo
 
 Tailwind with a custom palette — `ink` (dark navy bg), `cream` (text), `lnblue` (LinkedIn blue),
 `gold` (accent) — Cormorant Garamond (display) + DM Sans (body), glassmorphic scrolled nav, radial
-glows, a slot‑machine headline animation. No mobile hamburger menu.
+glows, decorative `circle-ring` elements. The hero is a headline + CTA over the decorative rings
+(no SSI gauge, no slot-machine animation). No mobile hamburger menu.
 
 ---
 
@@ -2192,22 +2233,23 @@ This document is **canonical** and must not be allowed to drift. The rule in `CL
 that **any code change or push updates the relevant section(s) here in the same change**. Practical
 checklist when you touch the codebase:
 
-| If you change…                                                                                                                   | Update section(s)                                                                         |
-|----------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
-| `convex/schema.ts` (tables/fields/indexes)                                                                                       | [§5 Data Model](#5-data-model) (+ ER diagram)                                             |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                       | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                |
-| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                            | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model) |
-| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                               | [§9](#9-plan-limits-system)                                                               |
-| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                           | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)             |
-| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                 | [§11](#11-feed--engagement) (+ flows)                                                     |
-| Admin/moderation (`admin.ts`, ban UI)                                                                                            | [§12](#12-admin--moderation)                                                              |
-| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab) | [§12A](#12a-feedback)                                                                     |
-| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                            | [§12B](#12b-message-of-the-day-motd)                                                      |
-| App UI (`app/src/**`)                                                                                                            | [§14](#14-frontend--authenticated-app-app)                                                |
-| Landing (`landing/**`)                                                                                                           | [§15](#15-frontend--landing-site-landing)                                                 |
-| Any `process.env` / `import.meta.env` usage                                                                                      | [§16 Environment Variables](#16-environment-variables)                                    |
-| Tooling/tests/deploy                                                                                                             | [§18](#18-configuration-tooling--testing)                                                 |
-| Resolving a stale item / removing dead code                                                                                      | [§19](#19-known-discrepancies-dead-code--roadmap)                                         |
+| If you change…                                                                                                                                                                          | Update section(s)                                                                         |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                              | [§5 Data Model](#5-data-model) (+ ER diagram)                                             |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                              | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                |
+| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                   | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model) |
+| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                      | [§9](#9-plan-limits-system)                                                               |
+| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                  | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)             |
+| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                        | [§11](#11-feed--engagement) (+ flows)                                                     |
+| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                   | [§12](#12-admin--moderation)                                                              |
+| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                        | [§12A](#12a-feedback)                                                                     |
+| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                   | [§12B](#12b-message-of-the-day-motd)                                                      |
+| App UI (`app/src/**`)                                                                                                                                                                   | [§14](#14-frontend--authenticated-app-app)                                                |
+| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`) | [§14A Design System](#14a-design-system)                                                  |
+| Landing (`landing/**`)                                                                                                                                                                  | [§15](#15-frontend--landing-site-landing)                                                 |
+| Any `process.env` / `import.meta.env` usage                                                                                                                                             | [§16 Environment Variables](#16-environment-variables)                                    |
+| Tooling/tests/deploy                                                                                                                                                                    | [§18](#18-configuration-tooling--testing)                                                 |
+| Resolving a stale item / removing dead code                                                                                                                                             | [§19](#19-known-discrepancies-dead-code--roadmap)                                         |
 
 When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add
 a flow chart (Mermaid) if it introduces a multi‑step flow.
@@ -2237,7 +2279,7 @@ with auditLog pseudonymization; Stripe subscription cancellation during grace pe
 (`PrivacyDataPage` — export request/status/download + delete-with-confirm modal calling
 `api.privacy._`), `CancelDeletionScreen`(grace-window interstitial wired into`RequireAuth`),
 the updated `RequireAuth`interception order (loading → null → isBanned → deletionScheduledAt →
-app), the **"Privacy"** link added to`AppNav`, and the new `privacy._`i18n namespace (en/pt/es)
+app), the **"Privacy"** link added to`Sidebar`, and the new `privacy._`i18n namespace (en/pt/es)
 — see [§14](#14-frontend--authenticated-app-app). Also reflects **Privacy & Compliance Phase 3a
 (Consent + Retention/Dormancy + Re-consent Backend)**: append-only`consentRecords`table with`recordConsent`/
 `getConsents`(latest-per-purpose via`latestConsentByPurpose`); `marketing`and`analytics`purposes off by default;

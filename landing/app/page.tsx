@@ -1,10 +1,10 @@
 import Nav from '../components/Nav'
 import Hero from '../components/Hero'
-import SSIExplainer from '../components/SSIExplainer'
-import StatsBar from '../components/StatsBar'
+import PainBeat from '../components/PainBeat'
 import HowItWorks from '../components/HowItWorks'
+import SSIExplainer from '../components/SSIExplainer'
+import Proof from '../components/Proof'
 import Features from '../components/Features'
-import Testimonials from '../components/Testimonials'
 import Pricing from '../components/Pricing'
 import FAQ from '../components/FAQ'
 import FinalCTA from '../components/FinalCTA'
@@ -15,11 +15,11 @@ export default function HomePage() {
     <div className="min-h-screen bg-ink">
       <Nav />
       <Hero />
-      <SSIExplainer />
-      <StatsBar />
+      <PainBeat />
       <HowItWorks />
+      <SSIExplainer />
+      <Proof />
       <Features />
-      <Testimonials />
       <Pricing />
       <FAQ />
       <FinalCTA />

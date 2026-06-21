@@ -41,8 +41,9 @@ Every task implicitly includes these:
   500/yr. Annual toggle **defaults to annual**.
 - **Honest features only.** Market only shipped capabilities. AI assist (shipped) is sold by **outcome**, never "Powered
   by AI." Omit unshipped features (featured posts, recruiter radar).
-- **Formatting.** After edits, run `pnpm format` (prettier-plugin-tailwindcss canonicalizes Tailwind class order) so
-  class ordering is consistent — write classes in any sensible order and let prettier fix them.
+- **Formatting.** After edits, format ONLY your changed files: `pnpm exec prettier --write <changed paths>` (
+  prettier-plugin-tailwindcss canonicalizes Tailwind class order). Do NOT run repo-wide `pnpm format` — it reformats
+  unrelated docs across the repo.
 
 ### Per-task verification commands (no unit-test harness in `landing/`)
 
@@ -50,7 +51,7 @@ Every task implicitly includes these:
 pnpm --filter landing exec tsc --noEmit   # typecheck (fast)
 pnpm build:landing                        # next build — 0 errors, 0 warnings
 pnpm lint                                 # eslint . --max-warnings 0
-pnpm format                               # prettier write (class ordering)
+pnpm exec prettier --write <changed files>  # scope to YOUR files, never repo-wide
 pnpm dev:landing                          # visual check at http://localhost:3000
 ```
 

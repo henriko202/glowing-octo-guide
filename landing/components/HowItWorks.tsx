@@ -1,18 +1,18 @@
 const STEPS = [
   {
     n: '01',
-    title: 'Connect your LinkedIn',
-    body: 'Sign in with LinkedIn in one click. We request only the permissions we need — to read your posts and engage on your behalf.'
+    title: 'Connect LinkedIn',
+    body: 'Sign in with LinkedIn and land in a feed of professionals in your field, everyone posting under their own identity. Nothing automated.'
   },
   {
     n: '02',
-    title: 'Engage with your circle',
-    body: 'Browse posts from professionals in your industry. Comment and react with one click — each interaction is published directly to LinkedIn.'
+    title: 'Engage where it counts',
+    body: 'React and comment on the posts that matter in your field. Every genuine interaction feeds all four SSI pillars: brand, network, insight, and relationships.'
   },
   {
     n: '03',
-    title: 'Watch your SSI climb',
-    body: 'LinkedIn scores you on profile strength, connections, insights, and relationships. Consistent genuine engagement moves all four pillars.'
+    title: 'Recruiters start finding you',
+    body: 'As your SSI climbs, you surface in more searches and feeds, so the right people reach you first.'
   }
 ]
 
@@ -20,12 +20,12 @@ export default function HowItWorks() {
   return (
     <section
       id="how-it-works"
-      className="bg-ink-800 px-6 py-28"
+      className="bg-ink px-6 py-28"
     >
       <div className="mx-auto max-w-5xl">
         <div className="mb-16 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">Process</p>
-          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">Simple by design</h2>
+          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">How it works</p>
+          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">Get found in three steps</h2>
         </div>
         <div className="grid grid-cols-1 gap-10 md:grid-cols-3">
           {STEPS.map(step => (
@@ -43,6 +43,10 @@ export default function HowItWorks() {
             </div>
           ))}
         </div>
+        {/* Network-effect line */}
+        <p className="mt-14 text-center font-display text-xl italic text-gold/80">
+          The more professionals join, the more relevant your feed becomes.
+        </p>
       </div>
     </section>
   )

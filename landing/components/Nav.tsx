@@ -30,13 +30,13 @@ export default function Nav() {
 
         <div className="hidden items-center gap-8 md:flex">
           <Link
-            href="#how-it-works"
+            href="/#how-it-works"
             className="text-sm text-cream/60 transition-colors hover:text-cream"
           >
             How it works
           </Link>
           <Link
-            href="#features"
+            href="/#features"
             className="text-sm text-cream/60 transition-colors hover:text-cream"
           >
             Features
@@ -53,7 +53,7 @@ export default function Nav() {
           href={SIGN_IN_URL}
           className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold transition-all duration-200 hover:bg-gold hover:text-ink"
         >
-          Join free
+          Start free
         </a>
       </nav>
     </header>
