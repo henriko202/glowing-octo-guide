@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useMutation } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
+import BrandMark from '@/components/BrandMark'
+import { Button } from '@/components/ui/button'
 
 // One-time first-login prompt asking for the user's Communication & analytics consent.
 // Shown by RequireAuth until users.consentPromptedAt is set. Both toggles default OFF; the user
@@ -26,12 +28,13 @@ export default function ConsentPromptScreen() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
-        <h1 className="text-lg font-bold text-slate-900">{t('privacy.consentPrompt.title')}</h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">{t('privacy.consentPrompt.intro')}</p>
+    <div className="bg-background flex min-h-dvh items-center justify-center p-4">
+      <div className="border-border bg-card w-full max-w-sm rounded-xl border p-6 shadow-sm">
+        <BrandMark className="mb-4 justify-center" />
+        <h1 className="text-foreground font-display text-2xl font-semibold">{t('privacy.consentPrompt.title')}</h1>
+        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{t('privacy.consentPrompt.intro')}</p>
         <div className="mt-4 space-y-2">
-          <label className="flex items-center gap-3 text-sm text-slate-700">
+          <label className="text-foreground flex items-center gap-3 text-sm">
             <input
               type="checkbox"
               aria-label={t('privacy.consent.marketing')}
@@ -41,7 +44,7 @@ export default function ConsentPromptScreen() {
             />
             <span>{t('privacy.consent.marketing')}</span>
           </label>
-          <label className="flex items-center gap-3 text-sm text-slate-700">
+          <label className="text-foreground flex items-center gap-3 text-sm">
             <input
               type="checkbox"
               aria-label={t('privacy.consent.analytics')}
@@ -52,15 +55,15 @@ export default function ConsentPromptScreen() {
             <span>{t('privacy.consent.analytics')}</span>
           </label>
         </div>
-        <button
+        <Button
           type="button"
           onClick={save}
           disabled={working}
-          className="mt-5 w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-5 w-full"
         >
           {working ? '…' : t('privacy.consentPrompt.save')}
-        </button>
-        <p className="mt-3 text-xs text-slate-400">{t('privacy.consentPrompt.note')}</p>
+        </Button>
+        <p className="text-muted-foreground mt-3 text-xs">{t('privacy.consentPrompt.note')}</p>
       </div>
     </div>
   )

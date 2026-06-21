@@ -1,9 +1,9 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Link as LinkIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV_GROUPS, isActivePath } from './navItems'
 import UserMenu from './UserMenu'
+import BrandMark from '../BrandMark'
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation()
@@ -11,19 +11,8 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="bg-sidebar text-sidebar-foreground flex h-full flex-col">
-      <div className="flex items-center gap-2.5 px-4 py-4">
-        <span className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-md">
-          <LinkIcon
-            className="size-4"
-            aria-hidden="true"
-          />
-        </span>
-        <span
-          className="font-display text-base font-semibold"
-          translate="no"
-        >
-          Link Into The SSI
-        </span>
+      <div className="px-4 py-4">
+        <BrandMark />
       </div>
 
       <nav

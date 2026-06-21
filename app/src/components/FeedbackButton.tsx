@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { MessageCircle } from 'lucide-react'
 import FeedbackModal from './FeedbackModal'
 
 export default function FeedbackButton() {
@@ -11,9 +12,13 @@ export default function FeedbackButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={t('feedback.button')}
-        className="fixed bottom-5 right-5 z-40 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-blue-700"
+        className="bg-primary text-primary-foreground fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full px-4 py-3 text-sm font-semibold shadow-lg hover:bg-[color-mix(in_oklch,var(--primary),black_12%)]"
       >
-        💬 {t('feedback.button')}
+        <MessageCircle
+          className="size-4"
+          aria-hidden="true"
+        />
+        {t('feedback.button')}
       </button>
       {open && <FeedbackModal onClose={() => setOpen(false)} />}
     </>

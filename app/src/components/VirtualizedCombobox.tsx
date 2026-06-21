@@ -200,8 +200,8 @@ export function VirtualizedCombobox({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            'h-auto w-full justify-between rounded-md border-slate-300 px-[10px] py-[7px] text-[13px] font-normal',
-            !selected && 'text-slate-400',
+            'border-input h-auto w-full justify-between rounded-md px-[10px] py-[7px] text-[13px] font-normal',
+            !selected && 'text-muted-foreground',
             className
           )}
         >

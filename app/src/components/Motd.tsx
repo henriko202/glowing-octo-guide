@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
+import { Button } from '@/components/ui/button'
 import MarkdownView from './MarkdownView'
 import Modal from './Modal'
 
@@ -47,39 +48,40 @@ export default function Motd() {
         dismissOnEscape={false}
         panelClassName="max-w-lg"
       >
-        <div className="[&_a]:text-blue-600 [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:font-semibold">
+        <div className="[&_a]:text-gold-text [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:font-semibold">
           <MarkdownView
             markdown={body}
-            className="text-sm leading-relaxed text-slate-700"
+            className="text-foreground text-sm leading-relaxed"
           />
         </div>
         <div className="mt-5 flex justify-end">
-          <button
+          <Button
             type="button"
             onClick={dismiss}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           >
             {t('motd.ok')}
-          </button>
+          </Button>
         </div>
       </Modal>
     )
   }
 
   return (
-    <div className="w-full bg-blue-600 px-4 py-2 text-sm text-white">
+    <div className="border-border bg-accent text-accent-foreground w-full border-b px-4 py-2 text-sm">
       <div className="mx-auto flex max-w-[640px] items-start gap-3">
         <div className="min-w-0 flex-1 [&_p]:m-0">
           <MarkdownView markdown={body} />
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           aria-label={t('motd.dismiss')}
           onClick={dismiss}
-          className="shrink-0 cursor-pointer rounded px-1 text-white/80 hover:text-white"
+          className="shrink-0"
         >
           ✕
-        </button>
+        </Button>
       </div>
     </div>
   )

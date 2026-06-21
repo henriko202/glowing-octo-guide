@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useMutation } from 'convex/react'
 import { api } from '../convex'
 import Modal from './Modal'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 const CATEGORIES = [
   'feature_request',
@@ -50,19 +52,19 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
     >
       {done ? (
         <div className="py-6 text-center">
-          <p className="text-base font-semibold text-slate-900">{t('feedback.thanks')}</p>
-          <button
+          <p className="text-foreground text-base font-semibold">{t('feedback.thanks')}</p>
+          <Button
             onClick={onClose}
-            className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            className="mt-4"
           >
             {t('feedback.close')}
-          </button>
+          </Button>
         </div>
       ) : (
         <div>
-          <h2 className="text-base font-semibold text-slate-900">{t('feedback.title')}</h2>
+          <h2 className="text-foreground text-base font-semibold">{t('feedback.title')}</h2>
 
-          <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-muted-foreground mt-3 text-[11px] font-semibold uppercase tracking-wide">
             {t('feedback.categoryLabel')}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -73,7 +75,9 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
                 aria-pressed={category === c}
                 onClick={() => setCategory(c)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  category === c ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  category === c
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/70'
                 }`}
               >
                 {t(`feedback.categories.${c}`)}
@@ -82,40 +86,39 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <label className="mt-4 flex flex-col gap-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
               {t('feedback.messageLabel')}
             </span>
-            <textarea
+            <Textarea
               value={message}
               maxLength={MAX}
               onChange={e => setMessage(e.target.value)}
               placeholder={t('feedback.messagePlaceholder')}
               rows={6}
-              className="resize-none rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+              className="resize-none"
             />
           </label>
-          <div className="mt-1 text-right text-xs text-slate-400">
+          <div className="text-muted-foreground mt-1 text-right text-xs">
             {trimmed.length}/{MAX}
           </div>
 
-          {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+          {error && <p className="text-destructive mt-2 text-xs">{error}</p>}
 
           <div className="mt-4 flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
             >
               {t('feedback.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               disabled={!valid || submitting}
               onClick={() => void handleSubmit()}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {submitting ? t('feedback.submitting') : t('feedback.submit')}
-            </button>
+            </Button>
           </div>
         </div>
       )}

@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '../convex'
 import { signOut } from '../lib/session'
+import BrandMark from '@/components/BrandMark'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 type Props = {
   deletionScheduledAt?: number
@@ -25,33 +28,35 @@ export default function CancelDeletionScreen({ deletionScheduledAt }: Props) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
-        <div className="mb-3 text-[11px] font-bold uppercase tracking-wider text-amber-700">
-          Account deletion pending
+    <div className="bg-background flex min-h-dvh items-center justify-center p-4">
+      <div className="border-border bg-card w-full max-w-sm rounded-xl border p-6 shadow-sm">
+        <BrandMark className="mb-4 justify-center" />
+
+        <div className="mb-3">
+          <Badge variant="warning">Account deletion pending</Badge>
         </div>
-        <h1 className="text-lg font-bold text-slate-900">Your account is scheduled for deletion</h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">
+
+        <h1 className="text-foreground font-display text-2xl font-semibold">Your account is scheduled for deletion</h1>
+        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
           {dateLabel
             ? `Your account and personal data will be permanently deleted on ${dateLabel}. You can keep your account by cancelling the deletion.`
             : 'Your account is pending deletion. You can keep it by cancelling the deletion.'}
         </p>
         <div className="mt-5 flex items-center gap-3">
-          <button
+          <Button
             type="button"
             onClick={keepAccount}
             disabled={working}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {working ? 'Cancelling…' : 'Keep my account'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
             onClick={signOut}
-            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Sign out
-          </button>
+          </Button>
         </div>
       </div>
     </div>

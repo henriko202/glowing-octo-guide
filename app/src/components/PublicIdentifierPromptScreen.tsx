@@ -3,6 +3,9 @@ import { useMutation } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import { extractVanityName } from '../lib/linkedinProfile'
+import BrandMark from '@/components/BrandMark'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 // One-time first-login onboarding prompt that asks the user to confirm their LinkedIn profile URL.
 // Shown by RequireAuth when the user has no linkedinPublicIdentifier and hasn't been prompted yet.
@@ -42,41 +45,46 @@ export default function PublicIdentifierPromptScreen() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6 font-sans">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
-        <h1 className="text-lg font-bold text-slate-900">{t('onboarding.linkedinIdentifier.title')}</h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">{t('onboarding.linkedinIdentifier.intro')}</p>
-        <input
-          type="text"
+    <div className="bg-background flex min-h-dvh items-center justify-center p-4">
+      <div className="border-border bg-card w-full max-w-sm rounded-xl border p-6 shadow-sm">
+        <BrandMark className="mb-4 justify-center" />
+        <h1 className="text-foreground font-display text-2xl font-semibold">
+          {t('onboarding.linkedinIdentifier.title')}
+        </h1>
+        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{t('onboarding.linkedinIdentifier.intro')}</p>
+        <Input
+          type="url"
+          inputMode="url"
           value={profileUrl}
           onChange={e => setProfileUrl(e.target.value)}
           placeholder={t('onboarding.linkedinIdentifier.placeholder')}
-          className="mt-4 w-full rounded-md border border-slate-300 px-[10px] py-[7px] text-[13px] outline-none"
+          className="mt-4"
         />
         {profileUrl && !vanity && (
-          <p className="mb-0 mt-[6px] text-xs text-red-500">{t('onboarding.linkedinIdentifier.invalid')}</p>
+          <p className="text-destructive mb-0 mt-[6px] text-xs">{t('onboarding.linkedinIdentifier.invalid')}</p>
         )}
         {vanity && (
-          <p className="mb-0 mt-[6px] text-xs text-slate-500">
+          <p className="text-muted-foreground mb-0 mt-[6px] text-xs">
             {t('onboarding.linkedinIdentifier.willSaveAs', { vanity })}
           </p>
         )}
-        <button
+        <Button
           type="button"
           onClick={save}
           disabled={!vanity || working}
-          className="mt-5 w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-5 w-full"
         >
           {working ? '…' : t('onboarding.linkedinIdentifier.save')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
           onClick={skip}
           disabled={working}
-          className="mt-3 w-full cursor-pointer border-none bg-transparent text-center text-xs font-semibold text-slate-400 hover:text-slate-600 disabled:opacity-60"
+          className="mt-3 w-full"
         >
           {t('onboarding.linkedinIdentifier.skip')}
-        </button>
+        </Button>
       </div>
     </div>
   )

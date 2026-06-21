@@ -17,8 +17,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {t('shell.skipToContent')}
       </a>
 
-      {/* Persistent sidebar (desktop) */}
-      <aside className="border-sidebar-border hidden w-56 shrink-0 border-r lg:block">
+      {/* Persistent sidebar (desktop) — sticky + viewport-tall so the user chip stays pinned to
+          the bottom of the screen while the page scrolls (page-scroll model preserved for the
+          feed's window virtualizer). */}
+      <aside className="border-sidebar-border hidden w-56 shrink-0 border-r lg:sticky lg:top-0 lg:block lg:h-dvh lg:self-start">
         <Sidebar />
       </aside>
 
