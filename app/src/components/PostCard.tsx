@@ -193,7 +193,7 @@ export default function PostCard({
                   type="button"
                   disabled
                   title={t('feed.cardGate')}
-                  className="text-gold-text cursor-not-allowed opacity-50"
+                  className="text-gold-text ml-auto cursor-not-allowed opacity-50"
                 >
                   View on LinkedIn ↗
                 </button>
@@ -202,7 +202,7 @@ export default function PostCard({
                   href={post.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-gold-text no-underline hover:underline"
+                  className="text-gold-text ml-auto no-underline hover:underline"
                 >
                   View on LinkedIn ↗
                 </a>

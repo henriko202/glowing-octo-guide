@@ -42,7 +42,10 @@ export default function BillingPage() {
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
   const [portalLoading, setPortalLoading] = useState(false)
-  const [interval, setInterval] = useState<Interval>('annual') // default annual
+  const [interval, setInterval] = useState<Interval>(
+    (sessionStorage.getItem('chosenInterval') as Interval | null) ?? 'annual'
+  )
+  const chosenPlan = sessionStorage.getItem('chosenPlan') ?? 'growth'
 
   const isTrialing = me?.subscriptionStatus === 'trialing'
   const trialEndsAt = me?.trialEndsAt
@@ -91,7 +94,7 @@ export default function BillingPage() {
 
   const lead = `${t('billing.currentPlan')}: ${planLabel}`
 
-  const growthPriceId = PLAN_PRICE_IDS[interval].growth
+  const chosenPriceId = PLAN_PRICE_IDS[interval][chosenPlan] ?? PLAN_PRICE_IDS[interval].growth
 
   return (
     <div className="mx-auto max-w-[900px] px-4 py-8 font-sans">
@@ -190,22 +193,19 @@ export default function BillingPage() {
         <div className="flex flex-col items-center gap-4 py-6">
           <Button
             size="lg"
-            onClick={() => growthPriceId && handleUpgrade(growthPriceId)}
-            disabled={!growthPriceId}
-            className={`px-8 py-4 text-base font-semibold ${growthPriceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
+            onClick={() => chosenPriceId && handleUpgrade(chosenPriceId)}
+            disabled={!chosenPriceId}
+            className={`px-8 py-4 text-base font-semibold ${chosenPriceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
           >
-            {t('billing.startTrialCta')}
+            {t('billing.startTrialCta', { plan: t(`billing.plans.${chosenPlan}.name`) })}
           </Button>
           <p className="text-muted-foreground max-w-sm text-center text-[13px]">
-            {t('billing.trialCtaNote', { price: PLAN_PRICES[interval].growth })}
+            {t('billing.trialCtaNote', { price: PLAN_PRICES[interval][chosenPlan] ?? PLAN_PRICES[interval].growth })}
           </p>
           <div className="border-border bg-muted mt-2 w-full max-w-sm rounded-xl border p-4 text-[13px]">
-            <p className="text-foreground mb-2 font-semibold">{t('billing.growthIncludesTitle')}</p>
-            <ul className="text-muted-foreground list-inside list-disc space-y-1">
-              <li>{t('billing.growthInclude1')}</li>
-              <li>{t('billing.growthInclude2')}</li>
-              <li>{t('billing.growthInclude3')}</li>
-            </ul>
+            <p className="text-muted-foreground">
+              {t('billing.trialIncludes', { plan: t(`billing.plans.${chosenPlan}.name`) })}
+            </p>
             <p className="text-muted-foreground mt-3 text-[11px]">{t('billing.comparisonNote')}</p>
           </div>
         </div>

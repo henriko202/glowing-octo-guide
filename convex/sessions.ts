@@ -69,16 +69,24 @@ export const deleteAllForUser = internalMutation({
 // ─── OAuth state CSRF protection ─────────────────────────────────────────────
 
 export const createOAuthState = internalMutation({
-  args: { state: v.string() },
-  handler: async (ctx, { state }) => {
+  args: {
+    state: v.string(),
+    plan: v.optional(v.string()),
+    interval: v.optional(v.string())
+  },
+  handler: async (ctx, { state, plan, interval }) => {
     await ctx.db.insert('oauthStates', {
       state,
-      expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+      plan,
+      interval
     })
   }
 })
 
-/** Validates the state and deletes it (single-use). Returns false if invalid/expired. */
+/** Validates the state and deletes it (single-use).
+ * Returns { valid: true, plan?, interval? } on success, or { valid: false } if invalid/expired.
+ */
 export const validateAndConsumeOAuthState = internalMutation({
   args: { state: v.string() },
   handler: async (ctx, { state }) => {
@@ -87,11 +95,14 @@ export const validateAndConsumeOAuthState = internalMutation({
       .withIndex('by_state', q => q.eq('state', state))
       .unique()
 
-    if (!record) return false
-    await ctx.db.delete(record._id) // Always delete — single-use token
+    if (!record) return { valid: false }
+    // Read plan/interval BEFORE deleting (single-use token)
+    const plan = record.plan
+    const interval = record.interval
+    await ctx.db.delete(record._id)
 
-    if (record.expiresAt < Date.now()) return false
-    return true
+    if (record.expiresAt < Date.now()) return { valid: false }
+    return { valid: true, plan, interval }
   }
 })
 

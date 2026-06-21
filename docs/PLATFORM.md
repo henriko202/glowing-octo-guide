@@ -68,17 +68,17 @@ controls, featured posts, and higher engagement/post‑volume limits. See
 
 ### Subscription tiers (business view)
 
-| Capability                          |  Starter   |               Growth                |     Pro     |     Contact (Enterprise)     |
-|-------------------------------------|:----------:|:-----------------------------------:|:-----------:|:----------------------------:|
-| Price                               |   $5/mo    |               $15/mo                |   $50/mo    |            Custom            |
-| Access shared feed                  |     ✓      |                  ✓                  |      ✓      |              ✓               |
-| 7‑day Growth trial (card required)  |     —      | ✓ (add card → Growth trial, see §8) |      —      |              —               |
-| Feed filtered by industry + country |     ✗      |        ✓ (auto from profile)        | ✓ (custom)  |          ✓ (custom)          |
-| Control who sees your posts         |     ✗      |                  ✗                  | ✓ (planned) |         ✓ (planned)          |
-| Interactions counted per post (cap) |     25     |                 50                  |     200     | 200 (per‑user override‑able) |
-| Posts admitted to feed / week       |     1      |                  2                  |      5      |  5 (per‑user override‑able)  |
-| Featured posts / month              |     0      |             1 (planned)             | 3 (planned) |       Custom (planned)       |
-| AI comment generator                | ✗ (future) |             ✓ (future)              | ✓ (future)  |          ✓ (future)          |
+| Capability                          |  Starter   |               Growth               |     Pro     |     Contact (Enterprise)     |
+|-------------------------------------|:----------:|:----------------------------------:|:-----------:|:----------------------------:|
+| Price                               |   $5/mo    |               $15/mo               |   $50/mo    |            Custom            |
+| Access shared feed                  |     ✓      |                 ✓                  |      ✓      |              ✓               |
+| 7‑day trial (card required)         |     ✓      | ✓ (tier chosen on landing, see §8) |      ✓      |              —               |
+| Feed filtered by industry + country |     ✗      |       ✓ (auto from profile)        | ✓ (custom)  |          ✓ (custom)          |
+| Control who sees your posts         |     ✗      |                 ✗                  | ✓ (planned) |         ✓ (planned)          |
+| Interactions counted per post (cap) |     25     |                 50                 |     200     | 200 (per‑user override‑able) |
+| Posts admitted to feed / week       |     1      |                 2                  |      5      |  5 (per‑user override‑able)  |
+| Featured posts / month              |     0      |            1 (planned)             | 3 (planned) |       Custom (planned)       |
+| AI comment generator                | ✗ (future) |             ✓ (future)             | ✓ (future)  |          ✓ (future)          |
 
 The numeric limits (interactions/post, posts/week) are the **enforced** values from the
 `planLimits` table; the featured‑post and AI rows are **marketing‑level/planned** (the
@@ -86,17 +86,19 @@ The numeric limits (interactions/post, posts/week) are the **enforced** values f
 [§19](#19-known-discrepancies-dead-code--roadmap).
 
 **Trial model (Plan 2B).** New users start at `subscriptionStatus: 'none'` with no app-side trial.
-The trial begins when they add a card via Stripe Checkout, which creates a real **Growth**
-subscription in `trialing` status (`tier: 'growth'` is set by the webhook). Billing starts at
-**50 combined interactions (made + received) OR 7 days, whichever comes first**: the 7-day side
-is Stripe's own `trial_period_days`; the 50-interaction milestone fires `endTrialEarly`
-(server-side) to convert the trial immediately. Because the trial is a real Growth subscription,
-trialing users get **Growth plan limits naturally** — no tier mapping shim is needed.
-**Engaging** (comment / react / submit a post) is **card-gated server-side** via `assertCanEngage`
-in `convex/lib/access.ts`, which requires `subscriptionStatus ∈ {trialing, active}`; users at
-`none`, `canceled`, or `past_due` receive a `PAYMENT_REQUIRED` error. The app-facing UI for this
-gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C, deferred
-to after the app/ UI revamp**.
+The trial begins when they add a card via Stripe Checkout, which creates a real subscription in
+`trialing` status for the **tier they chose on the landing Pricing page** (`plan`/`interval` are
+carried through OAuth and stored in `sessionStorage`; `BillingPage` reads them to pre-select the
+right price ID for Checkout — see §14). If no plan was chosen, `BillingPage` falls back to
+**Growth**. Billing starts at **50 combined interactions (made + received) OR 7 days, whichever
+comes first**: the 7-day side is Stripe's own `trial_period_days`; the 50-interaction milestone
+fires `endTrialEarly` (server-side) to convert the trial immediately. Because the trial is a real
+Stripe subscription, trialing users get the **chosen tier's plan limits naturally** — no tier
+mapping shim is needed. **Engaging** (comment / react / submit a post) is **card-gated
+server-side** via `assertCanEngage` in `convex/lib/access.ts`, which requires `subscriptionStatus
+∈ {trialing, active}`; users at `none`, `canceled`, or `past_due` receive a `PAYMENT_REQUIRED`
+error. The app-facing UI for this gate (disabled buttons, X/50 progress bar, SSI link-out,
+downgrade prompt) is **Plan 2C, deferred to after the app/ UI revamp**.
 
 ---
 
@@ -323,40 +325,40 @@ erDiagram
 One row per authenticated LinkedIn member. Inserted on first login (`linkedin/auth.ts:upsertUser`),
 patched thereafter (profile, subscription, ban). Read almost everywhere.
 
-| Field                        | Type                                                   | Req | Meaning                                                                                                                                                                                                                         |
-|------------------------------|--------------------------------------------------------|:---:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinId`                 | string                                                 |  ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                            |
-| `name`                       | string                                                 |  ✓  | Display name.                                                                                                                                                                                                                   |
-| `headline`                   | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                              |
-| `profilePictureUrl`          | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                     |
-| `industry`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                             |
-| `country`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                             |
-| `location`                   | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                           |
-| `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                        |
-| `commentLanguage`            | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance). |
-| `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                       |
-| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Growth Stripe trial); trialing users' posts are now **visible** in the feed.          |
-| `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                              |
-| `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                         |
-| `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                         |
-| `linkedinRefreshToken`       | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                         |
-| `tokenExpiresAt`             | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                       |
-| `linkedinPublicIdentifier`   | string                                                 |  –  | LinkedIn vanity name; captured via the first‑login `PublicIdentifierPromptScreen` or set in Settings, used for post‑ownership verification without Partner API.                                                                 |
-| `isAdmin`                    | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                           |
-| `isBanned`                   | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                 |
-| `bannedAt`                   | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                  |
-| `bannedBy`                   | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                              |
-| `bannedReason`               | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                       |
-| `email`                      | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                             |
-| `emailVerified`              | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                    |
-| `deletionRequestedAt`        | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                  |
-| `deletionScheduledAt`        | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                       |
-| `deletionReason`             | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                 |
-| `lastLoginAt`                | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                   |
-| `acknowledgedPolicyVersion`  | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                            |
-| `consentPromptedAt`          | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                 |
-| `publicIdentifierPromptedAt` | number                                                 |  –  | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login.                                           |
-| `createdAt`                  | number                                                 |  ✓  | Creation timestamp (ms).                                                                                                                                                                                                        |
+| Field                        | Type                                                   | Req | Meaning                                                                                                                                                                                                                                      |
+|------------------------------|--------------------------------------------------------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinId`                 | string                                                 |  ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                         |
+| `name`                       | string                                                 |  ✓  | Display name.                                                                                                                                                                                                                                |
+| `headline`                   | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                           |
+| `profilePictureUrl`          | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                  |
+| `industry`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                          |
+| `country`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                          |
+| `location`                   | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                        |
+| `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                     |
+| `commentLanguage`            | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).              |
+| `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                    |
+| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. |
+| `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                           |
+| `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                      |
+| `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                      |
+| `linkedinRefreshToken`       | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                                      |
+| `tokenExpiresAt`             | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                    |
+| `linkedinPublicIdentifier`   | string                                                 |  –  | LinkedIn vanity name; captured via the first‑login `PublicIdentifierPromptScreen` or set in Settings, used for post‑ownership verification without Partner API.                                                                              |
+| `isAdmin`                    | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                        |
+| `isBanned`                   | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                              |
+| `bannedAt`                   | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                               |
+| `bannedBy`                   | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                           |
+| `bannedReason`               | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                    |
+| `email`                      | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                          |
+| `emailVerified`              | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                                 |
+| `deletionRequestedAt`        | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                               |
+| `deletionScheduledAt`        | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                    |
+| `deletionReason`             | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                              |
+| `lastLoginAt`                | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                |
+| `acknowledgedPolicyVersion`  | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                         |
+| `consentPromptedAt`          | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                              |
+| `publicIdentifierPromptedAt` | number                                                 |  –  | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login.                                                        |
+| `createdAt`                  | number                                                 |  ✓  | Creation timestamp (ms).                                                                                                                                                                                                                     |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
 `by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
@@ -462,12 +464,15 @@ Random UUID tokens issued by the OAuth callback. 30‑day TTL.
 
 #### `oauthStates` — CSRF nonces
 
-Single‑use OAuth `state` values; ~10‑minute TTL; deleted on validation.
+Single‑use OAuth `state` values; ~10‑minute TTL; deleted on validation. The row also carries the
+plan-selection the user made on the landing page, so it survives the OAuth redirect round-trip.
 
-| Field       | Type   | Req | Meaning                                                                    |
-|-------------|--------|:---:|----------------------------------------------------------------------------|
-| `state`     | string |  ✓  | Random nonce (`by_state`).                                                 |
-| `expiresAt` | number |  ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron. |
+| Field       | Type                         | Req | Meaning                                                                                                                                        |
+|-------------|------------------------------|:---:|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `state`     | string                       |  ✓  | Random nonce (`by_state`).                                                                                                                     |
+| `expiresAt` | number                       |  ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron.                                                                     |
+| `plan`      | `'starter'\|'growth'\|'pro'` |  –  | Tier chosen on the landing Pricing page before starting OAuth. Absent when OAuth is initiated without a plan selection (e.g. direct app link). |
+| `interval`  | `'monthly'\|'annual'`        |  –  | Billing interval chosen alongside `plan`. Absent when `plan` is absent.                                                                        |
 
 #### `rateLimits` — fixed‑window counters
 
@@ -715,23 +720,27 @@ server‑side. After OAuth the app uses its **own opaque session tokens**.
 
 ### OAuth login flow
 
+The `/auth/linkedin` start handler reads optional `plan` and `interval` query parameters from the
+URL (appended by the landing Pricing page CTAs). The `plan` value is validated against the allowed
+tier list (`starter|growth|pro`) and, together with `interval`, is stored on the `oauthStates` row
+so it survives the LinkedIn redirect round-trip.
+
 ```mermaid
 sequenceDiagram
   participant U as User (browser)
-  participant A as App (React)
+  participant LP as Landing (Pricing CTA)
   participant CV as Convex .site (http.ts)
   participant LI as LinkedIn
   participant DB as Convex DB
+  participant A as App (React)
 
-  U->>A: open guarded route (e.g. /feed)
-  A->>CV: useQuery getMe(sessionToken?)
-  CV-->>A: null (no/invalid session)
-  A->>CV: window.location = /auth/linkedin
-  CV->>DB: createOAuthState(state, +10min)
+  LP->>CV: /auth/linkedin?plan=growth&interval=annual
+  Note over LP,CV: plan/interval optional — absent on direct app link
+  CV->>DB: createOAuthState(state, +10min, plan?, interval?)
   CV-->>U: 302 → LinkedIn authorize?scope=…&state
   U->>LI: authenticate & consent
   LI-->>CV: 302 /auth/linkedin/callback?code&state
-  CV->>DB: validateAndConsumeOAuthState(state)
+  CV->>DB: validateAndConsumeOAuthState(state) → { valid, plan?, interval? }
   alt invalid / expired state
     CV-->>U: 302 → APP_URL/?error=oauth_failed
   else valid
@@ -741,8 +750,9 @@ sequenceDiagram
     LI-->>CV: sub, name, picture
     CV->>DB: upsertUser(...) → userId  (tokens stored server-side)
     CV->>DB: sessions.create(token=UUID, userId, +30d)
-    CV-->>U: 302 → APP_URL/auth/success?session=UUID
-    U->>A: /auth/success stores token → navigate /feed
+    CV-->>U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual
+    Note over CV,U: plan/interval omitted from hash when absent
+    U->>A: /auth/success reads hash → stores token + plan/interval → navigate /feed
   end
 ```
 
@@ -771,12 +781,13 @@ flowchart TD
 | `users.dismissPublicIdentifierPrompt`                         | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path).                                                                                                                                                                                           |
 | `users.updateProfile`                                         | mutation (public) | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at 220 chars; empty string clears any of them.                                                                                                                       |
 | `users.refreshProfileFromLinkedIn`                            | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
+| `users.isProfileRefreshEnabled`                               | query (public)    | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                         |
 | `users.applyScrapedProfile`                                   | internalMutation  | Writes scraped fields: `country` + `headline` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                              |
 | `users.logout`                                                | mutation (public) | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
 | `users.forceLogoutAll`                                        | mutation (public) | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
 | `sessions.create` / `getByToken` / `deleteByToken`            | internal          | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
 | `sessions.deleteAllForUser`                                   | internalMutation  | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                 |
-| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation  | CSRF nonce lifecycle.                                                                                                                                                                                                                                                                                                      |
+| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation  | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                         |
 | `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` | internalMutation  | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                             |
 
 > **No token‑refresh flow exists.** Despite README claims, nothing refreshes LinkedIn tokens near
@@ -894,9 +905,10 @@ console warning).
 
 ## 9. Plan Limits System
 
-> **Trial users.** Because the trial is a real Growth Stripe subscription (see §8), `users.tier`
-> is set to `'growth'` by the webhook from the moment the card is added. Trial users therefore
-> receive **Growth limits naturally** — no `effectiveTier` shim or special-case lookup is needed.
+> **Trial users.** Because the trial is a real Stripe subscription for the tier chosen on the
+> landing page (see §8), `users.tier` is set to that tier by the webhook from the moment the card
+> is added. Trial users therefore receive **the chosen tier's limits naturally** — no `effectiveTier`
+> shim or special-case lookup is needed.
 
 Two enforced limits per tier, stored in `planLimits` and looked up via
 `lib/planLimits.getPlanLimitsHelper`:
@@ -1173,8 +1185,8 @@ flowchart TD
 
 **Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible` helper (`feed.ts`)
 now excludes only authors with `deletionScheduledAt` set — **trialing authors are no longer
-excluded**. Because trialing users must have a card on file (the trial is a real Growth Stripe
-subscription), their posts belong in the feed as a reciprocity incentive. `submitPost` sets
+excluded**. Because trialing users must have a card on file (the trial is a real Stripe subscription for the
+chosen tier — see §8), their posts belong in the feed as a reciprocity incentive. `submitPost` sets
 `hidden: false` for all card-backed submitters (the previous `hidden: subscriptionStatus ===
 'trialing'` flag has been removed). Existing hidden posts from before Plan 2B are not backfilled
 (pre-launch, no prod data). The `syncUserSubscription` webhook still un-hides the author's posts on
@@ -1798,7 +1810,7 @@ The app (`app/`) uses a "warm premium" branded theme — the landing site's iden
 - **Theme:** `app/src/lib/theme.ts` + `app/src/components/ThemeProvider.tsx` resolve
   light/dark/system, persist the choice to `localStorage` (key `theme`), seed from
   `prefers-color-scheme`, and set `color-scheme` + `<meta name="theme-color">`.
-- **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar) are shadcn-style
+- **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar, Table) are shadcn-style
   (cva + `cn`); `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline
   used by every screen.
 
@@ -1820,16 +1832,16 @@ embeds) and `connect-src` to `*.convex.cloud` (wss) + `*.stripe.com`.
 Declarative `react-router-dom` routes. The session token lives in **`sessionStorage`** (key
 `sessionToken`) — there's no React context/store; each page reads it directly.
 
-| Path            | Page              |                        Guarded                         |
-|-----------------|-------------------|:------------------------------------------------------:|
-| `/auth/success` | `AuthSuccessPage` |      – (captures `?session=` → stores → `/feed`)       |
-| `/feed`         | `FeedPage`        |                           ✓                            |
-| `/my-posts`     | `MyPostsPage`     |                           ✓                            |
-| `/settings`     | `SettingsPage`    |                           ✓                            |
-| `/billing`      | `BillingPage`     |                           ✓                            |
-| `/admin`        | `AdminPage`       | ✓ (server‑gated via `checkIsAdmin`; not linked in nav) |
-| `/privacy-data` | `PrivacyDataPage` |                           ✓                            |
-| `*`             | → `/feed`         |                           –                            |
+| Path            | Page              |                               Guarded                               |
+|-----------------|-------------------|:-------------------------------------------------------------------:|
+| `/auth/success` | `AuthSuccessPage` | – (reads `#session=` hash → stores token + plan/interval → `/feed`) |
+| `/feed`         | `FeedPage`        |                                  ✓                                  |
+| `/my-posts`     | `MyPostsPage`     |                                  ✓                                  |
+| `/settings`     | `SettingsPage`    |                                  ✓                                  |
+| `/billing`      | `BillingPage`     |                                  ✓                                  |
+| `/admin`        | `AdminPage`       |       ✓ (server‑gated via `checkIsAdmin`; not linked in nav)        |
+| `/privacy-data` | `PrivacyDataPage` |                                  ✓                                  |
+| `*`             | → `/feed`         |                                  –                                  |
 
 `RequireAuth` calls `getMe`; the interception order is:
 
@@ -1850,7 +1862,7 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 flowchart TD
   L["index.html → main.tsx"] --> I["i18n init + ConvexProvider + Router"]
   I --> RT{"route guarded?"}
-  RT -->|no e.g. /auth/success| LAND["capture ?session → store → /feed"]
+  RT -->|no e.g. /auth/success| LAND["read #session + plan + interval → store → /feed"]
   RT -->|yes| RA["RequireAuth: getMe(sessionToken)"]
   RA -->|undefined loading| SP["LoadingSpinner"]
   RA -->|null| OAUTH["window.location = VITE_CONVEX_SITE/auth/linkedin"]
@@ -1864,8 +1876,11 @@ flowchart TD
 
 ### Pages
 
-- **AuthSuccessPage** — stores `?session` token in `sessionStorage`, clears the persistent
-  `signedOut` marker (§7), and navigates to `/feed`. No Convex calls.
+- **AuthSuccessPage** — reads `#session`, `plan`, and `interval` from the URL hash (the OAuth
+  callback appends them as hash parameters, e.g. `#session=UUID&plan=growth&interval=annual`);
+  stores the session token in `sessionStorage` (key `sessionToken`); stores `plan` and `interval`
+  in `sessionStorage` (keys `chosenPlan` / `chosenInterval`) when present; clears the persistent
+  `signedOut` marker (§7); and navigates to `/feed`. No Convex calls.
 - **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); a list of `PostCard`s, each
   rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
   shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card.
@@ -1887,8 +1902,11 @@ flowchart TD
   reached, status, trialEndsAt }`). Layout varies by subscription state:
 
     - **No-card** (`none`/`canceled`/`past_due`): the three-tier plan cards are hidden; instead a
-      single prominent "Start your free 7-day Growth trial" CTA is shown, which always checks out the
-      **Growth** price (`PLAN_PRICE_IDS[interval].growth`) while honouring the monthly/annual toggle.
+      single prominent "Start your free 7-day trial" CTA is shown. It resolves the price ID from
+      `sessionStorage` keys `chosenPlan` / `chosenInterval` (written by `AuthSuccessPage` from the
+      plan the user selected on the landing Pricing page before starting OAuth), falling back to
+      **Growth** when neither is present. The monthly/annual toggle still applies as a UI override
+      of the interval.
     - **Trialing** (`trialing`): the trial banner shows an **X / 50 interactions** progress meter
       (`progress.combined` / `progress.threshold`, with a simple bar), the "or 7 days" secondary
       count-down (`trialEndsAt`), and a **"View your SSI on LinkedIn" ↗** link-out
@@ -2029,7 +2047,7 @@ text-primary` (gold pulse via Tailwind v4 tokens) to draw attention. A persisten
 the sidebar footer above `<UserMenu>` using `text-gold-text` styling; it is always visible
 regardless of gate state. SSI is a link-out only — no score is fetched or displayed.
 
-#### BillingPage — trial progress, always-Growth CTA, downgrade prompt
+#### BillingPage — trial progress, chosen-tier CTA, downgrade prompt
 
 See the **BillingPage** bullet in the Pages section above for the full state-dependent layout.
 Backend query: `api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s
@@ -2098,7 +2116,10 @@ annual/monthly toggle (annual default, annual = monthly × 10 giving 2 months fr
 Starter $5/$50, Growth $15/$150 (Recommended, elevated), Pro $50/$500 — plus an Enterprise
 contact-us line; trial copy reads "no charge until 50 interactions or 7 days, whichever comes
 first; card required, cancel anytime" (the card-capture and milestone-gate mechanics are
-implemented in Plan 2). `FAQ` is objection-led (safety first) with honest trial-scope and SSI
+implemented in Plan 2). Each tier's **"Start free" CTA** links directly to OAuth and appends
+`?plan=<starter|growth|pro>&interval=<monthly|annual>` so the chosen tier is carried through the
+OAuth flow and pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with
+honest trial-scope and SSI
 answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to `/privacy`,
 `/terms`, `/cookies`, and `mailto:hello@linkintothessi.com`.
 

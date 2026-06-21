@@ -149,6 +149,19 @@ export function assertCanRefresh(user: { linkedinPublicIdentifier?: string }, se
   if (!isApifyProfileScrapeEnabled(settings)) throw new Error('Profile refresh is currently unavailable.')
 }
 
+// Public: whether the dev-only LinkedIn profile refresh (Apify scrape) is currently enabled.
+// Used by Settings to hide the "Refresh from LinkedIn" button when the scrape is off (the prod default).
+export const isProfileRefreshEnabled = query({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await resolveSession(ctx, sessionToken)
+    if (!user) return false
+    const settings = await ctx.db.query('appSettings').first()
+    if (!settings) return false
+    return isApifyProfileScrapeEnabled(settings as ApifyFlags)
+  }
+})
+
 // Public: returns safe user profile — strips ALL token fields.
 // Auth: resolves the session token server-side; never accepts a userId from the client.
 // NOTE: resolves via resolveSession (not requireAuth) so a banned user gets an

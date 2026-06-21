@@ -7,7 +7,7 @@ export default function TopBar({ onOpenSidebar }: { onOpenSidebar: () => void })
   const { t } = useTranslation()
 
   return (
-    <header className="border-border bg-background flex h-14 items-center gap-2 border-b px-3 sm:px-4">
+    <header className="border-border bg-background sticky top-0 z-30 flex h-14 items-center gap-2 border-b px-3 sm:px-4">
       <button
         type="button"
         aria-label={t('shell.openSidebar')}

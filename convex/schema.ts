@@ -195,7 +195,9 @@ export default defineSchema({
   // Validated on callback; deleted immediately after use (replay protection).
   oauthStates: defineTable({
     state: v.string(),
-    expiresAt: v.number()
+    expiresAt: v.number(),
+    plan: v.optional(v.string()),
+    interval: v.optional(v.string())
   })
     .index('by_state', ['state'])
     // Indexed range for the expired-OAuth-state cleanup cron — replaces a full-table .filter() scan.

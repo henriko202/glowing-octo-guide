@@ -127,7 +127,7 @@ export default function MyPostsPage() {
           {usage && (
             <Badge
               title="In the last 7 days"
-              variant={atLimit ? 'warning' : 'default'}
+              variant={atLimit ? 'warning' : 'primary'}
               className="shrink-0 rounded-full px-3 py-1 text-xs"
             >
               {usage.postsThisWeek} of {usage.postsPerWeek} posts this week

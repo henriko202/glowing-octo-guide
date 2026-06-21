@@ -10,7 +10,12 @@ export default function AuthSuccessPage() {
     // The session token arrives in the URL fragment (#session=...). Fragments are never sent
     // to servers/proxies and don't appear in access logs, unlike query strings.
     const hash = window.location.hash.replace(/^#/, '')
-    const session = new URLSearchParams(hash).get('session')
+    const params = new URLSearchParams(hash)
+    const session = params.get('session')
+    const plan = params.get('plan')
+    const interval = params.get('interval')
+    if (plan) sessionStorage.setItem('chosenPlan', plan)
+    if (interval) sessionStorage.setItem('chosenInterval', interval)
     if (session) {
       sessionStorage.setItem('sessionToken', session)
       // A successful login clears the explicit-sign-out marker, so normal auto-redirect resumes.

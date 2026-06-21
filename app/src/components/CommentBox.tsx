@@ -84,7 +84,7 @@ export default function CommentBox({
   return (
     <form
       onSubmit={handleSubmit}
-      className="py-3 font-sans"
+      className="border-border bg-card mt-2 rounded-xl border p-4 font-sans"
     >
       <div className="mb-2 flex items-center gap-2">
         <div className="w-56">

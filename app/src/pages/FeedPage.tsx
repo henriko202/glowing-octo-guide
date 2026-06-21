@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useAction, usePaginatedQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
-// eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is intentional; its API is used directly.
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
@@ -9,9 +8,9 @@ import PostCard, { type PostWithAuthor } from '../components/PostCard'
 import CommentBox from '../components/CommentBox'
 import PostComposer from '../components/PostComposer'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { PageHeader } from '../components/PageHeader'
-import { Button } from '../components/ui/button'
-import { useCardGate } from '../hooks/useCardGate'
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/ui/button'
+import { useCardGate } from '@/hooks/useCardGate'
 
 const FEED_PAGE_SIZE = 20
 
@@ -29,7 +28,7 @@ export default function FeedPage() {
   const react = useAction(api.interactions.reactToPost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
-  const [reactError, setReactError] = useState<string | null>(null)
+  const [reactError, setReactError] = useState<{ postId: Id<'posts'>; msg: string } | null>(null)
 
   async function handlePostSubmit(url: string) {
     if (!sessionToken) throw new Error('Not signed in')
@@ -43,13 +42,22 @@ export default function FeedPage() {
   // scroll-container). measureElement handles variable-height rows including
   // when the inline CommentBox expands/collapses.
   const listRef = useRef<HTMLDivElement | null>(null)
+  // scrollMargin is the list's offset from the top of the page. Reading listRef.current during
+  // render is disallowed (react-hooks/refs), so measure it in a layout effect and re-measure on
+  // resize and whenever the post count changes the layout above the list (e.g. the empty state).
+  const [scrollMargin, setScrollMargin] = useState(0)
+  useLayoutEffect(() => {
+    const measure = () => setScrollMargin(listRef.current?.offsetTop ?? 0)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [posts.length])
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is intentional; its API is used directly.
   const virtualizer = useWindowVirtualizer({
     count: posts.length,
     estimateSize: () => 220,
     overscan: 3,
-    scrollMargin: listRef.current?.offsetTop ?? 0,
+    scrollMargin,
     measureElement:
       typeof window !== 'undefined'
         ? element => {
@@ -62,7 +70,9 @@ export default function FeedPage() {
 
   // ─── Auto-load more when the last virtual item becomes visible ───────────────
   const loadMoreRef = useRef(loadMore)
-  loadMoreRef.current = loadMore
+  useEffect(() => {
+    loadMoreRef.current = loadMore
+  }, [loadMore])
 
   useEffect(() => {
     const lastItem = virtualItems[virtualItems.length - 1]
@@ -131,16 +141,17 @@ export default function FeedPage() {
                         await react({ postId: id, reactionType, sessionToken: sessionToken ?? '' })
                       } catch (err: unknown) {
                         const msg = err instanceof Error ? err.message : String(err)
-                        if (msg.startsWith('PAYMENT_REQUIRED')) {
-                          setReactError(t('feed.cardGate'))
-                        } else {
-                          setReactError(msg)
-                        }
+                        setReactError({
+                          postId: id,
+                          msg: msg.startsWith('PAYMENT_REQUIRED') ? t('feed.cardGate') : msg
+                        })
                       }
                     }}
                     gated={gated}
                   />
-                  {reactError && <p className="text-destructive px-1 pt-1 text-xs">{reactError}</p>}
+                  {reactError?.postId === post._id && (
+                    <p className="text-destructive px-1 pt-1 text-xs">{reactError.msg}</p>
+                  )}
                   {isCommentOpen && (
                     <CommentBox
                       postId={post._id}

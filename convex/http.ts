@@ -14,10 +14,21 @@ const http = httpRouter()
 http.route({
   path: '/auth/linkedin',
   method: 'GET',
-  handler: httpAction(async (ctx, _req) => {
+  handler: httpAction(async (ctx, req) => {
     const state = crypto.randomUUID()
+
+    // Carry the user's chosen plan/interval through the OAuth round-trip.
+    // Validate against the known-good sets to prevent tampering.
+    const reqUrl = new URL(req.url)
+    const rawPlan = reqUrl.searchParams.get('plan') ?? undefined
+    const rawInterval = reqUrl.searchParams.get('interval') ?? undefined
+    const VALID_PLANS = new Set(['starter', 'growth', 'pro'])
+    const VALID_INTERVALS = new Set(['monthly', 'annual'])
+    const plan = rawPlan !== undefined && VALID_PLANS.has(rawPlan) ? rawPlan : undefined
+    const interval = rawInterval !== undefined && VALID_INTERVALS.has(rawInterval) ? rawInterval : undefined
+
     // Persist state server-side before redirecting — validated on callback (CSRF protection).
-    await ctx.runMutation(internal.sessions.createOAuthState, { state })
+    await ctx.runMutation(internal.sessions.createOAuthState, { state, plan, interval })
     const url = buildAuthUrl(state)
     return new Response(null, { status: 302, headers: { Location: url } })
   })
@@ -57,8 +68,8 @@ http.route({
         console.error('LinkedIn callback: missing state parameter')
         return new Response(null, { status: 302, headers: { Location: `${appUrl}/?error=oauth_failed` } })
       }
-      const stateValid = await ctx.runMutation(internal.sessions.validateAndConsumeOAuthState, { state })
-      if (!stateValid) {
+      const oauthState = await ctx.runMutation(internal.sessions.validateAndConsumeOAuthState, { state })
+      if (!oauthState.valid) {
         console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
         return new Response(null, { status: 302, headers: { Location: `${appUrl}/?error=oauth_failed` } })
       }
@@ -93,9 +104,14 @@ http.route({
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days
       })
 
+      // Append plan/interval to the success redirect when they were carried through OAuth.
+      let successUrl = `${appUrl}/auth/success#session=${sessionToken}`
+      if (oauthState.plan !== undefined) successUrl += `&plan=${oauthState.plan}`
+      if (oauthState.interval !== undefined) successUrl += `&interval=${oauthState.interval}`
+
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appUrl}/auth/success#session=${sessionToken}` }
+        headers: { Location: successUrl }
       })
     } catch (err) {
       // Log the real error server-side; send only a generic message to the client

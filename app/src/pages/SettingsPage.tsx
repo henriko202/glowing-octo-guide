@@ -37,6 +37,7 @@ export default function SettingsPage() {
   const setPublicIdentifier = useMutation(api.users.setPublicIdentifier)
   const updateProfile = useMutation(api.users.updateProfile)
   const refreshProfile = useMutation(api.users.refreshProfileFromLinkedIn)
+  const refreshEnabled = useQuery(api.users.isProfileRefreshEnabled, sessionToken ? { sessionToken } : 'skip')
   const setCommentLanguage = useMutation(api.users.setCommentLanguage)
 
   const [profileUrl, setProfileUrl] = useState('')
@@ -223,13 +224,15 @@ export default function SettingsPage() {
           >
             {profileSaved ? t('settings.saved') : profileSaving ? t('settings.saving') : t('settings.save')}
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            disabled={refreshing || !me.linkedinPublicIdentifier}
-          >
-            {refreshing ? t('settings.refreshing') : t('settings.refresh')}
-          </Button>
+          {refreshEnabled && (
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshing || !me.linkedinPublicIdentifier}
+            >
+              {refreshing ? t('settings.refreshing') : t('settings.refresh')}
+            </Button>
+          )}
         </div>
         {refreshError && <p className="text-destructive mb-0 mt-2 text-xs">{refreshError}</p>}
         <p className="text-muted-foreground mb-0 mt-2 text-xs">{t('settings.profileNote')}</p>

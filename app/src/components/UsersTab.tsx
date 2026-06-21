@@ -13,6 +13,7 @@ import { Flash, useFlash } from './useFlash'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
 
@@ -211,81 +212,79 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
       </p>
 
       {/* Table */}
-      <div
-        className="border-border bg-card rounded-lg border"
-        role="table"
-      >
-        <div
-          className="border-border bg-muted text-muted-foreground grid grid-cols-[1fr_100px_90px_56px] rounded-t-lg border-b px-4 py-2 text-[11px] font-semibold uppercase tracking-wide"
-          role="row"
-        >
-          <div role="columnheader">Name</div>
-          <div role="columnheader">Tier</div>
-          <div role="columnheader">Status</div>
-          <div role="columnheader"></div>
-        </div>
-
-        {filtered.length === 0 && (
-          <div className="text-muted-foreground px-4 py-8 text-center text-sm">No users match this filter.</div>
-        )}
-
-        {filtered.map(user => (
-          <div
-            key={user._id}
-            className="border-border grid grid-cols-[1fr_100px_90px_56px] items-center border-b px-4 py-3 text-sm last:border-b-0"
-            role="row"
-          >
-            {/* Name + headline */}
-            <div
-              className="min-w-0"
-              role="cell"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-foreground truncate font-medium">{user.name}</span>
-                {user.isBanned && (
-                  <Badge
-                    variant="destructive"
-                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                  >
-                    Banned
-                  </Badge>
-                )}
-              </div>
-              {user.headline && <div className="text-muted-foreground truncate text-xs">{user.headline}</div>}
-            </div>
-
-            {/* Tier badge */}
-            <div role="cell">
-              {user.tier ? (
-                <Badge variant={TIER_VARIANT[user.tier]}>{user.tier}</Badge>
-              ) : (
-                <span className="text-muted-foreground text-xs">—</span>
-              )}
-            </div>
-
-            {/* Subscription status */}
-            <div role="cell">
-              <Badge
-                variant={STATUS_VARIANT[user.subscriptionStatus]}
-                className="capitalize"
+      <Table className="table-fixed">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead className="w-[100px]">Tier</TableHead>
+            <TableHead className="w-[90px]">Status</TableHead>
+            <TableHead className="w-[56px]">
+              <span className="sr-only">Actions</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={4}
+                className="text-muted-foreground py-8 text-center text-sm"
               >
-                {user.subscriptionStatus}
-              </Badge>
-            </div>
+                No users match this filter.
+              </TableCell>
+            </TableRow>
+          )}
 
-            {/* Row actions */}
-            <div
-              className="flex justify-end"
-              role="cell"
-            >
-              <RowActionsMenu
-                label={`Actions for ${user.name}`}
-                items={actionsFor(user)}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+          {filtered.map(user => (
+            <TableRow key={user._id}>
+              {/* Name + headline */}
+              <TableCell className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-foreground truncate font-medium">{user.name}</span>
+                  {user.isBanned && (
+                    <Badge
+                      variant="destructive"
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                    >
+                      Banned
+                    </Badge>
+                  )}
+                </div>
+                {user.headline && <div className="text-muted-foreground truncate text-xs">{user.headline}</div>}
+              </TableCell>
+
+              {/* Tier badge */}
+              <TableCell>
+                {user.tier ? (
+                  <Badge variant={TIER_VARIANT[user.tier]}>{user.tier}</Badge>
+                ) : (
+                  <span className="text-muted-foreground text-xs">—</span>
+                )}
+              </TableCell>
+
+              {/* Subscription status */}
+              <TableCell>
+                <Badge
+                  variant={STATUS_VARIANT[user.subscriptionStatus]}
+                  className="capitalize"
+                >
+                  {user.subscriptionStatus}
+                </Badge>
+              </TableCell>
+
+              {/* Row actions */}
+              <TableCell>
+                <div className="flex justify-end">
+                  <RowActionsMenu
+                    label={`Actions for ${user.name}`}
+                    items={actionsFor(user)}
+                  />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       {/* Change tier */}
       {tierTarget && sessionToken && (
