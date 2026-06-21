@@ -142,4 +142,15 @@ describe('PostCard', () => {
     )
     expect(screen.getByRole('link', { name: /view on linkedin/i })).toHaveAttribute('href', sourceUrl)
   })
+
+  it('falls back to the author industry when there is no headline', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, author: { name: 'Léo Martins', industry: 'Fintech' } }}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
+    expect(screen.getByText('Fintech')).toBeInTheDocument()
+  })
 })

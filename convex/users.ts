@@ -82,9 +82,12 @@ export function toSafeMe(user: Doc<'users'>) {
   return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
 }
 
+/** LinkedIn's own headline limit; used to cap the user-editable headline field. */
+export const MAX_HEADLINE_LENGTH = 220
+
 /** Narrow db surface for applyScrapedProfileHandler — only needs get + patch. */
 interface ScrapedProfileDb {
-  get(id: string): Promise<{ country?: string } | null>
+  get(id: string): Promise<{ country?: string; headline?: string } | null>
   patch(id: string, fields: Record<string, unknown>): Promise<void>
 }
 
@@ -93,10 +96,11 @@ export interface ApplyScrapedProfileArgs {
   country?: string
   location?: string
   primaryLocale?: string
+  headline?: string
 }
 
 /**
- * Applies scraped profile fields. `country` is filled ONLY when the user has none
+ * Applies scraped profile fields. `country` and `headline` are filled ONLY when the user has none
  * (protects manual edits); `location` + `primaryLocale` always refresh when provided.
  */
 export async function applyScrapedProfileHandler(db: ScrapedProfileDb, args: ApplyScrapedProfileArgs): Promise<void> {
@@ -105,6 +109,7 @@ export async function applyScrapedProfileHandler(db: ScrapedProfileDb, args: App
   if (args.location !== undefined) patch.location = args.location
   if (args.primaryLocale !== undefined) patch.primaryLocale = args.primaryLocale
   if (args.country !== undefined && !existing?.country) patch.country = args.country.toUpperCase()
+  if (args.headline !== undefined && !existing?.headline) patch.headline = args.headline
   if (Object.keys(patch).length > 0) await db.patch(args.userId, patch)
 }
 
@@ -115,9 +120,10 @@ interface PatchOnlyDb {
 export interface UpdateProfileArgs {
   industry?: string
   country?: string
+  headline?: string
 }
 
-/** Validates + patches ONLY industry/country. Empty string clears the field. */
+/** Validates + patches industry, country, and headline. Empty/whitespace clears the field. */
 export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args: UpdateProfileArgs): Promise<void> {
   const patch: Record<string, unknown> = {}
   if (args.industry !== undefined) {
@@ -128,6 +134,11 @@ export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args
     const normalized = args.country.toUpperCase()
     if (args.country !== '' && !isValidCountry(normalized)) throw new Error('Invalid country')
     patch.country = args.country === '' ? undefined : normalized
+  }
+  if (args.headline !== undefined) {
+    const trimmed = args.headline.trim()
+    if (trimmed.length > MAX_HEADLINE_LENGTH) throw new Error('Headline too long')
+    patch.headline = trimmed === '' ? undefined : trimmed
   }
   if (Object.keys(patch).length > 0) await db.patch(userId, patch)
 }
@@ -298,25 +309,27 @@ export const applyScrapedProfile = internalMutation({
     userId: v.id('users'),
     country: v.optional(v.string()),
     location: v.optional(v.string()),
-    primaryLocale: v.optional(v.string())
+    primaryLocale: v.optional(v.string()),
+    headline: v.optional(v.string())
   },
   handler: async (ctx, args) =>
     applyScrapedProfileHandler(ctx.db as unknown as ScrapedProfileDb, args as ApplyScrapedProfileArgs)
 })
 
-// Public: user edits their own industry/country (canonical values only).
+// Public: user edits their own industry/country/headline (canonical values only).
 export const updateProfile = mutation({
   args: {
     sessionToken: v.string(),
     industry: v.optional(v.string()),
-    country: v.optional(v.string())
+    country: v.optional(v.string()),
+    headline: v.optional(v.string())
   },
-  handler: async (ctx, { sessionToken, industry, country }) => {
+  handler: async (ctx, { sessionToken, industry, country, headline }) => {
     const user = await requireAuth(ctx, sessionToken)
     await updateProfileHandler(
       ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> },
       user._id,
-      { industry, country }
+      { industry, country, headline }
     )
   }
 })

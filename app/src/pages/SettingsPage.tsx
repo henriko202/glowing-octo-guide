@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const [country, setCountry] = useState<string>('')
   const [industryDirty, setIndustryDirty] = useState(false)
   const [countryDirty, setCountryDirty] = useState(false)
+  const [headline, setHeadline] = useState<string>('')
+  const [headlineDirty, setHeadlineDirty] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -67,6 +69,11 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
     if (!countryDirty) setCountry(meCountry ?? '')
   }, [meCountry, countryDirty])
+  const meHeadline = me?.headline
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
+    if (!headlineDirty) setHeadline(meHeadline ?? '')
+  }, [meHeadline, headlineDirty])
   const meCommentLanguage = me?.commentLanguage
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value until the user picks a language
@@ -96,10 +103,11 @@ export default function SettingsPage() {
     if (!sessionToken) return
     setProfileSaving(true)
     try {
-      await updateProfile({ sessionToken, industry, country })
+      await updateProfile({ sessionToken, industry, country, headline })
       // Saved values are now the server truth — resume mirroring the reactive `me`.
       setIndustryDirty(false)
       setCountryDirty(false)
+      setHeadlineDirty(false)
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 3000)
     } finally {
@@ -184,6 +192,22 @@ export default function SettingsPage() {
             emptyText={t('settings.noResults')}
           />
         </div>
+
+        <div className="text-foreground mb-1 text-sm font-medium">{t('settings.headline')}</div>
+        <div className="mb-1">
+          <Input
+            type="text"
+            maxLength={220}
+            value={headline}
+            onChange={e => {
+              setHeadline(e.target.value)
+              setHeadlineDirty(true)
+            }}
+            placeholder={t('settings.headlinePlaceholder')}
+            aria-label={t('settings.headline')}
+          />
+        </div>
+        <p className="text-muted-foreground mb-3 mt-0 text-xs">{t('settings.headlineHint')}</p>
 
         {me.location && (
           <p className="text-muted-foreground my-1 text-sm">

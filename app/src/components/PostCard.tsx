@@ -20,6 +20,7 @@ export type PostWithAuthor = {
     name: string
     headline?: string
     profilePictureUrl?: string
+    industry?: string
   } | null
   sourceUrl: string
   suggestedReaction?: Reaction
@@ -153,7 +154,9 @@ export default function PostCard({
             />
             <div>
               <p className="text-foreground m-0 text-sm font-semibold">{post.author.name}</p>
-              {post.author.headline && <p className="text-muted-foreground m-0 text-xs">{post.author.headline}</p>}
+              {(post.author.headline ?? post.author.industry) && (
+                <p className="text-muted-foreground m-0 text-xs">{post.author.headline ?? post.author.industry}</p>
+              )}
             </div>
           </div>
         )}

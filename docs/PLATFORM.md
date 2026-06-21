@@ -769,9 +769,9 @@ flowchart TD
 | `users.getTrialProgress`                                      | query (public)    | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern. |
 | `users.setPublicIdentifier`                                   | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased).                                                                                                                                                                                                                                             |
 | `users.dismissPublicIdentifierPrompt`                         | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path).                                                                                                                                                                                           |
-| `users.updateProfile`                                         | mutation (public) | User edits their own `industry`/`country` (validated against canonical lists; empty string clears).                                                                                                                                                                                                                        |
+| `users.updateProfile`                                         | mutation (public) | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at 220 chars; empty string clears any of them.                                                                                                                       |
 | `users.refreshProfileFromLinkedIn`                            | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
-| `users.applyScrapedProfile`                                   | internalMutation  | Writes scraped fields: `country` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                                           |
+| `users.applyScrapedProfile`                                   | internalMutation  | Writes scraped fields: `country` + `headline` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                              |
 | `users.logout`                                                | mutation (public) | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
 | `users.forceLogoutAll`                                        | mutation (public) | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
 | `sessions.create` / `getByToken` / `deleteByToken`            | internal          | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
@@ -1561,9 +1561,9 @@ retention jobs run on fixed intervals from deploy time (`crons.interval`).
 
 ## 13A. Profile Enrichment (LinkedIn Profile Scrape)
 
-A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `country`
-(fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent from the
-payload) — it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
+A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `country` **and
+`headline`** (fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent
+from the payload) — it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
 
 - on `users.setPublicIdentifier`, but only when the identifier **changes**, the scrape is
   **enabled**, and the shared 2/day budget allows it (charged on the same `profile_refresh` counter
@@ -1581,9 +1581,16 @@ These triggers all schedule the internal action `jobs/scrapeProfileApify.scrapeU
 Apify env vars (`APIFY_API_TOKEN`/`APIFY_TASK_ID_PROFILE_SCRAPE`) are unset, or unless
 `apifyEnabled && apifyProfileScrapeEnabled` (gate helpers in `lib/apify.ts`). It calls the Apify
 actor, parses `location.countryCode` → `country`, `location.linkedinText` → `location`,
-`primaryLocale.language` → `primaryLocale`, and writes via `users.applyScrapedProfile` (country only
-if the user has none; location/locale always refresh). Results propagate to Settings via the
-reactive `getMe`, which also seeds the UI language once.
+`primaryLocale.language` → `primaryLocale`, and the dataset `headline` → `headline`
+(fill-when-empty), and writes via `users.applyScrapedProfile` (country and headline only if the user
+has none; location/locale always refresh). Results propagate to Settings via the reactive `getMe`,
+which also seeds the UI language once.
+
+The **headline** has two sources: the **dev-only** Apify scrape (fill-when-empty) and the
+**user-editable Settings field** (`users.updateProfile`, always wins). In production the Settings
+field is the only live source — the Apify scrape is a local-dev testing tool (the
+`appSettings.apifyProfileScrapeEnabled` flag is a dev/prod switch). The UI shows `headline ??
+industry`.
 
 ```mermaid
 flowchart TD
@@ -1604,8 +1611,8 @@ flowchart TD
   GATE -->|yes| PID{"has linkedinPublicIdentifier?"}
   PID -->|no| STOP
   PID -->|yes| API["Apify run-sync-get-dataset-items (queries=[vanity])"]
-  API --> PARSE["parseProfileScrapeResult -> {country?, location?, primaryLocale?}"]
-  PARSE --> APPLY["applyScrapedProfile: country fill-when-empty; location/locale refresh"]
+  API --> PARSE["parseProfileScrapeResult -> {country?, location?, primaryLocale?, headline?}"]
+  PARSE --> APPLY["applyScrapedProfile: country + headline fill-when-empty; location/locale refresh"]
   APPLY --> REACT["reactive getMe -> Settings updates + i18n seed"]
 ```
 

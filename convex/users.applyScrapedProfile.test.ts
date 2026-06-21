@@ -48,4 +48,16 @@ describe('applyScrapedProfileHandler', () => {
     await applyScrapedProfileHandler(db as any, { userId: 'u1' })
     expect(db._patches).toHaveLength(0)
   })
+
+  it('fills headline when the user has none', async () => {
+    const db = createMockDb({ _id: 'u1' })
+    await applyScrapedProfileHandler(db as any, { userId: 'u1', headline: 'Senior Product Designer' })
+    expect(db._patches[0].data).toEqual({ headline: 'Senior Product Designer' })
+  })
+
+  it('does NOT overwrite an existing headline but still refreshes location', async () => {
+    const db = createMockDb({ _id: 'u1', headline: 'My own title' })
+    await applyScrapedProfileHandler(db as any, { userId: 'u1', headline: 'Scraped title', location: 'Lisbon' })
+    expect(db._patches[0].data).toEqual({ location: 'Lisbon' })
+  })
 })

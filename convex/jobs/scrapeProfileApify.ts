@@ -1,5 +1,5 @@
 // LinkedIn profile scrape via a dedicated Apify actor (APIFY_TASK_ID_PROFILE_SCRAPE).
-// Populates users.country (fill-when-empty), users.location + users.primaryLocale (refresh).
+// Populates users.country + users.headline (fill-when-empty), users.location + users.primaryLocale (refresh).
 import { internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
@@ -11,12 +11,14 @@ import { isApifyProfileScrapeEnabled, runApifyTask } from '../lib/apify.js' // O
 interface ApifyProfileResult {
   location?: { linkedinText?: string; countryCode?: string }
   primaryLocale?: { country?: string; language?: string }
+  headline?: string
 }
 
 export interface ParsedProfile {
   country?: string
   location?: string
   primaryLocale?: string
+  headline?: string
 }
 
 /** Pure: extract the three fields we care about from the actor's dataset items. */
@@ -30,6 +32,8 @@ export function parseProfileScrapeResult(items: unknown): ParsedProfile {
   if (typeof locText === 'string' && locText.length > 0) out.location = locText
   const lang = first.primaryLocale?.language
   if (typeof lang === 'string' && lang.length > 0) out.primaryLocale = lang
+  const headline = first.headline
+  if (typeof headline === 'string' && headline.length > 0) out.headline = headline
   return out
 }
 
@@ -64,7 +68,12 @@ export const scrapeUserProfile = internalAction({
     })
 
     const parsed = parseProfileScrapeResult(items)
-    if (parsed.country === undefined && parsed.location === undefined && parsed.primaryLocale === undefined) {
+    if (
+      parsed.country === undefined &&
+      parsed.location === undefined &&
+      parsed.primaryLocale === undefined &&
+      parsed.headline === undefined
+    ) {
       console.log(`[Apify] No profile fields parsed for user ${user.linkedinPublicIdentifier}, check Apify console`)
       return
     }

@@ -35,6 +35,25 @@ describe('updateProfileHandler', () => {
     expect('industry' in db._patches[0].data).toBe(true)
     expect(db._patches[0].data.industry).toBeUndefined()
   })
+
+  it('patches a trimmed headline', async () => {
+    const db = createMockDb()
+    await updateProfileHandler(db as any, 'u1', { headline: '  Senior PM · SaaS  ' })
+    expect(db._patches[0].data).toEqual({ headline: 'Senior PM · SaaS' })
+  })
+
+  it('clears the headline when passed whitespace only', async () => {
+    const db = createMockDb()
+    await updateProfileHandler(db as any, 'u1', { headline: '   ' })
+    expect('headline' in db._patches[0].data).toBe(true)
+    expect(db._patches[0].data.headline).toBeUndefined()
+  })
+
+  it('rejects a headline longer than 220 characters', async () => {
+    const db = createMockDb()
+    await expect(updateProfileHandler(db as any, 'u1', { headline: 'x'.repeat(221) })).rejects.toThrow(/headline/i)
+    expect(db._patches).toHaveLength(0)
+  })
 })
 
 describe('assertCanRefresh', () => {

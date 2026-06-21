@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-vi.mock('convex/react', () => ({ useMutation: () => vi.fn() }))
+vi.mock('convex/react', () => ({ useMutation: () => vi.fn(), useQuery: () => undefined }))
 
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'

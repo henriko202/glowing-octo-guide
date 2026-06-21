@@ -31,4 +31,15 @@ describe('parseProfileScrapeResult', () => {
     expect(parseProfileScrapeResult(undefined)).toEqual({})
     expect(parseProfileScrapeResult([{}])).toEqual({})
   })
+
+  it('extracts a non-empty headline from the dataset item', () => {
+    expect(parseProfileScrapeResult([{ headline: 'Senior Product Designer · Fintech' }])).toEqual({
+      headline: 'Senior Product Designer · Fintech'
+    })
+  })
+
+  it('omits headline when blank or absent', () => {
+    expect(parseProfileScrapeResult([{ headline: '' }])).toEqual({})
+    expect(parseProfileScrapeResult([{ headline: '   ' }])).toEqual({ headline: '   ' })
+  })
 })
