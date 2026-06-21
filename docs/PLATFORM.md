@@ -774,20 +774,41 @@ flowchart TD
 
 Stripe is integrated via the **`@convex-dev/stripe`** component, registered in
 `convex/convex.config.ts` (`app.use(stripe)`). The component auto‑syncs customers/subscriptions and
-serves the webhook; our code adds **Checkout/Portal session creation** (`billing.ts`) and **webhook
-callbacks** (`http.ts` → `stripe.ts`) that keep our `users`/`subscriptions` tables in sync.
+serves the webhook; our code adds **Checkout/Portal session creation** and **webhook callbacks**
+(`http.ts` → `stripe.ts`) that keep our `users`/`subscriptions` tables in sync.
 
 ### Price‑ID → tier mapping
 
-`getTierFromPriceId(priceId)` maps the three `STRIPE_*_PRICE_ID` env values to `starter`/`growth`/
-`pro` (unknown → `starter`). `contact` is admin‑assigned, not purchasable via Checkout.
+`lib/stripePrices.ts` is the single source of truth for the price‑to‑tier mapping. It covers
+**both monthly and annual** price IDs (six env vars total — see §16). The pure helpers
+`buildPriceMap(env)` and `resolveTier(map, priceId)` are unit‑tested; the module‑level
+`ALLOWED_PRICE_IDS` set and `getTierFromPriceId(priceId)` function read `process.env` once at
+load. Unknown or blank IDs default to `starter`. `contact` is admin‑assigned, not purchasable via
+Checkout.
+
+### Billing intervals
+
+The BillingPage exposes a **monthly / annual toggle** (default: annual). Annual pricing is 2 months
+free: Starter $50/yr · Growth $150/yr · Pro $500/yr.
 
 ### Checkout (subscribe) flow
+
+Checkout runs through `billingNode.createCheckoutSession` (a `"use node"` Convex action that calls
+the Stripe Node SDK directly). The `@convex-dev/stripe` component handles **customer
+creation/lookup** (`getOrCreateCustomer`) and **webhook sync**; `billing.ts` retains only
+`createPortalSession` and the `setStripeCustomerId` internal mutation.
+
+Key checkout parameters:
+
+- `trial_period_days: 7` — 7-day trial on every new subscription.
+- `payment_method_collection: 'always'` — card required even during the trial (no free-ride signups).
+- `allow_promotion_codes: true` — enables Henriko's manual free-month promotion-code campaign on
+  Stripe hosted checkout. No coupons are created or auto-applied in code.
 
 ```mermaid
 sequenceDiagram
   participant A as App (BillingPage)
-  participant B as billing.createCheckoutSession (action)
+  participant B as billingNode.createCheckoutSession (node action)
   participant SC as Stripe component
   participant DB as Convex DB
   participant S as Stripe Checkout
@@ -795,26 +816,30 @@ sequenceDiagram
   A->>B: createCheckoutSession(priceId, sessionToken)
   B->>B: validate priceId ∈ ALLOWED_PRICE_IDS
   B->>B: requireAuthAction(sessionToken)
-  B->>SC: getOrCreateCustomer(userId, name)
-  B->>SC: createCheckoutSession(priceId, customerId, success/cancel URLs)
-  B->>DB: setStripeCustomerId(userId)  (before checkout completes)
+  B->>SC: getOrCreateCustomer(userId, email, name)
+  B->>S: stripe().checkout.sessions.create(trial=7d, card-required, promo-codes)
+  B->>DB: setStripeCustomerId(userId)  (if not already set)
   B-->>A: { url }
   A->>S: window.location = url
 ```
 
-`createPortalSession` similarly returns a Stripe **Customer Portal** URL (requires an existing
-`stripeCustomerId`).
+`createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an
+existing `stripeCustomerId`).
+
+**Plan 2B note:** `billingNode.endTrialEarly` (internalAction) sets `trial_end: 'now'` on a
+subscription. Plan 2B will schedule this when a trialing user reaches 50 combined interactions; it
+is not triggered by any current code path.
 
 ### Webhook‑driven subscription sync
 
 `http.ts` registers handlers for these Stripe events, each delegating to an internal mutation in
 `stripe.ts`:
 
-| Stripe event                                | Handler effect                                                                                                                                                                                                                                                            |
-|---------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` + `subscriptionStatus`, clear `trialEndsAt`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync. |
-| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`, downgrade user to `starter` + `canceled`, re‑stamp posts to `starter` rank.                                                                                                                                                |
-| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged).                                                                                                                                                                                                      |
+| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                              |
+|---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` + `subscriptionStatus`, clear `trialEndsAt`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
+| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`, downgrade user to `starter` + `canceled`, re‑stamp posts to `starter` rank.                                                                                                                                                                                                  |
+| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged).                                                                                                                                                                                                                                                        |
 
 ```mermaid
 flowchart TD
@@ -825,10 +850,16 @@ flowchart TD
   SYNC --> P3["upsert subscriptions row"]
   SYNC --> ACT{"status == active?"}
   ACT -->|yes| U1["un-hide author's hidden posts"]
-  ACT -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
+  ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
+  G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
+  G -->|no| NOOP["no-op (Apify dormant at launch)"]
   T -->|deleted| CAN["cancelUserSubscription → downgrade to starter"]
   T -->|payment_failed| PD["markPastDue (tier unchanged)"]
 ```
+
+> **Apify dormant guard:** `syncUserSubscription` reads `appSettings` and checks
+> `isApifyPostSyncEnabled(settings)` (from `lib/apify.ts`) before scheduling any Apify sync.
+> Apify is dormant at launch (compliance gate); billing alone cannot re‑enable it.
 
 ### Status semantics
 
@@ -1997,39 +2028,45 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 ### Convex backend — set in the **Convex dashboard** (Settings → Environment Variables)
 
-| Variable                         |                Required                 | Consumed in                          | Purpose                                                                                                                                                                                               |
-|----------------------------------|:---------------------------------------:|--------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `LINKEDIN_CLIENT_ID`             |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client id (authorize URL + token exchange).                                                                                                                                                     |
-| `LINKEDIN_CLIENT_SECRET`         |                    ✓                    | `linkedin/oauth.ts`                  | OAuth client secret (server‑side token exchange).                                                                                                                                                     |
-| `LINKEDIN_REDIRECT_URI`          |                    ✓                    | `linkedin/oauth.ts`                  | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                          |
-| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`              | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                       |
-| `STRIPE_STARTER_PRICE_ID`        |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                       |
-| `STRIPE_GROWTH_PRICE_ID`         |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `growth` tier.                                                                                                                                                                             |
-| `STRIPE_PRO_PRICE_ID`            |               ✓ (billing)               | `billing.ts`, `stripe.ts`, `http.ts` | Price id → `pro` tier.                                                                                                                                                                                |
-| `STRIPE_SECRET_KEY`              |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Stripe API secret — not referenced directly in our source.                                                                                                                                            |
-| `STRIPE_WEBHOOK_SECRET`          |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_     | Verifies webhook signatures at `/stripe/webhook`.                                                                                                                                                     |
-| `APIFY_API_TOKEN`                |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                   |
-| `APIFY_TASK_ID`                  |                ✓ (sync)                 | `jobs/syncPostsApify.ts`             | Apify actor (`harvestapi~linkedin-profile-posts`).                                                                                                                                                    |
-| `APIFY_TASK_ID_PROFILE_SCRAPE`   |           ✓ (profile scrape)            | `jobs/scrapeProfileApify.ts`         | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment).                                                                                                                      |
-| `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                       | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                          |
-| `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                       | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                             |
-| `CONVEX_DEPLOYMENT`              |                 ✓ (CLI)                 | Convex CLI                           | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                     |
-| `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)            | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
-| `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`        | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                     |
-| `OPENROUTER_API_KEY`             |   ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`            | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                |
-| `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`            | Optional model slug override. Provider routing (ZDR + no-data-collection, cheapest qualifying provider) is enforced in code, not via env.                                                             |
-| `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`            | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                     |
+| Variable                         |                Required                 | Consumed in                                         | Purpose                                                                                                                                                                                               |
+|----------------------------------|:---------------------------------------:|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `LINKEDIN_CLIENT_ID`             |                    ✓                    | `linkedin/oauth.ts`                                 | OAuth client id (authorize URL + token exchange).                                                                                                                                                     |
+| `LINKEDIN_CLIENT_SECRET`         |                    ✓                    | `linkedin/oauth.ts`                                 | OAuth client secret (server‑side token exchange).                                                                                                                                                     |
+| `LINKEDIN_REDIRECT_URI`          |                    ✓                    | `linkedin/oauth.ts`                                 | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                          |
+| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`, `billingNode.ts`           | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                       |
+| `STRIPE_STARTER_PRICE_ID`        |               ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                               |
+| `STRIPE_GROWTH_PRICE_ID`         |               ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `growth` tier.                                                                                                                                                                     |
+| `STRIPE_PRO_PRICE_ID`            |               ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `pro` tier.                                                                                                                                                                        |
+| `STRIPE_STARTER_ANNUAL_PRICE_ID` |               ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `starter` tier ($50/yr). Create in Stripe Dashboard alongside the monthly price.                                                                                                    |
+| `STRIPE_GROWTH_ANNUAL_PRICE_ID`  |               ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `growth` tier ($150/yr).                                                                                                                                                            |
+| `STRIPE_PRO_ANNUAL_PRICE_ID`     |               ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `pro` tier ($500/yr).                                                                                                                                                               |
+| `STRIPE_SECRET_KEY`              |               ✓ (billing)               | `billingNode.ts` + _(read by `@convex-dev/stripe`)_ | Stripe API secret — used directly in `billingNode.ts` for checkout + trial-end; also consumed by the Stripe component for customer/webhook ops.                                                       |
+| `STRIPE_WEBHOOK_SECRET`          |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_                    | Verifies webhook signatures at `/stripe/webhook`.                                                                                                                                                     |
+| `APIFY_API_TOKEN`                |                ✓ (sync)                 | `jobs/syncPostsApify.ts`                            | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                   |
+| `APIFY_TASK_ID`                  |                ✓ (sync)                 | `jobs/syncPostsApify.ts`                            | Apify actor (`harvestapi~linkedin-profile-posts`).                                                                                                                                                    |
+| `APIFY_TASK_ID_PROFILE_SCRAPE`   |           ✓ (profile scrape)            | `jobs/scrapeProfileApify.ts`                        | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment).                                                                                                                      |
+| `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                                      | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                          |
+| `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                                      | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                             |
+| `CONVEX_DEPLOYMENT`              |                 ✓ (CLI)                 | Convex CLI                                          | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                     |
+| `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)                           | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
+| `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`                       | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                     |
+| `OPENROUTER_API_KEY`             |   ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`                           | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                |
+| `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                           | Optional model slug override. Provider routing (ZDR + no-data-collection, cheapest qualifying provider) is enforced in code, not via env.                                                             |
+| `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                           | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                     |
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
-| Variable                       |              Required               | Consumed in       | Purpose                                                                            |
-|--------------------------------|:-----------------------------------:|-------------------|------------------------------------------------------------------------------------|
-| `VITE_CONVEX_URL`              |                  ✓                  | `main.tsx`        | `.convex.cloud` URL for `ConvexReactClient` (data transport).                      |
-| `VITE_CONVEX_SITE`             |                  ✓                  | `App.tsx`         | `.convex.site` base for the `/auth/linkedin` sign‑in redirect.                     |
-| `VITE_LANDING_URL`             | – (default `http://localhost:3000`) | `lib/session.ts`  | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin). |
-| `VITE_STRIPE_STARTER_PRICE_ID` |           ✓ (billing UI)            | `BillingPage.tsx` | Starter price id for checkout.                                                     |
-| `VITE_STRIPE_GROWTH_PRICE_ID`  |           ✓ (billing UI)            | `BillingPage.tsx` | Growth price id.                                                                   |
-| `VITE_STRIPE_PRO_PRICE_ID`     |           ✓ (billing UI)            | `BillingPage.tsx` | Pro price id (missing → that plan's button disabled).                              |
+| Variable                              |              Required               | Consumed in       | Purpose                                                                                      |
+|---------------------------------------|:-----------------------------------:|-------------------|----------------------------------------------------------------------------------------------|
+| `VITE_CONVEX_URL`                     |                  ✓                  | `main.tsx`        | `.convex.cloud` URL for `ConvexReactClient` (data transport).                                |
+| `VITE_CONVEX_SITE`                    |                  ✓                  | `App.tsx`         | `.convex.site` base for the `/auth/linkedin` sign‑in redirect.                               |
+| `VITE_LANDING_URL`                    | – (default `http://localhost:3000`) | `lib/session.ts`  | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).           |
+| `VITE_STRIPE_STARTER_PRICE_ID`        |           ✓ (billing UI)            | `BillingPage.tsx` | Monthly price id for Starter checkout.                                                       |
+| `VITE_STRIPE_GROWTH_PRICE_ID`         |           ✓ (billing UI)            | `BillingPage.tsx` | Monthly price id for Growth checkout.                                                        |
+| `VITE_STRIPE_PRO_PRICE_ID`            |           ✓ (billing UI)            | `BillingPage.tsx` | Monthly price id for Pro checkout (missing → button disabled).                               |
+| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |           ✓ (billing UI)            | `BillingPage.tsx` | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex. |
+| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |           ✓ (billing UI)            | `BillingPage.tsx` | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.  |
+| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |           ✓ (billing UI)            | `BillingPage.tsx` | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.        |
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
