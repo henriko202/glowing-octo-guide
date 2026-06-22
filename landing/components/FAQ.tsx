@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import type { Dictionary } from '../i18n/getDictionary'
+import {useState} from 'react'
+import type {Dictionary} from '../i18n/getDictionary'
 
 export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
@@ -16,7 +16,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
         </div>
 
-        <div className="divide-y divide-ink-600">
+        <div className="divide-y divide-gold">
           {dict.items.map((faq, i) => (
             <div key={faq.q}>
               <button
