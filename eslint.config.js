@@ -14,6 +14,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/.next/**',
+      '**/.open-next/**',
       '**/build/**',
       '**/_generated/**',
       'convex-mocks/**',
@@ -80,6 +81,14 @@ export default tseslint.config(
     files: ['convex/**/*.ts'],
     rules: {
       'no-console': 'off'
+    }
+  },
+
+  // ─── Node build scripts (plain ESM, not TypeScript) ───────────────────────
+  {
+    files: ['**/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly' }
     }
   },
 

@@ -1,6 +1,6 @@
 'use client'
-import {useState} from 'react'
-import type {Dictionary} from '../i18n/getDictionary'
+import { useState } from 'react'
+import type { Dictionary } from '../i18n/getDictionary'
 
 export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null)

@@ -23,7 +23,7 @@ import { type ArticleData } from './lib/articleValidator'
  */
 export function isAdminShareOverrideEnabled(
   user: { isAdmin?: boolean },
-  env: { ALLOW_ADMIN_SHARE_ANY_POST?: string }
+  env: Record<string, string | undefined>
 ): boolean {
   return user.isAdmin === true && env.ALLOW_ADMIN_SHARE_ANY_POST === 'true'
 }

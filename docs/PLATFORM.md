@@ -108,13 +108,13 @@ downgrade prompt) is **Plan 2C, deferred to after the app/ UI revamp**.
 The repository is a **pnpm monorepo** with **three deployable packages sharing one Convex
 backend**:
 
-| Package    | Stack                                                            | Deploy target      | Domain (prod)                                |
-|------------|------------------------------------------------------------------|--------------------|----------------------------------------------|
-| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)        | **Vercel**         | `linkintothessi.com`                         |
-| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next         | **Railway**        | `app.linkintothessi.com`                     |
-| `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` | **Convex** managed | `<deployment>.convex.cloud` / `.convex.site` |
+| Package    | Stack                                                            | Deploy target                          | Domain (prod)                                |
+|------------|------------------------------------------------------------------|----------------------------------------|----------------------------------------------|
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)        | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
+| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next         | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
+| `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
 
-Cloudflare sits in front of Vercel and Railway for DNS/CDN. External services: **LinkedIn**
+Cloudflare **hosts both frontends** (Workers) and provides DNS/CDN/TLS. External services: **LinkedIn**
 (OAuth + posting), **Stripe** (billing), **Apify** (LinkedIn post scraping).
 
 ### Deployment & integration topology
@@ -122,8 +122,8 @@ Cloudflare sits in front of Vercel and Railway for DNS/CDN. External services: *
 ```mermaid
 flowchart LR
   subgraph Client["User's Browser"]
-    Landing["Landing site<br/>(Next.js / Vercel)"]
-    App["SaaS App<br/>(React+Vite / Railway)"]
+    Landing["Landing site<br/>(Next.js / Cloudflare OpenNext)"]
+    App["SaaS App<br/>(React+Vite / Cloudflare Static Assets)"]
   end
 
   subgraph Convex["Convex Backend (managed)"]
@@ -2382,6 +2382,29 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                           | Optional model slug override. Provider routing (ZDR + no-data-collection, cheapest qualifying provider) is enforced in code, not via env.                                                             |
 | `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                           | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                     |
 
+### Frontend build-time env — set in **Cloudflare** (each Worker's build settings)
+
+Both frontends inline these at **build time** (Vite/Next bake them into the output), so they live in the Cloudflare
+Workers Builds env, not at runtime. `<prod>` = the production Convex deployment slug.
+
+**Landing Worker (`NEXT_PUBLIC_*`):**
+
+| Var                         | Value                            |
+|-----------------------------|----------------------------------|
+| `NEXT_PUBLIC_APP_URL`       | `https://app.linkintothessi.com` |
+| `NEXT_PUBLIC_CONVEX_SITE`   | `https://<prod>.convex.site`     |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | `.linkintothessi.com`            |
+
+**App Worker (`VITE_*`):**
+
+| Var                                             | Value                         |
+|-------------------------------------------------|-------------------------------|
+| `VITE_CONVEX_URL`                               | `https://<prod>.convex.cloud` |
+| `VITE_CONVEX_SITE`                              | `https://<prod>.convex.site`  |
+| `VITE_LANDING_URL`                              | `https://linkintothessi.com`  |
+| `VITE_COOKIE_DOMAIN`                            | `.linkintothessi.com`         |
+| `VITE_STRIPE_*_PRICE_ID` (+ `_ANNUAL_PRICE_ID`) | the 6 Stripe price ids        |
+
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
 | Variable                              |                    Required                     | Consumed in       | Purpose                                                                                                                |
@@ -2455,18 +2478,22 @@ The codebase follows a consistent, defensible security model:
   caps text at 3000 chars; `reactToPost` constrains the reaction enum; `commentOnPost`/`reactToPost`
   reject `hidden`/interaction‑limit‑reached posts; `banUser` caps the reason at 500 chars; checkout
   validates the price id against an allowlist before any work.
-- **CSP** (`app/index.html`) restricts script/style/frame/connect sources and adds
-  `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`. `script-src`/`style-src` keep
-  `'unsafe-inline'` because the Vite dev server injects inline scripts/styles — tightening that needs
-  a **prod‑only nonce/hash CSP served as an HTTP header** at the hosting layer (which is also where
-  `frame-ancestors`/HSTS belong, since a `<meta>` CSP ignores `frame-ancestors`).
+- **CSP + security headers (served at the Cloudflare HTTP layer).** The **app** generates `dist/_headers`
+  at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the **SHA-256 hash** of the one
+  pre-paint inline theme script (no `'unsafe-inline'`), plus `frame-src https://www.linkedin.com` and a
+  `connect-src` allowlist (Convex `.cloud`/`.site` + Stripe). The **landing** sets its CSP via
+  `next.config.js` `headers()` with `script-src 'self' 'unsafe-inline'` (it renders only static copy, so
+  the pages stay prerendered/cached; the strict hashed CSP is reserved for the app, which renders
+  untrusted data). Both retain `style-src 'unsafe-inline'` (Radix + inline styles), and both add
+  `frame-ancestors 'none'`, `Strict-Transport-Security` (HSTS, 2y + preload), `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`. The old `<meta>` CSP was
+  removed from `app/index.html` (a `<meta>` CSP cannot set `frame-ancestors`/HSTS — that needs HTTP headers).
 
 > **Open security‑relevant gaps / hardening backlog:** no LinkedIn token‑refresh flow (tokens
 > silently expire ~60 days); the ban is reactive (a banned user's in‑flight reads still resolve until
 > the next protected call / reactive push); `linkedinPublicIdentifier` is
 > **self‑attributed** (format‑validated only — LinkedIn actions still use the user's own token, so it
-> can't be used to act as someone else); and prod CSP / `frame-ancestors` / HSTS headers should be
-> set at the hosting layer. See [§19](#19-known-discrepancies-dead-code--roadmap).
+> can't be used to act as someone else). See [§19](#19-known-discrepancies-dead-code--roadmap).
 
 ### Compliance Documentation
 
@@ -2524,8 +2551,10 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   LinkedInEmbed, Modal, BannedScreen, BanUserDialog, UsersTab, PlanLimitsTab, AdminPage, MyPostsPage,
   SettingsPage, i18n. Run: `pnpm --filter app test`.
 - **All:** `pnpm -r test`.
-- **No CI config** (`.github/` doesn't exist) — lint/format/tests are run manually or by deploy
-  platforms.
+- **CI/deploy:** no `.github/` workflows — deploys run via **Cloudflare Workers Builds** (Git push-to-`master`:
+  landing = `opennextjs-cloudflare build`/`deploy`, app = `vite build` + `wrangler deploy`); Convex via
+  `npx convex deploy`. New deploy config: `app/wrangler.jsonc`, `landing/wrangler.jsonc`, `landing/open-next.config.ts`,
+  `app/scripts/gen-headers.mjs`; root scripts `deploy:app`/`deploy:landing`/`preview:landing`.
 
 ---
 
@@ -2542,8 +2571,6 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 - **Token refresh:** README claims a 60‑day refresh flow "implemented"/"attempted within 7 days of
   expiry"; **no refresh logic exists**.
 - **Next.js:** README says 14; `landing/` is **15**.
-- **Deploy artifacts:** README says `app/` includes a `Dockerfile` + `nginx.conf` for Railway;
-  **neither file exists** in the repo (no `railway.*`, `Procfile`, `vercel.json`, etc. either).
 - **Dev port:** README/`.env.example` assume 5173; Vite is configured for **5174**.
 - README's project tree references files that don't exist (`jobs/syncConnections.ts`,
   `pages/LoginPage.tsx`).
