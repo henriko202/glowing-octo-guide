@@ -1,0 +1,256 @@
+{
+  "meta": {
+    "title": "Link Into The SSI · Aumenta Tu Influencia en LinkedIn",
+    "description": "Aumenta tu SSI en LinkedIn con interacciones genuinas con los profesionales y conversaciones de tu sector.",
+    "ogTitle": "Link Into The SSI",
+    "ogDescription": "Aumenta tu SSI en LinkedIn de forma orgánica con interacciones reales."
+  },
+  "nav": {
+    "howItWorks": "Cómo funciona",
+    "features": "Funciones",
+    "pricing": "Planes",
+    "cta": "Empieza gratis"
+  },
+  "hero": {
+    "eyebrow": "Crecimiento deliberado en LinkedIn",
+    "headlineLine1": "Deja de perseguir oportunidades.",
+    "headlineLine2": "Haz que te encuentren.",
+    "subLine1": "Un feed enfocado en los profesionales y conversaciones de tu sector. Aparece donde importa y tu SSI sube.",
+    "subLine2": "Cada acción es tuya, publicada bajo tu propia identidad. Nada automatizado.",
+    "cta": "Empieza gratis con LinkedIn",
+    "ctaDisclaimer": "Tarjeta requerida · Sin cobro hasta 50 interacciones o 7 días · Cancela cuando quieras",
+    "trustLine": "Nunca publicamos sin tu aprobación.",
+    "scrollLabel": "Desplazar"
+  },
+  "painBeat": {
+    "eyebrow": "El problema",
+    "headlineLine1": "Publicas. Te postulas.",
+    "headlineLine2": "Silencio.",
+    "body": "Las mejores oportunidades nunca llegan a ti porque LinkedIn nunca te destaca. Los reclutadores buscan y el algoritmo clasifica. Un perfil inactivo permanece invisible, por muy bueno que seas."
+  },
+  "howItWorks": {
+    "eyebrow": "Cómo funciona",
+    "headline": "Sé encontrado en tres pasos",
+    "steps": [
+      {
+        "title": "Conecta LinkedIn",
+        "body": "Inicia sesión con LinkedIn y accede a un feed de profesionales de tu sector, todos publicando bajo su propia identidad. Nada automatizado."
+      },
+      {
+        "title": "Interactúa donde importa",
+        "body": "Reacciona y comenta en las publicaciones que importan en tu sector. Cada interacción genuina alimenta los cuatro pilares del SSI: marca, red, conocimiento y relaciones."
+      },
+      {
+        "title": "Los reclutadores empiezan a encontrarte",
+        "body": "A medida que tu SSI sube, apareces en más búsquedas y feeds, y las personas indicadas te contactan primero."
+      }
+    ]
+  },
+  "ssiExplainer": {
+    "eyebrow": "Por qué el SSI",
+    "headlineLine1": "La puntuación que decide",
+    "headlineLine2": "quién te encuentra",
+    "intro": "Tu Social Selling Index es la propia métrica 0–100 de LinkedIn sobre qué tan visible eres para reclutadores y colegas. Cuatro pilares, 25 puntos cada uno. El engagement es el más rápido de mover.",
+    "pillars": [
+      {
+        "icon": "🏆",
+        "title": "Establece tu marca",
+        "body": "Un perfil completo y contenido consistente y creíble te hacen visible para las personas correctas.",
+        "pts": 25
+      },
+      {
+        "icon": "🔍",
+        "title": "Encuentra a las personas correctas",
+        "body": "Conecta con tomadores de decisiones y colegas de tu sector, no con contactos al azar.",
+        "pts": 25
+      },
+      {
+        "icon": "💡",
+        "title": "Interactúa con relevancia",
+        "body": "Comenta y reacciona a lo que importa en tu industria. Cada interacción cuenta.",
+        "pts": 25
+      },
+      {
+        "icon": "🤝",
+        "title": "Construye relaciones",
+        "body": "Convierte conexiones en relaciones profesionales genuinas mediante un engagement constante.",
+        "pts": 25
+      }
+    ],
+    "stats": [
+      {
+        "value": "45%",
+        "label": "más oportunidades para líderes en SSI vs. puntuaciones bajas",
+        "source": "Datos de LinkedIn"
+      },
+      {
+        "value": "5×",
+        "label": "más visitas al perfil en el cuartil superior de SSI",
+        "source": "Datos de LinkedIn"
+      },
+      {
+        "value": "+51%",
+        "label": "más probabilidades de ser contactado por un reclutador con SSI superior a 70",
+        "source": "Datos de LinkedIn"
+      }
+    ]
+  },
+  "proof": {
+    "eyebrow": "Sin exageraciones",
+    "headlineLine1": "Acabamos de lanzar.",
+    "headlineLine2": "No vamos a inflar los números.",
+    "founderName": "Henriko",
+    "founderRole": "Fundador · Frontend Specialist (7+ años)",
+    "founderMessage": "Soy Henriko, especialista en frontend con más de 7 años de experiencia. Construí Link Into The SSI porque los buenos profesionales permanecen invisibles en LinkedIn mientras el algoritmo premia la actividad. Lanzamos recientemente, así que no encontrarás números inflados aquí. Solo el mecanismo, crecimiento real en tu SSI y una invitación honesta a ser de los primeros.",
+    "proofCardHeadline": "La única prueba que importa es la tuya.",
+    "proofCardBody": "Ve el crecimiento real en tu SSI desde el primer día, medido en el propio LinkedIn, no por nosotros.",
+    "proofCardLink": "Revisa tu SSI actual en LinkedIn",
+    "earlyAccess": "Sé uno de los primeros. Hazlo valer."
+  },
+  "features": {
+    "eyebrow": "Plataforma",
+    "headline": "Creado para el crecimiento deliberado",
+    "items": [
+      {
+        "icon": "⊙",
+        "title": "Tu sector, en primer plano",
+        "body": "Los miembros Growth y Pro ven primero las publicaciones de su propio sector, para que interactúes donde mueve tu SSI.",
+        "tier": "growthPlus"
+      },
+      {
+        "icon": "✎",
+        "title": "Comenta con confianza",
+        "body": "Recibe una reacción sugerida y un borrador de comentario en tu propia voz, para interactuar en segundos sin pensarlo demasiado.",
+        "tier": "allTiers"
+      },
+      {
+        "icon": "◈",
+        "title": "Controla tu alcance",
+        "body": "Elige quién ve tus publicaciones con segmentación por industria y país. Visibilidad máxima cuando importa.",
+        "tier": "pro"
+      }
+    ]
+  },
+  "tiers": {
+    "starter": "Starter",
+    "growth": "Growth",
+    "pro": "Pro",
+    "growthPlus": "Growth+",
+    "allTiers": "Todos los planes"
+  },
+  "pricing": {
+    "eyebrow": "Planes",
+    "headline": "Invierte en tu marca profesional",
+    "subheadline": "Todos los planes incluyen el feed. Los planes superiores añaden segmentación y control.",
+    "toggleAnnual": "Anual",
+    "toggleAnnualSuffix": "· 2 meses gratis",
+    "toggleMonthly": "Mensual",
+    "recommended": "Recomendado",
+    "periodMonth": "/mes",
+    "periodYear": "/año",
+    "annualSubLabel": "{{perMonth}}/mes facturado anualmente",
+    "monthlySubLabel": "2 meses gratis si pagas anualmente",
+    "trialNote": "Empieza gratis. Sin cobro hasta 50 interacciones o 7 días, lo que ocurra primero. Tarjeta requerida, cancela cuando quieras.",
+    "enterpriseNote": "Equipos y agencias: Enterprise desde",
+    "enterprisePrice": "$100/mes",
+    "enterpriseCta": "Contáctanos",
+    "plans": [
+      {
+        "id": "starter",
+        "name": "Starter",
+        "description": "Entra al feed y empieza a interactuar",
+        "features": [
+          "Accede al feed completo en vivo",
+          "Comenta y reacciona con IA",
+          "25 interacciones contadas por publicación",
+          "1 publicación en el feed / semana"
+        ],
+        "cta": "Empieza gratis"
+      },
+      {
+        "id": "growth",
+        "name": "Growth",
+        "description": "Un feed dirigido para resultados más rápidos",
+        "features": [
+          "Feed filtrado por industria + país",
+          "Todo lo de Starter",
+          "50 interacciones contadas por publicación",
+          "2 publicaciones en el feed / semana"
+        ],
+        "cta": "Empieza gratis"
+      },
+      {
+        "id": "pro",
+        "name": "Pro",
+        "description": "Alcance máximo y control total",
+        "features": [
+          "Filtros personalizados de industria + país",
+          "Controla quién ve tus publicaciones",
+          "Todo lo de Growth",
+          "200 interacciones contadas por publicación",
+          "5 publicaciones en el feed / semana"
+        ],
+        "cta": "Empieza gratis"
+      }
+    ]
+  },
+  "faq": {
+    "eyebrow": "FAQ",
+    "headline": "Preguntas frecuentes",
+    "items": [
+      {
+        "q": "¿Es seguro? ¿LinkedIn puede penalizarme?",
+        "a": "Sí, es seguro. Inicias sesión mediante el OAuth oficial de LinkedIn, eliges con qué interactuar y escribes tus propios comentarios. Nada actúa en tu nombre, por lo que te mantienes dentro de los Términos de Servicio de LinkedIn."
+      },
+      {
+        "q": "¿En qué se diferencia de la automatización o el spam?",
+        "a": "Tú tienes el control en todo momento. Nosotros mostramos publicaciones relevantes y agilizamos el engagement, pero cada acción requiere tu intención. Sin bots, sin acciones masivas, sin publicación automática."
+      },
+      {
+        "q": "¿Qué incluye el período gratis y cuándo se me cobra?",
+        "a": "Obtienes la experiencia completa. Se requiere una tarjeta para empezar, pero no se te cobra hasta que hayas tenido 50 interacciones (realizadas o recibidas) o pasen 7 días, lo que ocurra primero. Cancela antes y no pagas nada."
+      },
+      {
+        "q": "¿Qué es el SSI y qué tan rápido cambiará?",
+        "a": "Tu Social Selling Index es la métrica 0–100 de LinkedIn sobre qué tan visible eres. Puedes revisar tu puntuación real en LinkedIn en cualquier momento. La mayoría de los miembros ve un cambio en 1 a 2 semanas de engagement constante. Los resultados varían según tu actividad y punto de partida."
+      },
+      {
+        "q": "¿Necesito estar activo todos los días?",
+        "a": "No. Las interacciones pequeñas y regulares son lo que mueven tu SSI."
+      },
+      {
+        "q": "¿Puedo cancelar cuando quiera?",
+        "a": "Sí. Sin contratos, sin permanencia, sin cargos por cancelación. Cancela desde la configuración de tu cuenta con un clic; el acceso dura hasta el final del período actual."
+      }
+    ]
+  },
+  "finalCta": {
+    "headlineLine1": "¿Listo para dejar de perseguir?",
+    "headlineLine2": "Haz que te encuentren.",
+    "subheadline": "Empieza gratis con LinkedIn. Construye SSI real desde el primer día.",
+    "cta": "Empieza gratis con LinkedIn",
+    "earlyAccess": "Sé uno de los primeros. Hazlo valer."
+  },
+  "footer": {
+    "privacy": "Privacidad",
+    "terms": "Términos",
+    "cookies": "Cookies",
+    "contact": "Contacto"
+  },
+  "cookieNotice": {
+    "text": "Usamos solo el almacenamiento esencial del navegador para ejecutar la app (inicio de sesión + idioma). Sin cookies de rastreo.",
+    "learnMore": "Más información",
+    "dismiss": "Entendido"
+  },
+  "themeToggle": {
+    "system": "Tema del sistema",
+    "light": "Tema claro",
+    "dark": "Tema oscuro"
+  },
+  "languageSelector": {
+    "label": "Idioma",
+    "en": "English",
+    "pt": "Português",
+    "es": "Español"
+  }
+}

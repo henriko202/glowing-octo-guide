@@ -1,18 +1,17 @@
-{
-  /* DRAFT: requires legal review. */
-}
-export default function PrivacyPage() {
+import type { Locale } from '../../../../i18n/config'
+
+export default function En({ lang }: { lang: Locale }) {
   return (
     <main className="mx-auto max-w-2xl px-6 py-24 text-cream/70">
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Privacy Policy</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Last updated:</strong> June 2026 &mdash; draft pending legal review.
+          <strong className="text-cream">Last updated:</strong> June 2026
         </p>
         <p>Policy version: 2026-06-15</p>
 
         {/* 1. Who we are */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">1. Who We Are</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Who We Are</h2>
         <p>
           The data controller for your personal information is{' '}
           <strong className="text-cream">[LEGAL_ENTITY_NAME]</strong>, located at{' '}
@@ -23,7 +22,7 @@ export default function PrivacyPage() {
           Privacy enquiries:{' '}
           <a
             href="mailto:[PRIVACY_CONTACT_EMAIL]"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             [PRIVACY_CONTACT_EMAIL]
           </a>
@@ -35,11 +34,11 @@ export default function PrivacyPage() {
         </p>
 
         {/* 2. Data we collect & sources */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">2. Data We Collect &amp; Sources</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. Data We Collect &amp; Sources</h2>
         <p>
           <strong className="text-cream">LinkedIn sign-in (OIDC).</strong> When you connect your LinkedIn account we
-          receive your LinkedIn member ID, full name, professional headline, profile picture URL, and email address
-          through LinkedIn&rsquo;s OpenID Connect flow.
+          receive your LinkedIn member ID, full name, profile picture URL, and email address through LinkedIn&rsquo;s
+          OpenID Connect flow.
         </p>
         <p>
           <strong className="text-cream">Profile attributes you set.</strong> You may voluntarily provide your industry
@@ -68,7 +67,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 3. Why we use it & legal bases */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">3. Why We Use It &amp; Legal Bases</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">3. Why We Use It &amp; Legal Bases</h2>
         <p>
           <strong className="text-cream">Contract (Art. 6(1)(b) GDPR).</strong> Providing the core service:
           authenticating you, displaying your feed, publishing posts and engagement actions, and managing your
@@ -92,7 +91,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 4. Who we share it with */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">4. Who We Share It With</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">4. Who We Share It With</h2>
         <p>We engage the following sub-processors who may process personal data on our behalf:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
@@ -128,7 +127,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 5. International transfers */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">5. International Transfers</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. International Transfers</h2>
         <p>
           Our sub-processors are primarily based in the United States. Where data is transferred outside the European
           Economic Area or United Kingdom, we rely on the European Commission&rsquo;s Standard Contractual Clauses
@@ -136,7 +135,7 @@ export default function PrivacyPage() {
           on request by contacting{' '}
           <a
             href="mailto:[PRIVACY_CONTACT_EMAIL]"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             [PRIVACY_CONTACT_EMAIL]
           </a>
@@ -144,7 +143,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 6. How long we keep it */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">6. How Long We Keep It</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">6. How Long We Keep It</h2>
         <p>
           <strong className="text-cream">Account deletion.</strong> When you delete your account (or request erasure),
           your personal data is marked for deletion immediately. A 30-day grace period applies to allow
@@ -164,7 +163,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 7. Your rights */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">7. Your Rights</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">7. Your Rights</h2>
         <p>Depending on your jurisdiction, you may have the right to:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
@@ -203,7 +202,7 @@ export default function PrivacyPage() {
           delete your account, and manage consent toggles. You may also contact us at{' '}
           <a
             href="mailto:[PRIVACY_CONTACT_EMAIL]"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             [PRIVACY_CONTACT_EMAIL]
           </a>
@@ -211,7 +210,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 8. California (CCPA/CPRA) */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">
           8. California Residents (CCPA / CPRA)
         </h2>
         <p>
@@ -239,7 +238,7 @@ export default function PrivacyPage() {
           <strong className="text-cream">Settings &rarr; Privacy &amp; Data</strong> or email{' '}
           <a
             href="mailto:[PRIVACY_CONTACT_EMAIL]"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             [PRIVACY_CONTACT_EMAIL]
           </a>
@@ -247,7 +246,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 9. Brazil (LGPD) */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">9. Brazilian Users (LGPD)</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">9. Brazilian Users (LGPD)</h2>
         <p>
           In accordance with Brazil&rsquo;s Lei Geral de Prote&ccedil;&atilde;o de Dados (LGPD), you have the rights set
           out in Art. 18 of the LGPD, including: confirmation of the existence of processing; access to your data;
@@ -263,14 +262,14 @@ export default function PrivacyPage() {
         </p>
 
         {/* 10. Cookies & storage */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">10. Cookies &amp; Storage</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">10. Cookies &amp; Storage</h2>
         <p>
           We use only <strong className="text-cream">essential</strong> browser storage (a session token to keep you
           signed in and your preferences). We do not use advertising, cross-site tracking, or non-essential analytics
           cookies. For full details see our{' '}
           <a
-            href="/cookies"
-            className="text-gold hover:underline"
+            href={`/${lang}/cookies`}
+            className="text-gold-text hover:underline"
           >
             Cookie &amp; Storage Policy
           </a>
@@ -278,14 +277,14 @@ export default function PrivacyPage() {
         </p>
 
         {/* 11. Children / age */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">11. Children &amp; Minimum Age</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">11. Children &amp; Minimum Age</h2>
         <p>
           The service is intended for users <strong className="text-cream">16 years of age and older</strong>. We do not
           knowingly collect personal information from anyone under 16. If you believe a child under 16 has provided us
           with personal information, please contact us at{' '}
           <a
             href="mailto:[PRIVACY_CONTACT_EMAIL]"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             [PRIVACY_CONTACT_EMAIL]
           </a>{' '}
@@ -293,7 +292,7 @@ export default function PrivacyPage() {
         </p>
 
         {/* 12. Changes to this policy */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">12. Changes to This Policy</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">12. Changes to This Policy</h2>
         <p>
           We may update this policy from time to time. For <strong className="text-cream">material changes</strong> (new
           data categories, new purposes, or new sub-processors), we will notify you by email and/or an in-app notice,
@@ -304,7 +303,7 @@ export default function PrivacyPage() {
           Questions or concerns? Contact us at{' '}
           <a
             href="mailto:hello@linkintothessi.com"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             hello@linkintothessi.com
           </a>

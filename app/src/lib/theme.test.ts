@@ -1,7 +1,15 @@
-import { beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { resolveTheme, getStoredTheme, setStoredTheme, applyTheme } from './theme'
 
+function clearCookies() {
+  document.cookie.split(';').forEach(c => {
+    const name = c.split('=')[0].trim()
+    if (name) document.cookie = `${name}=; Path=/; Max-Age=0`
+  })
+}
+
 beforeEach(() => {
+  clearCookies()
   localStorage.clear()
   document.documentElement.className = ''
   document.documentElement.style.colorScheme = ''
@@ -18,16 +26,23 @@ describe('resolveTheme', () => {
   })
 })
 
-describe('stored theme', () => {
-  it('defaults to "system" when nothing stored', () => {
+describe('theme storage (cookie-primary, localStorage mirror)', () => {
+  it('defaults to system when nothing stored', () => {
     expect(getStoredTheme()).toBe('system')
   })
-  it('round-trips a stored preference', () => {
+  it('setStoredTheme writes both cookie and localStorage', () => {
     setStoredTheme('dark')
+    expect(document.cookie).toContain('theme=dark')
+    expect(localStorage.getItem('theme')).toBe('dark')
     expect(getStoredTheme()).toBe('dark')
   })
-  it('ignores a junk stored value', () => {
-    localStorage.setItem('theme', 'banana')
+  it('prefers the cookie over a stale localStorage value', () => {
+    localStorage.setItem('theme', 'light')
+    document.cookie = 'theme=dark; Path=/'
+    expect(getStoredTheme()).toBe('dark')
+  })
+  it('ignores an invalid stored value', () => {
+    document.cookie = 'theme=bogus; Path=/'
     expect(getStoredTheme()).toBe('system')
   })
 })

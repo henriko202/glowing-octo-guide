@@ -1,20 +1,19 @@
-export default function PainBeat() {
+import type { Dictionary } from '../i18n/getDictionary'
+
+export default function PainBeat({ dict }: { dict: Dictionary['painBeat'] }) {
   return (
     <section
       id="the-problem"
       className="bg-ink-800 px-6 py-28"
     >
       <div className="mx-auto max-w-3xl text-center">
-        <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">The problem</p>
-        <h2 className="font-display text-4xl font-semibold leading-tight text-cream md:text-5xl">
-          You post. You apply.
+        <p className="mb-3 text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
+        <h2 className="font-display text-4xl leading-tight font-semibold text-cream md:text-5xl">
+          {dict.headlineLine1}
           <br />
-          <span className="italic text-cream/50">Silence.</span>
+          <span className="text-cream/50 italic">{dict.headlineLine2}</span>
         </h2>
-        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-cream/60">
-          The best opportunities never reach you, because LinkedIn never surfaces you. Recruiters search and the
-          algorithm ranks. An inactive profile stays invisible, no matter how good you are.
-        </p>
+        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-cream/60">{dict.body}</p>
       </div>
     </section>
   )

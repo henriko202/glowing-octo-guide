@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useSyncExternalStore } from 'react'
+import type { Dictionary } from '../i18n/getDictionary'
+import type { Locale } from '../i18n/config'
 
 const KEY = 'cookieNoticeDismissed'
 
@@ -21,7 +23,7 @@ function getServerSnapshot(): boolean {
   return true
 }
 
-export default function CookieNotice() {
+export default function CookieNotice({ dict, lang }: { dict: Dictionary['cookieNotice']; lang: Locale }) {
   const dismissedInStorage = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
   const [dismissedNow, setDismissedNow] = useState(false)
 
@@ -31,12 +33,12 @@ export default function CookieNotice() {
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-cream/10 bg-ink/95 px-6 py-4 text-sm text-cream/80 backdrop-blur">
       <div className="mx-auto flex max-w-4xl flex-col items-center gap-3 sm:flex-row">
         <p className="m-0 flex-1">
-          We use only essential browser storage to run the app (sign-in + language). No tracking cookies.{' '}
+          {dict.text}{' '}
           <a
-            href="/cookies"
-            className="text-gold hover:underline"
+            href={`/${lang}/cookies`}
+            className="text-gold-text hover:underline"
           >
-            Learn more
+            {dict.learnMore}
           </a>
           .
         </p>
@@ -46,9 +48,9 @@ export default function CookieNotice() {
             localStorage.setItem(KEY, '1')
             setDismissedNow(true)
           }}
-          className="rounded-md bg-gold px-4 py-2 font-semibold text-ink"
+          className="rounded-md bg-gold px-4 py-2 font-semibold text-on-gold"
         >
-          Got it
+          {dict.dismiss}
         </button>
       </div>
     </div>

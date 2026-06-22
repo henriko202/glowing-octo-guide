@@ -17,10 +17,16 @@ i18n
     fallbackLng: 'en',
     supportedLngs: ['en', 'pt', 'es'],
     detection: {
-      order: ['localStorage', 'querystring', 'navigator'],
+      // 'cookie' first so the shared cross-site `lang` cookie (written by the landing's
+      // LanguageSelector and by the app itself) wins. localStorage stays as a fast local mirror.
+      order: ['cookie', 'localStorage', 'querystring', 'navigator'],
+      lookupCookie: 'lang',
       lookupQuerystring: 'lang',
       lookupLocalStorage: 'i18nextLng',
-      caches: ['localStorage']
+      caches: ['cookie', 'localStorage'],
+      cookieMinutes: 525600, // ~1 year
+      cookieDomain: (import.meta.env.VITE_COOKIE_DOMAIN as string | undefined) || undefined,
+      cookieOptions: { path: '/', sameSite: 'lax' }
     },
     interpolation: {
       escapeValue: false

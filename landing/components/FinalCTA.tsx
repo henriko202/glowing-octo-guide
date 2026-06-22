@@ -1,11 +1,12 @@
 import { SIGN_IN_URL } from '../lib/links'
+import type { Dictionary } from '../i18n/getDictionary'
 
-export default function FinalCTA() {
+export default function FinalCTA({ dict }: { dict: Dictionary['finalCta'] }) {
   return (
     <section className="relative overflow-hidden bg-ink px-6 py-32 text-center">
       <div
         className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(201,150,62,0.07) 0%, transparent 70%)' }}
+        style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, var(--glow-gold) 0%, transparent 70%)' }}
       />
       <div
         className="circle-ring"
@@ -15,24 +16,24 @@ export default function FinalCTA() {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          borderColor: 'rgba(201,150,62,0.08)'
+          borderColor: 'var(--ring-gold)'
         }}
       />
       <div className="relative z-10 mx-auto max-w-xl space-y-6">
         <h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
-          Ready to stop chasing?
+          {dict.headlineLine1}
           <br />
-          <span className="italic text-gold">Let them find you.</span>
+          <span className="text-gold-text italic">{dict.headlineLine2}</span>
         </h2>
-        <p className="text-base text-cream/50">Start free with LinkedIn. Build real SSI from day one.</p>
+        <p className="text-base text-cream/50">{dict.subheadline}</p>
         <div className="flex flex-col items-center gap-3">
           <a
-            href={SIGN_IN_URL}
-            className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-ink shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
+            href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
+            className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-on-gold shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
           >
-            Start free with LinkedIn →
+            {dict.cta} →
           </a>
-          <p className="text-sm text-gold">Be one of the first in. Make it count.</p>
+          <p className="text-sm text-gold-text">{dict.earlyAccess}</p>
         </div>
       </div>
     </section>

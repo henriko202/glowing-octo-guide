@@ -1,4 +1,6 @@
-export default function CookiesPage() {
+import type { Locale } from '../../../../i18n/config'
+
+export default function En({ lang: _lang }: { lang: Locale }) {
   return (
     <main className="mx-auto max-w-2xl px-6 py-24 text-cream/70">
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Cookie &amp; Storage Policy</h1>
@@ -20,7 +22,7 @@ export default function CookiesPage() {
           Questions:{' '}
           <a
             href="mailto:hello@linkintothessi.com"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             hello@linkintothessi.com
           </a>

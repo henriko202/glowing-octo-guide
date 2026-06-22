@@ -2,8 +2,22 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { SIGN_IN_URL } from '../lib/links'
+import ThemeToggle from './ThemeToggle'
+import LanguageSelector from './LanguageSelector'
+import type { Dictionary } from '../i18n/getDictionary'
+import type { Locale } from '../i18n/config'
 
-export default function Nav() {
+export default function Nav({
+  dict,
+  themeToggleDict,
+  languageSelectorDict,
+  lang
+}: {
+  dict: Dictionary['nav']
+  themeToggleDict: Dictionary['themeToggle']
+  languageSelectorDict: Dictionary['languageSelector']
+  lang: Locale
+}) {
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 40)
@@ -19,7 +33,7 @@ export default function Nav() {
     >
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link
-          href="/"
+          href={`/${lang}`}
           className="group flex items-center gap-2.5"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gold transition-all group-hover:border-gold-light group-hover:shadow-[0_0_12px_rgba(201,150,62,0.4)]">
@@ -30,31 +44,38 @@ export default function Nav() {
 
         <div className="hidden items-center gap-8 md:flex">
           <Link
-            href="/#how-it-works"
+            href={`/${lang}#how-it-works`}
             className="text-sm text-cream/60 transition-colors hover:text-cream"
           >
-            How it works
+            {dict.howItWorks}
           </Link>
           <Link
-            href="/#features"
+            href={`/${lang}#features`}
             className="text-sm text-cream/60 transition-colors hover:text-cream"
           >
-            Features
+            {dict.features}
           </Link>
           <Link
-            href="/pricing"
+            href={`/${lang}#pricing`}
             className="text-sm text-cream/60 transition-colors hover:text-cream"
           >
-            Pricing
+            {dict.pricing}
           </Link>
         </div>
 
-        <a
-          href={SIGN_IN_URL}
-          className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold transition-all duration-200 hover:bg-gold hover:text-ink"
-        >
-          Start free
-        </a>
+        <div className="flex items-center gap-3">
+          <LanguageSelector
+            dict={languageSelectorDict}
+            lang={lang}
+          />
+          <ThemeToggle dict={themeToggleDict} />
+          <a
+            href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
+            className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold-text transition-all duration-200 hover:bg-gold hover:text-on-gold"
+          >
+            {dict.cta}
+          </a>
+        </div>
       </nav>
     </header>
   )

@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import type { Dictionary } from '../i18n/getDictionary'
+import type { Locale } from '../i18n/config'
 
-export default function Footer() {
+export default function Footer({ dict, lang }: { dict: Dictionary['footer']; lang: Locale }) {
   return (
     <footer className="border-t border-cream/5 bg-ink-800 px-6 py-10">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
@@ -14,28 +16,28 @@ export default function Footer() {
         </div>
         <div className="flex items-center gap-6 text-xs text-cream/30">
           <Link
-            href="/privacy"
+            href={`/${lang}/privacy`}
             className="transition-colors hover:text-cream/60"
           >
-            Privacy
+            {dict.privacy}
           </Link>
           <Link
-            href="/terms"
+            href={`/${lang}/terms`}
             className="transition-colors hover:text-cream/60"
           >
-            Terms
+            {dict.terms}
           </Link>
           <Link
-            href="/cookies"
+            href={`/${lang}/cookies`}
             className="transition-colors hover:text-cream/60"
           >
-            Cookies
+            {dict.cookies}
           </Link>
           <a
             href="mailto:hello@linkintothessi.com"
             className="transition-colors hover:text-cream/60"
           >
-            Contact
+            {dict.contact}
           </a>
         </div>
       </div>

@@ -1,7 +1,6 @@
-{
-  /* DRAFT: requires legal review. */
-}
-export default function TermsPage() {
+import type { Locale } from '../../../../i18n/config'
+
+export default function En({ lang }: { lang: Locale }) {
   return (
     <main className="mx-auto max-w-2xl px-6 py-24 text-cream/70">
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Terms of Service</h1>
@@ -11,7 +10,7 @@ export default function TermsPage() {
         </p>
 
         {/* 1. Acceptance */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">1. Acceptance</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Acceptance</h2>
         <p>
           By accessing or using Link Into The SSI (&ldquo;the Service&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) you
           agree to be bound by these Terms of Service. If you do not agree, do not use the Service.
@@ -23,7 +22,7 @@ export default function TermsPage() {
         </p>
 
         {/* 2. The service */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">2. The Service</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. The Service</h2>
         <p>
           Link Into The SSI is a LinkedIn-connected SaaS platform that provides a shared feed of member posts and
           enables real LinkedIn engagement &mdash; comments and reactions &mdash; on your behalf. Its purpose is to help
@@ -32,7 +31,7 @@ export default function TermsPage() {
         </p>
 
         {/* 3. Your LinkedIn account & authorization */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">
           3. Your LinkedIn Account &amp; Authorization
         </h2>
         <p>
@@ -50,7 +49,7 @@ export default function TermsPage() {
         </p>
 
         {/* 4. Acceptable use */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">4. Acceptable Use</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">4. Acceptable Use</h2>
         <p>You agree not to use the Service to:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>send spam or unsolicited messages;</li>
@@ -68,7 +67,7 @@ export default function TermsPage() {
           You must also comply with{' '}
           <a
             href="https://www.linkedin.com/legal/user-agreement"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -78,7 +77,7 @@ export default function TermsPage() {
         </p>
 
         {/* 5. Subscriptions & billing */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">5. Subscriptions &amp; Billing</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. Subscriptions &amp; Billing</h2>
         <p>
           Access to the Service requires an active paid subscription. Subscriptions are billed on a{' '}
           <strong className="text-cream">monthly</strong> basis via Stripe. By subscribing you authorise Stripe to
@@ -94,8 +93,8 @@ export default function TermsPage() {
           <strong className="text-cream">Account deletion.</strong> Requesting account deletion automatically cancels
           any active subscription. Billing records are retained as required by law (see the{' '}
           <a
-            href="/privacy"
-            className="text-gold hover:underline"
+            href={`/${lang}/privacy`}
+            className="text-gold-text hover:underline"
           >
             Privacy Policy
           </a>
@@ -103,7 +102,7 @@ export default function TermsPage() {
         </p>
 
         {/* 6. Suspension, ban & account deletion */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">
           6. Suspension, Ban &amp; Account Deletion
         </h2>
         <p>
@@ -116,8 +115,8 @@ export default function TermsPage() {
           account can be recovered. After 30 days your personal data is permanently purged, except for billing records
           that must be retained for tax or financial compliance purposes (see our{' '}
           <a
-            href="/privacy"
-            className="text-gold hover:underline"
+            href={`/${lang}/privacy`}
+            className="text-gold-text hover:underline"
           >
             Privacy Policy
           </a>
@@ -125,7 +124,7 @@ export default function TermsPage() {
         </p>
 
         {/* 7. Disclaimers & limitation of liability */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">
           7. Disclaimers &amp; Limitation of Liability
         </h2>
         <p>
@@ -138,12 +137,12 @@ export default function TermsPage() {
         </p>
 
         {/* 8. LinkedIn User Agreement */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">8. LinkedIn User Agreement</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">8. LinkedIn User Agreement</h2>
         <p>
           You must independently comply with{' '}
           <a
             href="https://www.linkedin.com/legal/user-agreement"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -155,7 +154,7 @@ export default function TermsPage() {
         </p>
 
         {/* 9. Governing law */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">9. Governing Law</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">9. Governing Law</h2>
         <p>
           These Terms are governed by and construed in accordance with the laws of{' '}
           <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>. Any disputes arising from or relating to
@@ -164,7 +163,7 @@ export default function TermsPage() {
         </p>
 
         {/* 10. Changes & contact */}
-        <h2 className="mb-3 mt-10 font-display text-xl font-semibold text-cream">10. Changes &amp; Contact</h2>
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">10. Changes &amp; Contact</h2>
         <p>
           We may update these Terms from time to time. Material changes will be communicated by email or in-app notice
           before they take effect. Continued use of the Service after the effective date of a change constitutes
@@ -174,7 +173,7 @@ export default function TermsPage() {
           Questions about these Terms? Contact us at{' '}
           <a
             href="mailto:[PRIVACY_CONTACT_EMAIL]"
-            className="text-gold hover:underline"
+            className="text-gold-text hover:underline"
           >
             [PRIVACY_CONTACT_EMAIL]
           </a>
@@ -183,8 +182,8 @@ export default function TermsPage() {
         <p>
           For information about how we handle your personal data, please read our{' '}
           <a
-            href="/privacy"
-            className="text-gold hover:underline"
+            href={`/${lang}/privacy`}
+            className="text-gold-text hover:underline"
           >
             Privacy Policy
           </a>

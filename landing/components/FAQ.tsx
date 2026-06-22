@@ -1,34 +1,8 @@
 'use client'
 import { useState } from 'react'
+import type { Dictionary } from '../i18n/getDictionary'
 
-const FAQS = [
-  {
-    q: 'Is this safe? Will LinkedIn penalize me?',
-    a: 'Yes. You sign in through LinkedIn’s official OAuth, you choose what to engage with, and you write your own comments. Nothing acts on your behalf, so you stay within LinkedIn’s Terms of Service.'
-  },
-  {
-    q: 'How is this different from automation or spam?',
-    a: 'You stay in control at all times. We surface relevant posts and make engaging fast, but every action needs your intent. No bots, no bulk actions, no auto-posting.'
-  },
-  {
-    q: 'What does the free trial include, and when am I charged?',
-    a: 'You get the full Growth-level experience. A card is required to start, but you are not charged until you’ve had 50 interactions (made or received) or 7 days pass, whichever comes first. Cancel anytime before then and you pay nothing.'
-  },
-  {
-    q: 'What is SSI, and how fast will it move?',
-    a: 'Your Social Selling Index is LinkedIn’s 0–100 measure of how findable you are. You can check your real score on LinkedIn anytime. Most members see it move within 1–2 weeks of consistent engagement. Results vary with how active you are and where you start.'
-  },
-  {
-    q: 'Do I need to be active every day?',
-    a: 'No. A few minutes a few times a week beats occasional marathons. Small, regular interactions are what move your SSI.'
-  },
-  {
-    q: 'Can I cancel anytime?',
-    a: 'Yes. No contracts, no lock-in, no cancellation fees. Cancel from your account settings in one click; access lasts until the end of the current period.'
-  }
-]
-
-export default function FAQ() {
+export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   return (
@@ -38,12 +12,12 @@ export default function FAQ() {
     >
       <div className="mx-auto max-w-3xl">
         <div className="mb-16 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-widest text-gold">FAQ</p>
-          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">Common questions</h2>
+          <p className="mb-3 text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
+          <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
         </div>
 
         <div className="divide-y divide-ink-600">
-          {FAQS.map((faq, i) => (
+          {dict.items.map((faq, i) => (
             <div key={faq.q}>
               <button
                 id={`faq-btn-${i}`}
@@ -55,7 +29,7 @@ export default function FAQ() {
                 <span className="text-base font-medium text-cream">{faq.q}</span>
                 <span
                   aria-hidden="true"
-                  className="flex-shrink-0 font-display text-2xl text-gold transition-transform duration-200"
+                  className="flex-shrink-0 font-display text-2xl text-gold-text transition-transform duration-200"
                   style={{ transform: openIndex === i ? 'rotate(45deg)' : 'rotate(0deg)' }}
                 >
                   +

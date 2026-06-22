@@ -36,6 +36,7 @@
     13B. [Privacy & Compliance](#13b-privacy--compliance)
 14. [Frontend — Authenticated App (`app/`)](#14-frontend--authenticated-app-app)
     14A. [Design System](#14a-design-system)
+    14B. [Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)
 15. [Frontend — Landing Site (`landing/`)](#15-frontend--landing-site-landing)
 16. [Environment Variables](#16-environment-variables)
 17. [Security Posture](#17-security-posture)
@@ -109,7 +110,7 @@ backend**:
 
 | Package    | Stack                                                            | Deploy target      | Domain (prod)                                |
 |------------|------------------------------------------------------------------|--------------------|----------------------------------------------|
-| `landing/` | Next.js 15 (App Router), React 19, Tailwind 3                    | **Vercel**         | `linkintothessi.com`                         |
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)        | **Vercel**         | `linkintothessi.com`                         |
 | `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next         | **Railway**        | `app.linkintothessi.com`                     |
 | `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` | **Convex** managed | `<deployment>.convex.cloud` / `.convex.site` |
 
@@ -170,8 +171,8 @@ the app. This is the backbone of the [security model](#17-security-posture).
   `react-router-dom` **7**, `convex/react` client, `i18next` **25** (en/pt/es), plus **shadcn/ui**
   primitives (`cmdk`, `@radix-ui/react-popover`, `lucide-react`) + `@tanstack/react-virtual` for the
   searchable industry/country comboboxes (`@/*` alias → `app/src`; theme tokens in `index.css`).
-- **Landing (`landing/`):** Next.js **15** (App Router), React **19**, Tailwind CSS **3.4**,
-  TypeScript.
+- **Landing (`landing/`):** Next.js **15** (App Router), React **19**, Tailwind CSS **4** (CSS-first,
+  `@tailwindcss/postcss`), TypeScript.
 - **Payments:** Stripe (Checkout + Customer Portal + webhooks).
 - **Post ingestion:** Apify REST API (`harvestapi~linkedin-profile-posts` actor) + manual
   user‑pasted post URLs.
@@ -188,14 +189,18 @@ the app. This is the backbone of the [security model](#17-security-posture).
 /
 ├── landing/                     # Next.js marketing site → Vercel
 │   ├── app/
-│   │   ├── layout.tsx           # root layout + SEO metadata
+│   │   ├── layout.tsx           # root layout + SEO metadata + no-flash theme script
+│   │   ├── globals.css          # Tailwind v4 CSS-first: @theme inline, :root/:dark tokens
 │   │   ├── page.tsx             # home (composes 11 section components)
 │   │   ├── pricing/page.tsx
 │   │   ├── privacy/page.tsx     # LinkedIn app-review requirement
 │   │   └── terms/page.tsx       # LinkedIn app-review requirement
 │   ├── components/              # Nav, Hero, SSIExplainer, StatsBar, HowItWorks,
 │   │                            #   Features, Testimonials, Pricing, FAQ, FinalCTA, Footer
-│   ├── tailwind.config.ts       # custom ink/cream/lnblue/gold palette
+│   │                            #   ThemeToggle (3-state light/dark/system)
+│   ├── lib/
+│   │   ├── cookies.ts           # SSR-safe cookie read/write (Next/process.env)
+│   │   └── theme.ts             # resolveTheme / applyTheme / cookie get/set
 │   └── next.config.js
 │
 ├── app/                         # React + Vite SaaS dashboard → Railway
@@ -1808,11 +1813,83 @@ The app (`app/`) uses a "warm premium" branded theme — the landing site's iden
   page titles), both self-hosted via `@fontsource` (no Google CDN; `font-display: swap`).
   Numeric data uses `tabular-nums`.
 - **Theme:** `app/src/lib/theme.ts` + `app/src/components/ThemeProvider.tsx` resolve
-  light/dark/system, persist the choice to `localStorage` (key `theme`), seed from
-  `prefers-color-scheme`, and set `color-scheme` + `<meta name="theme-color">`.
+  light/dark/system. The choice is persisted to the cross-site `theme` cookie (source of truth)
+  **and** mirrored in `localStorage` for speed/back-compat. Cookie read/write is handled by
+  `app/src/lib/cookies.ts`. See [§14B](#14b-cross-site-theme--language-persistence) for the
+  cross-site persistence architecture.
 - **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar, Table) are shadcn-style
   (cva + `cn`); `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline
   used by every screen.
+
+---
+
+## 14B. Cross-site Theme & Language Persistence
+
+The authenticated app (`app/`) and the landing site (`landing/`) share user preferences via
+**cookies scoped to the registrable parent domain** (`.linkintothessi.com` in production). This
+allows a user who toggled dark mode on the landing to arrive in the app already in dark mode —
+and vice versa — without any server round-trip.
+
+### Cookie specification
+
+| Cookie  | Values                        | Domain scope                                                                                              | Path | SameSite | Max-Age |
+|---------|-------------------------------|-----------------------------------------------------------------------------------------------------------|------|----------|---------|
+| `theme` | `light` \| `dark` \| `system` | `VITE_COOKIE_DOMAIN` / `NEXT_PUBLIC_COOKIE_DOMAIN` (`.linkintothessi.com` prod; unset = host-only in dev) | `/`  | `Lax`    | ~1 year |
+| `lang`  | `en` \| `pt` \| `es`          | same                                                                                                      | `/`  | `Lax`    | ~1 year |
+
+**Dev behaviour:** when the domain env var is unset, the cookie is written without a `Domain`
+attribute (host-only). Because dev runs `localhost:3000` (landing) vs `localhost:5174` (app),
+cookies are **not** shared across origins in dev — cross-site sync is prod-only. Each site
+honours its own cookie in isolation.
+
+### Source files
+
+| Site    | File                                 | Responsibility                                                                                                                                                                        |
+|---------|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| App     | `app/src/lib/cookies.ts`             | SSR-safe cookie read (`document.cookie` parse) + `serializeCookie` + `getCookie`/`setCookie`. Reads `VITE_COOKIE_DOMAIN`.                                                             |
+| App     | `app/src/lib/theme.ts`               | `getStoredTheme`/`setStoredTheme` — reads cookie first, falls back to `localStorage` mirror; `applyTheme` sets `.dark` on `<html>`, `color-scheme` meta, `<meta name="theme-color">`. |
+| App     | `app/src/i18n/index.ts`              | `cookie` detector added to i18next-browser-languagedetector detection order (before `localStorage`).                                                                                  |
+| Landing | `landing/lib/cookies.ts`             | Same SSR-safe cookie I/O for Next.js. Reads `NEXT_PUBLIC_COOKIE_DOMAIN`.                                                                                                              |
+| Landing | `landing/lib/theme.ts`               | `resolveTheme` / `applyTheme` + cookie get/set.                                                                                                                                       |
+| Landing | `landing/app/layout.tsx`             | Inline no-flash `<script>` reads the `theme` cookie and applies `.dark` before React hydrates; sets `suppressHydrationWarning` on `<html>`.                                           |
+| Landing | `landing/components/ThemeToggle.tsx` | `'use client'` 3-state toggle (system → light → dark → system); updates cookie + DOM immediately.                                                                                     |
+| Landing | `landing/components/Nav.tsx`         | Mounts `<ThemeToggle>` in the nav bar.                                                                                                                                                |
+
+### Theme resolution flow
+
+```mermaid
+flowchart TD
+  A["Page load / toggle"] --> B{"theme cookie\npresent?"}
+  B -->|yes| C["use cookie value\n(light | dark | system)"]
+  B -->|no| D["check localStorage mirror\n(key 'theme')"]
+  D -->|found| C
+  D -->|not found| E["system default\n(prefers-color-scheme)"]
+  C --> F{"resolved =\nsystem?"}
+  E --> F
+  F -->|yes| G["read prefers-color-scheme\nmedia query"]
+  F -->|no| H["use resolved value\n(light or dark)"]
+  G --> H
+  H --> I["applyTheme:\ntoggle .dark on html\nset color-scheme\nset meta[theme-color]"]
+  I --> J["write cookie + localStorage mirror"]
+```
+
+### Palette unification (landing → app)
+
+The landing's Tailwind v4 migration (Plan 1 Phase B) replaced the previous dark-navy-only palette
+with a full light/dark split that mirrors the app's design-system tokens:
+
+| Landing token                   | Light     | Dark                         |
+|---------------------------------|-----------|------------------------------|
+| `--ink` (page bg)               | `#f2eee6` | `#0e1320`                    |
+| `--cream` (body text)           | `#1c1813` | `#f5f0e8`                    |
+| `--gold` (accent fill)          | `#c9963e` | `#d8a94e`                    |
+| `--gold-text` (text on bg)      | `#8a6418` | `#e8c474`                    |
+| `--lnblue`                      | `#0077b5` | `#0077b5` (constant — brand) |
+| `--on-gold` (text on gold fill) | `#1c1813` | `#1c1813` (constant)         |
+
+`@custom-variant dark (.dark)` in `landing/app/globals.css` flips every token block when `.dark`
+is on the root element. `@theme inline` (not plain `@theme`) ensures opacity utilities like
+`text-cream/50` stay reactive to the `.dark` override in dark mode.
 
 ---
 
@@ -2059,10 +2136,13 @@ trialEndsAt }`). Cross-reference: §8 (subscription state machine) and §9 (plan
 ### i18n (`i18n/index.ts`)
 
 `i18next` + `react-i18next` + browser language detector. Resources `en`/`pt`/`es`, fallback `en`.
-**Detection order:** `localStorage` → `?lang=` querystring → `navigator`. The `LanguageMenu` (Radix
-dropdown in `TopBar`) persists the choice to `localStorage`. On the first authenticated load, if no
-`localStorage` `i18nextLng` key is present, the UI language is seeded once from `me.primaryLocale`
-(the scraped LinkedIn language); the `LanguageMenu` switcher still overrides it thereafter.
+**Detection order:** `cookie` (`lang`) → `localStorage` → `?lang=` querystring → `navigator`. The
+`lang` cookie is the cross-site source of truth (see [§14B](#14b-cross-site-theme--language-persistence));
+`localStorage` is a same-origin mirror. The `LanguageMenu` (Radix dropdown in `TopBar`) persists
+the choice to both cookie and `localStorage`. On the first authenticated load, if neither the
+cookie nor `localStorage` `i18nextLng` key is present, the UI language is seeded once from
+`me.primaryLocale` (the scraped LinkedIn language); the `LanguageMenu` switcher still overrides it
+thereafter.
 
 **Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and
 confirmation copy used by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
@@ -2088,21 +2168,101 @@ mention the 50-interaction milestone alongside the 7-day window); all three loca
 
 ## 15. Frontend — Landing Site (`landing/`)
 
-Standalone **Next.js 15 (App Router)**, React 19, Tailwind 3.4. Pure marketing — **no API/Convex
-calls**; all content (pricing, FAQ, stats) is hard‑coded in module constants.
+Standalone **Next.js 15 (App Router)**, React 19, **Tailwind CSS 4** (CSS-first, migrated from v3
+in Plan 1 Phase B). Pure marketing — **no API/Convex calls**; all content (pricing, FAQ, stats) is
+hard‑coded in module constants.
+
+### Locale routing (Plan 2 — i18n)
+
+All pages are **locale-routed** under `app/[lang]/` where `lang ∈ { en, pt, es }` (default `en`).
+`pt` is **Brazilian Portuguese**; `es` is **neutral Latin-American Spanish**.
+
+#### Middleware (`landing/middleware.ts`)
+
+`middleware.ts` intercepts every request whose pathname does not start with a known locale prefix
+(plus static/API exclusions). It selects the target locale in priority order:
+
+```mermaid
+flowchart TD
+  REQ["Incoming request\n(no /en|pt|es prefix)"] --> CK{"lang cookie\npresent?"}
+  CK -->|yes| USE["use cookie value"]
+  CK -->|no| AL{"Accept-Language\nmatches en/pt/es?"}
+  AL -->|yes| USE
+  AL -->|no| DEF["default: en"]
+  USE --> REDIR["307 redirect to\n/<lang>/original-path"]
+  DEF --> REDIR
+```
+
+The `Accept-Language` matcher is hand-rolled (no `negotiator`/`@formatjs/intl-localematcher` deps)
+— it checks the first token of each `Accept-Language` entry against the three supported locales,
+in header priority order. Paths starting with `/api/`, `/_next/`, and static file extensions are
+excluded from interception (Next's built-in exclusion list is replicated in the matcher config).
+
+#### Root layout (`app/[lang]/layout.tsx`)
+
+`app/[lang]/layout.tsx` is the **single** root layout — there is no `app/layout.tsx`. It:
+
+- Awaits `params` (`const { lang } = await params` — Next 15 `params` is a `Promise`).
+- Renders `<html lang={lang}>` with `suppressHydrationWarning` (theme no-flash script).
+- Applies the dark/light theme no-flash inline `<script>` (reads the `theme` cookie before React
+  hydrates — identical to the Plan 1 pattern; see §14B).
+- Renders `<CookieNotice>` (banner).
+- Calls `generateStaticParams` exporting `[{ lang: 'en' }, { lang: 'pt' }, { lang: 'es' }]` so
+  all three locales are **statically pre-rendered** at build time.
+
+#### Dictionary (`landing/i18n/`)
+
+UI strings live in `i18n/dictionaries/{en,pt,es}.json` (~208 keys in groups: `meta`, `nav`,
+`hero`, `painBeat`, `howItWorks`, `ssiExplainer`, `proof`, `features`, `tiers`, `pricing`, `faq`,
+`finalCta`, `footer`, `cookieNotice`, `themeToggle`, `languageSelector`). The server utility
+`i18n/getDictionary.ts` imports the correct JSON at request time and returns a typed `Dictionary`
+(type derived from `en.json`). `i18n/config.ts` exports the `locales` array and `Locale` type.
+
+Server components (`app/[lang]/page.tsx`, `app/[lang]/pricing/page.tsx`, legal pages) call
+`getDictionary(lang)` and pass the relevant dict slice as props to child components.
+
+#### Client components and `LanguageSelector`
+
+The six client components — `Nav`, `Pricing`, `FAQ`, `CookieNotice`, `ThemeToggle`, and
+`LanguageSelector` — receive their dict slice (and `lang`) as props; they do not call
+`getDictionary` directly (server-only utility).
+
+`LanguageSelector` (`landing/components/LanguageSelector.tsx`) is mounted in `Nav`. When the user
+picks a locale it:
+
+1. Writes the **shared `lang` cookie** (same cookie name, domain, and SameSite attributes as the
+   app's i18n cookie detector — see §14B) via `landing/lib/cookies.ts`.
+2. Navigates to the same path under the chosen locale prefix (e.g. `/en/pricing` →
+   `/pt/pricing`) using `router.push`.
+
+Because the cookie domain is `.linkintothessi.com` in production, the chosen language immediately
+carries over to the authenticated app on next load (the app reads the `lang` cookie via its
+i18next cookie detector — §14B). In dev the cookie is host-only so sync is prod-only.
+
+#### SEO: `hreflang` + per-locale metadata
+
+Each `page.tsx` exports `generateMetadata(params)` returning per-locale `title`, `description`,
+and OpenGraph fields sourced from `dict.meta`. It also injects `alternates.languages` with the
+three `hreflang` alternate URLs (`/en/…`, `/pt/…`, `/es/…`) plus `x-default` pointing to `/en/…`.
 
 ### Routes
 
-| Route      | Purpose                                                                                                                     |
-|------------|-----------------------------------------------------------------------------------------------------------------------------|
-| `/`        | Home — composes `Nav → Hero → PainBeat → HowItWorks → SSIExplainer → Proof → Features → Pricing → FAQ → FinalCTA → Footer`. |
-| `/pricing` | Standalone pricing (`Nav` + `Pricing`).                                                                                     |
-| `/privacy` | Privacy Policy — **required for LinkedIn app review**.                                                                      |
-| `/terms`   | Terms of Service — **required for LinkedIn app review**.                                                                    |
-| `/cookies` | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`.     |
+All routes now include the locale prefix. The canonical forms are:
 
-`app/layout.tsx` defines static SEO metadata (title/description/OpenGraph), the dark "ink" theme,
-and renders `<CookieNotice>` (see below). **Notable section content** (encodes the business rules):
+| Route             | Purpose                                                                                                                     |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `/<lang>`         | Home — composes `Nav → Hero → PainBeat → HowItWorks → SSIExplainer → Proof → Features → Pricing → FAQ → FinalCTA → Footer`. |
+| `/<lang>/pricing` | Standalone pricing (`Nav` + `Pricing`).                                                                                     |
+| `/<lang>/privacy` | Privacy Policy — **required for LinkedIn app review**.                                                                      |
+| `/<lang>/terms`   | Terms of Service — **required for LinkedIn app review**.                                                                    |
+| `/<lang>/cookies` | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`.     |
+
+A bare `/` (or any path without a locale prefix) is 307-redirected by middleware to the detected
+locale (see middleware section above). Static generation covers all 5 route types × 3 locales =
+15 pages, plus `ƒ Middleware`.
+
+`app/[lang]/layout.tsx` renders `<CookieNotice>` (see below) and contains the no-flash theme script.
+**Notable section content** (encodes the business rules):
 `PainBeat` frames the core problem (algorithm invisibility). `HowItWorks` describes the three-step
 engagement flow (connect → engage → get found) plus the network-effect line. `SSIExplainer` covers the four 25-point
 pillars
@@ -2120,8 +2280,26 @@ implemented in Plan 2). Each tier's **"Start free" CTA** links directly to OAuth
 `?plan=<starter|growth|pro>&interval=<monthly|annual>` so the chosen tier is carried through the
 OAuth flow and pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with
 honest trial-scope and SSI
-answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to `/privacy`,
-`/terms`, `/cookies`, and `mailto:hello@linkintothessi.com`.
+answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to
+`/<lang>/privacy`, `/<lang>/terms`, `/<lang>/cookies`, and `mailto:hello@linkintothessi.com`.
+
+### Legal pages — pt/es drafts
+
+The legal pages (`/privacy`, `/terms`, `/cookies`) now have per-locale content modules:
+
+```
+app/[lang]/privacy/content/{en,pt,es}.tsx
+app/[lang]/terms/content/{en,pt,es}.tsx
+app/[lang]/cookies/content/{en,pt,es}.tsx
+```
+
+Each `page.tsx` imports the content module matching `lang` and renders it. The pt and es modules
+are **Brazilian Portuguese / Latin-American Spanish translations** of the English source — they
+preserve the hand-styled JSX markup and all `[PLACEHOLDER]` tokens (`[LEGAL_ENTITY_NAME]`,
+`[BUSINESS_ADDRESS]`, `[PRIVACY_CONTACT_EMAIL]`, `[DPO_OR_REP_CONTACT]`,
+`[GOVERNING_LAW_JURISDICTION]`, policy version strings) **verbatim**. A draft banner
+(translated) is shown in all locales. All three locales remain **drafts pending legal review** —
+translation does not constitute legal sign-off.
 
 ### CookieNotice (Phase 3b)
 
@@ -2160,10 +2338,14 @@ site (§7) — actually log in instead of ping‑ponging. Internal nav (logo, fo
 
 ### Styling
 
-Tailwind with a custom palette — `ink` (dark navy bg), `cream` (text), `lnblue` (LinkedIn blue),
-`gold` (accent) — Cormorant Garamond (display) + DM Sans (body), glassmorphic scrolled nav, radial
-glows, decorative `circle-ring` elements. The hero is a headline + CTA over the decorative rings
-(no SSI gauge, no slot-machine animation). No mobile hamburger menu.
+**Tailwind v4 CSS-first** — `landing/app/globals.css` uses `@tailwindcss/postcss`, `@theme inline`,
+`:root` (light) and `.dark` (dark) token blocks, plus `@custom-variant dark (.dark)`. The palette
+(`--ink`, `--cream`, `--gold`, `--gold-text`, `--lnblue`, `--on-gold`, `--on-lnblue`, decorative
+`--ring-line`, `--ring-gold`, `--glow-*`) is unified with the app's design system (see §14A/§14B).
+No `tailwind.config.ts` remains (deleted in the v3→v4 migration). Cormorant Garamond (display) +
+DM Sans (body), glassmorphic scrolled nav, radial glows, decorative `circle-ring` elements. The
+hero is a headline + CTA over the decorative rings (no SSI gauge, no slot-machine animation). No
+mobile hamburger menu. `ThemeToggle` (3-state system/light/dark) is mounted in `Nav`.
 
 ---
 
@@ -2202,24 +2384,26 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
-| Variable                              |              Required               | Consumed in       | Purpose                                                                                      |
-|---------------------------------------|:-----------------------------------:|-------------------|----------------------------------------------------------------------------------------------|
-| `VITE_CONVEX_URL`                     |                  ✓                  | `main.tsx`        | `.convex.cloud` URL for `ConvexReactClient` (data transport).                                |
-| `VITE_CONVEX_SITE`                    |                  ✓                  | `App.tsx`         | `.convex.site` base for the `/auth/linkedin` sign‑in redirect.                               |
-| `VITE_LANDING_URL`                    | – (default `http://localhost:3000`) | `lib/session.ts`  | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).           |
-| `VITE_STRIPE_STARTER_PRICE_ID`        |           ✓ (billing UI)            | `BillingPage.tsx` | Monthly price id for Starter checkout.                                                       |
-| `VITE_STRIPE_GROWTH_PRICE_ID`         |           ✓ (billing UI)            | `BillingPage.tsx` | Monthly price id for Growth checkout.                                                        |
-| `VITE_STRIPE_PRO_PRICE_ID`            |           ✓ (billing UI)            | `BillingPage.tsx` | Monthly price id for Pro checkout (missing → button disabled).                               |
-| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |           ✓ (billing UI)            | `BillingPage.tsx` | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex. |
-| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |           ✓ (billing UI)            | `BillingPage.tsx` | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.  |
-| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |           ✓ (billing UI)            | `BillingPage.tsx` | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.        |
+| Variable                              |                    Required                     | Consumed in       | Purpose                                                                                                                |
+|---------------------------------------|:-----------------------------------------------:|-------------------|------------------------------------------------------------------------------------------------------------------------|
+| `VITE_CONVEX_URL`                     |                        ✓                        | `main.tsx`        | `.convex.cloud` URL for `ConvexReactClient` (data transport).                                                          |
+| `VITE_CONVEX_SITE`                    |                        ✓                        | `App.tsx`         | `.convex.site` base for the `/auth/linkedin` sign‑in redirect.                                                         |
+| `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`  | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                     |
+| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`  | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev). |
+| `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                  | `BillingPage.tsx` | Monthly price id for Starter checkout.                                                                                 |
+| `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                  | `BillingPage.tsx` | Monthly price id for Growth checkout.                                                                                  |
+| `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                  | `BillingPage.tsx` | Monthly price id for Pro checkout (missing → button disabled).                                                         |
+| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                  | `BillingPage.tsx` | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                           |
+| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                  | `BillingPage.tsx` | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                            |
+| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                  | `BillingPage.tsx` | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                  |
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
-| Variable                  |                       Required                       | Consumed in    | Purpose                                                                                               |
-|---------------------------|:----------------------------------------------------:|----------------|-------------------------------------------------------------------------------------------------------|
-| `NEXT_PUBLIC_APP_URL`     |         – (default `http://localhost:5173`)          | `lib/links.ts` | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset.                     |
-| `NEXT_PUBLIC_CONVEX_SITE` | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts` | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly. |
+| Variable                    |                       Required                       | Consumed in      | Purpose                                                                                                                |
+|-----------------------------|:----------------------------------------------------:|------------------|------------------------------------------------------------------------------------------------------------------------|
+| `NEXT_PUBLIC_APP_URL`       |         – (default `http://localhost:5173`)          | `lib/links.ts`   | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset.                                      |
+| `NEXT_PUBLIC_CONVEX_SITE`   | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts`   | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly.                  |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` |   – (unset in dev; `.linkintothessi.com` in prod)    | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev). |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
 > default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the
@@ -2369,7 +2553,8 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 - **`featuredPostUsage`** table — defined and tested but has **no read/write call sites**.
 - `linkedin/types.ts` legacy `LinkedInProfile`/`LinkedInConnectionElement`/`LinkedInConnectionsResponse`
   are unused remnants of the abandoned `r_network` connections feature.
-- `tailwind.config.ts`'s `slotRoll` keyframe is overridden by the one in `globals.css` (dead).
+- `landing/tailwind.config.ts` was **deleted** in the Tailwind v3→v4 migration (Plan 1 Phase B);
+  its `slotRoll` keyframe and the `fadeUp`/`shimmer` keyframes had zero usages and were not ported.
 
 ### Stubs / planned
 
@@ -2416,30 +2601,39 @@ This document is **canonical** and must not be allowed to drift. The rule in `CL
 that **any code change or push updates the relevant section(s) here in the same change**. Practical
 checklist when you touch the codebase:
 
-| If you change…                                                                                                                                                                          | Update section(s)                                                                         |
-|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
-| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                              | [§5 Data Model](#5-data-model) (+ ER diagram)                                             |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                              | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                |
-| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                   | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model) |
-| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                      | [§9](#9-plan-limits-system)                                                               |
-| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                  | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)             |
-| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                        | [§11](#11-feed--engagement) (+ flows)                                                     |
-| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                   | [§12](#12-admin--moderation)                                                              |
-| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                        | [§12A](#12a-feedback)                                                                     |
-| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                   | [§12B](#12b-message-of-the-day-motd)                                                      |
-| App UI (`app/src/**`)                                                                                                                                                                   | [§14](#14-frontend--authenticated-app-app)                                                |
-| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`) | [§14A Design System](#14a-design-system)                                                  |
-| Landing (`landing/**`)                                                                                                                                                                  | [§15](#15-frontend--landing-site-landing)                                                 |
-| Any `process.env` / `import.meta.env` usage                                                                                                                                             | [§16 Environment Variables](#16-environment-variables)                                    |
-| Tooling/tests/deploy                                                                                                                                                                    | [§18](#18-configuration-tooling--testing)                                                 |
-| Resolving a stale item / removing dead code                                                                                                                                             | [§19](#19-known-discrepancies-dead-code--roadmap)                                         |
+| If you change…                                                                                                                                                                                                              | Update section(s)                                                                           |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                               |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                  |
+| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)   |
+| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                 |
+| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)               |
+| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                       |
+| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                |
+| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                            | [§12A](#12a-feedback)                                                                       |
+| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                        |
+| App UI (`app/src/**`)                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                  |
+| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                     | [§14A Design System](#14a-design-system)                                                    |
+| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/layout.tsx`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence) |
+| Landing (`landing/**`)                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                   |
+| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                      |
+| Tooling/tests/deploy                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                   |
+| Resolving a stale item / removing dead code                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                           |
 
 When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add
 a flow chart (Mermaid) if it introduces a multi‑step flow.
 
 ---
 
-_Last updated: 2026‑06‑15. Generated from a full read of the codebase at branch
+_Last updated: 2026‑06‑21. Updated to reflect locale-routed i18n + pt/es legal drafts (Plan 2):
+§15 restructured — added "Locale routing" subsection (middleware flow, root layout, dictionary pattern,
+LanguageSelector, hreflang/per-locale metadata, updated route table with locale prefix, legal
+content modules with pt/es drafts); also updated route table and footer link paths.
+Prior: Updated to reflect cross-site theme + lang persistence (Plan 1 Phase A+B):
+§14B added (cross-site cookie persistence, Mermaid flow, palette unification); §14A updated (cookie-primary theme);
+§15 updated (Tailwind v4, light/dark, ThemeToggle); §16 updated (VITE\_COOKIE\_DOMAIN, NEXT\_PUBLIC\_COOKIE\_DOMAIN);
+§2/§3/§4 updated (landing now Tailwind 4); §19 updated (tailwind.config.ts deleted); i18n cookie detector noted.
+Prior history: Generated from a full read of the codebase at branch
 `feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature
 (commits `d1b40a2` → `1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
 (Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`,
