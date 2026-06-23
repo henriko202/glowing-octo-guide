@@ -4,7 +4,7 @@
 
 # Record of Processing Activities (ROPA)
 
-**Controller:** [LEGAL_ENTITY_NAME]  
+**Controller:** NEANDERTECH SERVICOS DE TECNOLOGIA LTDA  
 **Prepared under:** GDPR Art. 30 (and equivalent obligations under UK GDPR, LGPD, and applicable US state law)  
 **Scope:** All personal data processed by Link Into The SSI as data controller
 
@@ -35,12 +35,12 @@
 
 ## 1. Controller Identity
 
-| Field                             | Value                   |
-|-----------------------------------|-------------------------|
-| **Legal entity name**             | [LEGAL_ENTITY_NAME]     |
-| **Registered address**            | [BUSINESS_ADDRESS]      |
-| **Primary privacy contact**       | [PRIVACY_CONTACT_EMAIL] |
-| **DPO / EU or UK representative** | [DPO_OR_REP_CONTACT]    |
+| Field                             | Value                                                                       |
+|-----------------------------------|-----------------------------------------------------------------------------|
+| **Legal entity name**             | NEANDERTECH SERVICOS DE TECNOLOGIA LTDA                                     |
+| **Registered address**            | AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil |
+| **Primary privacy contact**       | contact@linkintothessi.com                                                  |
+| **DPO / EU or UK representative** | Henriko Alberton                                                            |
 
 > **Human action required:** Fill in the bracketed fields above before publishing. Assess whether a formal DPO
 > appointment or an EU/UK representative (GDPR Art. 27) is legally required given the entity's domicile and the scope of
@@ -377,13 +377,13 @@ Data** in the authenticated app.
 | **Portability (Art. 20)**        | Same as access — the export is provided in a machine-readable format                                                                                                                                           |
 | **Erasure (Art. 17)**            | Settings → Privacy & Data → Delete Account. A 30-day grace period applies; hard deletion is performed by the `processAccountDeletions` cron. Stripe billing records required by tax law are retained by Stripe |
 | **Rectification (Art. 16)**      | Profile fields can be updated via Settings; LinkedIn OIDC attributes (name, headline, picture) are refreshed on next login                                                                                     |
-| **Restriction (Art. 18)**        | Contact [PRIVACY_CONTACT_EMAIL]                                                                                                                                                                                |
+| **Restriction (Art. 18)**        | Contact contact@linkintothessi.com                                                                                                                                                                             |
 | **Objection (Art. 21)**          | For processing based on legitimate interest: withdraw via Settings → Privacy & Data consent toggles; or delete the account                                                                                     |
 | **Withdraw consent (Art. 7(3))** | Settings → Privacy & Data → Consent toggles (marketing, analytics). Withdrawal does not affect the lawfulness of processing before withdrawal                                                                  |
 | **Lodge a complaint**            | Any data subject may lodge a complaint with the competent supervisory authority in their country of residence                                                                                                  |
 
 All self-service actions are recorded in the audit log (Activity 8). For requests that cannot be fulfilled self-service,
-contact [PRIVACY_CONTACT_EMAIL].
+contact contact@linkintothessi.com.
 
 ---
 

@@ -2281,7 +2281,7 @@ implemented in Plan 2). Each tier's **"Start free" CTA** links directly to OAuth
 OAuth flow and pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with
 honest trial-scope and SSI
 answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to
-`/<lang>/privacy`, `/<lang>/terms`, `/<lang>/cookies`, and `mailto:hello@linkintothessi.com`.
+`/<lang>/privacy`, `/<lang>/terms`, `/<lang>/cookies`, and `mailto:contact@linkintothessi.com`.
 
 ### Legal pages — pt/es drafts
 
@@ -2295,9 +2295,10 @@ app/[lang]/cookies/content/{en,pt,es}.tsx
 
 Each `page.tsx` imports the content module matching `lang` and renders it. The pt and es modules
 are **Brazilian Portuguese / Latin-American Spanish translations** of the English source — they
-preserve the hand-styled JSX markup and all `[PLACEHOLDER]` tokens (`[LEGAL_ENTITY_NAME]`,
-`[BUSINESS_ADDRESS]`, `[PRIVACY_CONTACT_EMAIL]`, `[DPO_OR_REP_CONTACT]`,
-`[GOVERNING_LAW_JURISDICTION]`, policy version strings) **verbatim**. A draft banner
+preserve the hand-styled JSX markup and all `[PLACEHOLDER]` tokens (`NEANDERTECH SERVICOS DE TECNOLOGIA LTDA`,
+`AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`, `contact@linkintothessi.com`,
+`Henriko Alberton`,
+`Brazil`, policy version strings) **verbatim**. A draft banner
 (translated) is shown in all locales. All three locales remain **drafts pending legal review** —
 translation does not constitute legal sign-off.
 
@@ -2321,7 +2322,9 @@ permission to act on their behalf and the monthly‑billing/cancellation policy.
 As of Phase 4, `/privacy` and `/terms` have been rewritten as full **GDPR / LGPD / US-state**
 drafts (covering lawful basis, data-subject rights, international transfers, and CCPA/CPRA
 disclosures). Both pages are **DRAFTs pending legal review** — bracketed placeholders
-(`[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, etc.) must be filled and a lawyer must sign off
+(`NEANDERTECH SERVICOS DE TECNOLOGIA LTDA`,
+`AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`, etc.) must be filled and a lawyer must
+sign off
 before they are regulator-ready. `/cookies` documents the essential-storage-only cookie policy
 (Phase 3b). See [`docs/compliance/README.md`](compliance/README.md) for the consolidated legal
 to-do list.

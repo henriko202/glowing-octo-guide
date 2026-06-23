@@ -106,7 +106,7 @@ export default function BillingPage() {
       {/* Billing Info Card — shown for active subscribers */}
       {subscriptionInfo && me?.subscriptionStatus === 'active' && (
         <div className="border-border bg-muted mb-6 rounded-xl border p-5">
-          <h2 className="text-foreground mb-3 mt-0 text-base font-bold">{t('billing.subscriptionInfo')}</h2>
+          <h2 className="text-foreground mt-0 mb-3 text-base font-bold">{t('billing.subscriptionInfo')}</h2>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-muted-foreground m-0 text-xs">{t('billing.status')}</p>
@@ -259,7 +259,7 @@ export default function BillingPage() {
               variant="outline"
               asChild
             >
-              <a href="mailto:hello@linkintothessi.com">{t('billing.plans.contact.cta')}</a>
+              <a href="mailto:contact@linkintothessi.com">{t('billing.plans.contact.cta')}</a>
             </Button>
           </div>
         </div>

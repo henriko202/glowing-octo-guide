@@ -21,10 +21,10 @@ export default function En({ lang: _lang }: { lang: Locale }) {
         <p>
           Questions:{' '}
           <a
-            href="mailto:hello@linkintothessi.com"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            hello@linkintothessi.com
+            contact@linkintothessi.com
           </a>
         </p>
       </div>

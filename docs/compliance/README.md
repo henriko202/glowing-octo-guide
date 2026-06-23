@@ -35,12 +35,13 @@ human decision, a lawyer, or a signed agreement.
 Every compliance doc contains placeholder values that must be completed with real information before
 the document has any legal effect:
 
-- `[LEGAL_ENTITY_NAME]` — the registered company or trading name that acts as data controller.
-- `[BUSINESS_ADDRESS]` — the controller's registered address (used in privacy notices and DPAs).
-- `[GOVERNING_LAW_JURISDICTION]` — the jurisdiction whose law governs the DPA and ToS (e.g. "England and Wales").
-- `[PRIVACY_CONTACT_EMAIL]` — the email address data subjects use to exercise their rights (currently
-  `hello@linkintothessi.com` in the UI — confirm this is monitored and correct).
-- `[DPO_OR_REP_CONTACT]` — contact details of the Data Protection Officer (if appointed) or the EU/UK representative (if
+- `NEANDERTECH SERVICOS DE TECNOLOGIA LTDA` — the registered company or trading name that acts as data controller.
+- `AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil` — the controller's registered address (
+  used in privacy notices and DPAs).
+- `Brazil` — the jurisdiction whose law governs the DPA and ToS (e.g. "England and Wales").
+- `contact@linkintothessi.com` — the email address data subjects use to exercise their rights (currently
+  `contact@linkintothessi.com` in the UI — confirm this is monitored and correct).
+- `Henriko Alberton` — contact details of the Data Protection Officer (if appointed) or the EU/UK representative (if
   required — see item 5 below).
 
 These placeholders also appear in the `/privacy` and `/terms` landing pages.
@@ -83,7 +84,7 @@ confirm:
 - An **EU representative** (GDPR Art. 27) is required if the controller is not established in the EU
   but offers services to EU residents. An **UK representative** (UK GDPR Art. 27) has an equivalent
   requirement for the UK.
-- If either representative is required, appoint them and add their contact details to `[DPO_OR_REP_CONTACT]` in all
+- If either representative is required, appoint them and add their contact details to `Henriko Alberton` in all
   relevant documents.
 
 ### 6. Assess ANPD (Brazil) obligations

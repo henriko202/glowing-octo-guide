@@ -6,8 +6,7 @@ export default function Es({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Terminos de Servicio</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Ultima actualizacion:</strong> Junio 2026 &mdash; borrador pendiente de
-          revision juridica.
+          <strong className="text-cream">Ultima actualizacion:</strong> Junio 2026
         </p>
 
         {/* 1. Aceptacion */}
@@ -130,9 +129,6 @@ export default function Es({ lang }: { lang: Locale }) {
           7. Exenciones de Garantia &amp; Limitacion de Responsabilidad
         </h2>
         <p>
-          <strong className="text-cream">[standard clauses &mdash; to be completed by legal counsel]</strong>
-        </p>
-        <p>
           Esta seccion, incluidas las exenciones de garantia, las disposiciones de indemnizacion y los limites de
           responsabilidad, sera redactada e insertada por asesores juridicos calificados antes del lanzamiento publico
           del Servicio. Hasta que estos terminos sean finalizados, no se aplica ninguna limitacion vinculante de
@@ -160,9 +156,8 @@ export default function Es({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">9. Ley Aplicable</h2>
         <p>
           Estos Terminos se rigen e interpretan de conformidad con las leyes de{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>. Cualquier disputa derivada de o
-          relacionada con estos Terminos estara sujeta a la jurisdiccion exclusiva de los tribunales de{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>.
+          <strong className="text-cream">Brazil</strong>. Cualquier disputa derivada de o relacionada con estos Terminos
+          estara sujeta a la jurisdiccion exclusiva de los tribunales de <strong className="text-cream">Brazil</strong>.
         </p>
 
         {/* 10. Cambios y contacto */}
@@ -175,10 +170,10 @@ export default function Es({ lang }: { lang: Locale }) {
         <p>
           Preguntas sobre estos Terminos? Contactenos en{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>

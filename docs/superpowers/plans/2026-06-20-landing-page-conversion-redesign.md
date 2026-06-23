@@ -931,7 +931,7 @@ export default function Pricing() {
           <p className="text-sm text-cream/40">
             Teams &amp; agencies — Enterprise from <span className="text-cream/70">$100/mo</span>.{' '}
             <a
-              href="mailto:hello@linkintothessi.com"
+              href="mailto:contact@linkintothessi.com"
               className="text-gold underline underline-offset-4 hover:text-gold-light"
             >
               Talk to us

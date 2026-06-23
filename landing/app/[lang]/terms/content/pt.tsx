@@ -6,8 +6,7 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Termos de Serviço</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Ultima atualizacao:</strong> Junho 2026 &mdash; rascunho aguardando revisão
-          juridica.
+          <strong className="text-cream">Ultima atualizacao:</strong> Junho 2026
         </p>
 
         {/* 1. Aceitação */}
@@ -133,9 +132,6 @@ export default function Pt({ lang }: { lang: Locale }) {
           7. Isenções de Responsabilidade &amp; Limitacao de Responsabilidade
         </h2>
         <p>
-          <strong className="text-cream">[standard clauses &mdash; to be completed by legal counsel]</strong>
-        </p>
-        <p>
           Esta secao, incluindo quaisquer isenções de garantia, disposições de indenizacao e limites de
           responsabilidade, sera redigida e inserida por advogados qualificados antes do lancamento publico do Serviço.
           Ate que esses termos sejam finalizados, nenhuma limitacao vinculante de responsabilidade se aplica em nenhuma
@@ -162,10 +158,9 @@ export default function Pt({ lang }: { lang: Locale }) {
         {/* 9. Lei aplicável */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">9. Lei Aplicável</h2>
         <p>
-          Estes Termos são regidos e interpretados de acordo com as leis de{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>. Quaisquer disputas decorrentes ou
-          relacionadas a estes Termos estarão sujeitas a jurisdicao exclusiva dos tribunais de{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>.
+          Estes Termos são regidos e interpretados de acordo com as leis do{' '}
+          <strong className="text-cream">Brasil</strong>. Quaisquer disputas decorrentes ou relacionadas a estes Termos
+          estarão sujeitas a jurisdicao exclusiva dos tribunais do <strong className="text-cream">Brasil</strong>.
         </p>
 
         {/* 10. Alterações e contato */}
@@ -178,10 +173,10 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>
           Duvidas sobre estes Termos? Entre em contato em{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>

@@ -4,7 +4,7 @@
 
 # Sub-Processor List
 
-**Controller:** [LEGAL_ENTITY_NAME]
+**Controller:** NEANDERTECH SERVICOS DE TECNOLOGIA LTDA
 **Service:** Link Into The SSI
 
 This document lists all third-party organisations that process personal data on behalf of Link Into The SSI as data

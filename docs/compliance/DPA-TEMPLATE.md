@@ -51,7 +51,7 @@ and
 [PROCESSOR] (legal entity name)
 Registered address: [PROCESSOR_ADDRESS]
 Company registration number: [PROCESSOR_REG_NO]
-Contact for data protection matters: [PRIVACY_CONTACT_EMAIL]
+Contact for data protection matters: contact@linkintothessi.com
 (hereinafter "**Processor**")
 
 The Controller and Processor are referred to individually as a "**Party**" and collectively as the "**Parties**".
@@ -401,9 +401,9 @@ subject to the liability limits in the Principal Agreement.
 
 ## 15. Governing Law and Jurisdiction
 
-This Agreement is governed by the laws of [GOVERNING_LAW_JURISDICTION]. Any dispute arising from or in connection with
+This Agreement is governed by the laws of Brazil. Any dispute arising from or in connection with
 this Agreement that cannot be resolved amicably will be subject to the exclusive jurisdiction of the courts
-of [GOVERNING_LAW_JURISDICTION], unless the Parties have agreed to an alternative dispute-resolution mechanism in the
+of Brazil, unless the Parties have agreed to an alternative dispute-resolution mechanism in the
 Principal Agreement.
 
 ---
@@ -451,7 +451,7 @@ Date: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
 ---
 
-**[PROCESSOR] ([LEGAL_ENTITY_NAME])**
+**[PROCESSOR] (NEANDERTECH SERVICOS DE TECNOLOGIA LTDA)**
 
 Signed: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
@@ -485,5 +485,6 @@ _[TO BE COMPLETED: Attach the applicable European Commission Standard Contractua
 
 ---
 
-_This template must be reviewed by qualified legal counsel before use. [LEGAL_ENTITY_NAME] accepts no liability for any
+_This template must be reviewed by qualified legal counsel before use. NEANDERTECH SERVICOS DE TECNOLOGIA LTDA accepts
+no liability for any
 reliance on this template in its unreviewed or incomplete form._

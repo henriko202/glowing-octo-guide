@@ -34,7 +34,7 @@ export default function Footer({ dict, lang }: { dict: Dictionary['footer']; lan
             {dict.cookies}
           </Link>
           <a
-            href="mailto:hello@linkintothessi.com"
+            href="mailto:contact@linkintothessi.com"
             className="transition-colors hover:text-cream/60"
           >
             {dict.contact}

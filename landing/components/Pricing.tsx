@@ -113,7 +113,7 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
           <p className="text-sm text-cream/40">
             {dict.enterpriseNote} <span className="text-cream/70">{dict.enterprisePrice}</span>.{' '}
             <a
-              href="mailto:hello@linkintothessi.com"
+              href="mailto:contact@linkintothessi.com"
               className="text-gold-text underline underline-offset-4 hover:text-gold-light"
             >
               {dict.enterpriseCta}

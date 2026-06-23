@@ -22,10 +22,10 @@ export default function Pt({ lang: _lang }: { lang: Locale }) {
         <p>
           Duvidas:{' '}
           <a
-            href="mailto:hello@linkintothessi.com"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            hello@linkintothessi.com
+            contact@linkintothessi.com
           </a>
         </p>
       </div>

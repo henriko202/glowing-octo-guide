@@ -4,7 +4,7 @@
 
 # Data Retention Policy
 
-**Controller:** [LEGAL_ENTITY_NAME]
+**Controller:** NEANDERTECH SERVICOS DE TECNOLOGIA LTDA
 **Service:** Link Into The SSI
 
 This document states the retention period for each category of personal data processed by Link Into The SSI, the legal

@@ -14,23 +14,25 @@ export default function Pt({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Quem Somos</h2>
         <p>
           O controlador de dados das suas informações pessoais e{' '}
-          <strong className="text-cream">[LEGAL_ENTITY_NAME]</strong>, localizado em{' '}
-          <strong className="text-cream">[BUSINESS_ADDRESS]</strong> (&ldquo;nos&rdquo;, &ldquo;Link Into The
-          SSI&rdquo;).
+          <strong className="text-cream">NEANDERTECH SERVICOS DE TECNOLOGIA LTDA</strong>, localizado em{' '}
+          <strong className="text-cream">
+            AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil
+          </strong>{' '}
+          (&ldquo;nos&rdquo;, &ldquo;Link Into The SSI&rdquo;).
         </p>
         <p>
           Consultas sobre privacidade:{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>
         <p>
           Encarregado de Proteção de Dados / Representante UE&ndash;UK:{' '}
-          <strong className="text-cream">[DPO_OR_REP_CONTACT]</strong>.
+          <strong className="text-cream">Henriko Alberton</strong>.
         </p>
 
         {/* 2. Dados que coletamos e fontes */}
@@ -139,10 +141,10 @@ export default function Pt({ lang }: { lang: Locale }) {
           Comissão Europeia como mecanismo de transferencia para cada processador. Uma copia das salvaguardas de
           transferencia aplicaveis esta disponivel mediante solicitacao pelo contato{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>
@@ -210,10 +212,10 @@ export default function Pt({ lang }: { lang: Locale }) {
           <strong className="text-cream">Configurações &rarr; Privacidade &amp; Dados</strong>, onde você pode exportar
           seus dados, excluir sua conta e gerenciar os consentimentos. Você tambem pode nos contatar em{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           . Responderemos em ate 30 dias (ou no prazo legal quando menor).
         </p>
@@ -246,10 +248,10 @@ export default function Pt({ lang }: { lang: Locale }) {
           Para enviar uma solicitacao de privacidade da California, use{' '}
           <strong className="text-cream">Configurações &rarr; Privacidade &amp; Dados</strong> ou envie um e-mail para{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>
@@ -267,7 +269,7 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>Reclamações podem ser apresentadas a Autoridade Nacional de Proteção de Dados (ANPD).</p>
         <p>
           Nosso encarregado (Data Protection Officer / representante LGPD):{' '}
-          <strong className="text-cream">[DPO_OR_REP_CONTACT]</strong>.
+          <strong className="text-cream">Henriko Alberton</strong>.
         </p>
 
         {/* 10. Cookies e armazenamento */}
@@ -292,10 +294,10 @@ export default function Pt({ lang }: { lang: Locale }) {
           intencionalmente informações pessoais de menores de 16 anos. Se você acredita que uma crianca com menos de 16
           anos nos forneceu informações pessoais, entre em contato em{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>{' '}
           e as removeremos imediatamente.
         </p>
@@ -312,10 +314,10 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>
           Duvidas ou preocupações? Entre em contato em{' '}
           <a
-            href="mailto:hello@linkintothessi.com"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            hello@linkintothessi.com
+            contact@linkintothessi.com
           </a>
           .
         </p>

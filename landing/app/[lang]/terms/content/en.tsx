@@ -6,7 +6,7 @@ export default function En({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Terms of Service</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Last updated:</strong> June 2026 &mdash; draft pending legal review.
+          <strong className="text-cream">Last updated:</strong> June 2026
         </p>
 
         {/* 1. Acceptance */}
@@ -128,9 +128,6 @@ export default function En({ lang }: { lang: Locale }) {
           7. Disclaimers &amp; Limitation of Liability
         </h2>
         <p>
-          <strong className="text-cream">[standard clauses &mdash; to be completed by legal counsel]</strong>
-        </p>
-        <p>
           This section, including any warranty disclaimers, indemnification provisions, and caps on liability, will be
           drafted and inserted by qualified legal counsel prior to the Service launching publicly. Until these terms are
           finalised no binding limitation of liability applies in either direction.
@@ -157,9 +154,8 @@ export default function En({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">9. Governing Law</h2>
         <p>
           These Terms are governed by and construed in accordance with the laws of{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>. Any disputes arising from or relating to
-          these Terms shall be subject to the exclusive jurisdiction of the courts of{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>.
+          <strong className="text-cream">Brazil</strong>. Any disputes arising from or relating to these Terms shall be
+          subject to the exclusive jurisdiction of the courts of <strong className="text-cream">Brazil</strong>.
         </p>
 
         {/* 10. Changes & contact */}
@@ -172,10 +168,10 @@ export default function En({ lang }: { lang: Locale }) {
         <p>
           Questions about these Terms? Contact us at{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>
