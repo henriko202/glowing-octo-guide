@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import PostCard, { ReactionOptions, type PostWithAuthor } from './PostCard'
+import PostCard, { type PostWithAuthor } from './PostCard'
 
 const mockPost: PostWithAuthor = {
   _id: 'post123' as never,
@@ -52,28 +52,6 @@ describe('PostCard', () => {
       />
     )
     expect(screen.getByText(/featured/i)).toBeInTheDocument()
-  })
-
-  it('renders all six reactions and calls onSelect with the chosen value', () => {
-    const onSelect = vi.fn()
-    render(
-      <ReactionOptions
-        suggested="LIKE"
-        onSelect={onSelect}
-      />
-    )
-    fireEvent.click(screen.getByRole('button', { name: /celebrate/i }))
-    expect(onSelect).toHaveBeenCalledWith('PRAISE')
-  })
-
-  it('pre-highlights the suggested reaction', () => {
-    render(
-      <ReactionOptions
-        suggested="INTEREST"
-        onSelect={() => {}}
-      />
-    )
-    expect(screen.getByRole('button', { name: /insightful/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('reacts with the suggested reaction when the trigger is clicked', () => {

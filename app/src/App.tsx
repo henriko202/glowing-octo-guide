@@ -20,6 +20,7 @@ import PolicyUpdateScreen from './components/PolicyUpdateScreen'
 import ConsentPromptScreen from './components/ConsentPromptScreen'
 import PrivacyDataPage from './pages/PrivacyDataPage'
 import PublicIdentifierPromptScreen from './components/PublicIdentifierPromptScreen'
+import { Toaster } from './components/ui/toast'
 import { POLICY_VERSION } from '../../convex/lib/policy'
 import { AUTH_URL, LANDING_URL, isSignedOut } from './lib/session'
 
@@ -68,6 +69,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <div className="flex min-h-screen flex-col">
+      <Toaster />
       <Routes>
         <Route
           path="/auth/success"

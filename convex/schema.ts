@@ -337,5 +337,18 @@ export default defineSchema({
     createdAt: v.number()
   })
     .index('by_user', ['userId']) // DSR export + a user's activity
-    .index('by_post', ['postId']) // admin: who engaged with a post
+    .index('by_post', ['postId']), // admin: who engaged with a post
+
+  // Per-(user, post) engagement state. One lazily-created row per user+post — distinct from the
+  // append-only userInteractions LOG above. Holds CURRENT state: `reactedAt` (set on the user's
+  // first reaction so a repeat reaction doesn't double-count / double-bill — a LinkedIn member can
+  // only hold one reaction per post) and `commentDraft` (their last AI-generated comment for the
+  // post, reloaded into the comment box for reuse/regeneration). Per-user data: exported for DSR
+  // and deleted on account erasure.
+  userPostState: defineTable({
+    userId: v.id('users'),
+    postId: v.id('posts'),
+    reactedAt: v.optional(v.number()),
+    commentDraft: v.optional(v.string())
+  }).index('by_user_and_post', ['userId', 'postId'])
 })

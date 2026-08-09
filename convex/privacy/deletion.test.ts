@@ -59,7 +59,8 @@ const SEED = {
   dataExportRequests: [{ _id: 'de1', userId: 'u1', fileStorageId: 'stor1' }],
   feedback: [{ _id: 'fb1', userId: 'u1', message: 'test', category: 'comment', status: 'new', createdAt: 1000 }],
   auditLogs: [{ _id: 'al1', targetUserId: 'u1', actorId: 'u1', action: 'x' }],
-  userInteractions: [{ _id: 'ui1', userId: 'u1', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 }]
+  userInteractions: [{ _id: 'ui1', userId: 'u1', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 }],
+  userPostState: [{ _id: 'ups1', userId: 'u1', postId: 'p1', reactedAt: 1000 }]
 }
 
 describe('cascadeDeleteUser', () => {

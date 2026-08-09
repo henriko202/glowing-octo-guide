@@ -5,6 +5,9 @@ import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 import PostCard, { type PostWithAuthor } from '../components/PostCard'
+import { buildPostUrl } from '../components/LinkedInEmbed'
+import { toast } from '../components/ui/toast'
+import { HANDOFF_DELAY_MS, delay, openLinkedIn } from '../lib/handoff'
 import CommentBox from '../components/CommentBox'
 import PostComposer from '../components/PostComposer'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -28,6 +31,7 @@ export default function FeedPage() {
   const react = useAction(api.interactions.reactToPost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
+  const [reactingPostId, setReactingPostId] = useState<Id<'posts'> | null>(null)
   const [reactError, setReactError] = useState<{ postId: Id<'posts'>; msg: string } | null>(null)
 
   async function handlePostSubmit(url: string) {
@@ -137,6 +141,10 @@ export default function FeedPage() {
                     onComment={id => handleToggleComment(id)}
                     onReact={async (id, reactionType) => {
                       setReactError(null)
+                      setReactingPostId(id)
+                      // No member API exists for reacting to another member's post — the user reacts
+                      // there. Show the toast, count optimistically, then hand off to LinkedIn.
+                      toast(t('reactions.openHint'))
                       try {
                         await react({ postId: id, reactionType, sessionToken: sessionToken ?? '' })
                       } catch (err: unknown) {
@@ -145,9 +153,16 @@ export default function FeedPage() {
                           postId: id,
                           msg: msg.startsWith('PAYMENT_REQUIRED') ? t('feed.cardGate') : msg
                         })
+                        setReactingPostId(null)
+                        return
                       }
+                      // Keep the toast + spinner on screen for a beat, THEN open LinkedIn.
+                      await delay(HANDOFF_DELAY_MS)
+                      openLinkedIn(buildPostUrl(post.linkedinPostUrn, post.sourceUrl))
+                      setReactingPostId(null)
                     }}
                     gated={gated}
+                    reacting={reactingPostId === post._id}
                   />
                   {reactError?.postId === post._id && (
                     <p className="text-destructive px-1 pt-1 text-xs">{reactError.msg}</p>
@@ -155,6 +170,7 @@ export default function FeedPage() {
                   {isCommentOpen && (
                     <CommentBox
                       postId={post._id}
+                      postUrl={buildPostUrl(post.linkedinPostUrn, post.sourceUrl)}
                       sessionToken={sessionToken ?? ''}
                       onClose={() => setCommentingOn(null)}
                       gated={gated}

@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PostComposer from '../components/PostComposer'
-import LinkedInEmbed from '../components/LinkedInEmbed'
+import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -29,20 +29,6 @@ interface MyPost {
 interface WeeklyUsage {
   postsThisWeek: number
   postsPerWeek: number
-}
-
-/**
- * Build the "open on LinkedIn" link.
- * Uses the original sourceUrl if we stored it (most accurate).
- * Falls back to reconstructing a /feed/update/ URL for cron-synced posts.
- * NOTE: urn:li:ugcPost IDs and urn:li:activity IDs can differ in LinkedIn's
- * data model, so sourceUrl is always preferred over reconstruction.
- */
-function buildLinkedInUrl(post: MyPost): string {
-  if (post.sourceUrl) return post.sourceUrl
-  // Fallback for cron-synced posts: use the /feed/update/ format with the ugcPost URN.
-  // This may not always resolve correctly due to URN type differences.
-  return `https://www.linkedin.com/feed/update/${encodeURIComponent(post.linkedinPostUrn)}/`
 }
 
 function timeAgo(ts: number): string {
@@ -145,7 +131,7 @@ export default function MyPostsPage() {
       />
 
       {/* Section header */}
-      <div className="text-muted-foreground mb-3 text-[10px] uppercase tracking-wider">Your posts ({posts.length})</div>
+      <div className="text-muted-foreground mb-3 text-[10px] tracking-wider uppercase">Your posts ({posts.length})</div>
 
       {/* Transient error from a hide/delete action */}
       {actionError && (
@@ -208,7 +194,7 @@ export default function MyPostsPage() {
                     <span className="text-muted-foreground text-xs">
                       {timeAgo(post.publishedAt)} ·{' '}
                       <a
-                        href={buildLinkedInUrl(post)}
+                        href={buildPostUrl(post.linkedinPostUrn, post.sourceUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-gold-text no-underline hover:underline"

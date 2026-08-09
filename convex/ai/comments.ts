@@ -1,6 +1,8 @@
 // convex/ai/comments.ts
-// On-demand AI comment drafting. Returns transient text the user edits before posting —
-// never persisted (identical reused comments would trip LinkedIn spam detection). fetch() → no "use node".
+// On-demand AI comment drafting. The draft is saved per (user, post) on userPostState so the comment
+// box can reload it for reuse/regeneration (see interactions.getCommentDraft). Per-post scope keeps
+// this clear of the old spam-detection worry (which was about reusing one comment across many posts).
+// fetch() → no "use node".
 import { action } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
@@ -30,6 +32,9 @@ export const generateComment = action({
 
     const lang = resolveCommentLanguage(language ?? user.commentLanguage)
     const text = await callOpenRouter(buildCommentPrompt({ ...post, author }, lang), { action: 'generate comment' })
-    return { comment: text.trim() }
+    const draft = text.trim()
+    // Persist so the comment box can reload it (reuse or regenerate) when reopened.
+    await ctx.runMutation(internal.interactions.saveCommentDraft, { userId: user._id, postId, draft })
+    return { comment: draft }
   }
 })

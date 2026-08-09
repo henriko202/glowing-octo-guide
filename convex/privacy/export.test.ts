@@ -132,4 +132,28 @@ describe('buildExportBundle', () => {
     })
     expect(bundle.interactions).toEqual([])
   })
+
+  it('includes per-post state (reactions + saved comment drafts) verbatim', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      userPostState: [{ _id: 'ups1', postId: 'p1', reactedAt: 1000, commentDraft: 'my draft' }]
+    })
+    expect(bundle.userPostState).toHaveLength(1)
+    expect(bundle.userPostState[0].commentDraft).toBe('my draft')
+  })
+
+  it('defaults userPostState to empty array when omitted', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: []
+    })
+    expect(bundle.userPostState).toEqual([])
+  })
 })

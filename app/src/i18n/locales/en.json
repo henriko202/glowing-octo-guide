@@ -48,6 +48,7 @@
   },
   "reactions": {
     "react": "React",
+    "openHint": "Opening the post on LinkedIn — add your reaction there.",
     "like": "Like",
     "celebrate": "Celebrate",
     "love": "Love",
@@ -58,8 +59,9 @@
   "comment": {
     "placeholder": "Write a comment…",
     "cancel": "Cancel",
-    "submit": "Post to LinkedIn",
-    "submitting": "Posting...",
+    "submit": "Copy & comment on LinkedIn",
+    "submitting": "Opening…",
+    "copiedHint": "Draft copied — paste it into the comment box on the LinkedIn tab we just opened.",
     "generate": "Generate with AI",
     "regenerate": "Regenerate",
     "generating": "Generating…",

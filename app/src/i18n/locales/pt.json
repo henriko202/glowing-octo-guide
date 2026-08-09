@@ -48,6 +48,7 @@
   },
   "reactions": {
     "react": "Reagir",
+    "openHint": "A abrir a publicação no LinkedIn — reaja lá.",
     "like": "Gostei",
     "celebrate": "Parabéns",
     "love": "Adorei",
@@ -58,8 +59,9 @@
   "comment": {
     "placeholder": "Escreva um comentário…",
     "cancel": "Cancelar",
-    "submit": "Publicar no LinkedIn",
-    "submitting": "A publicar...",
+    "submit": "Copiar e comentar no LinkedIn",
+    "submitting": "A abrir…",
+    "copiedHint": "Rascunho copiado — cole-o na caixa de comentário no separador do LinkedIn que abrimos.",
     "generate": "Gerar com IA",
     "regenerate": "Gerar novamente",
     "generating": "A gerar…",

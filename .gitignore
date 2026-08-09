@@ -10,3 +10,7 @@ dist/
 .idea/
 .claude/
 .superpowers/
+.agents/
+.junie/
+.windsurf/
+backlog/

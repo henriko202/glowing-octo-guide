@@ -25,6 +25,7 @@ export interface ExportInput {
   feedback?: AnyDoc[]
   feedbackResponses?: AnyDoc[]
   interactions?: AnyDoc[]
+  userPostState?: AnyDoc[]
   exportedAt?: number
 }
 
@@ -41,6 +42,8 @@ export function buildExportBundle(input: ExportInput) {
     feedbackResponses: input.feedbackResponses ?? [],
     // The user's own engagement log (reactions + comments they made on posts).
     interactions: input.interactions ?? [],
+    // Per-post state: which posts they reacted to + their saved AI comment drafts.
+    userPostState: input.userPostState ?? [],
     // The user is entitled to data ABOUT them, not the internal admin trail — keep the
     // action + when, drop other actors' identifiers and internal fields.
     auditLog: input.audits.map(a => ({ action: a.action, createdAt: a.createdAt, metadata: a.metadata }))
@@ -86,7 +89,11 @@ export const gatherUserData = internalQuery({
       .query('userInteractions')
       .withIndex('by_user', q => q.eq('userId', userId))
       .collect()
-    return { user, posts, subscriptions, consents, audits, feedback, feedbackResponses, interactions }
+    const userPostState = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', userId))
+      .collect()
+    return { user, posts, subscriptions, consents, audits, feedback, feedbackResponses, interactions, userPostState }
   }
 })
 

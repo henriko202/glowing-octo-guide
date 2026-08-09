@@ -19,6 +19,19 @@ export function buildEmbedUrl(urn: string): string {
 }
 
 /**
+ * Build the "open this post on LinkedIn" URL for the engagement handoff — the deepest link
+ * LinkedIn allows (there is no URL to focus the comment box or trigger a reaction; those happen
+ * behind a click on the post page). Prefers the stored sourceUrl (most accurate); otherwise
+ * reconstructs LinkedIn's documented thread permalink `/feed/update/<activityUrn>/`. Colons are
+ * left RAW — LinkedIn's router (like the embed endpoint) does not match a percent-encoded URN.
+ * urn:li:ugcPost and urn:li:activity ids can differ, so sourceUrl is always preferred.
+ */
+export function buildPostUrl(urn: string, sourceUrl?: string): string {
+  if (sourceUrl) return sourceUrl
+  return `https://www.linkedin.com/feed/update/${urn}/`
+}
+
+/**
  * Renders a LinkedIn post as a clipped embed iframe. The iframe is rendered
  * taller than its container so the container's overflow:hidden clips LinkedIn's
  * native action bar at the bottom. An optional `footer` is overlaid at the
@@ -53,7 +66,7 @@ export default function LinkedInEmbed({
         sandbox="allow-scripts allow-same-origin"
         loading="lazy"
       />
-      {footer && <div className="absolute bottom-0 left-0 right-0">{footer}</div>}
+      {footer && <div className="absolute right-0 bottom-0 left-0">{footer}</div>}
     </div>
   )
 }

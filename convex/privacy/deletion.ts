@@ -36,7 +36,8 @@ const OWNED: Array<{ table: string; index: string; field: string }> = [
   { table: 'featuredPostUsage', index: 'by_user_month', field: 'userId' },
   { table: 'planLimits', index: 'by_user', field: 'userId' },
   { table: 'consentRecords', index: 'by_user', field: 'userId' },
-  { table: 'userInteractions', index: 'by_user', field: 'userId' }
+  { table: 'userInteractions', index: 'by_user', field: 'userId' },
+  { table: 'userPostState', index: 'by_user_and_post', field: 'userId' }
 ]
 
 // Tables with user references that are ANONYMIZED rather than deleted (userId cleared to undefined).
