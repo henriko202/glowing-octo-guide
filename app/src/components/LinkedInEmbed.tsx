@@ -50,7 +50,7 @@ export default function LinkedInEmbed({
 }) {
   return (
     <div
-      className="relative overflow-hidden"
+      className="relative overflow-hidden pl-2"
       style={{ height: containerHeight }}
     >
       <iframe

@@ -234,7 +234,6 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │   ├── linkedin/
 │   │   ├── oauth.ts             # auth URL builder + token exchange + userinfo
 │   │   ├── auth.ts              # upsertUser mutation
-│   │   ├── posts.ts             # LinkedIn post fetch/parse helpers
 │   │   ├── parsePostUrl.ts      # /posts/… and /feed/update/… URL parser
 │   │   ├── parsePostContent.ts  # HTML → text/media + shared-article link (extractArticleUrl) + article enrichment (parseArticle)
 │   │   ├── verifyPostOwnership.ts
@@ -288,7 +287,7 @@ erDiagram
     string subscriptionStatus "trialing|active|canceled|past_due|none"
     string linkedinAccessToken "secret - server only"
     string linkedinRefreshToken "secret - server only"
-    string linkedinPublicIdentifier "vanity name"
+    string linkedinPublicIdentifier "vanity name (auto-derived)"
     boolean isAdmin "DB-edit only"
     boolean isBanned
     string email "OIDC email claim - privacy use only"
@@ -327,40 +326,40 @@ erDiagram
 One row per authenticated LinkedIn member. Inserted on first login (`linkedin/auth.ts:upsertUser`), patched thereafter
 (profile, subscription, ban). Read almost everywhere.
 
-| Field                        | Type                                                   | Req | Meaning                                                                                                                                                                                                                                      |
-|------------------------------|--------------------------------------------------------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinId`                 | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                         |
-| `name`                       | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                |
-| `headline`                   | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                           |
-| `profilePictureUrl`          | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                  |
-| `industry`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                          |
-| `country`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                          |
-| `location`                   | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                        |
-| `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                     |
-| `commentLanguage`            | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).              |
-| `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                    |
-| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. |
-| `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                           |
-| `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                      |
-| `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                      |
-| `linkedinRefreshToken`       | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                                      |
-| `tokenExpiresAt`             | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                    |
-| `linkedinPublicIdentifier`   | string                                                 |  –  | LinkedIn vanity name; captured via the first‑login `PublicIdentifierPromptScreen` or set in Settings, used for post‑ownership verification without Partner API.                                                                              |
-| `isAdmin`                    | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                        |
-| `isBanned`                   | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                              |
-| `bannedAt`                   | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                               |
-| `bannedBy`                   | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                           |
-| `bannedReason`               | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                    |
-| `email`                      | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                          |
-| `emailVerified`              | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                                 |
-| `deletionRequestedAt`        | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                               |
-| `deletionScheduledAt`        | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                    |
-| `deletionReason`             | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                              |
-| `lastLoginAt`                | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                |
-| `acknowledgedPolicyVersion`  | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                         |
-| `consentPromptedAt`          | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                              |
-| `publicIdentifierPromptedAt` | number                                                 |  –  | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login.                                                        |
-| `createdAt`                  | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                     |
+| Field                       | Type                                                   | Req | Meaning                                                                                                                                                                                                                                                                                       |
+|-----------------------------|--------------------------------------------------------|:---:|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinId`                | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                                                                          |
+| `name`                      | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                                                                 |
+| `headline`                  | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                                                                            |
+| `profilePictureUrl`         | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                   |
+| `industry`                  | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                           |
+| `country`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                           |
+| `location`                  | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                         |
+| `primaryLocale`             | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                      |
+| `commentLanguage`           | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                               |
+| `tier`                      | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                     |
+| `subscriptionStatus`        | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed.                                                  |
+| `trialEndsAt`               | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                                                                            |
+| `stripeCustomerId`          | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                                                                       |
+| `linkedinAccessToken`       | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                                                                       |
+| `linkedinRefreshToken`      | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                                                                                       |
+| `tokenExpiresAt`            | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                                                                     |
+| `linkedinPublicIdentifier`  | string                                                 |  –  | LinkedIn vanity name, **auto‑derived (set‑once)** from the `author.url` of a name‑verified submitted post (`users.setDerivedPublicIdentifier`); never user‑typed. Seeds the Apify profile/post scrape. NOT the ownership check (that matches the post's author name against the OIDC `name`). |
+| `isAdmin`                   | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                                                                         |
+| `isBanned`                  | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                                                                               |
+| `bannedAt`                  | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                                                                                |
+| `bannedBy`                  | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                            |
+| `bannedReason`              | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                     |
+| `email`                     | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                           |
+| `emailVerified`             | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                                                                                  |
+| `deletionRequestedAt`       | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                                                                                |
+| `deletionScheduledAt`       | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                     |
+| `deletionReason`            | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                               |
+| `lastLoginAt`               | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                                                                 |
+| `acknowledgedPolicyVersion` | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                                                                          |
+| `consentPromptedAt`         | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                                                                               |
+| `firstPostPromptedAt`       | number                                                 |  –  | When the first‑post onboarding step was resolved (ms) — set once by submitting any post (`posts.submitPost` → `users.markFirstPostPrompted`) or skipping (`users.dismissFirstPostPrompt`). Unset ⇒ `FirstPostPromptScreen` is shown after the consent gate.                                   |
+| `createdAt`                 | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                      |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
 `by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
@@ -707,8 +706,11 @@ now imports generated `Doc<>`/`Id<>`/`QueryCtx`/`MutationCtx`/`ActionCtx` from
 LinkedIn **3‑legged OAuth 2.0 (OIDC)**, brokered entirely by Convex HTTP actions so secrets stay server‑side. After
 OAuth the app uses its **own opaque session tokens**.
 
-- **Scopes requested** (`convex/linkedin/oauth.ts`):
-  `openid profile email r_basicprofile w_member_social_feed w_member_social`.
+- **Scopes requested** (`convex/linkedin/oauth.ts`): `openid profile email` — the only Standard‑tier product (Sign In
+  with LinkedIn / OIDC), so **every** LinkedIn member can authenticate. No
+  `w_member_social*` / `r_basicprofile`: the app makes **no LinkedIn API writes** (react/comment happen on LinkedIn via
+  the handoff, §11), and those scopes are Development‑tier/ungranted — requesting them throws
+  `unauthorized_scope_error` for anyone without a role on the app (i.e. breaks login for all non‑team users).
 - **OAuth endpoints:** authorize `https://www.linkedin.com/oauth/v2/authorization`, token
   `https://www.linkedin.com/oauth/v2/accessToken`, userinfo `https://api.linkedin.com/v2/userinfo`
   (OIDC; replaces the deprecated `/v2/me`).
@@ -783,26 +785,27 @@ flowchart TD
 
 ### Identity / user functions (`convex/users.ts`, `linkedin/auth.ts`, `sessions.ts`)
 
-| Function                                                      | Kind              | Purpose                                                                                                                                                                                                                                                                                                                    |
-|---------------------------------------------------------------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedin.auth.upsertUser`                                    | internalMutation  | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                                                                                                                                                                              |
-| `users.getMe`                                                 | query (public)    | Safe profile via `resolveSession` + `toSafeMe` (strips tokens + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`).                                                                                                                                                                  |
-| `users.getWithTokens`                                         | internalQuery     | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                |
-| `users.getActiveSubscribers`                                  | internalQuery     | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                              |
-| `users.getSubscriptionInfo`                                   | query (public)    | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                             |
-| `users.getTrialProgress`                                      | query (public)    | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern. |
-| `users.setPublicIdentifier`                                   | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased).                                                                                                                                                                                                                                             |
-| `users.dismissPublicIdentifierPrompt`                         | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path).                                                                                                                                                                                           |
-| `users.updateProfile`                                         | mutation (public) | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at 220 chars; empty string clears any of them.                                                                                                                       |
-| `users.refreshProfileFromLinkedIn`                            | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
-| `users.isProfileRefreshEnabled`                               | query (public)    | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                         |
-| `users.applyScrapedProfile`                                   | internalMutation  | Writes scraped fields: `country` + `headline` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                              |
-| `users.logout`                                                | mutation (public) | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
-| `users.forceLogoutAll`                                        | mutation (public) | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
-| `sessions.create` / `getByToken` / `deleteByToken`            | internal          | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
-| `sessions.deleteAllForUser`                                   | internalMutation  | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                 |
-| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation  | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                         |
-| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` | internalMutation  | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                             |
+| Function                                                      | Kind                | Purpose                                                                                                                                                                                                                                                                                                                    |
+|---------------------------------------------------------------|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedin.auth.upsertUser`                                    | internalMutation    | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                                                                                                                                                                              |
+| `users.getMe`                                                 | query (public)      | Safe profile via `resolveSession` + `toSafeMe` (strips tokens + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`).                                                                                                                                                                  |
+| `users.getWithTokens`                                         | internalQuery       | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                |
+| `users.getActiveSubscribers`                                  | internalQuery       | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                              |
+| `users.getSubscriptionInfo`                                   | query (public)      | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                             |
+| `users.getTrialProgress`                                      | query (public)      | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern. |
+| `users.setDerivedPublicIdentifier`                            | mutation (internal) | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                 |
+| `users.dismissFirstPostPrompt`                                | mutation (public)   | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                     |
+| `users.markFirstPostPrompted`                                 | mutation (internal) | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                               |
+| `users.updateProfile`                                         | mutation (public)   | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at 220 chars; empty string clears any of them.                                                                                                                       |
+| `users.refreshProfileFromLinkedIn`                            | mutation (public)   | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
+| `users.isProfileRefreshEnabled`                               | query (public)      | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                         |
+| `users.applyScrapedProfile`                                   | internalMutation    | Writes scraped fields: `country` + `headline` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                              |
+| `users.logout`                                                | mutation (public)   | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
+| `users.forceLogoutAll`                                        | mutation (public)   | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
+| `sessions.create` / `getByToken` / `deleteByToken`            | internal            | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
+| `sessions.deleteAllForUser`                                   | internalMutation    | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                 |
+| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation    | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                         |
+| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` | internalMutation    | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                             |
 
 > **No token‑refresh flow exists.** Despite README claims, nothing refreshes LinkedIn tokens near
 > expiry; `refreshToken`/`tokenExpiresAt` are stored but unused. See [§19](#19-known-discrepancies-dead-code--roadmap).
@@ -991,7 +994,7 @@ flowchart TD
   F -->|no urn| X4["throw 'Could not find urn'"]
   F --> OWN{"admin override?"}
   OWN -->|yes: share ANY post| PC["parsePostContent(html) → text + media; appendMediaLinks"]
-  OWN -->|no| V["verifyPostOwnership(token, urn, linkedinId, vanityName, publicIdentifier)"]
+  OWN -->|no| V["verifyPostOwnership(postAuthorName vs OIDC name; vanity fallback)"]
   V --> PC
   PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
   ENG --> ART{"post links an article?<br/>(extractArticleUrl finds the /pulse/… anchor)"}
@@ -1002,10 +1005,14 @@ flowchart TD
   UP --> R["return { postId }"]
 ```
 
-**Ownership verification** (`linkedin/verifyPostOwnership.ts`) is a two‑step fallback: **Step A**
-the UGC API (works when `w_member_social`/`r_member_social` is approved); **Step B** a local comparison of the post's
-author against the user's stored `linkedinPublicIdentifier` / `vanityName`
-(no API call). This lets the product work **without LinkedIn Partner/MDP access**.
+**Ownership verification** (`linkedin/verifyPostOwnership.ts`) anchors on the member's LinkedIn **name**, not an
+editable field. **Primary:** the post page's JSON‑LD `author.name` (parsed by `parsePostAuthor`) must match the member's
+OIDC `name` (from login; case‑/accent‑insensitive) — both come from LinkedIn and neither is editable in‑app, so it
+cannot be spoofed via a settings field. **Fallback:** the older vanity heuristic (the URL's `vanityName` vs the stored
+`linkedinPublicIdentifier`) runs **only** when the post page carried no author block — not attacker‑triggerable, since a
+submitter can't make LinkedIn omit the author. On a name‑verified post, `submitPost` also auto‑fills the member's
+`linkedinPublicIdentifier` (**set‑once**) from the author's profile URL via `users.setDerivedPublicIdentifier` — a
+trustworthy, never‑typed seed for the Apify scrape. **No LinkedIn API call** is made.
 
 **Admin override (testing only, dev‑gated).** The override is active **only** when the submitter is an admin **and** the
 `ALLOW_ADMIN_SHARE_ANY_POST` env var is `'true'` — a flag set exclusively on the local / dev Convex deployment
@@ -1581,9 +1588,10 @@ A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `c
 `headline`** (fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent from the payload) —
 it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
 
-- on `users.setPublicIdentifier`, but only when the identifier **changes**, the scrape is **enabled**, and the shared
-  2/day budget allows it (charged on the same `profile_refresh` counter as the button — and the flag is checked _before_
-  the budget, so a disabled scrape never charges it), and
+- on `users.setDerivedPublicIdentifier` — when a name‑verified post's author URL first **auto‑derives** the vanity
+  (set‑once), the scrape fires if it is **enabled** and the shared 2/day budget allows it (charged on the same
+  `profile_refresh` counter as the button — and the flag is checked _before_ the budget, so a disabled scrape never
+  charges it), and
 - on the user-pressed **"Refresh from LinkedIn"** button (`refreshProfileFromLinkedIn`, ≤ 2/day), and
 - on the **post sync** (`syncUserPostsViaApify` — subscription activation + hourly cron) **when the user has no
   `country` yet**, which bounds the (paid) scrape to ~once per user even though posts sync repeatedly.
@@ -1609,7 +1617,7 @@ industry`.
 
 ```mermaid
 flowchart TD
-  T1["setPublicIdentifier (vanity saved)"] --> CHG{"changed & scrape enabled & within 2/day budget?"}
+  T1["setDerivedPublicIdentifier (vanity auto-derived from verified post)"] --> CHG{"changed & scrape enabled & within 2/day budget?"}
   CHG -->|no| SKIP["skip auto-scrape (no budget charged)"]
   CHG -->|yes| SCH["scheduler.runAfter(0)"]
   T2["Settings: Refresh from LinkedIn"] --> RF["refreshProfileFromLinkedIn"]
@@ -1918,8 +1926,8 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
 6. **`!me.consentPromptedAt`** (new user who has not yet completed the one-time consent prompt) →
    `<ConsentPromptScreen>`
-7. **`!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt`** (first login, LinkedIn profile URL not yet
-   captured) → `<PublicIdentifierPromptScreen>`
+7. **`!me.firstPostPromptedAt`** (new user who has not yet shared or skipped their first post) →
+   `<FirstPostPromptScreen>`
 8. **user ok** → `<AppShell>` (sidebar + top bar) + the requested page
 
 ```mermaid
@@ -1934,7 +1942,7 @@ flowchart TD
   RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
   RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
   RA -->|"!consentPromptedAt"| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
-  RA -->|"no public identifier & not prompted"| PID["PublicIdentifierPromptScreen → setPublicIdentifier / dismiss → reload"]
+  RA -->|"!firstPostPromptedAt"| FIRSTPOST["FirstPostPromptScreen → submitPost / dismissFirstPostPrompt → reload"]
   RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + page → page issues Convex queries"]
 ```
 
@@ -1954,8 +1962,10 @@ flowchart TD
 - **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getMyPosts` + `submitPost`. Usage pill ("N of M posts this week")
   turns **amber** at the cap and disables the composer (`atLimit`). Renders each post via the shared `LinkedInEmbed`
   with an app footer (stats, relative time, "View on LinkedIn").
-- **SettingsPage** — `getMe` + `setPublicIdentifier` + `updateProfile` + `refreshProfileFromLinkedIn`. Industry and
-  country are **searchable, virtualized comboboxes** (`VirtualizedCombobox`, built on the shadcn `command`/`popover`
+- **SettingsPage** — `getMe` + `updateProfile` + `refreshProfileFromLinkedIn` + `setCommentLanguage` (the standalone
+  LinkedIn‑identity section was **removed** — the auto‑derived vanity is internal‑only now, seeding Apify; the "Refresh
+  from LinkedIn" button remains gated on it). Industry and country are **searchable, virtualized comboboxes**
+  (`VirtualizedCombobox`, built on the shadcn `command`/`popover`
   primitives + `@tanstack/react-virtual`; country names via `Intl.DisplayNames`); a read-only **Location** row appears
   when `me.location` is present (populated by the profile scrape); a **"Refresh from LinkedIn"** button re-scrapes the
   profile (disabled without a public identifier; shows the server error inline when the scrape flag is off). Pro/contact
@@ -2031,13 +2041,13 @@ both **OFF by default** — and a "Save & continue" button that calls
 `window.location.reload()`; new users whose `acknowledgedPolicyVersion` is pre-stamped at signup but `consentPromptedAt`
 is unset hit this prompt on first login — see the `RequireAuth`
 interception order above and §13B),
-`PublicIdentifierPromptScreen` (first-login full-screen prompt shown by `RequireAuth` when the user has no
-`linkedinPublicIdentifier` **and** `publicIdentifierPromptedAt` is unset; asks for the LinkedIn profile URL — reusing
-`extractVanityName` from `app/src/lib/linkedinProfile.ts` — and either saves it via `api.users.setPublicIdentifier` or
-stamps `publicIdentifierPromptedAt` via
-`api.users.dismissPublicIdentifierPrompt` ("Skip for now"), then `window.location.reload()`. LinkedIn's OIDC login does
-**not** expose the vanityName, so this prompt is how it's captured at login — see §7 and the `RequireAuth` interception
-order above), plus the two LinkedIn‑embed components:
+`FirstPostPromptScreen` (first-login full-screen **skippable** onboarding step shown by `RequireAuth` when
+`me.firstPostPromptedAt` is unset — immediately after the consent gate; presents the shared `PostComposer` under a
+"Share your best recent post" heading, plus an "I'll do this later" link. Submitting a post calls
+`api.posts.submitPost` — which stamps `firstPostPromptedAt` server-side via `users.markFirstPostPrompted` — while the
+skip link calls `api.users.dismissFirstPostPrompt`; either then `window.location.reload()`s. Never blocks entry: a user
+without a post URL handy can skip. See the `RequireAuth` interception order above), plus the two LinkedIn‑embed
+components:
 
 - **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
   and **My Posts**. Renders a LinkedIn post in an iframe that is intentionally taller (`iframeHeight` 480) than its
@@ -2432,10 +2442,12 @@ The codebase follows a consistent, defensible security model:
   lapsed subscription never grants access; `getTierFromPriceId` fails to `starter`.
 - **Rate limiting** (fixed window per `userId+action`): submitPost 10/h, comment 20/h, react 30/h, profile scrape 2/day
   (shared by manual Refresh + auto‑scrape on identifier change). **Admins are exempt** from every rate limit.
-- **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path (`upsertUser`,
-  `setPublicIdentifier`, etc.). Admin endpoints re‑check `assertAdmin` on the server‑resolved user, never on a
-  client‑supplied id. `banUser` cannot self‑ban (always leaves ≥ 1 admin).
-- **Input validation:** `setPublicIdentifier` validates the vanity‑name format; `commentOnPost`
+- **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path (`upsertUser`, etc.).
+  Admin endpoints re‑check `assertAdmin` on the server‑resolved user, never on a client‑supplied id. `banUser` cannot
+  self‑ban (always leaves ≥ 1 admin).
+- **Input validation:** the LinkedIn vanity is **auto‑derived** (LinkedIn‑authoritative, never user‑typed) — post
+  ownership is verified by matching the post's author name to the member's OIDC `name` (§11), not a user‑set field;
+  `commentOnPost`
   caps text at 3000 chars; `reactToPost` constrains the reaction enum; `commentOnPost`/`reactToPost`
   reject `hidden`/interaction‑limit‑reached posts; `banUser` caps the reason at 500 chars; checkout validates the price
   id against an allowlist before any work.
@@ -2452,9 +2464,10 @@ The codebase follows a consistent, defensible security model:
 
 > **Open security‑relevant gaps / hardening backlog:** no LinkedIn token‑refresh flow (tokens
 > silently expire ~60 days); the ban is reactive (a banned user's in‑flight reads still resolve until
-> the next protected call / reactive push); `linkedinPublicIdentifier` is
-> **self‑attributed** (format‑validated only — LinkedIn actions still use the user's own token, so it
-> can't be used to act as someone else). See [§19](#19-known-discrepancies-dead-code--roadmap).
+> the next protected call / reactive push); `linkedinPublicIdentifier` is now
+> **auto‑derived** (set‑once) from a name‑verified post's author URL — LinkedIn‑authoritative, never
+> user‑typed, so it can't be spoofed via a settings field; LinkedIn actions still use the user's own
+> token. See [§19](#19-known-discrepancies-dead-code--roadmap).
 
 ### Compliance Documentation
 
@@ -2525,8 +2538,6 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 - **Tables:** README says 5; there are **10**.
 - **Post sync:** README says "hourly LinkedIn‑API cron"; reality is **daily, Apify‑only, admin‑gated**
   (no direct LinkedIn‑API ingestion path).
-- **OAuth scopes:** README lists `r_liteprofile`/`r_member_social`/`r_network`; code uses
-  `openid profile email r_basicprofile w_member_social_feed w_member_social`.
 - **OAuth redirect:** README shows `?userId=…`; code uses `?session=…` (a session token).
 - **Token refresh:** README claims a 60‑day refresh flow "implemented"/"attempted within 7 days of expiry"; **no refresh
   logic exists**.
@@ -2566,8 +2577,9 @@ analytics dashboard, proactive token‑refresh cron.
 - **URN** — LinkedIn's resource identifier (e.g. `urn:li:activity:…`, `urn:li:ugcPost:…`,
   `urn:li:share:…`). Used as the post dedupe key; namespaces are **not interchangeable**, which is why `sourceUrl` is
   preserved.
-- **Public identifier / vanity name** — the `linkedin.com/in/<name>` slug; used for ownership verification without
-  Partner API access.
+- **Public identifier / vanity name** — the `linkedin.com/in/<name>` slug; **auto‑derived (set‑once)** from a
+  name‑verified post's `author.url` and used to seed the Apify profile/post scrape. Post‑ownership verification is
+  **name‑based** (the post's JSON‑LD author name vs the member's OIDC `name`), not vanity‑based.
 - **Apify** — third‑party scraping platform; the `harvestapi~linkedin-profile-posts` actor fetches a user's recent
   posts.
 - **MDP / Partner access** — LinkedIn Marketing/Member Data Partner program; required for the connections and home‑feed

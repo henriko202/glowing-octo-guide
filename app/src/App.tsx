@@ -18,8 +18,8 @@ import BannedScreen from './components/BannedScreen'
 import CancelDeletionScreen from './components/CancelDeletionScreen'
 import PolicyUpdateScreen from './components/PolicyUpdateScreen'
 import ConsentPromptScreen from './components/ConsentPromptScreen'
+import FirstPostPromptScreen from './components/FirstPostPromptScreen'
 import PrivacyDataPage from './pages/PrivacyDataPage'
-import PublicIdentifierPromptScreen from './components/PublicIdentifierPromptScreen'
 import { Toaster } from './components/ui/toast'
 import { POLICY_VERSION } from '../../convex/lib/policy'
 import { AUTH_URL, LANDING_URL, isSignedOut } from './lib/session'
@@ -55,7 +55,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!me.consentPromptedAt) return <ConsentPromptScreen />
 
-  if (!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt) return <PublicIdentifierPromptScreen />
+  if (!me.firstPostPromptedAt) return <FirstPostPromptScreen />
 
   return (
     <AppShell>

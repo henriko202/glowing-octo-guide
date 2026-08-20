@@ -79,10 +79,10 @@ http.route({
 
       const tokenExpiresAt = Date.now() + tokens.expires_in * 1000
 
-      // Note: linkedinPublicIdentifier is NOT available from the OIDC userinfo response — LinkedIn's
-      // identity/vanityName endpoints require Partner/MDP access we don't have. Instead we capture it
-      // from the user via the one-time first-login prompt (PublicIdentifierPromptScreen) and Settings
-      // (users.setPublicIdentifier).
+      // Note: linkedinPublicIdentifier (vanityName) is NOT in the OIDC userinfo response — LinkedIn's
+      // identity/vanity endpoints require Partner/MDP access we don't have. It is derived later,
+      // set-once, from the author.url of a name-verified submitted post (posts.submitPost →
+      // users.setDerivedPublicIdentifier). Ownership itself matches userInfo.name ↔ the post author name.
       const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
         linkedinId: userInfo.sub,
         name: userInfo.name,

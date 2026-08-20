@@ -1,6 +1,6 @@
 # Convex guidelines
 
-These guidelines target Convex `^1.41.0`.
+These guidelines target Convex `^1.44.0`.
 
 ## Function guidelines
 
@@ -48,6 +48,10 @@ export default mutation({
 - `v.object(...)` validators compose: `.pick("a", "b")`, `.omit("c")`, `.partial()`, and `.extend({ d: v.string() })`
   derive new object validators from an existing one - define a shape once and derive variants instead of duplicating
   fields. Use an object validator's `.fields` to supply function `args`.
+- `schema.doc("tableName")` (import `schema` from `./schema`) returns the validator for a whole stored document: the
+  table's validator with `_id` and `_creationTime` added, to every member for union tables. Use it when an `args` or
+  `returns` validator needs a complete document instead of re-declaring the fields or the system fields;
+  `docValidator("tableName", tableDefinition)` from `convex/server` builds the same from a bare table definition.
 - Below is an example of a schema with validators that codify a discriminated union type:
 
 ```typescript
@@ -82,10 +86,9 @@ export default defineSchema({
   and must be valid Unicode sequences. Strings must be smaller than the 1MB total size limit when encoded as UTF-8. | |
   Bytes | ArrayBuffer | `new ArrayBuffer(8)` | `v.bytes()` | Convex supports first class bytestrings, passed in as
   `ArrayBuffer`s. Bytestrings must be smaller than the 1MB total size limit for Convex types. | | Array | Array |
-  `[1, 3.2, "abc"]` | `v.array(values)` | Arrays can have at most 8192 values. | | Object | Object |
-  `{a: "abc"}` | `v.object({property: value})` | Convex only supports "plain old JavaScript objects" (objects that do
-  not have a custom prototype). Objects can have at most 1024 entries. Field names must be nonempty and not start with
-  "$" or "\_". |
+  `[1, 3.2, "abc"]` | `v.array(values)` | Arrays can have at most 8192 values. | | Object | Object | `{a: "abc"}` |
+  `v.object({property: value})` | Convex only supports "plain old JavaScript objects" (objects that do not have a custom
+  prototype). Objects can have at most 1024 entries. Field names must be nonempty and not start with "$" or "\_". |
 
 | Record | Record | `{"a": "1", "b": "2"}` | `v.record(keys, values)` | Records are objects at runtime, but can have
 dynamic keys. Keys must be only ASCII characters, nonempty, and not start with "$" or "\_". |
@@ -317,7 +320,8 @@ export const exampleQuery = query({
   in the 'users' table, take in `Id<'users'>` rather than `string`.
 - For typed app environment variables, declare them in `convex/convex.config.ts` with
   `defineApp({ env: { MY_KEY: v.optional(v.string()) } })` and read them with `env` from `./_generated/server` instead
-  of `process.env`.
+  of `process.env`. The platform-provided `CONVEX_SITE_URL` and `CONVEX_CLOUD_URL` are already on `env` as strings;
+  never declare them in `convex.config.ts` (redeclaring them fails the deploy or breaks the generated `env` type).
 
 ## Full text search guidelines
 

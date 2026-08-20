@@ -47,7 +47,6 @@ import type * as linkedin_client from "../linkedin/client.js";
 import type * as linkedin_oauth from "../linkedin/oauth.js";
 import type * as linkedin_parsePostContent from "../linkedin/parsePostContent.js";
 import type * as linkedin_parsePostUrl from "../linkedin/parsePostUrl.js";
-import type * as linkedin_posts from "../linkedin/posts.js";
 import type * as linkedin_types from "../linkedin/types.js";
 import type * as linkedin_verifyPostOwnership from "../linkedin/verifyPostOwnership.js";
 import type * as migrations_seedPlanLimits from "../migrations/seedPlanLimits.js";
@@ -108,7 +107,6 @@ declare const fullApi: ApiFromModules<{
   "linkedin/oauth": typeof linkedin_oauth;
   "linkedin/parsePostContent": typeof linkedin_parsePostContent;
   "linkedin/parsePostUrl": typeof linkedin_parsePostUrl;
-  "linkedin/posts": typeof linkedin_posts;
   "linkedin/types": typeof linkedin_types;
   "linkedin/verifyPostOwnership": typeof linkedin_verifyPostOwnership;
   "migrations/seedPlanLimits": typeof migrations_seedPlanLimits;

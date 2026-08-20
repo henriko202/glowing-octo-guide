@@ -1,7 +1,11 @@
 import type { LinkedInTokenResponse, LinkedInUserInfo } from './types.js'
 import { callMemberApi } from './client'
 
-const SCOPES = ['openid', 'profile', 'email', 'r_basicprofile', 'w_member_social_feed', 'w_member_social'].join(' ')
+// OpenID Connect only (Standard tier → every LinkedIn member can sign in). No w_member_social*/
+// r_basicprofile: the app makes no LinkedIn API writes (react/comment happen on LinkedIn via the
+// handoff, docs/PLATFORM.md §11), and those scopes would throw unauthorized_scope_error for any
+// user without a role on the app — i.e. break login for everyone but the team.
+const SCOPES = ['openid', 'profile', 'email'].join(' ')
 
 export function buildAuthUrl(state: string): string {
   const clientId = process.env.LINKEDIN_CLIENT_ID!

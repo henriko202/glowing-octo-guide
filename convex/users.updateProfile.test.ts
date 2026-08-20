@@ -58,7 +58,7 @@ describe('updateProfileHandler', () => {
 
 describe('assertCanRefresh', () => {
   it('throws without a public identifier', () => {
-    expect(() => assertCanRefresh({}, { apifyProfileScrapeEnabled: true })).toThrow(/LinkedIn profile URL/i)
+    expect(() => assertCanRefresh({}, { apifyProfileScrapeEnabled: true })).toThrow(/detect your LinkedIn profile/i)
   })
   it('throws when profile scrape is disabled', () => {
     expect(() => assertCanRefresh({ linkedinPublicIdentifier: 'x' }, {})).toThrow(/unavailable/i)

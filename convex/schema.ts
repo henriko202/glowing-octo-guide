@@ -35,12 +35,13 @@ export default defineSchema({
     linkedinAccessToken: v.optional(v.string()),
     linkedinRefreshToken: v.optional(v.string()),
     tokenExpiresAt: v.optional(v.number()),
-    // The user's LinkedIn public profile identifier (vanityName / publicIdentifier).
-    // Set once by the user in Settings. Used for post ownership verification without
-    // requiring LinkedIn Partner API access.
+    // The member's LinkedIn public profile identifier (vanityName). Auto-derived (set-once) from the
+    // `author.url` of a name-verified submitted post (setDerivedPublicIdentifier) — never user-typed.
+    // Seeds the Apify profile/post scrape; it is NOT the ownership check (that matches the post's
+    // author name against the OIDC name — see linkedin/verifyPostOwnership.ts).
     linkedinPublicIdentifier: v.optional(v.string()),
     // Admin flag — MUST only be set directly in the database.
-    // All application code (upsertUser, setPublicIdentifier, etc.) must ignore this field.
+    // All application code (upsertUser, etc.) must ignore this field.
     isAdmin: v.optional(v.boolean()),
     // Ban state — set/cleared only by the admin banUser/unbanUser mutations.
     // bannedReason is user-visible (shown on the banned screen).
@@ -65,9 +66,9 @@ export default defineSchema({
     acknowledgedPolicyVersion: v.optional(v.string()),
     // When the user completed the one-time consent prompt (marketing/analytics). Unset ⇒ prompt on login.
     consentPromptedAt: v.optional(v.number()),
-    // When the user was shown the one-time "confirm your LinkedIn profile URL" onboarding prompt.
-    // Unset AND no linkedinPublicIdentifier ⇒ show the prompt on login (see App RequireAuth).
-    publicIdentifierPromptedAt: v.optional(v.number()),
+    // When the first-post onboarding step was resolved — set once, either by submitting any post
+    // (server-side in posts.submitPost) or by skipping the prompt. Unset ⇒ show FirstPostPromptScreen.
+    firstPostPromptedAt: v.optional(v.number()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])

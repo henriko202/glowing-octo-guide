@@ -18,7 +18,7 @@ identity — growing their LinkedIn Social Selling Index (SSI) through consisten
 ```
 
 | Service   | Platform   | URL                             |
-| --------- | ---------- | ------------------------------- |
+|-----------|------------|---------------------------------|
 | landing/  | Vercel     | `linkintothessi.com`            |
 | app/      | Railway    | `app.linkintothessi.com`        |
 | Backend   | Convex.dev | Managed serverless              |
@@ -31,7 +31,7 @@ identity — growing their LinkedIn Social Selling Index (SSI) through consisten
 - **Frontend (app):** React 19, Vite, TypeScript, Tailwind CSS, react-i18next (en/pt/es)
 - **Landing:** Next.js 14, TypeScript, Tailwind CSS
 - **Backend:** [Convex](https://convex.dev) — real-time, serverless, TypeScript-native
-- **Auth:** LinkedIn 3-legged OAuth (`r_liteprofile`, `r_member_social`, `w_member_social`, `r_network`)
+- **Auth:** LinkedIn 3-legged OAuth — Sign In with LinkedIn / OpenID Connect (`openid profile email`)
 - **Payments:** Stripe via [@convex-dev/stripe](https://www.convex.dev/components/stripe)
 - **Testing:** Vitest + React Testing Library
 
@@ -126,13 +126,13 @@ The app runs at `http://localhost:5173`, landing at `http://localhost:3000`.
 ## Subscription Tiers
 
 | Feature                             | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) | Contact |
-| ----------------------------------- | :-------------: | :-------------: | :----------: | :-----: |
-| Access feed                         |        ✓        |        ✓        |      ✓       |    ✓    |
-| 3-day free trial                    |        ✓        |        —        |      —       |    —    |
-| Feed filtered by industry + country |        ✗        |    ✓ (auto)     |  ✓ (custom)  |    ✓    |
-| Filter who sees your posts          |        ✗        |        ✗        |      ✓       |    ✓    |
+|-------------------------------------|:---------------:|:---------------:|:------------:|:-------:|
+| Access feed                         |       ✓        |       ✓        |      ✓      |   ✓    |
+| 3-day free trial                    |       ✓        |        —        |      —       |    —    |
+| Feed filtered by industry + country |       ✗        |    ✓ (auto)    | ✓ (custom)  |   ✓    |
+| Filter who sees your posts          |       ✗        |       ✗        |      ✓      |   ✓    |
 | Featured posts / month              |        0        |        1        |      3       | Custom  |
-| AI comment generator                |   ✗ (future)    |   ✓ (future)    |  ✓ (future)  |    ✓    |
+| AI comment generator                |   ✗ (future)   |   ✓ (future)   | ✓ (future)  |   ✓    |
 
 ---
 
@@ -275,17 +275,20 @@ Connect the repo to Vercel, set the root directory to `landing/`, and add
 
 ## LinkedIn API Notes
 
-| Capability                     | Available? | Notes                                                          |
-| ------------------------------ | ---------- | -------------------------------------------------------------- |
-| Read own posts                 | ✓          | `r_member_social` scope                                        |
-| Post comments as user          | ✓          | `w_member_social` scope                                        |
-| Post reactions as user         | ✓          | `w_member_social` scope                                        |
-| Read 1st-degree connections    | ✓          | `r_network` scope (degrades to 403 gracefully if not approved) |
-| Read connections' posts (feed) | ✗          | Requires LinkedIn MDP partner access                           |
-| Token lifetime                 | 60 days    | Refresh flow implemented                                       |
+Login uses **Sign In with LinkedIn (OpenID Connect)** only — scopes `openid profile email` (Standard tier, so any member
+can authenticate). The app makes **no LinkedIn API writes**: reactions and comments happen on LinkedIn itself via the
+in-app handoff (the app opens the post; the member acts there). See `docs/PLATFORM.md` §11.
 
-The app requires LinkedIn app approval for `r_member_social` and `w_member_social` scopes before going live. The
-`privacy` and `terms` pages at `/privacy` and `/terms` are required by LinkedIn for app review.
+| Capability                | How                                                                  |
+|---------------------------|----------------------------------------------------------------------|
+| Sign in / identity        | `openid profile email` → `/v2/userinfo` (Standard tier, all members) |
+| Ingest a member's posts   | Apify sync (daily, admin-gated) — not the LinkedIn API               |
+| React / comment on a post | Handoff: app opens the post, member acts on LinkedIn (no API write)  |
+| Post-ownership check      | UGC API if ever granted, else local vanity-name comparison           |
+| Read connections' feed    | ✗ — requires LinkedIn MDP partner access (not used)                 |
+
+Only `openid profile email` are needed to go live — all granted by the Standard-tier Sign In product. The
+`/privacy` and `/terms` pages are still required by LinkedIn for app review.
 
 ---
 

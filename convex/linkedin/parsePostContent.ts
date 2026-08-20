@@ -157,6 +157,56 @@ export function parsePostContent(html: string): ParsedPostContent {
   return { text: extractText(html, blocks), media: extractMedia(html, blocks) }
 }
 
+export interface PostAuthor {
+  /** Post author's display name — JSON-LD `author.name` on the post block. Compared to the member's
+   *  OIDC name to verify post ownership. */
+  name?: string
+  /** Post author's LinkedIn vanity, parsed from `author.url` (e.g. `mateus-yonemoto`). Used to
+   *  auto-fill the member's identifier once ownership is confirmed. */
+  vanity?: string
+}
+
+const POST_LD_TYPE = /^(SocialMediaPosting|DiscussionForumPosting)$/i
+
+function isPostType(type: unknown): boolean {
+  if (typeof type === 'string') return POST_LD_TYPE.test(type)
+  if (Array.isArray(type)) return type.some(t => POST_LD_TYPE.test(String(t)))
+  return false
+}
+
+/** Extract + validate a LinkedIn vanity from a profile URL like `https://br.linkedin.com/in/mateus-yonemoto`.
+ *  Lowercased; returns undefined unless it matches the accepted `^[a-z0-9\-_]{3,100}$` format so we
+ *  never store garbage. */
+function vanityFromProfileUrl(url: string): string | undefined {
+  const m = url.match(/linkedin\.com\/in\/([^/?#]+)/i)
+  if (!m) return undefined
+  let slug: string
+  try {
+    slug = decodeURIComponent(m[1]).toLowerCase()
+  } catch {
+    return undefined
+  }
+  return /^[a-z0-9\-_]{3,100}$/.test(slug) ? slug : undefined
+}
+
+/**
+ * Extracts the POST author's identity from a LinkedIn post page's JSON-LD — the `author` of the
+ * SocialMediaPosting/DiscussionForumPosting block (NOT a comment's author). Returns the display
+ * `name` (compared against the member's OIDC name to verify ownership) and the `vanity` parsed from
+ * `author.url`. Best-effort: yields {} when the page has no post-typed JSON-LD block or no author.
+ */
+export function parsePostAuthor(html: string): PostAuthor {
+  for (const b of extractJsonLd(html)) {
+    if (!isPostType(b['@type'])) continue
+    const author = asRecord(b.author)
+    if (!author) continue
+    const name = typeof author.name === 'string' && author.name.trim() ? author.name.trim() : undefined
+    const vanity = typeof author.url === 'string' ? vanityFromProfileUrl(author.url) : undefined
+    return { name, vanity }
+  }
+  return {}
+}
+
 export interface ParsedArticle {
   /** Article title — JSON-LD `name`, falling back to og:title. */
   title?: string

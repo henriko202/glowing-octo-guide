@@ -26,14 +26,10 @@
     "signInButton": "Iniciar sesión con LinkedIn"
   },
   "onboarding": {
-    "linkedinIdentifier": {
-      "title": "Confirma tu perfil de LinkedIn",
-      "intro": "Pega la URL de tu perfil de LinkedIn para que podamos verificar que las publicaciones que envías te pertenecen. Puedes cambiarlo más tarde en Configuración.",
-      "placeholder": "https://www.linkedin.com/in/tu-nombre",
-      "willSaveAs": "Se guardará como: {{vanity}}",
-      "invalid": "No se pudo leer un nombre de usuario de esa URL. Prueba https://www.linkedin.com/in/tu-nombre",
-      "save": "Guardar y continuar",
-      "skip": "Omitir por ahora"
+    "firstPost": {
+      "title": "Comparte tu mejor publicación reciente",
+      "intro": "Añade una de tus publicaciones de LinkedIn para dar vida a tu feed y que otras personas puedan interactuar con ella. Puedes añadir más cuando quieras.",
+      "skip": "Lo haré más tarde"
     }
   },
   "feed": {

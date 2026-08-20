@@ -3,6 +3,7 @@ import {
   appendMediaLinks,
   extractArticleUrl,
   parseArticle,
+  parsePostAuthor,
   parsePostContent,
   parsePostEngagement,
   type PostMedia
@@ -330,5 +331,50 @@ describe('parsePostEngagement', () => {
       ]}
     </script>`
     expect(parsePostEngagement(html)).toEqual({ likeCount: 0, commentCount: 0 })
+  })
+})
+
+describe('parsePostAuthor', () => {
+  it('extracts name + vanity from a SocialMediaPosting author (real-post shape)', () => {
+    // Mirrors the real post JSON-LD: author is a Person with name + a profile url on a country subdomain.
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","articleBody":"hi","author":{"@type":"Person","name":"Mateus Yonemoto","url":"https://br.linkedin.com/in/mateus-yonemoto","image":{"@type":"ImageObject","url":"https://media.licdn.com/x.jpg"}}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Mateus Yonemoto', vanity: 'mateus-yonemoto' })
+  })
+
+  it('handles a DiscussionForumPosting post type', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"DiscussionForumPosting","author":{"name":"Ana Souza","url":"https://www.linkedin.com/in/ana-souza"}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Ana Souza', vanity: 'ana-souza' })
+  })
+
+  it('returns the post block author, never a nested comment author', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","author":{"name":"Real Poster","url":"https://www.linkedin.com/in/real-poster"},"comment":[{"@type":"Comment","author":{"name":"Some Commenter","url":"https://www.linkedin.com/in/commenter"}}]}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Real Poster', vanity: 'real-poster' })
+  })
+
+  it('returns the name but no vanity when author.url is missing', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","author":{"name":"No URL Person"}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'No URL Person', vanity: undefined })
+  })
+
+  it('drops a vanity that fails the accepted format (e.g. too short)', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","author":{"name":"Short Vanity","url":"https://www.linkedin.com/in/x"}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Short Vanity', vanity: undefined })
+  })
+
+  it('returns {} when there is no post-typed JSON-LD block', () => {
+    expect(
+      parsePostAuthor(`<script type="application/ld+json">{"@type":"Article","author":{"name":"A"}}</script>`)
+    ).toEqual({})
+    expect(parsePostAuthor('<html>nothing</html>')).toEqual({})
   })
 })

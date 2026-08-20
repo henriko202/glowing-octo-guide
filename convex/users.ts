@@ -145,7 +145,8 @@ export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args
 
 /** Guard for the refresh mutation. Throws a user-facing message; never leaks the flag. */
 export function assertCanRefresh(user: { linkedinPublicIdentifier?: string }, settings: ApifyFlags): void {
-  if (!user.linkedinPublicIdentifier) throw new Error('Set your LinkedIn profile URL first.')
+  if (!user.linkedinPublicIdentifier)
+    throw new Error('Submit one of your posts first so we can detect your LinkedIn profile.')
   if (!isApifyProfileScrapeEnabled(settings)) throw new Error('Profile refresh is currently unavailable.')
 }
 
@@ -245,56 +246,26 @@ export const getSubscriptionInfo = query({
   }
 })
 
-// Public: stores the user's LinkedIn public profile identifier (vanityName).
-// Called from Settings page when the user enters their LinkedIn profile URL.
-// Used for post ownership verification without requiring LinkedIn Partner API access.
-export const setPublicIdentifier = mutation({
-  args: {
-    sessionToken: v.string(),
-    publicIdentifier: v.string()
-  },
-  handler: async (ctx, { sessionToken, publicIdentifier }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    // Trust model: we validate FORMAT only — we do NOT verify the vanity name actually belongs
-    // to the signed-in member. This is self-attribution; the post-ownership fallback
-    // (verifyPostOwnership Step B) trusts it, but every real LinkedIn action (comment/react) still
-    // uses the user's own OAuth token, so it cannot be used to act as someone else. See PLATFORM.md §17.
-    // Validate LinkedIn vanity name format: alphanumeric, hyphens, underscores, 3-100 chars
-    const trimmed = publicIdentifier.trim().toLowerCase()
-    if (!/^[a-zA-Z0-9\-_]{3,100}$/.test(trimmed)) {
-      throw new Error('Invalid LinkedIn profile identifier format')
-    }
-    const changed = user.linkedinPublicIdentifier !== trimmed
-    // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
-    await ctx.db.patch(user._id, { linkedinPublicIdentifier: trimmed })
-    // Auto-scrape only when the identifier actually changed AND the profile scrape is enabled,
-    // and only within the shared 2/day budget (the same `profile_refresh` counter the Refresh
-    // button uses) — so repeatedly changing the URL can't run unlimited paid scrapes. The flag is
-    // checked BEFORE consuming the budget, so a disabled scrape never wastes the user's daily
-    // budget (and we avoid scheduling a no-op action). The non-throwing budget check means an
-    // exhausted budget never blocks saving the identifier; the user can scrape later via Refresh.
-    if (changed) {
-      const settings = await ctx.db.query('appSettings').first()
-      if (isApifyProfileScrapeEnabled(settings as ApifyFlags)) {
-        // Admins bypass the daily budget; everyone else consumes one (non-throwing) slot.
-        const allowed =
-          user.isAdmin || (await tryConsumeRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000))
-        if (allowed) {
-          await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
-        }
+// Internal: fill the member's LinkedIn vanity from a name-verified post's author profile URL — called
+// by submitPost once the author-name ownership check passes. The value is LinkedIn-authoritative
+// (parsed from the post's JSON-LD `author.url`), never user-typed, so it's the trustworthy seed for
+// the Apify profile/post scrape. Set-once — never overwrites an existing identifier. Kicks off a
+// one-time, budget-guarded profile scrape, mirroring the old manual setter.
+export const setDerivedPublicIdentifier = internalMutation({
+  args: { userId: v.id('users'), vanity: v.string() },
+  handler: async (ctx, { userId, vanity }) => {
+    const user = await ctx.db.get(userId)
+    if (!user || user.linkedinPublicIdentifier) return // set-once — never overwrite
+    await ctx.db.patch(userId, { linkedinPublicIdentifier: vanity })
+    // Country/locale enrichment scrape — budget-guarded (admins bypass), same policy as before.
+    const settings = await ctx.db.query('appSettings').first()
+    if (isApifyProfileScrapeEnabled(settings as ApifyFlags)) {
+      const allowed =
+        user.isAdmin || (await tryConsumeRateLimit(ctx, userId, 'profile_refresh', 2, 24 * 60 * 60 * 1000))
+      if (allowed) {
+        await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId })
       }
     }
-  }
-})
-
-// Public: marks the one-time "confirm your LinkedIn profile URL" onboarding prompt as shown, so
-// RequireAuth stops displaying PublicIdentifierPromptScreen even when the user skipped it. The user
-// can still set their identifier later in Settings (setPublicIdentifier).
-export const dismissPublicIdentifierPrompt = mutation({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, { sessionToken }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    await ctx.db.patch(user._id, { publicIdentifierPromptedAt: Date.now() })
   }
 })
 
@@ -355,6 +326,26 @@ export const setCommentLanguage = mutation({
     const user = await requireAuth(ctx, sessionToken)
     if (!isValidCommentLanguage(commentLanguage)) throw new Error('Unsupported language')
     await ctx.db.patch(user._id, { commentLanguage })
+  }
+})
+
+// Public: mark the first-post onboarding step resolved when the user skips it ("I'll do this
+// later"). Set-once — submitting any post sets the same flag server-side (markFirstPostPrompted).
+export const dismissFirstPostPrompt = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    if (!user.firstPostPromptedAt) await ctx.db.patch(user._id, { firstPostPromptedAt: Date.now() })
+  }
+})
+
+// Internal: called from posts.submitPost after a post is persisted, so posting (from the
+// onboarding gate or the normal My Posts composer) also clears the first-post step. Set-once.
+export const markFirstPostPrompted = internalMutation({
+  args: { userId: v.id('users') },
+  handler: async (ctx, { userId }) => {
+    const user = await ctx.db.get(userId)
+    if (user && !user.firstPostPromptedAt) await ctx.db.patch(userId, { firstPostPromptedAt: Date.now() })
   }
 })
 

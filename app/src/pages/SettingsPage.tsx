@@ -5,7 +5,6 @@ import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { COUNTRY_CODES, countryLabel, INDUSTRIES } from '../../../convex/lib/profileOptions'
 import { VirtualizedCombobox } from '@/components/VirtualizedCombobox'
-import { extractVanityName } from '@/lib/linkedinProfile'
 import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -34,15 +33,11 @@ export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken }) as MeProfile | null | undefined
-  const setPublicIdentifier = useMutation(api.users.setPublicIdentifier)
   const updateProfile = useMutation(api.users.updateProfile)
   const refreshProfile = useMutation(api.users.refreshProfileFromLinkedIn)
   const refreshEnabled = useQuery(api.users.isProfileRefreshEnabled, sessionToken ? { sessionToken } : 'skip')
   const setCommentLanguage = useMutation(api.users.setCommentLanguage)
 
-  const [profileUrl, setProfileUrl] = useState('')
-  const [identifierSaving, setIdentifierSaving] = useState(false)
-  const [identifierSaved, setIdentifierSaved] = useState(false)
   const [industry, setIndustry] = useState<string>('')
   const [country, setCountry] = useState<string>('')
   const [industryDirty, setIndustryDirty] = useState(false)
@@ -86,7 +81,6 @@ export default function SettingsPage() {
   }
 
   const isPro = me.tier === 'pro' || me.tier === 'contact'
-  const extractedVanity = extractVanityName(profileUrl)
 
   const lang = i18n.language?.split('-')[0] ?? 'en'
   const industryOptions = INDUSTRIES.map(i => ({ value: i.code, label: i.label }))
@@ -142,25 +136,12 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSaveIdentifier() {
-    if (!sessionToken || !extractedVanity) return
-    setIdentifierSaving(true)
-    try {
-      await setPublicIdentifier({ sessionToken, publicIdentifier: extractedVanity })
-      setProfileUrl('')
-      setIdentifierSaved(true)
-      setTimeout(() => setIdentifierSaved(false), 3000)
-    } finally {
-      setIdentifierSaving(false)
-    }
-  }
-
   return (
     <div className="mx-auto max-w-[560px] px-4 py-8 font-sans">
       <PageHeader title={t('settings.title')} />
 
       <section className="border-border bg-card mb-4 rounded-xl border p-5">
-        <h2 className="text-foreground mb-3 mt-0 text-base font-semibold">{t('settings.profile')}</h2>
+        <h2 className="text-foreground mt-0 mb-3 text-base font-semibold">{t('settings.profile')}</h2>
 
         <div className="text-foreground mb-1 text-sm font-medium">{t('settings.industry')}</div>
         <div className="mb-3">
@@ -208,7 +189,7 @@ export default function SettingsPage() {
             aria-label={t('settings.headline')}
           />
         </div>
-        <p className="text-muted-foreground mb-3 mt-0 text-xs">{t('settings.headlineHint')}</p>
+        <p className="text-muted-foreground mt-0 mb-3 text-xs">{t('settings.headlineHint')}</p>
 
         {me.location && (
           <p className="text-muted-foreground my-1 text-sm">
@@ -234,67 +215,13 @@ export default function SettingsPage() {
             </Button>
           )}
         </div>
-        {refreshError && <p className="text-destructive mb-0 mt-2 text-xs">{refreshError}</p>}
-        <p className="text-muted-foreground mb-0 mt-2 text-xs">{t('settings.profileNote')}</p>
-      </section>
-
-      {/* LinkedIn identity — required for post ownership verification */}
-      <section className="border-border bg-card mb-4 rounded-xl border p-5">
-        <h2 className="text-foreground mb-1 mt-0 text-base font-semibold">LinkedIn Identity</h2>
-        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">
-          {me.linkedinPublicIdentifier ? (
-            <>
-              Verified as{' '}
-              <a
-                href={`https://www.linkedin.com/in/${me.linkedinPublicIdentifier}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gold-text font-semibold no-underline hover:underline"
-              >
-                {me.linkedinPublicIdentifier}
-              </a>
-              . Update below if your profile URL changes.
-            </>
-          ) : (
-            'Set your LinkedIn profile URL so we can verify that submitted posts belong to your account.'
-          )}
-        </p>
-        <div className="flex gap-2">
-          <Input
-            type="url"
-            inputMode="url"
-            value={profileUrl}
-            onChange={e => setProfileUrl(e.target.value)}
-            placeholder={
-              me.linkedinPublicIdentifier
-                ? `https://www.linkedin.com/in/${me.linkedinPublicIdentifier}`
-                : 'https://www.linkedin.com/in/your-name'
-            }
-            className="flex-1"
-          />
-          <Button
-            onClick={handleSaveIdentifier}
-            disabled={!extractedVanity || identifierSaving}
-            className={`whitespace-nowrap ${identifierSaved ? 'bg-success text-success-foreground' : ''}`}
-          >
-            {identifierSaved ? 'Saved ✓' : identifierSaving ? 'Saving…' : 'Save'}
-          </Button>
-        </div>
-        {profileUrl && !extractedVanity && (
-          <p className="text-destructive mb-0 mt-[6px] text-xs">
-            Couldn't extract a username from that URL. Try: https://www.linkedin.com/in/your-name
-          </p>
-        )}
-        {extractedVanity && (
-          <p className="text-muted-foreground mb-0 mt-[6px] text-xs">
-            Will save as: <strong>{extractedVanity}</strong>
-          </p>
-        )}
+        {refreshError && <p className="text-destructive mt-2 mb-0 text-xs">{refreshError}</p>}
+        <p className="text-muted-foreground mt-2 mb-0 text-xs">{t('settings.profileNote')}</p>
       </section>
 
       <section className="border-border bg-card mb-4 rounded-xl border p-5">
-        <h2 className="text-foreground mb-1 mt-0 text-base font-semibold">{t('settings.aiComments')}</h2>
-        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('settings.aiCommentsNote')}</p>
+        <h2 className="text-foreground mt-0 mb-1 text-base font-semibold">{t('settings.aiComments')}</h2>
+        <p className="text-muted-foreground mt-0 mb-3 text-[13px]">{t('settings.aiCommentsNote')}</p>
         <div className="text-foreground mb-1 text-sm font-medium">{t('settings.commentLanguage')}</div>
         <VirtualizedCombobox
           options={commentLangOptions}
@@ -319,9 +246,9 @@ export default function SettingsPage() {
 
       {isPro ? (
         <section className="border-border bg-card rounded-xl border p-5">
-          <h2 className="text-foreground mb-2 mt-0 text-base font-semibold">{t('settings.visibility')}</h2>
+          <h2 className="text-foreground mt-0 mb-2 text-base font-semibold">{t('settings.visibility')}</h2>
           <p className="text-muted-foreground mb-3 text-sm">{t('settings.visibilityNote')}</p>
-          <p className="text-gold-text text-[13px]">{t('settings.visibilityComingSoon')}</p>
+          <p className="text-[13px] text-gold-text">{t('settings.visibilityComingSoon')}</p>
         </section>
       ) : (
         <section className="border-border bg-accent rounded-xl border p-5">

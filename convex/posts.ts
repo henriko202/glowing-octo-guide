@@ -9,7 +9,13 @@ import { requireAuth, requireAuthAction } from './lib/auth'
 import { assertCanEngage } from './lib/access'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
-import { appendMediaLinks, parseArticle, parsePostContent, parsePostEngagement } from './linkedin/parsePostContent'
+import {
+  appendMediaLinks,
+  parseArticle,
+  parsePostAuthor,
+  parsePostContent,
+  parsePostEngagement
+} from './linkedin/parsePostContent'
 import { type ArticleData } from './lib/articleValidator'
 
 /**
@@ -190,18 +196,32 @@ export const submitPost = action({
 
     // 4. Verify ownership — skipped only under the admin override (dev-only), so a
     //    dev admin may share ANY post regardless of who authored it.
-    //    Normal path: Step A (UGC API, works when r_member_social is approved) →
-    //    Step B (local comparison against stored publicIdentifier, no API call).
-    //    Override path: synthesize a confirmed result. content stays empty (it falls
-    //    back to the HTML-parsed text below) and publishedAt defaults to now —
-    //    identical to the vanity-heuristic fallback's degraded shape.
+    //    Normal path: match the post's JSON-LD author name (rendered by LinkedIn) against the
+    //    member's OIDC name — non-spoofable, no LinkedIn API call. Falls back to the vanity heuristic
+    //    only when the page carried no author block. On a name-verified post we also auto-fill the
+    //    member's LinkedIn identifier from the author's profile URL — the trustworthy seed for Apify.
+    //    Override path: synthesize a confirmed result. content stays empty (it falls back to the
+    //    HTML-parsed text below) and publishedAt defaults to now — identical to the heuristic shape.
     let ownership: OwnershipResult
     if (adminShareOverride) {
       ownership = { confirmed: true, content: '', publishedAt: Date.now(), strategy: 'admin-override' }
     } else {
-      const token = user.linkedinAccessToken
-      const storedIdentifier = user.linkedinPublicIdentifier ?? null
-      ownership = await verifyPostOwnership(token, urn, user.linkedinId, parsed.vanityName, storedIdentifier)
+      const postAuthor = parsePostAuthor(rawLinkedinText)
+      ownership = verifyPostOwnership(
+        postAuthor.name ?? null,
+        user.name,
+        parsed.vanityName,
+        user.linkedinPublicIdentifier ?? null
+      )
+      // Set-once: fill the member's vanity from this name-verified post so Apify has a trustworthy,
+      // never-typed profile locator. ponytail: set-once (not refresh-on-change) — vanity churn is rare
+      // pre-launch; upgrade to refresh-if-different if members start changing their LinkedIn URLs.
+      if (postAuthor.vanity && !user.linkedinPublicIdentifier) {
+        await ctx.runMutation(internal.users.setDerivedPublicIdentifier, {
+          userId: user._id,
+          vanity: postAuthor.vanity
+        })
+      }
     }
 
     // 4b. Extract full content + media from the page HTML we already fetched
@@ -263,6 +283,10 @@ export const submitPost = action({
     if (!postId) {
       throw new Error('Failed to upsert post')
     }
+
+    // The first successful submission clears the first-post onboarding step (set-once), whether the
+    // post came from the onboarding gate or the normal My Posts composer.
+    await ctx.runMutation(internal.users.markFirstPostPrompted, { userId: user._id })
 
     // Best-effort, async: predict the most-likely reaction without blocking the submit.
     // Failure (incl. missing OPENROUTER_API_KEY) leaves the post at its default LIKE.

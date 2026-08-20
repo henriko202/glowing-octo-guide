@@ -26,14 +26,10 @@
     "signInButton": "Sign in with LinkedIn"
   },
   "onboarding": {
-    "linkedinIdentifier": {
-      "title": "Confirm your LinkedIn profile",
-      "intro": "Paste your LinkedIn profile URL so we can verify that posts you submit belong to you. You can change this later in Settings.",
-      "placeholder": "https://www.linkedin.com/in/your-name",
-      "willSaveAs": "Will save as: {{vanity}}",
-      "invalid": "Couldn't read a username from that URL. Try https://www.linkedin.com/in/your-name",
-      "save": "Save & continue",
-      "skip": "Skip for now"
+    "firstPost": {
+      "title": "Share your best recent post",
+      "intro": "Add one of your LinkedIn posts to bring your feed to life and let others engage with it. You can add more anytime.",
+      "skip": "I'll do this later"
     }
   },
   "feed": {
