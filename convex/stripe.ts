@@ -9,6 +9,7 @@ import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
+import { canEngage } from './lib/access'
 import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
@@ -33,6 +34,18 @@ export function toSubscriptionStatus(raw: string): Doc<'users'>['subscriptionSta
   }
 }
 
+// An admin's tier is FIXED — Stripe webhooks never change it ("if a user is admin, tier change is
+// never applied"). Everyone else, including 'contact', follows Stripe: a contact member who
+// subscribes to a paid plan moves to that tier like anyone else (contact is admin-assigned, not
+// Stripe-purchasable, but the member is free to change it). Returns the tier to persist.
+export function resolveSyncedTier(
+  currentTier: Doc<'users'>['tier'],
+  isAdmin: boolean | undefined,
+  stripeTier: 'starter' | 'growth' | 'pro'
+): Doc<'users'>['tier'] {
+  return isAdmin ? currentTier : stripeTier
+}
+
 // These internal mutations are called from webhook callbacks registered in http.ts
 // to keep our users table in sync with Stripe subscription state.
 
@@ -55,17 +68,22 @@ export const syncUserSubscription = internalMutation({
       return
     }
 
+    // Admins' tier is fixed (see resolveSyncedTier); everyone else follows Stripe.
+    const effectiveTier = resolveSyncedTier(user.tier, user.isAdmin, args.tier)
     const status = toSubscriptionStatus(args.status)
     await ctx.db.patch(user._id, {
-      tier: args.tier,
+      tier: effectiveTier,
       subscriptionStatus: status,
-      trialEndsAt: undefined
+      trialEndsAt: undefined,
+      // Paid-through instant — a canceled author's posts stay in the feed until this passes.
+      subscriptionEndsAt: args.currentPeriodEnd
     })
 
-    // Re-stamp authorTierRank + feed fields on all this user's posts, un-hiding them when
-    // the subscription becomes active. Shared with the cancel + admin tier-change paths.
+    // Re-stamp authorTierRank + feed fields on all this user's posts, and reveal any created hidden
+    // while they had no card (e.g. an onboarding first post) as soon as they gain one — trialing
+    // counts (Plan 2B: a card on file ⇒ posts visible). Shared with the cancel + admin tier paths.
     const becameActive = status === 'active'
-    await restampUserPostsTierRank(ctx, user._id, tierToRank(args.tier), { unhideHidden: becameActive })
+    await restampUserPostsTierRank(ctx, user._id, tierToRank(effectiveTier), { unhideHidden: canEngage(status) })
 
     // Trigger immediate post fetch when subscription becomes active — ONLY if Apify is enabled.
     // Apify is dormant at launch (compliance gate); this guard prevents re-enabling it via billing.
@@ -111,10 +129,21 @@ export const cancelUserSubscription = internalMutation({
       .first()
     if (!sub) return
     await ctx.db.patch(sub._id, { status: 'canceled' })
-    await ctx.db.patch(sub.userId, { tier: 'starter', subscriptionStatus: 'canceled' })
 
-    // Downgrade authorTierRank (→ feedRank) on all posts by this user to starter.
-    await restampUserPostsTierRank(ctx, sub.userId, tierToRank('starter'))
+    // Cancellation NEVER revokes access — status goes 'canceled' but canEngage() still allows it
+    // (see lib/access.ts). Instead, the author's posts stay in the feed only until their paid period
+    // ends (subscriptionEndsAt = the sub's last known current_period_end). Tier drops to starter for
+    // everyone except admins, whose tier is fixed (resolveSyncedTier).
+    const user = await ctx.db.get(sub.userId)
+    const tier = resolveSyncedTier(user?.tier, user?.isAdmin, 'starter')
+    await ctx.db.patch(sub.userId, {
+      tier,
+      subscriptionStatus: 'canceled',
+      subscriptionEndsAt: sub.currentPeriodEnd
+    })
+
+    // Re-stamp authorTierRank (→ feedRank) on all posts by this user to match the resolved tier.
+    await restampUserPostsTierRank(ctx, sub.userId, tierToRank(tier))
   }
 })
 
@@ -130,6 +159,7 @@ export const markPastDue = internalMutation({
       .withIndex('by_stripe_customer', q => q.eq('stripeCustomerId', stripeCustomerId))
       .first()
     if (!user) return
+    // A failed payment blocks engaging until it clears (canEngage rejects 'past_due'). Tier unchanged.
     await ctx.db.patch(user._id, { subscriptionStatus: 'past_due' })
     const sub = await ctx.db
       .query('subscriptions')

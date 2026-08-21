@@ -28,6 +28,7 @@
 10. [Posts & Content Pipeline](#10-posts--content-pipeline)
 11. [Feed & Engagement](#11-feed--engagement)
     11A. [AI Reaction & Comment Assistance](#11a-ai-reaction--comment-assistance)
+    11B. [Search & Command Palette](#11b-search--command-palette)
 12. [Admin & Moderation](#12-admin--moderation)
     12A. [Feedback](#12a-feedback)
     12B. [Message of the Day (MOTD)](#12b-message-of-the-day-motd)
@@ -90,16 +91,18 @@ The numeric limits (interactions/post, posts/week) are the **enforced** values f
 
 **Trial model (Plan 2B).** New users start at `subscriptionStatus: 'none'` with no app-side trial. The trial begins when
 they add a card via Stripe Checkout, which creates a real subscription in
-`trialing` status for the **tier they chose on the landing Pricing page** (`plan`/`interval` are carried through OAuth
-and stored in `sessionStorage`; `BillingPage` reads them to pre-select the right price ID for Checkout — see §14). If no
-plan was chosen, `BillingPage` falls back to **Growth**. Billing starts at **50 combined interactions (made + received)
+`trialing` status for the **tier they pick on the billing plan grid** — every plan card starts the same trial for that
+tier, with **Growth** recommended (`interval` is carried through OAuth via `sessionStorage` to pre-select the
+monthly/annual toggle — see §14). Billing starts at **50 combined interactions (made + received)
 OR 7 days, whichever comes first**: the 7-day side is Stripe's own `trial_period_days`; the 50-interaction milestone
 fires `endTrialEarly` (server-side) to convert the trial immediately. Because the trial is a real Stripe subscription,
-trialing users get the **chosen tier's plan limits naturally** — no tier mapping shim is needed. **Engaging** (comment /
-react / submit a post) is **card-gated server-side** via `assertCanEngage` in `convex/lib/access.ts`, which requires `subscriptionStatus
-∈ {trialing, active}`; users at `none`, `canceled`, or `past_due` receive a `PAYMENT_REQUIRED`
-error. The app-facing UI for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan
-2C, deferred to after the app/ UI revamp**.
+trialing users get the **chosen tier's plan limits naturally** — no tier mapping shim is needed. **Engaging** with
+others (comment / react) is **card-gated server-side** via `assertCanEngage` in `convex/lib/access.ts`, which requires
+an engage‑granting `subscriptionStatus ∈ {trialing, active, canceled}`; only `none` (never subscribed) and `past_due`
+(failed payment) receive a `PAYMENT_REQUIRED` error. **Cancellation never revokes access** — a canceled member keeps
+engaging; instead their own posts stop showing in the feed once their paid period ends (see §Feed). The app-facing UI
+for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C, deferred to after the
+app/ UI revamp**.
 
 ---
 
@@ -326,40 +329,41 @@ erDiagram
 One row per authenticated LinkedIn member. Inserted on first login (`linkedin/auth.ts:upsertUser`), patched thereafter
 (profile, subscription, ban). Read almost everywhere.
 
-| Field                       | Type                                                   | Req | Meaning                                                                                                                                                                                                                                                                                       |
-|-----------------------------|--------------------------------------------------------|:---:|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinId`                | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                                                                          |
-| `name`                      | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                                                                 |
-| `headline`                  | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                                                                            |
-| `profilePictureUrl`         | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                   |
-| `industry`                  | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                           |
-| `country`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                           |
-| `location`                  | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                         |
-| `primaryLocale`             | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                      |
-| `commentLanguage`           | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                               |
-| `tier`                      | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                     |
-| `subscriptionStatus`        | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed.                                                  |
-| `trialEndsAt`               | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                                                                            |
-| `stripeCustomerId`          | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                                                                       |
-| `linkedinAccessToken`       | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                                                                       |
-| `linkedinRefreshToken`      | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                                                                                       |
-| `tokenExpiresAt`            | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                                                                     |
-| `linkedinPublicIdentifier`  | string                                                 |  –  | LinkedIn vanity name, **auto‑derived (set‑once)** from the `author.url` of a name‑verified submitted post (`users.setDerivedPublicIdentifier`); never user‑typed. Seeds the Apify profile/post scrape. NOT the ownership check (that matches the post's author name against the OIDC `name`). |
-| `isAdmin`                   | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                                                                         |
-| `isBanned`                  | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                                                                               |
-| `bannedAt`                  | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                                                                                |
-| `bannedBy`                  | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                            |
-| `bannedReason`              | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                     |
-| `email`                     | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                           |
-| `emailVerified`             | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                                                                                  |
-| `deletionRequestedAt`       | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                                                                                |
-| `deletionScheduledAt`       | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                     |
-| `deletionReason`            | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                               |
-| `lastLoginAt`               | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                                                                 |
-| `acknowledgedPolicyVersion` | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                                                                          |
-| `consentPromptedAt`         | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                                                                               |
-| `firstPostPromptedAt`       | number                                                 |  –  | When the first‑post onboarding step was resolved (ms) — set once by submitting any post (`posts.submitPost` → `users.markFirstPostPrompted`) or skipping (`users.dismissFirstPostPrompt`). Unset ⇒ `FirstPostPromptScreen` is shown after the consent gate.                                   |
-| `createdAt`                 | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                      |
+| Field                       | Type                                                   | Req | Meaning                                                                                                                                                                                                                                                                                                                                                                  |
+|-----------------------------|--------------------------------------------------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinId`                | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                                                                                                                                                     |
+| `name`                      | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                                                                                                                                            |
+| `headline`                  | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                                                                                                                                                       |
+| `profilePictureUrl`         | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                                                                                              |
+| `industry`                  | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                      |
+| `country`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                      |
+| `location`                  | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                                                                                                    |
+| `primaryLocale`             | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                                                                                                 |
+| `commentLanguage`           | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                                                                                          |
+| `tier`                      | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                                                                                                |
+| `subscriptionStatus`        | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. Engage access is granted for `{trialing, active, canceled}` — cancellation never revokes it (see `canEngage`).              |
+| `trialEndsAt`               | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                                                                                                                                                       |
+| `subscriptionEndsAt`        | number                                                 |  –  | Paid‑through instant (ms; Stripe `current_period_end`), mirrored on every sync + cancel. A **canceled** author's posts stay in the feed until `now ≥ subscriptionEndsAt`, then drop out (`isAuthorFeedEligible`). Does not affect engage access.                                                                                                                         |
+| `stripeCustomerId`          | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                                                                                                                                                  |
+| `linkedinAccessToken`       | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                                                                                                                                                  |
+| `linkedinRefreshToken`      | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                                                                                                                                                                  |
+| `tokenExpiresAt`            | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                                                                                                                                                |
+| `linkedinPublicIdentifier`  | string                                                 |  –  | LinkedIn vanity name, **auto‑derived (set‑once)** from the `author.url` of a name‑verified submitted post (`users.setDerivedPublicIdentifier`); never user‑typed. Seeds the Apify profile/post scrape. NOT the ownership check (that matches the post's author name against the OIDC `name`).                                                                            |
+| `isAdmin`                   | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                                                                                                                                                    |
+| `isBanned`                  | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                                                                                                                                                          |
+| `bannedAt`                  | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                                                                                                                                                           |
+| `bannedBy`                  | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                                                                                                       |
+| `bannedReason`              | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                                                                                                |
+| `email`                     | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                                                                                                      |
+| `emailVerified`             | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                                                                                                                                                             |
+| `deletionRequestedAt`       | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                                                                                                                                                           |
+| `deletionScheduledAt`       | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                                                                                                |
+| `deletionReason`            | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                                                                                                          |
+| `lastLoginAt`               | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                                                                                                                                            |
+| `acknowledgedPolicyVersion` | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                                                                                                                                                     |
+| `consentPromptedAt`         | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                                                                                                                                                          |
+| `firstPostPromptedAt`       | number                                                 |  –  | When the first‑post onboarding step was resolved (ms) — set once by submitting any post (`posts.submitPost` → `users.markFirstPostPrompted`) or skipping (`users.dismissFirstPostPrompt`). Unset ⇒ `FirstPostPromptScreen` is shown after the consent gate (to every new member; the onboarding post is created hidden for no-card members and funnels them to billing). |
+| `createdAt`                 | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                                                                                                 |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
 `by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
@@ -827,6 +831,21 @@ price IDs (six env vars total — see §16). The pure helpers
 `ALLOWED_PRICE_IDS` set and `getTierFromPriceId(priceId)` function read `process.env` once at load. Unknown or blank IDs
 default to `starter`. `contact` is admin‑assigned, not purchasable via Checkout.
 
+> **Tier pin — admins only.** Stripe webhook tier writes route through the pure, unit‑tested
+> `resolveSyncedTier(currentTier, isAdmin, stripeTier)` in `stripe.ts`: an **admin's tier is never
+> changed** by Stripe; everyone else follows Stripe. `contact` is **not** pinned — `contact` is
+> admin‑assigned (not Stripe‑purchasable), but a contact member who subscribes to a paid plan moves to
+> that tier like anyone else. Applied in `syncUserSubscription` and `cancelUserSubscription`.
+>
+> **Access is never revoked by cancellation** — this is enforced in `lib/access.canEngage`, not in the
+> webhook: `canEngage` grants engagement for `subscriptionStatus ∈ {trialing, active, canceled}`, so a
+> canceled member keeps commenting / reacting / submitting. Only `none` (never subscribed) and
+> `past_due` (failed payment) are gated. What a cancellation *does* remove is **feed visibility of the
+> member's own posts**, and only after their paid period ends: `cancelUserSubscription` stamps
+> `subscriptionEndsAt = current_period_end`, and `feed.isAuthorFeedEligible(author, now)` drops a
+> canceled author's posts once `now ≥ subscriptionEndsAt`. (The `subscriptions` row still records the
+> real Stripe price/status verbatim.)
+
 ### Billing intervals
 
 The BillingPage exposes a **monthly / annual toggle** (default: annual). Annual pricing is 2 months free:
@@ -884,17 +903,17 @@ most once** per user: the `subscriptionStatus !== 'trialing'` guard inside
 `http.ts` registers handlers for these Stripe events, each delegating to an internal mutation in
 `stripe.ts`:
 
-| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                              |
-|---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` + `subscriptionStatus`, clear `trialEndsAt`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
-| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`, downgrade user to `starter` + `canceled`, re‑stamp posts to `starter` rank.                                                                                                                                                                                                  |
-| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged).                                                                                                                                                                                                                                                        |
+| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|---------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, clear `trialEndsAt`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
+| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`; set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this). Downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                     |
+| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears.                                                                                                                                                                                                                                                                                                             |
 
 ```mermaid
 flowchart TD
   W["Stripe webhook → /stripe/webhook"] --> T{"event type"}
   T -->|created/updated| SYNC["syncUserSubscription"]
-  SYNC --> P1["patch user: tier, status, clear trialEndsAt"]
+  SYNC --> P1["patch user: tier (admin fixed), status, subscriptionEndsAt, clear trialEndsAt"]
   SYNC --> P2["re-stamp authorTierRank on all posts"]
   SYNC --> P3["upsert subscriptions row"]
   SYNC --> ACT{"status == active?"}
@@ -902,8 +921,8 @@ flowchart TD
   ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
   G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
   G -->|no| NOOP["no-op (Apify dormant at launch)"]
-  T -->|deleted| CAN["cancelUserSubscription → downgrade to starter"]
-  T -->|payment_failed| PD["markPastDue (tier unchanged)"]
+  T -->|deleted| CAN["cancelUserSubscription → tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
+  T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement)"]
 ```
 
 > **Apify dormant guard:** `syncUserSubscription` reads `appSettings` and checks
@@ -1120,8 +1139,9 @@ flowchart TD
 ```
 
 > Because `getActiveSubscribers` returns only `active` users, the Apify path's `hidden` is
-> effectively always `false` on the cron. Since Plan 2B, `submitPost` also sets `hidden: false`
-> unconditionally (trialing users must have a card on file and their posts are visible in the feed).
+> effectively always `false` on the cron. `submitPost` sets `hidden` via `postCreatedHidden`: carded
+> members (trialing/active) post visibly (Plan 2B), while a no-card member (`none`/`past_due`) — e.g. a
+> new member’s onboarding first post — is created hidden and revealed when they add a card.
 
 ### Queue drain (`jobs/processQueue.processPostQueue`, daily cron)
 
@@ -1198,20 +1218,28 @@ flowchart TD
 > short pages; the client's **Load more** (`usePaginatedQuery`) requests the next page. Design + rollout:
 > [feed-cursor-pagination-plan.md](./feed-cursor-pagination-plan.md).
 
-**Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible` helper (`feed.ts`)
-now excludes only authors with `deletionScheduledAt` set — **trialing authors are no longer excluded**. Because trialing
-users must have a card on file (the trial is a real Stripe subscription for the chosen tier — see §8), their posts
-belong in the feed as a reciprocity incentive. `submitPost` sets
-`hidden: false` for all card-backed submitters (the previous `hidden: subscriptionStatus ===
-'trialing'` flag has been removed). Existing hidden posts from before Plan 2B are not backfilled (pre-launch, no prod
-data). The `syncUserSubscription` webhook still un-hides the author's posts on
-`active` transition, which remains correct.
+**Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible(author, now)` helper (`feed.ts`)
+excludes authors with `deletionScheduledAt` set, and drops a **canceled** author once their paid period ends:
+`subscriptionStatus === 'canceled'` stays eligible only while `now < subscriptionEndsAt` (the paid‑through instant
+stamped by `cancelUserSubscription`); a missing/elapsed `subscriptionEndsAt` → not eligible. This is the sole feed
+effect of a cancellation — the member keeps full engage access (see Card gate below). Everyone else (trialing / active)
+is eligible. Trialing authors are **not** excluded: because trialing users must have a card on file (the trial is a real
+Stripe subscription for the chosen tier — see §8), their posts belong in the feed as a reciprocity incentive. The gate
+is applied at query time in both `getFeed` and `search` (which already load the page's authors), so no cron or post
+mutation is needed. `submitPost` sets `hidden` via
+`postCreatedHidden(user)` — visible for carded members, hidden for no-card members (`none`/`past_due`, e.g. a new
+member's onboarding first post). Existing hidden posts from before Plan 2B are not backfilled (pre-launch, no prod
+data). The `syncUserSubscription` webhook un-hides the author's posts when they **gain a card**
+(`unhideHidden: canEngage(status)`) — so a trial start (subscribe), not just an `active` transition, reveals it.
 
-**Card gate on engagement.** `commentOnPost`, `reactToPost`, and `submitPost` all call
-`assertCanEngage(user)` (from `convex/lib/access.ts`) immediately after resolving the caller. Users at
-`subscriptionStatus ∈ {none, canceled, past_due}` receive a `PAYMENT_REQUIRED` error; only `trialing` and `active` users
-may engage; admins (`isAdmin`) always bypass the gate. The in-app UI for this gate (disabled buttons, progress bar, CTA)
-is **Plan 2C, deferred to after the app/ UI revamp**.
+**Card gate on engagement.** `commentOnPost` and `reactToPost` call `assertCanEngage(user)` (from
+`convex/lib/access.ts`) immediately after resolving the caller — `submitPost` does NOT: a no-card member may submit (the
+post is created hidden via `postCreatedHidden`), only reactions/comments are card-gated. Engagement is granted for
+`subscriptionStatus ∈ {trialing, active, canceled}` — **cancellation never revokes access**; only `none` (never
+subscribed) and `past_due` (failed payment) receive a `PAYMENT_REQUIRED` error. Admins (`isAdmin`) always bypass the
+gate. The frontend mirror `useCardGate()` (`app/src/hooks/useCardGate.ts`) uses the same status set and must stay in
+sync. The in-app UI for this gate (disabled buttons, progress bar, CTA) is **Plan 2C, deferred to after the app/ UI
+revamp**.
 
 ### Sort priority (effective order)
 
@@ -1367,6 +1395,41 @@ overrides per-comment without writing back.
 `posts.submitPost` (schedule hook), `interactions.reactToPost` (enum fix), `users.{setCommentLanguage,
 getPublicAuthor}`, `getMe` (exposes `commentLanguage` via `toSafeMe`); frontend `PostCard` (picker),
 `CommentBox` (draft + language), `SettingsPage` ("AI Comments"), i18n `reactions.*` / `comment.*`.
+
+---
+
+## 11B. Search & Command Palette
+
+A ⌘K / Ctrl-K **command palette** searches posts and people and offers quick navigation actions. It replaces the former
+non-functional top-bar search placeholder.
+
+### Backend (`convex/search.ts`, `search` query)
+
+- Two full-text **search indexes** on `convex/schema.ts`: `posts.search_content` (`searchField: 'content'`,
+  `filterFields: ['inFeed']`) and `users.search_name` (`searchField: 'name'`).
+- The `search` query takes `{ sessionToken, queryText }` and returns `{ posts, people }`. It **requires a valid
+  session** (returns empty on missing/invalid token or a query under 2 chars).
+- **Feed-parity visibility (security-critical):** post results reuse the exact same rules as `feed.getFeed` — the
+  `search_content` index is pinned to `inFeed === true`, then per-viewer `visibilityIndustries` / `visibilityCountries`
+  allow-lists and `isAuthorFeedEligible(author)` are applied. Search can never surface a post the feed would hide.
+- **Safe projections:** posts expose only `{ _id, content, sourceUrl, author }` (author via `toFeedAuthor`); people via
+  the pure allow-list `toSearchPerson` → `{ _id, name, headline, profilePictureUrl, linkedinPublicIdentifier }` — never
+  tokens, email, admin/ban state, or other PII. `toSearchPerson` is unit-tested (`convex/search.test.ts`).
+
+### Frontend (`app/src/components/shell/CommandPalette.tsx`)
+
+- Reuses the `cmdk` wrapper in `app/src/components/ui/command.tsx` (`CommandDialog` + `Command` root). `AppShell` owns
+  the open state and a global ⌘K/Ctrl-K keydown listener (`preventDefault` so it doesn't collide with browser find); the
+  `TopBar` search button opens it via `onOpenSearch`.
+- Input is debounced ~180ms; the Convex query runs reactively via `useQuery(..., 'skip')` and only fires at ≥2 chars.
+  Idle (no query) shows **Quick actions** (nav items + toggle theme + sign out); typing shows **People** / **Posts**
+  groups, or a localized "No results". `shouldFilter={false}` — results are already filtered server-side, so cmdk's
+  substring filter must not re-hide full-text matches. Selecting a person/post opens their LinkedIn permalink in a new
+  tab (the compliant embed → permalink handoff).
+- Palette strings live under `shell.*` in `app/src/i18n/locales/{en,pt,es}.json`.
+
+> Search indexes cannot be exercised under the project's no-`convex-test` convention — the `search` query is verified by
+> a manual runtime smoke test; only the pure `toSearchPerson` projection is unit-tested.
 
 ---
 
@@ -1926,7 +1989,8 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
 6. **`!me.consentPromptedAt`** (new user who has not yet completed the one-time consent prompt) →
    `<ConsentPromptScreen>`
-7. **`!me.firstPostPromptedAt`** (new user who has not yet shared or skipped their first post) →
+7. **`!me.firstPostPromptedAt`** (every new member, before billing — the submitted first post is created hidden for a
+   no-card member and the screen funnels them to `/billing`; the post is revealed when they add a card) →
    `<FirstPostPromptScreen>`
 8. **user ok** → `<AppShell>` (sidebar + top bar) + the requested page
 
@@ -1942,7 +2006,7 @@ flowchart TD
   RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
   RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
   RA -->|"!consentPromptedAt"| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
-  RA -->|"!firstPostPromptedAt"| FIRSTPOST["FirstPostPromptScreen → submitPost / dismissFirstPostPrompt → reload"]
+  RA -->|"!firstPostPromptedAt"| FIRSTPOST["FirstPostPromptScreen → submitPost (hidden if no card) → /billing · or dismiss → reload"]
   RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + page → page issues Convex queries"]
 ```
 
@@ -1974,17 +2038,26 @@ flowchart TD
     + `api.users.getTrialProgress` (see §11 — query returns `{ made, received, combined, threshold,
   reached, status, trialEndsAt }`). Layout varies by subscription state:
 
-    - **No-card** (`none`/`canceled`/`past_due`): the three-tier plan cards are hidden; instead a single prominent
-      "Start your free 7-day trial" CTA is shown. It resolves the price ID from
-      `sessionStorage` keys `chosenPlan` / `chosenInterval` (written by `AuthSuccessPage` from the plan the user
-      selected on the landing Pricing page before starting OAuth), falling back to **Growth** when neither is present.
-      The monthly/annual toggle still applies as a UI override of the interval.
+  The **three-tier plan grid + Enterprise card is shown in every state** — no-card users are pushed toward Growth, not
+  limited to it. Every plan card's CTA routes through `createCheckoutSession`, which applies the same card-required
+  7-day trial to any valid price (the trial is plan-agnostic at the backend), so there is no separate
+  "start trial" gate. Each plan card lists that tier's `features` as a ✓ bullet list (copy mirrored from the landing
+  Pricing section's i18n, `billing.plans.<id>.features` in `app/src/i18n/locales/*`). The monthly/annual toggle applies
+  in all states.
+
+    - **No-card** (`none`/`canceled`/`past_due`): the plan grid is shown under a lead — **"Select a plan below — Growth
+      is the best bang for your buck."** + a "every plan starts with a free 7-day trial · cancel anytime" note. The
+      **Growth** card carries a **"Recommended"** badge and a highlighted border. No card is marked "current". The red
+      **"Your subscription has ended"** banner is shown only for genuinely ended subscriptions (`canceled` or a trial
+      that ran out) — brand-new users (`none`) never see it.
     - **Trialing** (`trialing`): the trial banner shows an **X / 50 interactions** progress meter (`progress.combined` /
       `progress.threshold`, with a simple bar), the "or 7 days" secondary count-down (`trialEndsAt`), and a **"View your
-      SSI on LinkedIn" ↗** link-out (`https://linkedin.com/sales/ssi`, new tab). The three-tier cards are visible; when
-      the user acts on the **Starter** card, an inline "what you'll miss" block lists Growth advantages
-      (industry-filtered feed, 50 vs 25 interactions/post, 2 vs 1 posts/week).
-    - **Active**: standard plan cards + "Manage Subscription" → Stripe portal. Enterprise → `mailto:`.
+      SSI on LinkedIn" ↗** link-out (`https://linkedin.com/sales/ssi`, new tab). When the user acts on the **Starter**
+      card, an inline "what you'll miss" block lists Growth advantages (industry-filtered feed, 50 vs 25
+      interactions/post, 2 vs 1 posts/week).
+    - **Active**: the current tier's card shows a "Current plan" badge; "Manage Subscription" → Stripe portal.
+    - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to
+      `mailto:contact@linkintothessi.com`.
 - **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Four tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync status), **Plan
   Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's effective limits, with an "override"
@@ -2042,12 +2115,14 @@ both **OFF by default** — and a "Save & continue" button that calls
 is unset hit this prompt on first login — see the `RequireAuth`
 interception order above and §13B),
 `FirstPostPromptScreen` (first-login full-screen **skippable** onboarding step shown by `RequireAuth` when
-`me.firstPostPromptedAt` is unset — immediately after the consent gate; presents the shared `PostComposer` under a
+`me.firstPostPromptedAt` is unset — shown to every new member immediately after the consent gate; presents the shared
+`PostComposer` under a
 "Share your best recent post" heading, plus an "I'll do this later" link. Submitting a post calls
-`api.posts.submitPost` — which stamps `firstPostPromptedAt` server-side via `users.markFirstPostPrompted` — while the
-skip link calls `api.users.dismissFirstPostPrompt`; either then `window.location.reload()`s. Never blocks entry: a user
-without a post URL handy can skip. See the `RequireAuth` interception order above), plus the two LinkedIn‑embed
-components:
+`api.posts.submitPost` — which stamps `firstPostPromptedAt` server-side via `users.markFirstPostPrompted` and creates
+the post hidden for a no-card member (`postCreatedHidden`). A card-less member is then funneled to `/billing` (their
+post is revealed once they add a card); everyone else reloads to the feed. The skip link calls
+`api.users.dismissFirstPostPrompt` then reloads. Never blocks entry: a member without a post URL handy can skip. See the
+`RequireAuth` interception order above), plus the two LinkedIn‑embed components:
 
 - **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
   and **My Posts**. Renders a LinkedIn post in an iframe that is intentionally taller (`iframeHeight` 480) than its
@@ -2604,6 +2679,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                 |
 | Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)               |
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                       |
+| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                               |
 | Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                |
 | Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                            | [§12A](#12a-feedback)                                                                       |
 | MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                        |

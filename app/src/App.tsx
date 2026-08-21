@@ -55,6 +55,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!me.consentPromptedAt) return <ConsentPromptScreen />
 
+  // Prompt every new member for their first post — even before they add a card. The post is
+  // created hidden (postCreatedHidden) and the screen funnels non-subscribers to billing.
   if (!me.firstPostPromptedAt) return <FirstPostPromptScreen />
 
   return (

@@ -1,18 +1,33 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dialog } from 'radix-ui'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import CommandPalette from './CommandPalette'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // Global ⌘K / Ctrl-K toggles the command palette. preventDefault so it doesn't collide with
+  // the browser's own find/search shortcut.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(o => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   return (
     <div className="bg-background flex min-h-dvh">
       <a
         href="#main-content"
-        className="focus:bg-primary focus:text-primary-foreground sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:px-3 focus:py-2"
+        className="focus:bg-primary focus:text-primary-foreground sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:px-3 focus:py-2"
       >
         {t('shell.skipToContent')}
       </a>
@@ -41,7 +56,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </Dialog.Root>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar onOpenSidebar={() => setDrawerOpen(true)} />
+        <TopBar
+          onOpenSidebar={() => setDrawerOpen(true)}
+          onOpenSearch={() => setPaletteOpen(true)}
+        />
         <main
           id="main-content"
           className="flex-1"
@@ -49,6 +67,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+      />
     </div>
   )
 }

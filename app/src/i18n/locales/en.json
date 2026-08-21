@@ -13,7 +13,13 @@
   },
   "shell": {
     "search": "Search posts, people",
-    "searchComingSoon": "Search is coming soon.",
+    "commandTitle": "Search & commands",
+    "searchPlaceholder": "Search posts and people…",
+    "noResults": "No results.",
+    "groupActions": "Quick actions",
+    "groupPeople": "People",
+    "groupPosts": "Posts",
+    "actionToggleTheme": "Toggle theme",
     "language": "Language",
     "theme": "Toggle theme",
     "profile": "Profile & settings",
@@ -119,22 +125,44 @@
     "trialCtaNote": "Then {{price}} · cancel anytime. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
     "trialIncludes": "Full {{plan}} access during your trial. The full plan comparison appears once you start.",
     "comparisonNote": "Compare plans after your trial — upgrade, downgrade, or cancel anytime.",
+    "newUserLead": "Select a plan below — Growth is the best bang for your buck.",
+    "newUserTrialNote": "Every plan starts with a free 7-day trial · cancel anytime.",
+    "recommended": "Recommended",
     "annual": "Annual · 2 months free",
     "monthly": "Monthly",
     "plans": {
       "starter": {
         "name": "Starter",
         "description": "Get started and start engaging",
+        "features": [
+          "See the full live feed",
+          "Comment & react with AI",
+          "25 interactions counted per post",
+          "1 post into the feed / week"
+        ],
         "cta": "Start free trial"
       },
       "growth": {
         "name": "Growth",
         "description": "Targeted feed for faster results",
+        "features": [
+          "Feed filtered to your industry + country",
+          "Everything in Starter",
+          "50 interactions counted per post",
+          "2 posts into the feed / week"
+        ],
         "cta": "Get Growth"
       },
       "pro": {
         "name": "Pro",
         "description": "Maximum visibility and control",
+        "features": [
+          "Custom industry + country filters",
+          "Control who sees your posts",
+          "Everything in Growth",
+          "200 interactions counted per post",
+          "5 posts into the feed / week"
+        ],
         "cta": "Get Pro"
       },
       "contact": {

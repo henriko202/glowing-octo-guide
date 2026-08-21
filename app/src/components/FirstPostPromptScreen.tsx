@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import BrandMark from '@/components/BrandMark'
 import PostComposer from './PostComposer'
+import { useCardGate } from '../hooks/useCardGate'
 
 // One-time first-login nudge to share the member's first post. Shown by RequireAuth until
 // users.firstPostPromptedAt is set — which happens when they submit any post (server-side in
@@ -11,13 +12,20 @@ export default function FirstPostPromptScreen() {
   const { t } = useTranslation()
   const submitPost = useAction(api.posts.submitPost)
   const dismiss = useMutation(api.users.dismissFirstPostPrompt)
+  const { gated } = useCardGate()
 
   async function handleSubmit(postUrl: string) {
     const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
     if (!sessionToken) throw new Error('Not signed in')
     await submitPost({ sessionToken, postUrl })
-    // submitPost set firstPostPromptedAt server-side; reload drops the gate → lands on /feed.
-    window.location.reload()
+    // submitPost set firstPostPromptedAt server-side. The post is created hidden for a not-yet-
+    // subscribed member — funnel them to billing to add a card (which reveals it once active);
+    // already-subscribed members just land on the feed.
+    if (gated) {
+      window.location.href = '/billing'
+    } else {
+      window.location.reload()
+    }
   }
 
   async function handleSkip() {

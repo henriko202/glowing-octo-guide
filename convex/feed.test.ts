@@ -100,17 +100,24 @@ describe('toFeedAuthor', () => {
 })
 
 describe('isAuthorFeedEligible', () => {
+  const NOW = 1_000_000
+
   it('includes an active author', () => {
-    expect(isAuthorFeedEligible({ subscriptionStatus: 'active' })).toBe(true)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'active' }, NOW)).toBe(true)
   })
   it('includes a trialing author (card-backed Growth trial — reciprocity)', () => {
-    expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: undefined })).toBe(true)
-    expect(isAuthorFeedEligible({ subscriptionStatus: 'trialing' })).toBe(true)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: undefined }, NOW)).toBe(true)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'trialing' }, NOW)).toBe(true)
   })
   it('excludes an author pending deletion', () => {
-    expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: 123 })).toBe(false)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'active', deletionScheduledAt: 123 }, NOW)).toBe(false)
   })
   it('excludes a missing author', () => {
-    expect(isAuthorFeedEligible(null)).toBe(false)
+    expect(isAuthorFeedEligible(null, NOW)).toBe(false)
+  })
+  it('keeps a canceled author until their paid period ends, then drops them', () => {
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled', subscriptionEndsAt: NOW + 1 }, NOW)).toBe(true)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled', subscriptionEndsAt: NOW - 1 }, NOW)).toBe(false)
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled' }, NOW)).toBe(false) // unknown end → dropped
   })
 })

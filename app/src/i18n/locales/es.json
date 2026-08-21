@@ -13,7 +13,13 @@
   },
   "shell": {
     "search": "Buscar publicaciones, personas",
-    "searchComingSoon": "La búsqueda llegará pronto.",
+    "commandTitle": "Búsqueda y comandos",
+    "searchPlaceholder": "Buscar publicaciones y personas…",
+    "noResults": "Sin resultados.",
+    "groupActions": "Acciones rápidas",
+    "groupPeople": "Personas",
+    "groupPosts": "Publicaciones",
+    "actionToggleTheme": "Cambiar tema",
     "language": "Idioma",
     "theme": "Cambiar tema",
     "profile": "Perfil y ajustes",
@@ -119,22 +125,44 @@
     "trialCtaNote": "Luego {{price}} · cancela cuando quieras. Se te facturará cuando alcances 50 interacciones o tras 7 días, lo que ocurra primero.",
     "trialIncludes": "Acceso completo a {{plan}} durante tu prueba. La comparación de planes aparece una vez que empieces.",
     "comparisonNote": "Compara los planes tras tu prueba — mejora, cambia a un plan inferior o cancela cuando quieras.",
+    "newUserLead": "Elige un plan abajo — Growth es la mejor relación calidad-precio.",
+    "newUserTrialNote": "Todos los planes incluyen una prueba gratuita de 7 días · cancela cuando quieras.",
+    "recommended": "Recomendado",
     "annual": "Anual · 2 meses gratis",
     "monthly": "Mensual",
     "plans": {
       "starter": {
         "name": "Starter",
         "description": "Comienza e interactúa",
+        "features": [
+          "Accede al feed completo en vivo",
+          "Comenta y reacciona con IA",
+          "25 interacciones contadas por publicación",
+          "1 publicación en el feed / semana"
+        ],
         "cta": "Iniciar prueba gratuita"
       },
       "growth": {
         "name": "Growth",
         "description": "Feed dirigido para resultados más rápidos",
+        "features": [
+          "Feed filtrado por industria + país",
+          "Todo lo de Starter",
+          "50 interacciones contadas por publicación",
+          "2 publicaciones en el feed / semana"
+        ],
         "cta": "Obtener Growth"
       },
       "pro": {
         "name": "Pro",
         "description": "Máxima visibilidad y control",
+        "features": [
+          "Filtros personalizados de industria + país",
+          "Controla quién ve tus publicaciones",
+          "Todo lo de Growth",
+          "200 interacciones contadas por publicación",
+          "5 publicaciones en el feed / semana"
+        ],
         "cta": "Obtener Pro"
       },
       "contact": {

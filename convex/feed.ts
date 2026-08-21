@@ -73,12 +73,20 @@ export function toFeedAuthor(author: Doc<'users'>) {
  * content disappears from the feed the moment they request erasure, and reappears automatically
  * if they cancel — no post mutation needed). Trialing authors ARE eligible: they hold a
  * card-backed Growth trial (Task 4 / Plan 2B) so their posts belong in the feed (reciprocity).
+ *
+ * A CANCELED author keeps their posts in the feed only until their paid period ends: cancellation
+ * never revokes engage access (see lib/access.canEngage), but the member's own posts drop out once
+ * `now` passes `subscriptionEndsAt` (the paid-through instant). Missing/elapsed → not eligible.
  */
 export function isAuthorFeedEligible(
-  author: { subscriptionStatus?: string; deletionScheduledAt?: number } | null
+  author: { subscriptionStatus?: string; subscriptionEndsAt?: number; deletionScheduledAt?: number } | null,
+  now: number
 ): boolean {
   if (!author) return false
   if (author.deletionScheduledAt) return false
+  if (author.subscriptionStatus === 'canceled') {
+    return author.subscriptionEndsAt !== undefined && now < author.subscriptionEndsAt
+  }
   return true
 }
 
@@ -129,6 +137,7 @@ export const getFeed = query({
     // post visibility allowlists, author eligibility (trialing / pending deletion), and the
     // viewer's industry/country filters. Pages may come back short when these drop posts —
     // `usePaginatedQuery` just loads more.
+    const now = Date.now()
     const enriched = result.page
       .filter(post => {
         if (post.visibilityIndustries.length > 0) {
@@ -138,7 +147,7 @@ export const getFeed = query({
           if (!viewer.country || !post.visibilityCountries.includes(viewer.country)) return false
         }
         const author = authorMap.get(post.authorId)
-        if (!isAuthorFeedEligible(author ?? null)) return false
+        if (!isAuthorFeedEligible(author ?? null, now)) return false
         if (filter.applyIndustry && filter.industries.length > 0) {
           if (!author?.industry || !filter.industries.includes(author.industry)) return false
         }

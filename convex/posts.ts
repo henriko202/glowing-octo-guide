@@ -6,7 +6,7 @@ import type { Doc, Id } from './_generated/dataModel'
 import { isAllowedLinkedInUrl, parseLinkedInPostUrl } from './linkedin/parsePostUrl'
 import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
-import { assertCanEngage } from './lib/access'
+import { postCreatedHidden } from './lib/access'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import {
@@ -148,7 +148,9 @@ export const submitPost = action({
     if (!user?.linkedinAccessToken) {
       throw new Error('No LinkedIn access token. Please sign in again.')
     }
-    assertCanEngage(user)
+    // No card-gate here: a not-yet-subscribed member CAN submit (incl. the onboarding first post).
+    // The post is created HIDDEN for non-active authors (postCreatedHidden, at the upsert below) and
+    // revealed when they become 'active'. Reactions/comments stay card-gated (see interactions.ts).
 
     // Admin "share any post" override — TESTING ONLY, enabled only on the local /
     // dev deployment via the ALLOW_ADMIN_SHARE_ANY_POST env var. When off (always
@@ -272,7 +274,7 @@ export const submitPost = action({
       isFeatured: false,
       visibilityIndustries: [],
       visibilityCountries: [],
-      hidden: false,
+      hidden: postCreatedHidden(user),
       // Preserve the original submitted URL so we can link back correctly —
       // reconstructing from URN loses information (activity ID ≠ ugcPost ID).
       sourceUrl: postUrl,

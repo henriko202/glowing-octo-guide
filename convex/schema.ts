@@ -29,6 +29,10 @@ export default defineSchema({
       v.literal('none')
     ),
     trialEndsAt: v.optional(v.number()),
+    // Paid-through timestamp (Stripe current_period_end, ms). Mirrored from the subscription on
+    // every Stripe sync + cancellation. A canceled author's posts stay in the feed until this
+    // instant, then drop out (see feed.isAuthorFeedEligible) — access to engage is NOT affected.
+    subscriptionEndsAt: v.optional(v.number()),
     trialInteractionsMade: v.optional(v.number()),
     trialInteractionsReceived: v.optional(v.number()),
     stripeCustomerId: v.optional(v.string()),
@@ -84,7 +88,10 @@ export default defineSchema({
     //  • dormancy sweep: eq(deletionScheduledAt, undefined) + range on lastLoginAt.
     // Because flagging a dormant user SETS deletionScheduledAt, that row immediately leaves
     // the dormancy range — so the retention cron can self-reschedule without re-reading it.
-    .index('by_deletion_and_last_login', ['deletionScheduledAt', 'lastLoginAt']),
+    .index('by_deletion_and_last_login', ['deletionScheduledAt', 'lastLoginAt'])
+    // Full-text people search for the ⌘K command palette (convex/search.ts). Results are
+    // projected through toSearchPerson (safe display fields only — never tokens/PII).
+    .searchIndex('search_name', { searchField: 'name' }),
 
   posts: defineTable({
     linkedinPostUrn: v.string(),
@@ -141,7 +148,11 @@ export default defineSchema({
     // NOTE: the older by_featured / by_published / by_feed indexes were removed once the
     // feed migrated to by_feed_rank — they had no remaining withIndex callers and every
     // index adds write amplification on this (highest-write) table.
-    .index('by_feed_rank', ['inFeed', 'feedRank']),
+    .index('by_feed_rank', ['inFeed', 'feedRank'])
+    // Full-text content search for the ⌘K command palette (convex/search.ts). filterField
+    // `inFeed` pins the scan to feed-eligible posts so hidden/capped/deleted posts never
+    // enter the candidate set; per-viewer visibility is still applied on top (mirrors getFeed).
+    .searchIndex('search_content', { searchField: 'content', filterFields: ['inFeed'] }),
 
   subscriptions: defineTable({
     userId: v.id('users'),
