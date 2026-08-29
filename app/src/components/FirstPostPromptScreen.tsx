@@ -16,7 +16,7 @@ export default function FirstPostPromptScreen() {
 
   async function handleSubmit(postUrl: string) {
     const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
-    if (!sessionToken) throw new Error('Not signed in')
+    if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl })
     // submitPost set firstPostPromptedAt server-side. The post is created hidden for a not-yet-
     // subscribed member — funnel them to billing to add a card (which reveals it once active);

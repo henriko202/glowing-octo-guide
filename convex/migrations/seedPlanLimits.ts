@@ -1,42 +1,30 @@
 import { internalMutation } from '../_generated/server'
+import { buildTierDefaultRow } from '../lib/planLimits'
 
-// One-time seed mutation to populate the default planLimits rows for each tier.
-// Run once via the Convex dashboard or CLI:
+// Seed mutation to populate the default planLimits rows for each tier. Kept for explicit
+// re-seeding (e.g. a fresh environment); no longer a hard prerequisite for the admin
+// "update tier default" flow, which self-heals the same way (backlog/B27) — see
+// admin.ts's updateTierDefault. Run via the Convex dashboard or CLI:
 //   npx convex run migrations/seedPlanLimits:seedPlanLimits --prod
 //
-// Safe to re-run — skips any tier that already has a default row (no userId).
+// Safe to re-run — skips any tier that already has a default row (no userId). Row values
+// come from lib/planLimits.ts's DEFAULTS (single source of truth), so this can't drift
+// from the self-heal or the read fallback.
 export const seedPlanLimits = internalMutation({
   args: {},
   handler: async ctx => {
-    const defaults: Array<{
-      tier: 'starter' | 'growth' | 'pro' | 'contact'
-      interactionsPerPost: number
-      postsPerWeek: number
-      featuredPerMonth: number
-    }> = [
-      { tier: 'starter', interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
-      { tier: 'growth', interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
-      { tier: 'pro', interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
-      // 999 is a Custom/enterprise sentinel (effectively unlimited) — see lib/planLimits.ts DEFAULTS.
-      { tier: 'contact', interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 999 }
-    ]
+    const tiers = ['starter', 'growth', 'pro', 'contact'] as const
 
-    for (const row of defaults) {
+    for (const tier of tiers) {
       // Only insert if no default row (no userId) for this tier already exists.
       const tierRows = await ctx.db
         .query('planLimits')
-        .withIndex('by_tier', q => q.eq('tier', row.tier))
+        .withIndex('by_tier', q => q.eq('tier', tier))
         .take(20)
       const existing = tierRows.find(r => r.userId === undefined)
 
       if (!existing) {
-        await ctx.db.insert('planLimits', {
-          tier: row.tier,
-          interactionsPerPost: row.interactionsPerPost,
-          postsPerWeek: row.postsPerWeek,
-          featuredPerMonth: row.featuredPerMonth
-          // userId intentionally omitted — this is the tier default
-        })
+        await ctx.db.insert('planLimits', buildTierDefaultRow(tier))
       }
     }
   }

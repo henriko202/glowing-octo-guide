@@ -1,13 +1,14 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
 import BannedScreen from './BannedScreen'
+import { SUPPORT_EMAIL } from '../lib/support'
 
 describe('BannedScreen', () => {
   it('shows the suspension heading and a support mailto link', () => {
     render(<BannedScreen />)
     expect(screen.getByText(/account has been suspended/i)).toBeInTheDocument()
     const link = screen.getByRole('link', { name: /contact support/i })
-    expect(link).toHaveAttribute('href', 'mailto:contact@email.com')
+    expect(link).toHaveAttribute('href', `mailto:${SUPPORT_EMAIL}`)
   })
 
   it('shows the reason block when a reason is provided', () => {

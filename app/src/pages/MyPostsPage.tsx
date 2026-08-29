@@ -38,11 +38,10 @@ interface FeaturedUsage {
   featuredPerMonth: number
 }
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: ReturnType<typeof useTranslation>['t']): string {
   const days = Math.floor((Date.now() - ts) / 86400000)
-  if (days <= 0) return 'Today'
-  if (days === 1) return '1 day ago'
-  return `${days} days ago`
+  if (days <= 0) return t('myPosts.today')
+  return t('myPosts.daysAgo', { count: days })
 }
 
 export default function MyPostsPage() {
@@ -63,7 +62,7 @@ export default function MyPostsPage() {
   const [actionError, setActionError] = useState<string | null>(null)
 
   async function handleSubmit(postUrl: string) {
-    if (!sessionToken) throw new Error('Not signed in')
+    if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl })
   }
 
@@ -75,7 +74,7 @@ export default function MyPostsPage() {
     try {
       await setPostHidden({ sessionToken, postId: post._id, hidden: !post.hidden })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Could not update the post.')
+      setActionError(err instanceof Error ? err.message : t('myPosts.updateError'))
     }
   }
 
@@ -94,7 +93,7 @@ export default function MyPostsPage() {
         await featurePost({ sessionToken, postId: post._id })
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Could not update the post.')
+      setActionError(err instanceof Error ? err.message : t('myPosts.updateError'))
     }
   }
 
@@ -102,15 +101,13 @@ export default function MyPostsPage() {
   // toward the weekly limit, so we say so in the confirmation.
   async function handleDelete(post: MyPost) {
     if (!sessionToken) return
-    const ok = window.confirm(
-      'Delete this post? It will be removed from the feed and from My Posts. It still counts toward your weekly post limit.'
-    )
+    const ok = window.confirm(t('myPosts.deleteConfirm'))
     if (!ok) return
     setActionError(null)
     try {
       await deletePost({ sessionToken, postId: post._id })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Could not delete the post.')
+      setActionError(err instanceof Error ? err.message : t('myPosts.deleteError'))
     }
   }
 
@@ -141,17 +138,17 @@ export default function MyPostsPage() {
             />
             <div>
               <div className="text-foreground text-sm font-semibold">{me.name}</div>
-              <div className="text-muted-foreground text-xs capitalize">{me.tier} plan</div>
+              <div className="text-muted-foreground text-xs capitalize">{t('myPosts.tierPlan', { tier: me.tier })}</div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {usage && (
               <Badge
-                title="In the last 7 days"
+                title={t('myPosts.weeklyUsageHint')}
                 variant={atLimit ? 'warning' : 'primary'}
                 className="shrink-0 rounded-full px-3 py-1 text-xs"
               >
-                {usage.postsThisWeek} of {usage.postsPerWeek} posts this week
+                {t('myPosts.weeklyUsage', { used: usage.postsThisWeek, limit: usage.postsPerWeek })}
               </Badge>
             )}
             {featuredUsage && (
@@ -176,12 +173,14 @@ export default function MyPostsPage() {
           Disabled at the weekly limit so we don't trigger a guaranteed-to-fail submit. */}
       <PostComposer
         atLimit={atLimit}
-        limitHint="Weekly limit reached"
+        limitHint={t('myPosts.weeklyLimitReached')}
         onSubmit={handleSubmit}
       />
 
       {/* Section header */}
-      <div className="text-muted-foreground mb-3 text-[10px] tracking-wider uppercase">Your posts ({posts.length})</div>
+      <div className="text-muted-foreground mb-3 text-[10px] tracking-wider uppercase">
+        {t('myPosts.heading', { count: posts.length })}
+      </div>
 
       {/* Transient error from a hide/delete action */}
       {actionError && (
@@ -193,7 +192,7 @@ export default function MyPostsPage() {
       {/* Post list */}
       {posts.length === 0 ? (
         <div className="border-border border-t pt-5 text-center">
-          <p className="text-muted-foreground text-[13px]">Share your first post using the composer above ↑</p>
+          <p className="text-muted-foreground text-[13px]">{t('myPosts.emptyState')}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
@@ -219,10 +218,10 @@ export default function MyPostsPage() {
                       variant="warning"
                       className="rounded-full px-2 py-0.5 text-[11px]"
                     >
-                      Hidden from feed
+                      {t('myPosts.hiddenFromFeed')}
                     </Badge>
                   ) : (
-                    <span className="text-muted-foreground text-[11px]">Visible in feed</span>
+                    <span className="text-muted-foreground text-[11px]">{t('myPosts.visibleInFeed')}</span>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -243,7 +242,7 @@ export default function MyPostsPage() {
                     size="sm"
                     onClick={() => handleToggleHidden(post)}
                   >
-                    {post.hidden ? 'Unhide' : 'Hide'}
+                    {post.hidden ? t('myPosts.unhide') : t('myPosts.hide')}
                   </Button>
                   <Button
                     type="button"
@@ -251,7 +250,7 @@ export default function MyPostsPage() {
                     size="sm"
                     onClick={() => handleDelete(post)}
                   >
-                    Delete
+                    {t('myPosts.delete')}
                   </Button>
                 </div>
               </div>
@@ -264,14 +263,14 @@ export default function MyPostsPage() {
                       👍 {post.likeCount} · 💬 {post.commentCount}
                     </span>
                     <span className="text-muted-foreground text-xs">
-                      {timeAgo(post.publishedAt)} ·{' '}
+                      {timeAgo(post.publishedAt, t)} ·{' '}
                       <a
                         href={buildPostUrl(post.linkedinPostUrn, post.sourceUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-gold-text no-underline hover:underline"
                       >
-                        View on LinkedIn ↗
+                        {t('feed.viewOnLinkedIn')}
                       </a>
                     </span>
                   </div>

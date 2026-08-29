@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { requireAuth } from './lib/auth'
-import { tierToRank } from './lib/planLimits'
+import { tierToRank, buildTierDefaultRow, DEFAULTS } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
 import { type ApifyFlags, isApifyPostSyncEnabled, isApifyProfileScrapeEnabled } from './lib/apify'
 
@@ -266,6 +266,12 @@ export const removeContactUserLimit = mutation({
 // Updates the default limits for a tier's default row (the row without userId).
 // Filters JS-side to isolate the default row and avoid touching per-user overrides
 // that share the same tier value in the by_tier index.
+// Self-heals (backlog/B27): if no default row exists yet for this tier (e.g. an
+// environment where migrations/seedPlanLimits.ts was never run), inserts one from
+// buildTierDefaultRow — the same DEFAULTS-sourced values the explicit seed and the read
+// fallback use — instead of throwing. Never inserts/patches a per-user override row: the
+// `userId === undefined` filter and the fresh insert (which omits userId) both stay
+// scoped to the tier-default row only.
 export const updateTierDefault = mutation({
   args: {
     sessionToken: v.string(),
@@ -283,18 +289,18 @@ export const updateTierDefault = mutation({
       .withIndex('by_tier', q => q.eq('tier', tier))
       .collect()
 
-    const defaultRow = tierRows.find(r => r.userId === undefined)
-    if (!defaultRow) {
-      throw new Error('No default row found for tier — run seedPlanLimits first')
+    let defaultRowId = tierRows.find(r => r.userId === undefined)?._id
+    if (defaultRowId === undefined) {
+      defaultRowId = await ctx.db.insert('planLimits', buildTierDefaultRow(tier))
     }
 
-    await ctx.db.patch(defaultRow._id, { interactionsPerPost, postsPerWeek })
+    await ctx.db.patch(defaultRowId, { interactionsPerPost, postsPerWeek })
   }
 })
 
 // Effective plan limits for a contact-tier user: their per-user override row if present,
-// otherwise the contact tier default. Falls back to the hardcoded contact default
-// (matches DEFAULTS.contact in lib/planLimits.ts) when no default row exists.
+// otherwise the contact tier default. Falls back to DEFAULTS.contact
+// (lib/planLimits.ts — the single source of truth, backlog/B27) when no default row exists.
 // Exported for unit testing.
 export function effectiveContactLimits(
   override: { interactionsPerPost: number; postsPerWeek: number } | undefined,
@@ -314,7 +320,11 @@ export function effectiveContactLimits(
       hasOverride: false
     }
   }
-  return { interactionsPerPost: 200, postsPerWeek: 5, hasOverride: false }
+  return {
+    interactionsPerPost: DEFAULTS.contact.interactionsPerPost,
+    postsPerWeek: DEFAULTS.contact.postsPerWeek,
+    hasOverride: false
+  }
 }
 
 // Returns every contact-tier user with their effective plan limits, for the read-only

@@ -155,7 +155,7 @@ export default function PostCard({
                   title={t('feed.cardGate')}
                   className="ml-auto cursor-not-allowed text-gold-text opacity-50"
                 >
-                  View on LinkedIn ↗
+                  {t('feed.viewOnLinkedIn')}
                 </button>
               ) : (
                 <a
@@ -164,7 +164,7 @@ export default function PostCard({
                   rel="noopener noreferrer"
                   className="ml-auto text-gold-text no-underline hover:underline"
                 >
-                  View on LinkedIn ↗
+                  {t('feed.viewOnLinkedIn')}
                 </a>
               ))}
           </div>

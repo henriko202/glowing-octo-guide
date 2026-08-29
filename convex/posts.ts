@@ -294,8 +294,10 @@ export const submitPost = action({
       }
     }
 
-    // 5. Upsert the post — returns the post _id
-    const postId = await ctx.runMutation(internal.jobs.syncPosts.upsertPost, {
+    // 5. Upsert the post — returns { postId, created }; submitPost always schedules the
+    // prediction below regardless of created (a resubmit of an already-known URN is rare and
+    // harmless — see backlog/B09, which only gates the Apify re-sync path on `created`).
+    const { postId } = await ctx.runMutation(internal.jobs.syncPosts.upsertPost, {
       linkedinPostUrn: urn,
       authorId: user._id,
       content: composedContent,

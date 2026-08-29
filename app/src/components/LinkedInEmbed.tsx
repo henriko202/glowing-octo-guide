@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Build a LinkedIn embed iframe URL from a post URN.
@@ -48,6 +49,7 @@ export default function LinkedInEmbed({
   iframeHeight?: number
   footer?: ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <div
       className="relative overflow-hidden pl-2"
@@ -55,7 +57,7 @@ export default function LinkedInEmbed({
     >
       <iframe
         src={buildEmbedUrl(urn)}
-        title="LinkedIn post"
+        title={t('linkedInEmbed.title')}
         width="100%"
         height={iframeHeight}
         className="block border-none"

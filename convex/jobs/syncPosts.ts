@@ -11,6 +11,8 @@ import { isWeeklyLimitReached } from '../lib/postLimit'
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
 // If the limit is reached and queueOnLimitReached is true, routes to postQueue instead.
+// Returns `created: true` only on a genuine insert, so callers can schedule follow-up work
+// (e.g. AI reaction prediction — backlog/B09) exactly once per post, never on a re-sync.
 export const upsertPost = internalMutation({
   args: {
     linkedinPostUrn: v.string(),
@@ -54,7 +56,7 @@ export const upsertPost = internalMutation({
         hidden: args.hidden,
         ...feed
       })
-      return existing._id
+      return { postId: existing._id, created: false }
     }
 
     // Insert branch — atomic weekly-limit check (all reads+write in one transaction)
@@ -90,7 +92,7 @@ export const upsertPost = internalMutation({
             queuedAt: Date.now()
           })
         }
-        return null
+        return { postId: null, created: false }
       }
       throw new Error(
         `Weekly post limit reached. Your plan allows ${limits.postsPerWeek} post${limits.postsPerWeek === 1 ? '' : 's'} per week.`
@@ -108,13 +110,14 @@ export const upsertPost = internalMutation({
       interactionLimitReached: false,
       deletedAt: undefined
     })
-    return await ctx.db.insert('posts', {
+    const postId = await ctx.db.insert('posts', {
       ...postArgs,
       featuredAt: undefined,
       authorTierRank,
       interactionLimitReached: false,
       ...feed
     })
+    return { postId, created: true }
   }
 })
 

@@ -5,6 +5,7 @@ import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { SUPPORT_EMAIL } from '@/lib/support'
 
 const PLAN_IDS = ['starter', 'growth', 'pro'] as const
 
@@ -73,11 +74,11 @@ export default function BillingPage() {
 
   async function handleUpgrade(priceId: string) {
     try {
-      if (!sessionToken) throw new Error('Not signed in')
+      if (!sessionToken) throw new Error(t('auth.notSignedIn'))
       const result = await createCheckout({ priceId, sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
-      alert(`Checkout failed: ${err instanceof Error ? err.message : String(err)}`)
+      alert(t('billing.checkoutFailed', { error: err instanceof Error ? err.message : String(err) }))
     }
   }
 
@@ -88,7 +89,7 @@ export default function BillingPage() {
       const result = await createPortal({ sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
-      alert(`Failed to open portal: ${err instanceof Error ? err.message : String(err)}`)
+      alert(t('billing.portalFailed', { error: err instanceof Error ? err.message : String(err) }))
     } finally {
       setPortalLoading(false)
     }
@@ -268,14 +269,14 @@ export default function BillingPage() {
         {/* Enterprise / Contact */}
         <div className="border-border bg-card flex h-full flex-col rounded-xl border p-5">
           <h2 className="text-foreground mt-0 text-lg font-bold">{t('billing.plans.contact.name')}</h2>
-          <p className="text-foreground my-2 text-2xl font-bold">Custom</p>
+          <p className="text-foreground my-2 text-2xl font-bold">{t('billing.customPrice')}</p>
           <p className="text-muted-foreground mb-4 text-[13px]">{t('billing.plans.contact.description')}</p>
           <Button
             variant="outline"
             className="mt-auto self-start"
             asChild
           >
-            <a href="mailto:contact@linkintothessi.com">{t('billing.plans.contact.cta')}</a>
+            <a href={`mailto:${SUPPORT_EMAIL}`}>{t('billing.plans.contact.cta')}</a>
           </Button>
         </div>
       </div>
@@ -283,10 +284,10 @@ export default function BillingPage() {
       <p className="text-muted-foreground mt-6 text-[13px]">
         {t('billing.enterprise')}{' '}
         <a
-          href="mailto:contact@linkintothessi.com"
+          href={`mailto:${SUPPORT_EMAIL}`}
           className="text-primary hover:underline"
         >
-          contact@linkintothessi.com
+          {SUPPORT_EMAIL}
         </a>
       </p>
     </div>

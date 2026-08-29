@@ -62,6 +62,18 @@ function apifyPostToUpsertArgs(
   }
 }
 
+// A post is worth an AI reaction prediction only when upsertPost actually inserted a new row —
+// never on the update branch (re-sync of an already-seen URN) or the queue branch (over the
+// weekly limit). Pure + exported so the created-vs-existing gate is unit-testable without mocking
+// ctx (backlog/B09; mirrors the computeCapacity pattern in jobs/processQueue.ts). The type
+// predicate lets callers narrow `postId` to non-null instead of asserting it.
+export function shouldPredictReaction(result: {
+  postId: Id<'posts'> | null
+  created: boolean
+}): result is { postId: Id<'posts'>; created: true } {
+  return result.created && result.postId !== null
+}
+
 // ─── Sync posts for one user via Apify ───────────────────────────────────────
 
 export const syncUserPostsViaApify = internalAction({
@@ -120,10 +132,17 @@ export const syncUserPostsViaApify = internalAction({
     }
 
     for (const post of posts) {
-      await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, {
+      const result = await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, {
         ...apifyPostToUpsertArgs(post, userId, hidden, visibility),
         queueOnLimitReached: true
       })
+      // Best-effort, async: mirrors the manual-submit scheduling (posts.ts submitPost). Fires for
+      // every genuinely new post, including trial-hidden ones — ponytail: no hidden special-case;
+      // a few wasted predictions for a never-converting trial user is an acceptable ceiling.
+      // predictReaction itself no-ops when AI is unconfigured, so this is safe either way.
+      if (shouldPredictReaction(result)) {
+        await actionCtx.scheduler.runAfter(0, internal.ai.reactions.predictReaction, { postId: result.postId })
+      }
     }
   }
 })

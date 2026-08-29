@@ -72,22 +72,23 @@ engagement/post‑volume limits. See
 
 ### Subscription tiers (business view)
 
-| Capability                          |   Starter   |               Growth                |     Pro     |     Contact (Enterprise)     |
-|-------------------------------------|:-----------:|:-----------------------------------:|:-----------:|:----------------------------:|
-| Price                               |    $5/mo    |               $15/mo                |   $50/mo    |            Custom            |
-| Access shared feed                  |     ✓      |                 ✓                  |     ✓      |              ✓              |
-| 7‑day trial (card required)         |     ✓      | ✓ (tier chosen on landing, see §8) |     ✓      |              —               |
-| Feed filtered by industry + country |     ✗      |       ✓ (auto from profile)        | ✓ (custom) |         ✓ (custom)          |
-| Control who sees your posts         |     ✗      |                 ✗                  |     ✓      |              ✓              |
-| Interactions counted per post (cap) |     25      |                 50                  |     200     | 200 (per‑user override‑able) |
-| Posts admitted to feed / week       |      1      |                  2                  |      5      |  5 (per‑user override‑able)  |
-| Featured posts / month              |      0      |                  1                  |      3      |   999 (unlimited sentinel)   |
-| AI comment generator                | ✗ (future) |             ✓ (future)             | ✓ (future) |         ✓ (future)          |
+| Capability                          | Starter |               Growth                |     Pro     |     Contact (Enterprise)     |
+|-------------------------------------|:-------:|:-----------------------------------:|:-----------:|:----------------------------:|
+| Price                               |  $5/mo  |               $15/mo                |   $50/mo    |            Custom            |
+| Access shared feed                  |   ✓    |                 ✓                  |     ✓      |              ✓              |
+| 7‑day trial (card required)         |   ✓    | ✓ (tier chosen on landing, see §8) |     ✓      |              —               |
+| Feed filtered by industry + country |   ✗    |       ✓ (auto from profile)        | ✓ (custom) |         ✓ (custom)          |
+| Control who sees your posts         |   ✗    |                 ✗                  |     ✓      |              ✓              |
+| Interactions counted per post (cap) |   25    |                 50                  |     200     | 200 (per‑user override‑able) |
+| Posts admitted to feed / week       |    1    |                  2                  |      5      |  5 (per‑user override‑able)  |
+| Featured posts / month              |    0    |                  1                  |      3      |   999 (unlimited sentinel)   |
+| AI comment generator                |   ✓    |                 ✓                  |     ✓      |              ✓              |
 
 The numeric limits (interactions/post, posts/week, featured‑posts/month) are all **enforced**
 values read from the `planLimits` table via `getPlanLimitsHelper` (see
-[§9](#9-plan-limits-system)); the AI row is still a UI placeholder. Contact tier's featured‑posts cap of 999 is a
-sentinel for "effectively unlimited". Unlike the other two caps, it is **not**
+[§9](#9-plan-limits-system)); the AI comment generator is **live** for every tier — rate-limited rather than plan-gated
+(see [§11A](#11a-ai-reaction--comment-assistance)). Contact tier's featured‑posts cap of 999 is a sentinel for
+"effectively unlimited". Unlike the other two caps, it is **not**
 exposed in the admin per‑user override UI — `setContactUserLimit` only edits `interactionsPerPost`/
 `postsPerWeek`, so a contact user's `featuredPerMonth` always coalesces to the 999 default; a custom featured cap for
 one enterprise account currently requires a direct DB edit to that user's
@@ -105,8 +106,8 @@ others (comment / react) is **card-gated server-side** via `assertCanEngage` in 
 an engage‑granting `subscriptionStatus ∈ {trialing, active, canceled}`; only `none` (never subscribed) and `past_due`
 (failed payment) receive a `PAYMENT_REQUIRED` error. **Cancellation never revokes access** — a canceled member keeps
 engaging; instead their own posts stop showing in the feed once their paid period ends (see §Feed). The app-facing UI
-for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C, deferred to after the
-app/ UI revamp**.
+for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C** — shipped; see
+[§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
 
 ---
 
@@ -191,7 +192,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 
 ```
 /
-├── landing/                     # Next.js marketing site → Vercel
+├── landing/                     # Next.js marketing site → Cloudflare Workers (OpenNext)
 │   ├── app/
 │   │   ├── layout.tsx           # root layout + SEO metadata + no-flash theme script
 │   │   ├── globals.css          # Tailwind v4 CSS-first: @theme inline, :root/:dark tokens
@@ -207,8 +208,9 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │   │   └── theme.ts             # resolveTheme / applyTheme / cookie get/set
 │   └── next.config.js
 │
-├── app/                         # React + Vite SaaS dashboard → Railway
-│   ├── index.html               # mount point + strict CSP meta
+├── app/                         # React + Vite SaaS dashboard → Cloudflare Workers (Static Assets)
+│   ├── index.html               # mount point + pre-hydration theme guard (CSP is generated into dist/_headers
+│   │                            #   by scripts/gen-headers.mjs, not an index.html meta tag)
 │   ├── vite.config.ts           # dev port 5174, inline Vitest config
 │   └── src/
 │       ├── main.tsx             # ConvexProvider + BrowserRouter bootstrap
@@ -250,7 +252,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │   │   ├── syncPostsApify.ts    # Apify scrape (per-user + fan-out)
 │   │   └── processQueue.ts      # drains postQueue → posts when capacity opens
 │   └── migrations/
-│       └── seedPlanLimits.ts    # one-time seed of tier-default plan limits
+│       └── seedPlanLimits.ts    # explicit (re-)seed of tier-default plan limits — optional, updateTierDefault self-heals
 │
 ├── convex-mocks/                # Vitest mock for `convex/server` (backend unit tests)
 ├── docs/                        # planning/spec markdown + THIS document
@@ -389,29 +391,29 @@ exceeds one mutation's write budget), `interactions.ts`
 keeps the denormalized `feedRank` / `inFeed` fields in sync through the single
 `computeFeedFields` helper (`lib/feedRank.ts`).
 
-| Field                     | Type          | Req | Meaning                                                                                                                                                                                                                                                                                    |
-|---------------------------|---------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinPostUrn`         | string        | ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                                                                                                                                                                       |
-| `authorId`                | `id('users')` | ✓  | Post author.                                                                                                                                                                                                                                                                               |
-| `content`                 | string        | ✓  | Post text (composed text + appended media links).                                                                                                                                                                                                                                          |
-| `publishedAt`             | number        | ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                                                                                                                                                                        |
-| `likeCount`               | number        | ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                                                                                                                                                                 |
-| `commentCount`            | number        | ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                                                                                                                                                                   |
-| `mediaUrls`               | string[]      | ✓  | Extracted media URLs (images, documents, and the shared‑article link when the post links a LinkedIn article).                                                                                                                                                                              |
-| `imageUrls`               | string[]      |  –  | Image‑typed media URLs only (subset of `mediaUrls`), captured at manual submit and sent to the AI as **vision input** (see [§11A](#11a-ai-reaction--comment-assistance)). Absent on synced/legacy posts.                                                                                   |
-| `isFeatured`              | boolean       | ✓  | Pinned to top of feed.                                                                                                                                                                                                                                                                     |
-| `featuredAt`              | number        |  –  | When featured (display only; the feed orders featured posts by `publishedAt`, not this — see `computeFeedFields` in [§10](#10-posts--content-pipeline)).                                                                                                                                   |
-| `visibilityIndustries`    | string[]      | ✓  | Author allowlist — only viewers in these industries see it. Copied from `users.defaultVisibilityIndustries` at insert time (empty when the author has none set); never edited after write — see [§11](#11-feed--engagement).                                                               |
-| `visibilityCountries`     | string[]      | ✓  | Author allowlist — only viewers in these countries see it. Copied from `users.defaultVisibilityCountries` at insert time (empty when the author has none set).                                                                                                                             |
-| `hidden`                  | boolean       | ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                        |
-| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                      |
-| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                          |
-| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                             |
-| `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Feeds the AI reaction/comment prompts; not displayed. Absent when the post shares no article or enrichment failed. |
-| `suggestedReaction`       | enum          |  –  | AI‑predicted most‑likely reaction (`LIKE\|PRAISE\|EMPATHY\|INTEREST\|APPRECIATION\|ENTERTAINMENT`), set async after submit. Absent ⇒ the UI picker treats it as `LIKE`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                  |
-| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.                                                                                                                                                      |
-| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                          |
-| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                      |
+| Field                     | Type          | Req | Meaning                                                                                                                                                                                                                                                                                                                              |
+|---------------------------|---------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinPostUrn`         | string        | ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                                                                                                                                                                                                                 |
+| `authorId`                | `id('users')` | ✓  | Post author.                                                                                                                                                                                                                                                                                                                         |
+| `content`                 | string        | ✓  | Post text (composed text + appended media links).                                                                                                                                                                                                                                                                                    |
+| `publishedAt`             | number        | ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                                                                                                                                                                                                                  |
+| `likeCount`               | number        | ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                                                                                                                                                                                                           |
+| `commentCount`            | number        | ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                                                                                                                                                                                                             |
+| `mediaUrls`               | string[]      | ✓  | Extracted media URLs (images, documents, and the shared‑article link when the post links a LinkedIn article).                                                                                                                                                                                                                        |
+| `imageUrls`               | string[]      |  –  | Image‑typed media URLs only (subset of `mediaUrls`), captured at manual submit and sent to the AI as **vision input** (see [§11A](#11a-ai-reaction--comment-assistance)). Absent on synced/legacy posts.                                                                                                                             |
+| `isFeatured`              | boolean       | ✓  | Pinned to top of feed.                                                                                                                                                                                                                                                                                                               |
+| `featuredAt`              | number        |  –  | When featured (display only; the feed orders featured posts by `publishedAt`, not this — see `computeFeedFields` in [§10](#10-posts--content-pipeline)).                                                                                                                                                                             |
+| `visibilityIndustries`    | string[]      | ✓  | Author allowlist — only viewers in these industries see it. Copied from `users.defaultVisibilityIndustries` at insert time (empty when the author has none set); never edited after write — see [§11](#11-feed--engagement).                                                                                                         |
+| `visibilityCountries`     | string[]      | ✓  | Author allowlist — only viewers in these countries see it. Copied from `users.defaultVisibilityCountries` at insert time (empty when the author has none set).                                                                                                                                                                       |
+| `hidden`                  | boolean       | ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                                                                  |
+| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                                                                |
+| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                                                                    |
+| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                                                                       |
+| `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Feeds the AI reaction/comment prompts; not displayed. Absent when the post shares no article or enrichment failed.                                           |
+| `suggestedReaction`       | enum          |  –  | AI‑predicted most‑likely reaction (`LIKE\|PRAISE\|EMPATHY\|INTEREST\|APPRECIATION\|ENTERTAINMENT`), set async after a **new** post is inserted (manual submit or Apify sync — a re‑synced/queued‑then‑promoted post does not get one). Absent ⇒ the UI picker treats it as `LIKE`. See [§11A](#11a-ai-reaction--comment-assistance). |
+| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.                                                                                                                                                                                                |
+| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                                                                    |
+| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                                                                |
 
 Indexes: `by_author [authorId]`, `by_urn [linkedinPostUrn]`,
 `by_author_and_publishedAt [authorId, publishedAt]`, and `by_feed_rank [inFeed, feedRank]` which backs the **live
@@ -529,7 +531,9 @@ Index: `by_user_month [userId, month]` — read with `.unique()` since a user ha
 #### `consentRecords` — append-only consent/withdrawal log (GDPR)
 
 One row per consent event. Current effective consent for a given `(userId, purpose)` pair is the **most recent** row for
-that pair. Queried via `by_user_and_purpose` index. The `purpose` union is intentionally narrow at launch (
+that pair. Queried via `by_user`; latest-per-purpose is resolved in code, not via the `by_user_and_purpose` index
+below — that index has no query call site and is currently unused (cross-ref [[B20]]/[[B23]]). The `purpose` union is
+intentionally narrow at launch (
 `'marketing' | 'analytics'`); `'location_enrichment'` is reserved for a future Apify profile-scrape opt-in that is
 disabled at launch.
 
@@ -1024,10 +1028,20 @@ Three enforced limits per tier, stored in `planLimits` and looked up via
 `featuredPerMonth` is **not** part of that admin‑editable override today — a contact per‑user row always coalesces to
 the 999 sentinel (see the lookup precedence note below); a bespoke featured cap needs a direct DB edit.
 
-These are defined identically in **two places that must stay in sync**: the hardcoded `DEFAULTS` in
-`lib/planLimits.ts` (used only if a DB row is missing, or as the fallback half of the optional-field coalesce below)
-and the seed rows in `migrations/seedPlanLimits.ts` (idempotent; run once via
-`npx convex run migrations/seedPlanLimits:seedPlanLimits --prod`).
+These live in exactly **one place** (backlog/B27): the `DEFAULTS` const in `lib/planLimits.ts`. Everything that needs a
+full tier-default row — the read fallback (below), the explicit seed mutation, and the admin self-heal — builds it from
+`DEFAULTS` via the pure helper `lib/planLimits.ts:buildTierDefaultRow(tier)`
+(`{ tier, ...DEFAULTS[tier] }`), so the numbers can't drift apart the way two hand-maintained copies could.
+
+- **`migrations/seedPlanLimits.ts`** — idempotent `internalMutation`, kept for explicit (re-)seeding of a fresh
+  environment: `npx convex run migrations/seedPlanLimits:seedPlanLimits --prod` (repo root only). Skips any tier that
+  already has a default row (no `userId`).
+- **`admin.updateTierDefault`** — **auto-initializes** the same way (see [§12](#12-admin--moderation)): if the tier has
+  no default row yet when an admin edits it, it inserts one via `buildTierDefaultRow(tier)` and then patches it with the
+  admin's new values, instead of throwing. Running `seedPlanLimits` is therefore **no longer a hard prerequisite** for
+  the admin edit path — it remains available for pre-populating an environment (e.g. before any admin has touched the
+  screen) or for bulk re-seeding.
+- **`lib/planLimits.ts`'s `DEFAULTS`** — also the safety‑net fallback read‑side (below) when a DB row is missing.
 
 ### Lookup precedence (`getPlanLimitsHelper(ctx, userId, tier)`)
 
@@ -1350,8 +1364,8 @@ post is created hidden via `postCreatedHidden`), only reactions/comments are car
 `subscriptionStatus ∈ {trialing, active, canceled}` — **cancellation never revokes access**; only `none` (never
 subscribed) and `past_due` (failed payment) receive a `PAYMENT_REQUIRED` error. Admins (`isAdmin`) always bypass the
 gate. The frontend mirror `useCardGate()` (`app/src/hooks/useCardGate.ts`) uses the same status set and must stay in
-sync. The in-app UI for this gate (disabled buttons, progress bar, CTA) is **Plan 2C, deferred to after the app/ UI
-revamp**.
+sync. The in-app UI for this gate (disabled buttons, progress bar, CTA) is **Plan 2C** — shipped; see
+[§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
 
 ### Sort priority (effective order)
 
@@ -1458,24 +1472,52 @@ are listed as text context, not attached.
 
 ### Reaction prediction (async, best-effort)
 
-`posts.submitPost`, after the upsert, schedules `internal.ai.reactions.predictReaction` — submit returns immediately;
-OpenRouter latency/cost/failure never touch it. The prediction reads the post, builds the reaction prompt (content +
-article), calls OpenRouter, coerces the reply with `parseReaction` (whole-word match against the 6-enum allow-list,
-**default `LIKE`**), and patches `posts.suggestedReaction`. Any failure is swallowed (logged) — the post keeps the
-default `LIKE`. Only manual submits predict (that's where `article` context exists); synced/legacy posts default to
-`LIKE`.
+Both post-creation paths schedule `internal.ai.reactions.predictReaction` immediately after the upsert, so OpenRouter
+latency/cost/failure never touch either caller: `posts.submitPost` (manual submit) and
+`jobs/syncPostsApify.syncUserPostsViaApify` — the single Apify sync function shared by all three §10 triggers (daily
+cron fan-out, Stripe on-activation, admin manual sync). Both call the shared gatekeeper
+`jobs/syncPosts.upsertPost`, which now returns `{ postId, created }` — `created` is `true` **only** on a genuine insert,
+never on the update branch (an already-known URN being re-synced) or the queue branch (over the weekly limit, routed to
+`postQueue`). `submitPost` always schedules (its insert is always new); the Apify caller gates on
+`created === true` via the pure, unit-tested `shouldPredictReaction` helper — so a daily cron re-run over already-synced
+posts never re-schedules a prediction (no duplicate OpenRouter spend). Apify predicts for **all**
+newly-inserted posts, including trial-`hidden` ones — no special-case; a few wasted predictions for a never-converting
+trial user is an accepted ceiling.
+
+The prediction reads the post, builds the reaction prompt (content + article), calls OpenRouter, coerces the reply with
+`parseReaction` (whole-word match against the 6-enum allow-list, **default `LIKE`**), and patches
+`posts.suggestedReaction`. Any failure — including a missing `OPENROUTER_API_KEY` — is swallowed (logged); the post
+keeps the default `LIKE`, and the sync itself never fails because of it. Apify-synced posts carry no `article`/
+`imageUrls` context (that enrichment is manual-submit-only — see above), so their prompt is text-only.
+
+**Known gap — queued posts:** a post that overflows the weekly limit is routed to `postQueue` instead of `posts`
+(`created: false`, no prediction). When `jobs/processQueue.processPostQueue` later promotes it into `posts`, that insert
+does **not** go through `upsertPost` and is not wired to `predictReaction` — a promoted post keeps the default `LIKE`
+unless a later Apify re-sync happens to touch it (which also doesn't predict, by design — that would be the update
+branch). See `backlog/B09-ai-reaction-apify-posts.md`.
+
+No proactive throttle guards the resulting OpenRouter burst (`convex/ai/openrouter.ts`'s `callOpenRouter` has no rate
+limiting of its own): the daily cron, ≤3 new posts/user, and the `created`-only gate above already bound a single run to
+at most a few predictions per newly-active user, and any OpenRouter failure/429 is swallowed by the same best-effort
+handling. Revisit with `@convex-dev/rate-limiter` if usage growth makes that bound too loose.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant SP as posts.submitPost (action)
+    participant CRON as syncPostsApify (daily cron)
+    participant UP as jobs.syncPosts.upsertPost
     participant DB as Convex DB
     participant PR as ai.reactions.predictReaction (scheduled)
     participant DS as OpenRouter
     U ->> SP: submit URL
-    SP ->> DB: upsertPost → postId (suggestedReaction absent ⇒ LIKE)
-    SP ->> PR: scheduler.runAfter(0, { postId })
-    SP -->> U: { postId } (returns immediately)
+    SP ->> UP: upsertPost(...)
+    CRON ->> UP: upsertPost(..., queueOnLimitReached: true)
+    UP ->> DB: insert (new) or patch (re-sync)
+    UP -->> SP: { postId, created } (always true here)
+    UP -->> CRON: { postId, created }
+    SP ->> PR: scheduler.runAfter(0, { postId }) — unconditional
+    CRON ->> PR: scheduler.runAfter(0, { postId }) — only if created
     PR ->> DB: getPost
     PR ->> DS: buildReactionPrompt → keyword
     DS -->> PR: e.g. "PRAISE"
@@ -1507,9 +1549,11 @@ overrides per-comment without writing back.
 ### Files
 
 `convex/ai/{openrouter,prompts,reactions,comments}.ts`, `convex/lib/{reactions,languages}.ts`,
-`posts.submitPost` (schedule hook), `interactions.reactToPost` (enum fix), `users.{setCommentLanguage,
-getPublicAuthor}`, `getMe` (exposes `commentLanguage` via `toSafeMe`); frontend `PostCard` (picker),
-`CommentBox` (draft + language), `SettingsPage` ("AI Comments"), i18n `reactions.*` / `comment.*`.
+`posts.submitPost` (schedule hook), `jobs/syncPosts.ts` (`upsertPost`'s `{ postId, created }` signal),
+`jobs/syncPostsApify.ts` (schedule hook + `shouldPredictReaction` gate), `interactions.reactToPost` (enum fix),
+`users.{setCommentLanguage, getPublicAuthor}`, `getMe` (exposes `commentLanguage` via `toSafeMe`); frontend
+`PostCard` (picker), `CommentBox` (draft + language), `SettingsPage` ("AI Comments"), i18n `reactions.*` /
+`comment.*`.
 
 ---
 
@@ -1557,28 +1601,28 @@ code writes it. Every admin function calls `assertAdmin(user)` after
 
 ### Admin functions (`convex/admin.ts`)
 
-| Function                                                                 | Kind     | Purpose                                                                                                                                                                 |
-|--------------------------------------------------------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                   |
-| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                              |
-| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                             |
-| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                               |
-| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                     |
-| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).   |
-| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                             |
-| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                 |
-| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                        |
-| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions. |
-| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                |
-| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                     |
-| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                      |
-| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                        |
-| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Backend‑only (no UI).                                                                                   |
-| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                             |
-| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                     |
-| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                             |
-| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                   |
-| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                |
+| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                             |
+|--------------------------------------------------------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                               |
+| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                                          |
+| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                                         |
+| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                           |
+| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                                 |
+| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                               |
+| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                         |
+| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                             |
+| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                    |
+| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                             |
+| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                            |
+| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                                                                 |
+| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                                  |
+| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                                    |
+| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Self‑heals (backlog/B27): inserts the row from `buildTierDefaultRow` first if the tier was never seeded, instead of throwing. Backend‑only (no UI). |
+| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                                         |
+| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                                 |
+| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                                         |
+| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                               |
+| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                            |
 
 `validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`. `effectiveContactLimits`
 (pure, unit‑tested) resolves a contact user's display limits as `override ?? contact default ?? hardcoded`.
@@ -2140,6 +2184,13 @@ flowchart TD
     RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + Motd + ReconnectBanner + page → page issues Convex queries"]
 ```
 
+### Gate screens & support contact
+
+Gate screens (currently `BannedScreen`) and `BillingPage` surface the monitored support address via a shared constant
+`SUPPORT_EMAIL` defined in `app/src/lib/support.ts`. `BannedScreen` links to it in a "Contact support" button;
+`BillingPage` links to it from the Enterprise card CTA and the "Need more?" footer line. This constant must be kept in
+sync with the compliance docs and live support inbox.
+
 ### Pages
 
 - **AuthSuccessPage** — reads `#session`, `plan`, and `interval` from the URL hash (the OAuth callback appends them as
@@ -2155,11 +2206,12 @@ flowchart TD
   failed silently).
 - **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getFeaturedUsage` + `getMyPosts` + `submitPost` + `setPostHidden` +
   `deletePost` + `featurePost` + `unfeaturePost`. Two usage pills next to the profile header — weekly ("N of M posts
-  this week") and monthly featured ("N of M featured this month", localized via the `myPosts` i18n namespace) — each
-  turns **amber** at its cap; the weekly one also disables the composer (`atLimit`). Each post's owner action bar gets a
-  **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the monthly cap is reached) alongside the
-  existing Hide/Unhide + Delete; a featured post also shows the shared `feed.featured` ("★ Featured") badge. Renders
-  each post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
+  this week") and monthly featured ("N of M featured this month") — both fully localized via the `myPosts` i18n
+  namespace — each turns **amber** at its cap; the weekly one also disables the composer (`atLimit`). Each post's owner
+  action bar gets a **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the monthly cap is
+  reached) alongside the existing Hide/Unhide + Delete; a featured post also shows the shared `feed.featured` ("★
+  Featured") badge. Renders each post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on
+  LinkedIn").
 - **SettingsPage** — `getMe` + `updateProfile` + `refreshProfileFromLinkedIn` + `setCommentLanguage` +
   `setPostVisibility` (the standalone LinkedIn‑identity section was **removed** — the auto‑derived vanity is
   internal‑only now, seeding Apify; the "Refresh from LinkedIn" button remains gated on it). Industry and country are
@@ -2194,8 +2246,8 @@ flowchart TD
       card, an inline "what you'll miss" block lists Growth advantages (industry-filtered feed, 50 vs 25
       interactions/post, 2 vs 1 posts/week).
     - **Active**: the current tier's card shows a "Current plan" badge; "Manage Subscription" → Stripe portal.
-    - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to
-      `mailto:contact@linkintothessi.com`.
+    - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
+      `SUPPORT_EMAIL` constant).
 - **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Four tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync status), **Plan
   Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's effective limits, with an "override"
@@ -2365,6 +2417,30 @@ continue" button copy for `ConsentPromptScreen`); all three locales (`en`/`pt`/`
 the Starter card while trialing), `billing.trialBanner` (updated to mention the 50-interaction milestone alongside the
 7-day window); all three locales (`en`/`pt`/`es`).
 
+**Keys added with B16 (hardcoded-English cleanup):** extracted the remaining inline English strings so every user-facing
+surface now routes through `t()`. `MyPostsPage` — `timeAgo()` now uses i18next plurals (`myPosts.daysAgo_one`/`_other`
+via `t(key, { count })` for "N day (s) ago", plus `myPosts.today` for the zero-day case) instead of string
+concatenation; new `myPosts.tierPlan`, `weeklyUsageHint`, `weeklyUsage`,
+`weeklyLimitReached`, `heading`, `emptyState`, `hiddenFromFeed`, `visibleInFeed`, `hide`, `unhide`, `delete`,
+`deleteConfirm` (the `window.confirm` text — the confirm mechanism itself is unchanged; replacing it with a Modal is
+[[B18]]), `updateError`, `deleteError`. `PostComposer` — new `composer.*` namespace (`shareLabel`, `placeholder`,
+`hint`, `submitting`, `submit`, `submitError`); shared by `FeedPage`, `MyPostsPage`, and `FirstPostPromptScreen`, all of
+which now render this copy localized. Gate screens — new `bannedScreen.*` (badge, heading, body, `reasonLabel`,
+`contactSupport`; the support *address* stays the `SUPPORT_EMAIL` constant per the Gate screens subsection above) and
+new `cancelDeletion.*` (badge, heading, `bodyWithDate`/`bodyNoDate` with `{{date}}` interpolation, `cancelling`,
+`keepAccount`); both screens' "Sign out" button now reuses `nav.signOut` instead of a duplicate key. `PostCard` and
+`MyPostsPage`'s "View on LinkedIn ↗" label is now the single shared `feed.viewOnLinkedIn` key. `BillingPage` — the
+checkout/portal-session `alert()` error text now uses `billing.checkoutFailed`/`billing.portalFailed` (with
+`{{error}}` interpolation), and the Enterprise card's price now reads `billing.customPrice`. `LinkedInEmbed`'s iframe
+`title` (accessibility label, not just decorative) now reads `linkedInEmbed.title` — preserved as a real, non-empty
+translated string in all three locales. A duplicated defensive guard — `throw new Error('Not signed in')`, copy-pasted
+across `FeedPage`, `MyPostsPage`, `BillingPage`, and `FirstPostPromptScreen`'s post-submit/checkout handlers, surfaced
+verbatim in `PostComposer`'s or `BillingPage`'s error UI on the rare session-expiry race — was found while sweeping
+these same files and fixed at all four call sites with one shared `auth.notSignedIn` key (this string wasn't in B16's
+original inventory, which predates the sweep). Every new key has a genuine `pt`/`es`
+translation (not an English copy); language-neutral glyphs (`↗`, `→`, `↑`) and the LinkedIn URL placeholder are kept
+as-is in the values. Admin UI strings remain out of scope (tracked separately as [[B17]]).
+
 ---
 
 ## 15. Frontend — Landing Site (`landing/`)
@@ -2492,8 +2568,10 @@ Portuguese / Latin-American Spanish translations** of the English source — the
 all `[PLACEHOLDER]` tokens (`NEANDERTECH SERVICOS DE TECNOLOGIA LTDA`,
 `AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`, `contact@linkintothessi.com`,
 `Henriko Alberton`,
-`Brazil`, policy version strings) **verbatim**. A draft banner (translated) is shown in all locales. All three locales
-remain **drafts pending legal review** — translation does not constitute legal sign-off.
+`Brazil`, policy version strings) **verbatim**. The legal pages render **no** literal draft/DRAFT banner element in any
+locale — the only related copy is an inline "drafted and inserted by qualified legal counsel" note in the Terms
+liability section (not a rendered banner; cross-ref [[B29]]). All three locales remain **drafts pending legal review**
+as an internal status — translation does not constitute legal sign-off.
 
 ### CookieNotice (Phase 3b)
 
@@ -2833,7 +2911,8 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   post writer copies them onto `posts.visibilityIndustries`/`visibilityCountries` at insert time, which `feed.getFeed`
   already enforced (see [§11](#11-feed--engagement)). Settings UI is chip pickers built on `VirtualizedCombobox` +
   `Badge`.
-- **AI comment generator** — `CommentBox` advertises "AI suggestions coming soon"; no integration.
+- ~~AI comment generator~~ — **resolved**: `CommentBox` calls `api.ai.comments.generateComment` (live OpenRouter
+  integration, rate-limited not tier-gated); see [§11A](#11a-ai-reaction--comment-assistance).
 - ~~Featured posts quota~~ — **resolved** (task B07): `posts.featurePost`/`unfeaturePost` are wired to
   `planLimits.featuredPerMonth` and `featuredPostUsage`
   (see [§9](#9-plan-limits-system)/[§10](#10-posts--content-pipeline)); My Posts exposes a Feature/Unfeature toggle +
@@ -2845,13 +2924,15 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 - ~~Feed backfill migration missing~~ — **resolved**: `convex/migrations/backfillFeedFields.ts` now stamps
   `feedRank`/`inFeed` on every `posts` row (see §11). Pre-launch there is no prod data so it's a no-op today; narrowing
   the schema's `feedRank`/`inFeed` from `v.optional` to required is a separate future item.
-- **Placeholder constants** — `BannedScreen.SUPPORT_EMAIL = 'contact@email.com'` (TODO);
-  `STRIPE_WEBHOOK_SECRET=whsec_your_secret` in the committed `.env.local`.
+- ~~`BannedScreen.SUPPORT_EMAIL` placeholder~~ — **resolved** (task B14): the real support address
+  `contact@linkintothessi.com` now lives in `app/src/lib/support.ts` (`SUPPORT_EMAIL`), consumed by `BannedScreen`
+  and `BillingPage` (see [§14 "Gate screens & support contact"](#gate-screens--support-contact)).
+- **Placeholder constant** — `STRIPE_WEBHOOK_SECRET=whsec_your_secret` is a placeholder value in the **tracked**
+  `convex/.env.local.example`; real `.env.local` files are gitignored (see `.gitignore`) and are never committed.
 
 ### Roadmap (from README + specs in `docs/`)
 
-AI comment generator (Pro+), LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs), SSI‑trend
-analytics dashboard.
+LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs), SSI‑trend analytics dashboard.
 
 ---
 
@@ -2906,8 +2987,22 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑08‑29. Updated to reflect the featured‑posts feature (task B07,
-backlog/B07-featured-posts-feature.md): the feed already boosted featured posts (`lib/feedRank.ts`) and `PostCard`
+_Last updated: 2026‑08‑29. Updated to reflect the plan‑limits self‑heal fix (task B27, backlog/B27-seed-plan-limits.md,
+approach B): `admin.updateTierDefault` threw `No default row found for tier —
+run seedPlanLimits first` in any environment where the one‑time `migrations/seedPlanLimits.ts` mutation had never been
+run, blocking the admin edit path entirely. It now self‑heals — inserts the missing tier‑default row before patching it,
+the same idempotent `userId === undefined` check `seedPlanLimits` already used, so it still can't duplicate a row or
+touch a contact per‑user override. The seed values and the read‑side safety‑net (`DEFAULTS` in
+`lib/planLimits.ts`) were already two hand‑maintained copies of the same numbers (matched, but only by discipline — the
+backlog doc flagged the drift risk); the new self‑heal insert would have been a third. They're now **one**:
+`DEFAULTS` plus a new pure helper, `buildTierDefaultRow(tier)`
+(`{ tier, ...DEFAULTS[tier] }`), that both `seedPlanLimits` and `updateTierDefault` call. New
+`lib/planLimits.test.ts` unit‑tests the helper (every field present per tier, values match `DEFAULTS`, `userId`
+never set). `seedPlanLimits` is unchanged in behavior and kept for explicit/bulk re‑seeding — it's just no longer a hard
+prerequisite for the admin edit path. §9's seed‑values subsection and §12's `updateTierDefault` table row are updated;
+approach A (adding the seed run to the [[B24]] deploy checklist) was **not** taken. Prior: Updated to reflect the
+featured‑posts feature (task B07, backlog/B07-featured-posts-feature.md): the feed already boosted featured posts
+(`lib/feedRank.ts`) and `PostCard`
 already rendered the "★ Featured" badge, but nothing ever set `isFeatured: true` and the `featuredPostUsage` quota table
 was unwired — this closes that gap. `planLimits` schema gained `featuredPerMonth: v.optional(v.number())`
 (widen‑then‑coalesce, no backfill migration); `lib/planLimits.ts`'s `DEFAULTS` and every return path in

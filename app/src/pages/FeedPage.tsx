@@ -35,7 +35,7 @@ export default function FeedPage() {
   const [reactError, setReactError] = useState<{ postId: Id<'posts'>; msg: string } | null>(null)
 
   async function handlePostSubmit(url: string) {
-    if (!sessionToken) throw new Error('Not signed in')
+    if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl: url })
   }
 

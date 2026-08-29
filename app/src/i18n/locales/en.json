@@ -46,7 +46,8 @@
     "featured": "★ Featured",
     "like": "Like",
     "comment": "Comment",
-    "cardGate": "Add a payment method on the Billing page to start engaging."
+    "cardGate": "Add a payment method on the Billing page to start engaging.",
+    "viewOnLinkedIn": "View on LinkedIn ↗"
   },
   "myPosts": {
     "featuredPill": "{{used}} of {{limit}} featured this month",
@@ -54,7 +55,32 @@
     "featuredPillHint": "This calendar month",
     "feature": "Feature",
     "unfeature": "Unfeature",
-    "featureLimitReached": "Monthly featured limit reached"
+    "featureLimitReached": "Monthly featured limit reached",
+    "today": "Today",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "tierPlan": "{{tier}} plan",
+    "weeklyUsageHint": "In the last 7 days",
+    "weeklyUsage": "{{used}} of {{limit}} posts this week",
+    "weeklyLimitReached": "Weekly limit reached",
+    "heading": "Your posts ({{count}})",
+    "emptyState": "Share your first post using the composer above ↑",
+    "hiddenFromFeed": "Hidden from feed",
+    "visibleInFeed": "Visible in feed",
+    "hide": "Hide",
+    "unhide": "Unhide",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this post? It will be removed from the feed and from My Posts. It still counts toward your weekly post limit.",
+    "updateError": "Could not update the post.",
+    "deleteError": "Could not delete the post."
+  },
+  "composer": {
+    "shareLabel": "Share a post",
+    "placeholder": "https://www.linkedin.com/posts/your-name_…",
+    "hint": "Paste your LinkedIn post URL",
+    "submitting": "Submitting…",
+    "submit": "Submit →",
+    "submitError": "Failed to submit post"
   },
   "reactions": {
     "react": "React",
@@ -142,6 +168,9 @@
     "recommended": "Recommended",
     "annual": "Annual · 2 months free",
     "monthly": "Monthly",
+    "checkoutFailed": "Checkout failed: {{error}}",
+    "portalFailed": "Failed to open portal: {{error}}",
+    "customPrice": "Custom",
     "plans": {
       "starter": {
         "name": "Starter",
@@ -185,7 +214,8 @@
     }
   },
   "auth": {
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "notSignedIn": "Not signed in"
   },
   "admin": {
     "title": "Admin Panel",
@@ -272,5 +302,23 @@
       "readPolicy": "Read the policy",
       "acknowledge": "I acknowledge"
     }
+  },
+  "bannedScreen": {
+    "badge": "Account suspended",
+    "heading": "Your account has been suspended",
+    "body": "An administrator has revoked your access to this app.",
+    "reasonLabel": "Reason",
+    "contactSupport": "Contact support"
+  },
+  "cancelDeletion": {
+    "badge": "Account deletion pending",
+    "heading": "Your account is scheduled for deletion",
+    "bodyWithDate": "Your account and personal data will be permanently deleted on {{date}}. You can keep your account by cancelling the deletion.",
+    "bodyNoDate": "Your account is pending deletion. You can keep it by cancelling the deletion.",
+    "cancelling": "Cancelling…",
+    "keepAccount": "Keep my account"
+  },
+  "linkedInEmbed": {
+    "title": "LinkedIn post"
   }
 }

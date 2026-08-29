@@ -46,7 +46,8 @@
     "featured": "★ Destacado",
     "like": "Me gusta",
     "comment": "Comentar",
-    "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar."
+    "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar.",
+    "viewOnLinkedIn": "Ver en LinkedIn ↗"
   },
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mes",
@@ -54,7 +55,32 @@
     "featuredPillHint": "Este mes (calendario)",
     "feature": "Destacar",
     "unfeature": "Quitar destacado",
-    "featureLimitReached": "Límite mensual de destacados alcanzado"
+    "featureLimitReached": "Límite mensual de destacados alcanzado",
+    "today": "Hoy",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "tierPlan": "Plan {{tier}}",
+    "weeklyUsageHint": "En los últimos 7 días",
+    "weeklyUsage": "{{used}} de {{limit}} publicaciones esta semana",
+    "weeklyLimitReached": "Límite semanal alcanzado",
+    "heading": "Tus publicaciones ({{count}})",
+    "emptyState": "Comparte tu primera publicación usando el formulario de arriba ↑",
+    "hiddenFromFeed": "Oculta del feed",
+    "visibleInFeed": "Visible en el feed",
+    "hide": "Ocultar",
+    "unhide": "Mostrar",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar esta publicación? Se eliminará del feed y de Mis Publicaciones. Seguirá contando para tu límite semanal de publicaciones.",
+    "updateError": "No se pudo actualizar la publicación.",
+    "deleteError": "No se pudo eliminar la publicación."
+  },
+  "composer": {
+    "shareLabel": "Compartir una publicación",
+    "placeholder": "https://www.linkedin.com/posts/your-name_…",
+    "hint": "Pega la URL de tu publicación de LinkedIn",
+    "submitting": "Enviando…",
+    "submit": "Enviar →",
+    "submitError": "No se pudo enviar la publicación"
   },
   "reactions": {
     "react": "Reaccionar",
@@ -142,6 +168,9 @@
     "recommended": "Recomendado",
     "annual": "Anual · 2 meses gratis",
     "monthly": "Mensual",
+    "checkoutFailed": "Fallo en el pago: {{error}}",
+    "portalFailed": "No se pudo abrir el portal: {{error}}",
+    "customPrice": "Personalizado",
     "plans": {
       "starter": {
         "name": "Starter",
@@ -185,7 +214,8 @@
     }
   },
   "auth": {
-    "loading": "Cargando..."
+    "loading": "Cargando...",
+    "notSignedIn": "Sesión no iniciada"
   },
   "admin": {
     "title": "Panel de Administración",
@@ -272,5 +302,23 @@
       "readPolicy": "Leer la política",
       "acknowledge": "Acepto"
     }
+  },
+  "bannedScreen": {
+    "badge": "Cuenta suspendida",
+    "heading": "Tu cuenta ha sido suspendida",
+    "body": "Un administrador ha revocado tu acceso a esta aplicación.",
+    "reasonLabel": "Motivo",
+    "contactSupport": "Contactar con soporte"
+  },
+  "cancelDeletion": {
+    "badge": "Eliminación de cuenta pendiente",
+    "heading": "Tu cuenta está programada para eliminación",
+    "bodyWithDate": "Tu cuenta y tus datos personales se eliminarán permanentemente el {{date}}. Puedes conservar tu cuenta cancelando la eliminación.",
+    "bodyNoDate": "Tu cuenta está pendiente de eliminación. Puedes conservarla cancelando la eliminación.",
+    "cancelling": "Cancelando…",
+    "keepAccount": "Conservar mi cuenta"
+  },
+  "linkedInEmbed": {
+    "title": "Publicación de LinkedIn"
   }
 }

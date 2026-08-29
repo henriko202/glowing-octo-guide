@@ -1,5 +1,6 @@
 // app/src/components/PostComposer.tsx
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -12,6 +13,7 @@ interface PostComposerProps {
 }
 
 export default function PostComposer({ onSubmit, atLimit = false, limitHint }: PostComposerProps) {
+  const { t } = useTranslation()
   const [url, setUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,7 +30,7 @@ export default function PostComposer({ onSubmit, atLimit = false, limitHint }: P
       await onSubmit(url.trim())
       setUrl('')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to submit post')
+      setError(err instanceof Error ? err.message : t('composer.submitError'))
     } finally {
       setSubmitting(false)
     }
@@ -39,28 +41,28 @@ export default function PostComposer({ onSubmit, atLimit = false, limitHint }: P
       onSubmit={handleSubmit}
       className="border-border bg-card mb-6 rounded-lg border p-4 font-sans"
     >
-      <div className="text-muted-foreground mb-2 text-[10px] uppercase tracking-wider">Share a post</div>
+      <div className="text-muted-foreground mb-2 text-[10px] tracking-wider uppercase">{t('composer.shareLabel')}</div>
       <Input
         type="url"
         inputMode="url"
         value={url}
         onChange={e => setUrl(e.target.value)}
-        placeholder="https://www.linkedin.com/posts/your-name_…"
+        placeholder={t('composer.placeholder')}
         disabled={submitting}
         className="mb-2"
       />
       {error && <p className="text-destructive mb-2 text-xs">{error}</p>}
       <div className="flex items-center justify-between">
         {atLimit && limitHint ? (
-          <span className="text-gold-text text-[11px]">{limitHint}</span>
+          <span className="text-[11px] text-gold-text">{limitHint}</span>
         ) : (
-          <span className="text-muted-foreground text-[11px]">Paste your LinkedIn post URL</span>
+          <span className="text-muted-foreground text-[11px]">{t('composer.hint')}</span>
         )}
         <Button
           type="submit"
           disabled={submitDisabled}
         >
-          {submitting ? 'Submitting…' : 'Submit →'}
+          {submitting ? t('composer.submitting') : t('composer.submit')}
         </Button>
       </div>
     </form>
