@@ -8,6 +8,7 @@ import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import type { Doc } from '../_generated/dataModel'
 import { requireAuthAction } from '../lib/auth'
+import { assertCanEngage } from '../lib/access'
 import { resolveCommentLanguage } from '../lib/languages'
 import { buildCommentPrompt } from './prompts'
 import { callOpenRouter } from './openrouter'
@@ -16,6 +17,12 @@ export const generateComment = action({
   args: { sessionToken: v.string(), postId: v.id('posts'), language: v.optional(v.string()) },
   handler: async (ctx, { sessionToken, postId, language }): Promise<{ comment: string }> => {
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
+
+    // Card-on-file gate: AI drafting needs an active subscription (trial/paid), same as submitting the
+    // comment (interactions.commentOnPost). Enforced here — not just in the UI card-gate — so the
+    // OpenRouter spend can't be reached without a subscription. All tiers pass; admins bypass. Runs
+    // before the rate limiter so a blocked user never consumes quota.
+    assertCanEngage(user)
 
     // Rate limit: 30 comment drafts/hour (admins exempt) — same budget shape as reactToPost.
     if (!user.isAdmin) {

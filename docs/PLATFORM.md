@@ -86,7 +86,8 @@ engagement/post‑volume limits. See
 
 The numeric limits (interactions/post, posts/week, featured‑posts/month) are all **enforced**
 values read from the `planLimits` table via `getPlanLimitsHelper` (see
-[§9](#9-plan-limits-system)); the AI comment generator is **live** for every tier — rate-limited rather than plan-gated
+[§9](#9-plan-limits-system)); the AI comment generator is **live** for every tier — gated on an active subscription (the
+same `assertCanEngage` card-on-file gate as engaging), rate-limited, but never tier-gated
 (see [§11A](#11a-ai-reaction--comment-assistance)). Contact tier's featured‑posts cap of 999 is a sentinel for
 "effectively unlimited". Unlike the other two caps, it is **not**
 exposed in the admin per‑user override UI — `setContactUserLimit` only edits `interactionsPerPost`/
@@ -1530,12 +1531,16 @@ confirms or changes before `reactToPost` sends the chosen reaction (§11).
 
 ### Comment drafting (on-demand)
 
-`api.ai.comments.generateComment({ sessionToken, postId, language? })` → `{ comment }`. It auth-checks, rate-limits
-(30/h, admins exempt), loads the post + the author's public name/headline (`internal.users.getPublicAuthor`), resolves
-the language, builds the comment prompt (≤2 paragraphs, concise, no hashtags/@-mentions; article + media URLs included),
-calls OpenRouter, and returns the draft. **Nothing is persisted** — comments are generated fresh per user per click
-(identical reused text would trip LinkedIn spam detection). `CommentBox` prefills the textarea (Generate / Regenerate)
-for the user to edit, then posts via the unchanged `commentOnPost`.
+`api.ai.comments.generateComment({ sessionToken, postId, language? })` → `{ comment }`. It auth-checks, then **
+`assertCanEngage`** — AI drafting requires an active subscription (the same card-on-file gate as `commentOnPost`:
+`none`/`past_due` are blocked, all tiers otherwise pass, admins bypass), so the OpenRouter spend is never reachable
+without a subscription. It then rate-limits (30/h, admins exempt), loads the post + the author's public name/headline
+(`internal.users.getPublicAuthor`), resolves the language, builds the comment prompt (≤2 paragraphs, concise, no
+hashtags/@-mentions; article + media URLs included), calls OpenRouter, and returns the draft. The draft is **persisted
+per (user, post)** on `userPostState` (`internal.interactions.saveCommentDraft`) so `CommentBox` can reload it on reopen
+for reuse/regeneration — per-post scope avoids the cross-post text reuse that would trip LinkedIn spam detection.
+`CommentBox` prefills the textarea (Generate / Regenerate) for the user to edit, then posts via the unchanged
+`commentOnPost`.
 
 ### Comment language
 
@@ -2912,7 +2917,8 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   already enforced (see [§11](#11-feed--engagement)). Settings UI is chip pickers built on `VirtualizedCombobox` +
   `Badge`.
 - ~~AI comment generator~~ — **resolved**: `CommentBox` calls `api.ai.comments.generateComment` (live OpenRouter
-  integration, rate-limited not tier-gated); see [§11A](#11a-ai-reaction--comment-assistance).
+  integration, gated on an active subscription via `assertCanEngage`, rate-limited, not tier-gated); see
+  [§11A](#11a-ai-reaction--comment-assistance).
 - ~~Featured posts quota~~ — **resolved** (task B07): `posts.featurePost`/`unfeaturePost` are wired to
   `planLimits.featuredPerMonth` and `featuredPostUsage`
   (see [§9](#9-plan-limits-system)/[§10](#10-posts--content-pipeline)); My Posts exposes a Feature/Unfeature toggle +
