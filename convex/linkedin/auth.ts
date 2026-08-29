@@ -86,3 +86,42 @@ export const upsertUser = internalMutation({
   },
   handler: async (ctx, args) => upsertUserHandler(ctx.db as unknown as UpsertDb, args as UpsertUserArgs)
 })
+
+/** Narrow db surface for updateTokensHandler — only ever patches by known id. */
+interface UpdateTokensDb {
+  patch(id: string, fields: Record<string, unknown>): Promise<void>
+}
+
+export interface UpdateTokensArgs {
+  userId: string
+  accessToken: string
+  refreshToken?: string
+  tokenExpiresAt: number
+}
+
+// Plain handler — used by the registered mutation and testable in isolation. Called by the
+// refresh cron (linkedin/tokenRefresh.ts) after a successful refreshAccessToken call.
+export async function updateTokensHandler(db: UpdateTokensDb, args: UpdateTokensArgs): Promise<void> {
+  const patch: Record<string, unknown> = {
+    // SECURITY: isAdmin (and every other identity/profile field) is intentionally excluded, same
+    // discipline as upsertUserHandler — this mutation only ever touches the three token fields.
+    linkedinAccessToken: args.accessToken,
+    tokenExpiresAt: args.tokenExpiresAt
+  }
+  // LinkedIn's refresh response omits refresh_token when the provider doesn't rotate it — in that
+  // case the key is left out of the patch entirely so the existing stored value survives, rather
+  // than being overwritten with undefined.
+  if (args.refreshToken !== undefined) patch.linkedinRefreshToken = args.refreshToken
+  await db.patch(args.userId, patch)
+}
+
+// Registered Convex internal mutation — delegates to the plain handler
+export const updateTokens = internalMutation({
+  args: {
+    userId: v.id('users'),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    tokenExpiresAt: v.number()
+  },
+  handler: async (ctx, args) => updateTokensHandler(ctx.db as unknown as UpdateTokensDb, args)
+})

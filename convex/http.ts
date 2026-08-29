@@ -6,6 +6,7 @@ import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
 import { getTierFromPriceId } from './lib/stripePrices'
+import { scrubError } from './lib/scrubError'
 
 const http = httpRouter()
 
@@ -116,7 +117,7 @@ http.route({
     } catch (err) {
       // Log the real error server-side; send only a generic message to the client
       // to prevent leaking internal details (API responses, stack traces, etc.)
-      console.error('OAuth callback error:', err instanceof Error ? err.message : String(err), err)
+      console.error('OAuth callback error:', scrubError(err))
       return new Response(null, {
         status: 302,
         headers: { Location: `${appUrl}/?error=auth_failed` }
@@ -144,7 +145,8 @@ registerRoutes(http, components.stripe, {
         stripeSubscriptionId: sub.id,
         tier: getTierFromPriceId(priceId),
         status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined
+        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
+        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
       })
     },
     'customer.subscription.updated': async (ctx: StripeEvent, event: StripeEvent) => {
@@ -155,7 +157,8 @@ registerRoutes(http, components.stripe, {
         stripeSubscriptionId: sub.id,
         tier: getTierFromPriceId(priceId),
         status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined
+        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
+        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
       })
     },
     'customer.subscription.deleted': async (ctx: StripeEvent, event: StripeEvent) => {
@@ -175,7 +178,9 @@ registerRoutes(http, components.stripe, {
     }
   },
   onEvent: async (_ctx: StripeEvent, event: StripeEvent) => {
-    console.log('[Stripe webhook]', event.type, event.id)
+    // event.type/event.id are safe identifiers, but route through the scrub helper anyway so this
+    // seam stays PII-safe if a future edit logs more of the event object.
+    console.log('[Stripe webhook]', scrubError({ type: event.type, id: event.id }))
   }
 })
 

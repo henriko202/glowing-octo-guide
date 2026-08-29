@@ -1,5 +1,6 @@
 import type { LinkedInTokenResponse, LinkedInUserInfo } from './types.js'
 import { callMemberApi } from './client'
+import { scrubError } from '../lib/scrubError'
 
 // OpenID Connect only (Standard tier → every LinkedIn member can sign in). No w_member_social*/
 // r_basicprofile: the app makes no LinkedIn API writes (react/comment happen on LinkedIn via the
@@ -39,8 +40,38 @@ export async function exchangeCodeForTokens(code: string): Promise<LinkedInToken
 
   if (!res.ok) {
     const body = await res.text()
-    console.error(`LinkedIn token exchange failed: ${res.status}`, body)
+    console.error(`LinkedIn token exchange failed: ${res.status}`, scrubError(body))
     throw new Error('LinkedIn authentication failed. Please try again.')
+  }
+  return res.json() as Promise<LinkedInTokenResponse>
+}
+
+// Best-effort refresh (see backlog/B01): the app's OIDC Standard-tier scopes (SCOPES above) mean
+// LinkedIn essentially never issues a refresh_token, so linkedinRefreshToken is undefined for
+// almost every user and this path is dormant in practice. Kept correct for the rare account that
+// does have one (or a future tier change). Mirrors exchangeCodeForTokens' error handling exactly.
+export async function refreshAccessToken(refreshToken: string): Promise<LinkedInTokenResponse> {
+  const clientId = process.env.LINKEDIN_CLIENT_ID!
+  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET!
+
+  const res = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret
+    })
+  })
+
+  if (!res.ok) {
+    // LinkedIn's error body is {error, error_description} — never the token — but route it through
+    // the scrub helper anyway so this seam can't regress into logging a token if the body shape
+    // ever changes.
+    const body = await res.text()
+    console.error(`LinkedIn token refresh failed: ${res.status}`, scrubError(body))
+    throw new Error('LinkedIn token refresh failed.')
   }
   return res.json() as Promise<LinkedInTokenResponse>
 }

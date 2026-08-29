@@ -211,6 +211,17 @@
     "dismiss": "Descartar",
     "ok": "OK"
   },
+  "errorBoundary": {
+    "title": "Algo salió mal",
+    "body": "Ocurrió un error inesperado. Recargar la página suele solucionarlo.",
+    "reload": "Recargar página"
+  },
+  "reconnectBanner": {
+    "expiredMessage": "Tu conexión con LinkedIn ha caducado — reconéctate para seguir publicando.",
+    "expiringMessage_one": "Tu conexión con LinkedIn caduca en {{count}} día — reconéctate.",
+    "expiringMessage_other": "Tu conexión con LinkedIn caduca en {{count}} días — reconéctate.",
+    "reconnect": "Reconectar"
+  },
   "privacy": {
     "title": "Privacidad y Datos",
     "consentPrompt": {

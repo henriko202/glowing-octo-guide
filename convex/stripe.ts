@@ -56,7 +56,8 @@ export const syncUserSubscription = internalMutation({
     stripeSubscriptionId: v.string(),
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro')),
     status: v.string(),
-    currentPeriodEnd: v.optional(v.number())
+    currentPeriodEnd: v.optional(v.number()),
+    trialEndsAt: v.optional(v.number())
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -74,7 +75,7 @@ export const syncUserSubscription = internalMutation({
     await ctx.db.patch(user._id, {
       tier: effectiveTier,
       subscriptionStatus: status,
-      trialEndsAt: undefined,
+      trialEndsAt: args.trialEndsAt,
       // Paid-through instant — a canceled author's posts stay in the feed until this passes.
       subscriptionEndsAt: args.currentPeriodEnd
     })

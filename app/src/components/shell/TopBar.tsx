@@ -3,6 +3,21 @@ import { Menu, Search } from 'lucide-react'
 import LanguageMenu from './LanguageMenu'
 import ThemeToggle from './ThemeToggle'
 
+/**
+ * The command-palette modifier to DISPLAY, per the user's OS: ⌘ on macOS/iOS, Ctrl elsewhere.
+ * (The ⌘K / Ctrl-K listener in AppShell already accepts both, so this only affects the hint.)
+ * ponytail: navigator.platform is deprecated but the simplest reliable signal in a client-only
+ * SPA; swap to navigator.userAgentData?.platform if it ever stops reporting.
+ */
+export function getModifierKey(
+  platform: string = typeof navigator === 'undefined' ? '' : navigator.platform
+): '⌘' | 'Ctrl' {
+  return /Mac|iP(hone|ad|od)/.test(platform) ? '⌘' : 'Ctrl'
+}
+
+const MOD_KEY = getModifierKey()
+const IS_MAC = MOD_KEY === '⌘'
+
 export default function TopBar({
   onOpenSidebar,
   onOpenSearch
@@ -38,7 +53,7 @@ export default function TopBar({
         />
         <span className="truncate">{t('shell.search')}</span>
         <kbd className="border-border flex h-5 flex-row gap-1 rounded border px-1.5 leading-none">
-          <span className="pt-1">⌘</span>
+          <span className={IS_MAC ? 'pt-1' : 'self-center'}>{MOD_KEY}</span>
           <span className="flex self-center pt-0.5">K</span>
         </kbd>
       </button>

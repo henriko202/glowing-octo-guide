@@ -28,7 +28,19 @@ crons.interval('cleanup expired oauth states', { hours: 1 }, internal.sessions.d
 // Batched; reschedules itself when a run fills the batch.
 crons.interval('process account deletions', { hours: 24 }, internal.privacy.deletion.processAccountDeletions, {})
 
+// LinkedIn token refresh: renews tokens in the pre-expiry window via the by_token_expiry index.
+// Runs every 6h — more frequently than "enforce data retention" below (24h) — so a refreshable
+// token is renewed BEFORE retention nulls it as expired. Best-effort/mostly dormant in practice
+// (see linkedin/tokenRefresh.ts): the app's current OAuth tier almost never yields a
+// refresh_token. Cursor-paginated (mirrors migrations/backfillFeedFields.ts): each 6h tick
+// self-reschedules with the cursor until the whole pre-expiry window has been paged through, so
+// coverage never depends on per-user refresh success/failure. Called with no args — cursor
+// undefined starts a fresh sweep from the front of the window each tick.
+crons.interval('refresh LinkedIn tokens', { hours: 6 }, internal.linkedin.tokenRefresh.refreshExpiringTokens, {})
+
 // Data minimization: expire tokens, purge old export files + audit logs, flag dormant accounts.
+// Must run AFTER the refresh cron has a chance to act (see above) — retention only clears tokens
+// already past expiry, so ordering ensures a refreshable token is renewed first.
 crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retention.enforceDataRetention, {})
 
 export default crons

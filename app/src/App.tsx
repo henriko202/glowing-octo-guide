@@ -12,6 +12,7 @@ import MyPostsPage from './pages/MyPostsPage'
 import AdminPage from './pages/AdminPage'
 import AppShell from './components/shell/AppShell'
 import Motd from './components/Motd'
+import ReconnectBanner from './components/ReconnectBanner'
 import FeedbackButton from './components/FeedbackButton'
 import LoadingSpinner from './components/LoadingSpinner'
 import BannedScreen from './components/BannedScreen'
@@ -62,6 +63,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return (
     <AppShell>
       <Motd />
+      <ReconnectBanner />
       {children}
       <FeedbackButton />
     </AppShell>

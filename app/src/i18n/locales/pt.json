@@ -211,6 +211,17 @@
     "dismiss": "Dispensar",
     "ok": "OK"
   },
+  "errorBoundary": {
+    "title": "Algo deu errado",
+    "body": "Ocorreu um erro inesperado. Recarregar a página geralmente resolve.",
+    "reload": "Recarregar página"
+  },
+  "reconnectBanner": {
+    "expiredMessage": "Sua conexão com o LinkedIn expirou — reconecte-se para continuar publicando.",
+    "expiringMessage_one": "Sua conexão com o LinkedIn expira em {{count}} dia — reconecte-se.",
+    "expiringMessage_other": "Sua conexão com o LinkedIn expira em {{count}} dias — reconecte-se.",
+    "reconnect": "Reconectar"
+  },
   "privacy": {
     "title": "Privacidade e Dados",
     "consentPrompt": {

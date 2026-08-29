@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
 import { ThemeProvider } from '../ThemeProvider'
-import TopBar from './TopBar'
+import TopBar, { getModifierKey } from './TopBar'
 
 function renderTopBar(onOpen = vi.fn(), onSearch = vi.fn()) {
   return render(
@@ -32,5 +32,18 @@ describe('TopBar', () => {
     renderTopBar(vi.fn(), onSearch)
     fireEvent.click(screen.getByRole('button', { name: /search posts, people/i }))
     expect(onSearch).toHaveBeenCalled()
+  })
+})
+
+describe('getModifierKey', () => {
+  it('returns ⌘ on macOS / iOS platforms', () => {
+    expect(getModifierKey('MacIntel')).toBe('⌘')
+    expect(getModifierKey('iPhone')).toBe('⌘')
+    expect(getModifierKey('iPad')).toBe('⌘')
+  })
+  it('returns Ctrl on Windows / Linux / anything else', () => {
+    expect(getModifierKey('Win32')).toBe('Ctrl')
+    expect(getModifierKey('Linux x86_64')).toBe('Ctrl')
+    expect(getModifierKey('')).toBe('Ctrl')
   })
 })

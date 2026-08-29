@@ -67,17 +67,10 @@ export const getUsersWithLinkedin = internalQuery({
 // client can render the banned screen.
 export function toSafeMe(user: Doc<'users'>) {
   // Strip secrets + internal fields. bannedReason stays (shown on the banned screen).
+  // tokenExpiresAt is intentionally KEPT (not a secret — just an expiry timestamp for the
+  // owner's own connection) so the client can show a reconnect-before-expiry banner (B01b).
   /* eslint-disable @typescript-eslint/no-unused-vars -- destructure-and-discard sensitive fields */
-  const {
-    linkedinAccessToken,
-    linkedinRefreshToken,
-    tokenExpiresAt,
-    stripeCustomerId,
-    bannedBy,
-    bannedAt,
-    isAdmin,
-    ...safeUser
-  } = user
+  const { linkedinAccessToken, linkedinRefreshToken, stripeCustomerId, bannedBy, bannedAt, isAdmin, ...safeUser } = user
   /* eslint-enable @typescript-eslint/no-unused-vars */
   return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
 }
@@ -163,7 +156,8 @@ export const isProfileRefreshEnabled = query({
   }
 })
 
-// Public: returns safe user profile — strips ALL token fields.
+// Public: returns safe user profile — strips the token VALUES (access/refresh) but keeps
+// tokenExpiresAt (an expiry timestamp, not a secret) so the client can show a reconnect banner.
 // Auth: resolves the session token server-side; never accepts a userId from the client.
 // NOTE: resolves via resolveSession (not requireAuth) so a banned user gets an
 // isBanned signal instead of null — otherwise the client would loop back to LinkedIn.

@@ -211,6 +211,17 @@
     "dismiss": "Dismiss",
     "ok": "OK"
   },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "body": "An unexpected error occurred. Reloading the page usually fixes it.",
+    "reload": "Reload page"
+  },
+  "reconnectBanner": {
+    "expiredMessage": "Your LinkedIn connection has expired — reconnect to keep posting.",
+    "expiringMessage_one": "Your LinkedIn connection expires in {{count}} day — reconnect.",
+    "expiringMessage_other": "Your LinkedIn connection expires in {{count}} days — reconnect.",
+    "reconnect": "Reconnect"
+  },
   "privacy": {
     "title": "Privacy & Data",
     "consentPrompt": {

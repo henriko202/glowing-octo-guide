@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { upsertUserHandler, type UpsertUserArgs } from './auth'
+import { upsertUserHandler, updateTokensHandler, type UpsertUserArgs } from './auth'
 import { POLICY_VERSION } from '../lib/policy'
 
 // Minimal in-memory mock for Convex db context
@@ -74,5 +74,46 @@ describe('upsertUserHandler', () => {
     await upsertUserHandler(db, { ...BASE_ARGS, email: 'new@example.com' })
     expect(db._patches[0].data.lastLoginAt).toBeGreaterThan(0)
     expect(db._patches[0].data.email).toBe('new@example.com')
+  })
+})
+
+describe('updateTokensHandler', () => {
+  function createPatchDb() {
+    const patches: Array<{ id: string; data: Record<string, unknown> }> = []
+    return {
+      patch: async (id: string, data: Record<string, unknown>) => {
+        patches.push({ id, data })
+      },
+      _patches: patches
+    }
+  }
+
+  it('patches accessToken, refreshToken, and tokenExpiresAt', async () => {
+    const db = createPatchDb()
+    await updateTokensHandler(db, {
+      userId: 'user-1',
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      tokenExpiresAt: 999
+    })
+    expect(db._patches).toHaveLength(1)
+    expect(db._patches[0]).toEqual({
+      id: 'user-1',
+      data: { linkedinAccessToken: 'new-access', tokenExpiresAt: 999, linkedinRefreshToken: 'new-refresh' }
+    })
+  })
+
+  it('omits refreshToken from the patch when LinkedIn does not return a new one', async () => {
+    const db = createPatchDb()
+    await updateTokensHandler(db, { userId: 'user-1', accessToken: 'new-access', tokenExpiresAt: 999 })
+    expect(db._patches[0].data).not.toHaveProperty('linkedinRefreshToken')
+    expect(db._patches[0].data).toEqual({ linkedinAccessToken: 'new-access', tokenExpiresAt: 999 })
+  })
+
+  it('never includes isAdmin or other identity fields in the patch', async () => {
+    const db = createPatchDb()
+    await updateTokensHandler(db, { userId: 'user-1', accessToken: 'a', tokenExpiresAt: 1 })
+    expect(db._patches[0].data).not.toHaveProperty('isAdmin')
+    expect(db._patches[0].data).not.toHaveProperty('name')
   })
 })

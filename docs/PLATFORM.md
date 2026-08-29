@@ -346,7 +346,7 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `subscriptionEndsAt`        | number                                                 |  –  | Paid‑through instant (ms; Stripe `current_period_end`), mirrored on every sync + cancel. A **canceled** author's posts stay in the feed until `now ≥ subscriptionEndsAt`, then drop out (`isAuthorFeedEligible`). Does not affect engage access.                                                                                                                         |
 | `stripeCustomerId`          | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                                                                                                                                                  |
 | `linkedinAccessToken`       | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                                                                                                                                                  |
-| `linkedinRefreshToken`      | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                                                                                                                                                                  |
+| `linkedinRefreshToken`      | string                                                 |  –  | **Secret.** Refresh flow exists (dormant — Standard-tier OAuth issues no refresh_token; reconnect banner mitigates). See §7/§13.                                                                                                                                                                                                                                         |
 | `tokenExpiresAt`            | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                                                                                                                                                |
 | `linkedinPublicIdentifier`  | string                                                 |  –  | LinkedIn vanity name, **auto‑derived (set‑once)** from the `author.url` of a name‑verified submitted post (`users.setDerivedPublicIdentifier`); never user‑typed. Seeds the Apify profile/post scrape. NOT the ownership check (that matches the post's author name against the OIDC `name`).                                                                            |
 | `isAdmin`                   | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                                                                                                                                                    |
@@ -789,30 +789,57 @@ flowchart TD
 
 ### Identity / user functions (`convex/users.ts`, `linkedin/auth.ts`, `sessions.ts`)
 
-| Function                                                      | Kind                | Purpose                                                                                                                                                                                                                                                                                                                    |
-|---------------------------------------------------------------|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedin.auth.upsertUser`                                    | internalMutation    | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                                                                                                                                                                              |
-| `users.getMe`                                                 | query (public)      | Safe profile via `resolveSession` + `toSafeMe` (strips tokens + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`).                                                                                                                                                                  |
-| `users.getWithTokens`                                         | internalQuery       | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                |
-| `users.getActiveSubscribers`                                  | internalQuery       | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                              |
-| `users.getSubscriptionInfo`                                   | query (public)      | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                             |
-| `users.getTrialProgress`                                      | query (public)      | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern. |
-| `users.setDerivedPublicIdentifier`                            | mutation (internal) | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                 |
-| `users.dismissFirstPostPrompt`                                | mutation (public)   | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                     |
-| `users.markFirstPostPrompted`                                 | mutation (internal) | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                               |
-| `users.updateProfile`                                         | mutation (public)   | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at 220 chars; empty string clears any of them.                                                                                                                       |
-| `users.refreshProfileFromLinkedIn`                            | mutation (public)   | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
-| `users.isProfileRefreshEnabled`                               | query (public)      | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                         |
-| `users.applyScrapedProfile`                                   | internalMutation    | Writes scraped fields: `country` + `headline` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                              |
-| `users.logout`                                                | mutation (public)   | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
-| `users.forceLogoutAll`                                        | mutation (public)   | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
-| `sessions.create` / `getByToken` / `deleteByToken`            | internal            | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
-| `sessions.deleteAllForUser`                                   | internalMutation    | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                 |
-| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation    | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                         |
-| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` | internalMutation    | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                             |
+| Function                                                                 | Kind                           | Purpose                                                                                                                                                                                                                                                                                                                    |
+|--------------------------------------------------------------------------|--------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedin.auth.upsertUser`                                               | internalMutation               | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                                                                                                                                                                              |
+| `users.getMe`                                                            | query (public)                 | Safe profile via `resolveSession` + `toSafeMe` (strips token **values** + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`; **keeps `tokenExpiresAt`** — not a secret, drives the client's reconnect‑before‑expiry banner).                                                         |
+| `linkedin.oauth.refreshAccessToken`                                      | function (server‑only)         | `grant_type=refresh_token` call to the token endpoint. Same log‑real/throw‑sanitized discipline as `exchangeCodeForTokens`; never logs the token value. Called only by the refresh cron below.                                                                                                                             |
+| `linkedin.auth.updateTokens`                                             | internalMutation               | Patches `linkedinAccessToken`/`tokenExpiresAt` (always) + `linkedinRefreshToken` (only when LinkedIn returns a new one — a non‑rotating provider's omitted `refresh_token` leaves the stored value untouched instead of clearing it). Never writes `isAdmin`, mirroring `upsertUser`.                                      |
+| `linkedin.tokenRefresh.getUsersPendingRefresh` / `refreshExpiringTokens` | internalQuery / internalAction | Refresh-cron pair — see [§13](#13-scheduled-jobs-crons).                                                                                                                                                                                                                                                                   |
+| `users.getWithTokens`                                                    | internalQuery                  | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                |
+| `users.getActiveSubscribers`                                             | internalQuery                  | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                              |
+| `users.getSubscriptionInfo`                                              | query (public)                 | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                             |
+| `users.getTrialProgress`                                                 | query (public)                 | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern. |
+| `users.setDerivedPublicIdentifier`                                       | mutation (internal)            | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                 |
+| `users.dismissFirstPostPrompt`                                           | mutation (public)              | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                     |
+| `users.markFirstPostPrompted`                                            | mutation (internal)            | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                               |
+| `users.updateProfile`                                                    | mutation (public)              | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at 220 chars; empty string clears any of them.                                                                                                                       |
+| `users.refreshProfileFromLinkedIn`                                       | mutation (public)              | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
+| `users.isProfileRefreshEnabled`                                          | query (public)                 | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                         |
+| `users.applyScrapedProfile`                                              | internalMutation               | Writes scraped fields: `country` + `headline` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                              |
+| `users.logout`                                                           | mutation (public)              | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
+| `users.forceLogoutAll`                                                   | mutation (public)              | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
+| `sessions.create` / `getByToken` / `deleteByToken`                       | internal                       | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
+| `sessions.deleteAllForUser`                                              | internalMutation               | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                 |
+| `sessions.createOAuthState` / `validateAndConsumeOAuthState`             | internalMutation               | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                         |
+| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates`            | internalMutation               | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                             |
 
-> **No token‑refresh flow exists.** Despite README claims, nothing refreshes LinkedIn tokens near
-> expiry; `refreshToken`/`tokenExpiresAt` are stored but unused. See [§19](#19-known-discrepancies-dead-code--roadmap).
+### Token lifecycle: issue → refresh window → reconnect fallback
+
+1. **Issue.** Every login (`http.ts` OAuth callback → `linkedin.auth.upsertUser`) stores
+   `linkedinAccessToken` / `linkedinRefreshToken` / `tokenExpiresAt` (= `now + expires_in*1000`, LinkedIn's access
+   tokens run **~60 days**).
+2. **Refresh window (pre‑expiry, best‑effort).** The `refresh LinkedIn tokens` cron (every
+   6h, [§13](#13-scheduled-jobs-crons))
+   renews any token entering its **last 7 days** before expiry, via `linkedin.oauth.refreshAccessToken` +
+   `linkedin.auth.updateTokens`. **This is dormant for essentially every user in practice**: the app's OAuth scopes are
+   OIDC Standard‑tier (`openid profile email`, no `offline_access`), and LinkedIn does not issue a
+   `refresh_token` for that tier — so `linkedinRefreshToken` is `undefined` on nearly every account and the cron's
+   `by_token_expiry` + refresh‑token‑present query matches nothing. The path is kept correct (and unit‑tested) for the
+   rare account that does have one, or a future tier change, without being load‑bearing for the common case.
+3. **Post‑expiry (today).** If a token is never refreshed, the daily `enforce data retention` cron
+   ([§13](#13-scheduled-jobs-crons), [§13B](#13b-privacy--compliance)) **NULLs** it once `tokenExpiresAt` is in the
+   past. After that, every LinkedIn‑dependent action fails — e.g. `posts.submitPost` throws `'No LinkedIn access
+   token. Please sign in again.'`
+4. **Reconnect fallback (built, task B01b).** Because step 2 is dormant for most users, the real mitigation is
+   `app/src/components/ReconnectBanner.tsx` — a persistent top‑of‑app banner (mounted in `App.tsx` alongside `Motd`,
+   authenticated region only) driven by the `tokenExpiresAt` `users.getMe` returns. Pure gate
+   `shouldShowReconnect(me, now)`: `tokenExpiresAt == null` → "expired" copy; `tokenExpiresAt < now + 7d` (including
+   already past) → "expiring in N day (s)" copy; otherwise renders nothing. No dismiss — it stays up while the condition
+   holds. Its "Reconnect" button just re‑runs `/auth/linkedin` (`window.location.href = AUTH_URL`, the same URL
+   `RequireAuth`'s own auto‑OAuth redirect uses) — the existing OAuth entry point already re‑stores a fresh token via
+   `upsertUser`. An expired‑token user who still manages to submit sees the `submitPost` error above, but the banner
+   means that's no longer their first signal.
 
 ---
 
@@ -896,24 +923,33 @@ enforced by the pure `crossesThreshold` helper in
 most once** per user: the `subscriptionStatus !== 'trialing'` guard inside
 `bumpTrialInteraction` skips any increment once the trial has already converted. The combined
 "50 interactions OR 7 days" rule is therefore split: the 7-day side is Stripe's
-`trial_period_days` (from Checkout); the 50-interaction side fires `endTrialEarly` to end it early.
+`trial_period_days` (from Checkout); the 50-interaction side fires `endTrialEarly` to end it early. Both sides converge
+on the same webhook sync path (below) — `endTrialEarly`'s `trial_end: 'now'` is just another
+`customer.subscription.updated` event.
+
+`users.trialEndsAt` (ms) is sourced **verbatim from Stripe's `trial_end`** (epoch seconds × 1000,
+`null` → `undefined`) by `syncUserSubscription` — it is not computed locally as `now + 7d`. This keeps it correct across
+both the 7-day elapse and the 50-interaction early-end (`trial_end: 'now'`
+reads back as a past/`now` timestamp on the next sync). The UI's `status === 'trialing'` gate (`BillingPage`) — not the
+value of `trialEndsAt` itself — decides when the countdown is shown, so a stale past `trialEndsAt` left over after
+conversion to `active` never misrenders.
 
 ### Webhook‑driven subscription sync
 
 `http.ts` registers handlers for these Stripe events, each delegating to an internal mutation in
 `stripe.ts`:
 
-| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                        |
-|---------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, clear `trialEndsAt`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
-| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`; set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this). Downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                     |
-| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears.                                                                                                                                                                                                                                                                                                             |
+| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
+| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`; set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this). Downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                        |
+| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears.                                                                                                                                                                                                                                                                                                                                                                |
 
 ```mermaid
 flowchart TD
   W["Stripe webhook → /stripe/webhook"] --> T{"event type"}
   T -->|created/updated| SYNC["syncUserSubscription"]
-  SYNC --> P1["patch user: tier (admin fixed), status, subscriptionEndsAt, clear trialEndsAt"]
+  SYNC --> P1["patch user: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
   SYNC --> P2["re-stamp authorTierRank on all posts"]
   SYNC --> P3["upsert subscriptions row"]
   SYNC --> ACT{"status == active?"}
@@ -1217,6 +1253,13 @@ flowchart TD
 > fields are kept in sync by every post writer (`computeFeedFields`). Heavy viewer filters can yield
 > short pages; the client's **Load more** (`usePaginatedQuery`) requests the next page. Design + rollout:
 > [feed-cursor-pagination-plan.md](./feed-cursor-pagination-plan.md).
+>
+> Because `feedRank`/`inFeed` are `v.optional` (widen→backfill), `by_feed_rank`'s `eq(inFeed, true)` can
+> never match a row where the field is still `undefined`. `convex/migrations/backfillFeedFields.ts` is
+> the batched, self-rescheduling backfill that stamps both fields on every `posts` row via the same
+> `computeFeedFields` — it must run (or be re-run) before trusting the index against any posts written
+> by a path that bypasses the live writers (e.g. a future bulk import). Pre-launch there is no prod data,
+> so today it's a no-op; see the `ponytail:` comment in the migration.
 
 **Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible(author, now)` helper (`feed.ts`)
 excludes authors with `deletionScheduledAt` set, and drops a **canceled** author once their paid period ends:
@@ -1332,14 +1375,18 @@ are listed as text context, not attached.
 > `OPENROUTER_API_KEY` enables the AI features (unset ⇒ reactions no-op to `LIKE`, Generate reports "AI
 > unavailable"). The seam (`convex/ai/openrouter.ts`) constrains routing **in code** to providers that honour
 > **zero data retention** (`zdr: true`) and **no data collection / no training** (`data_collection: "deny"`) —
-> not env-overridable — and OpenRouter picks the cheapest qualifying provider (`:floor`). The model is Google's
-> open **Gemma** (`google/gemma-4-26b-a4b-it`). **OpenRouter** (US) is the named sub-processor; the **downstream
+> not env-overridable — and OpenRouter selects among the qualifying providers (no `:floor` price-routing
+> suffix on the model slug; the `data_collection`/`zdr` pin is what governs provider selection). The model is
+> Google's open **Gemma** (`google/gemma-4-26b-a4b-it`), verified against OpenRouter's live catalog and served
+> by **DeepInfra** at fp8. **OpenRouter** (US) is the named sub-processor; the **downstream
 > inference provider (e.g. DeepInfra) and its region are selected per request, not pinned** — so region is not
 > guaranteed and the controller relies on OpenRouter's DPA flowing down to its providers. Documented in
 > `docs/compliance/`: ROPA **Activity 13** (`DATA-INVENTORY.md`), the **OpenRouter** rows in `SUBPROCESSORS.md`,
 > **item 10** in `GAP-ASSESSMENT.md`, and the public `/privacy` disclosure. **Human/legal before go-live:**
 > execute OpenRouter's DPA, confirm ZDR/no-training flows down to its providers, and assess the transfer
-> position given the non-pinned region (add region constraints if needed).
+> position given the non-pinned region (add region constraints if needed). **Flagged for legal review:**
+> DeepInfra's zero-retention posture has a documented exception for Google-family models — Google logs
+> prompts/responses for abuse-monitoring purposes independent of DeepInfra's ZDR commitment.
 
 ### Reaction prediction (async, best-effort)
 
@@ -1420,7 +1467,8 @@ non-functional top-bar search placeholder.
 
 - Reuses the `cmdk` wrapper in `app/src/components/ui/command.tsx` (`CommandDialog` + `Command` root). `AppShell` owns
   the open state and a global ⌘K/Ctrl-K keydown listener (`preventDefault` so it doesn't collide with browser find); the
-  `TopBar` search button opens it via `onOpenSearch`.
+  `TopBar` search button opens it via `onOpenSearch`. The top-bar shortcut hint is OS-aware — `getModifierKey`
+  (`TopBar.tsx`, from `navigator.platform`) shows **⌘** on macOS/iOS and **Ctrl** elsewhere.
 - Input is debounced ~180ms; the Convex query runs reactively via `useQuery(..., 'skip')` and only fires at ≥2 chars.
   Idle (no query) shows **Quick actions** (nav items + toggle theme + sign out); typing shows **People** / **Posts**
   groups, or a localized "No results". `shouldFilter={false}` — results are already filtered server-side, so cmdk's
@@ -1634,14 +1682,23 @@ flowchart TD
 times in UTC (`crons.cron`); the session/OAuth cleanup, account‑deletion, and retention jobs run on fixed intervals from
 deploy time (`crons.interval`).
 
-| Cron name                      | Schedule            | Target                                     | Effect                                                                                                                                                                                                                                                                     |
-|--------------------------------|---------------------|--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sync LinkedIn posts`          | daily **03:00 UTC** | `jobs/syncPosts.syncAllPosts`              | Apify sync **iff** `apifySyncEnabled` (else no‑op).                                                                                                                                                                                                                        |
-| `process post queue`           | daily **04:00 UTC** | `jobs/processQueue.processPostQueue`       | Promote queued posts when authors regain weekly capacity.                                                                                                                                                                                                                  |
-| `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`           | Purge expired sessions (≤ 200/run).                                                                                                                                                                                                                                        |
-| `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`        | Purge expired CSRF nonces (≤ 200/run).                                                                                                                                                                                                                                     |
-| `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty. |
-| `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`   | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps.                                                         |
+| Cron name                      | Schedule            | Target                                        | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|--------------------------------|---------------------|-----------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sync LinkedIn posts`          | daily **03:00 UTC** | `jobs/syncPosts.syncAllPosts`                 | Apify sync **iff** `apifySyncEnabled` (else no‑op).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `process post queue`           | daily **04:00 UTC** | `jobs/processQueue.processPostQueue`          | Promote queued posts when authors regain weekly capacity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`              | Purge expired sessions (≤ 200/run).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`           | Purge expired CSRF nonces (≤ 200/run).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions`    | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `refresh LinkedIn tokens`      | every **6h**        | `linkedin/tokenRefresh.refreshExpiringTokens` | Renews tokens entering their pre-expiry window (`tokenExpiresAt` in `[now, now+7d)` **and** a refresh token on file) via `linkedin.oauth.refreshAccessToken` + `linkedin.auth.updateTokens`. Reads via `by_token_expiry`, **cursor-paginated** (≤100/page, mirrors `migrations/backfillFeedFields.ts`'s pattern) rather than a single `.take(100)` snapshot — the cursor is captured before any refresh attempt and advances every run regardless of per-user outcome, so a full 6h tick pages through the **entire** pre-expiry window even if rows near the front keep failing. Each user's refresh is try/caught independently (one `invalid_grant` skips that user, never aborts the batch or stalls the cursor). **Runs more often than `enforce data retention` below on purpose** — see ordering note. Best-effort/mostly dormant in practice: see [§7](#7-authentication--identity). |
+| `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`      | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+
+> **Ordering: refresh before retention.** `refresh LinkedIn tokens` only acts on tokens that are **not yet** expired
+> (the pre-expiry window); `enforce data retention` only nulls tokens that **already are** expired. Because the
+> refresh cron's cursor pages through the **whole** pre-expiry window on every 6h tick (not just the first 100 rows
+> — see the cron table row above), every refreshable token gets at least one refresh attempt within that same tick,
+> well inside retention's 24h cadence — so a refreshable token cannot be nulled by retention before the refresh
+> cron has had a chance at it. Retention itself never attempts a refresh; it stays a pure minimization/cleanup job
+> (see [§13B](#13b-privacy--compliance)).
 
 ---
 
@@ -1958,7 +2015,10 @@ React 19 + Vite 6 SPA. Dev server runs on **port 5174**. Convex reactivity via `
 ### Bootstrap (`main.tsx`)
 
 Imports `./i18n` (side‑effect init) → `./index.css` → mounts
-`<StrictMode><ConvexProvider client={new ConvexReactClient(VITE_CONVEX_URL)}><BrowserRouter><App/>`.
+`<StrictMode><ThemeProvider><ConvexProvider client={new ConvexReactClient(VITE_CONVEX_URL)}><BrowserRouter><ErrorBoundary><App/>`.
+`ErrorBoundary` (`components/ErrorBoundary.tsx`) is a top‑level render‑crash guard — without it a render error in
+`App` blanks the whole page; the boundary shows a friendly, i18n'd fallback (reload button) and reports the error via
+`console.error` (see [§17](#17-security-posture) Observability).
 `index.html` ships a strict **CSP** meta tag allowing `frame-src https://www.linkedin.com` (post embeds) and
 `connect-src` to `*.convex.cloud` (wss) + `*.stripe.com`.
 
@@ -1992,7 +2052,9 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 7. **`!me.firstPostPromptedAt`** (every new member, before billing — the submitted first post is created hidden for a
    no-card member and the screen funnels them to `/billing`; the post is revealed when they add a card) →
    `<FirstPostPromptScreen>`
-8. **user ok** → `<AppShell>` (sidebar + top bar) + the requested page
+8. **user ok** → `<AppShell>` (sidebar + top bar) + `<Motd/>` + **`<ReconnectBanner/>`** (persistent top‑of‑app banner,
+   shown when `me.tokenExpiresAt` is null or within 7 days — the user‑facing counterpart to B01a's refresh cron;
+   see [§7](#7-authentication--identity)) + the requested page
 
 ```mermaid
 flowchart TD
@@ -2007,7 +2069,7 @@ flowchart TD
   RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
   RA -->|"!consentPromptedAt"| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
   RA -->|"!firstPostPromptedAt"| FIRSTPOST["FirstPostPromptScreen → submitPost (hidden if no card) → /billing · or dismiss → reload"]
-  RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + page → page issues Convex queries"]
+  RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + Motd + ReconnectBanner + page → page issues Convex queries"]
 ```
 
 ### Pages
@@ -2191,6 +2253,11 @@ styling; it is always visible regardless of gate state. SSI is a link-out only �
 See the **BillingPage** bullet in the Pages section above for the full state-dependent layout. Backend query:
 `api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s session-resolution pattern; returns `{ made, received, combined, threshold, reached, status,
 trialEndsAt }`). Cross-reference: §8 (subscription state machine) and §9 (plan limits).
+
+The date-countdown half of the trial UI is now **live**: `trialEndsAt` is populated from Stripe (see §8), so
+`getTrialDaysRemaining(trialEndsAt)` and `isTrialExpired` on `BillingPage` render real values instead of always `0`/
+`false`. Previously only the X/50 interaction meter worked; both halves of the "50 interactions OR 7 days" rule now
+render correctly.
 
 ---
 
@@ -2407,8 +2474,8 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 | Variable                         |                Required                 | Consumed in                                         | Purpose                                                                                                                                                                                               |
 |----------------------------------|:---------------------------------------:|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `LINKEDIN_CLIENT_ID`             |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client id (authorize URL + token exchange).                                                                                                                                                     |
-| `LINKEDIN_CLIENT_SECRET`         |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client secret (server‑side token exchange).                                                                                                                                                     |
+| `LINKEDIN_CLIENT_ID`             |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client id (authorize URL + token exchange **and** the token-refresh call — no separate var).                                                                                                    |
+| `LINKEDIN_CLIENT_SECRET`         |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client secret (server‑side token exchange **and** refresh — `refreshAccessToken` reuses the same env pair, nothing new was added for the refresh cron).                                         |
 | `LINKEDIN_REDIRECT_URI`          |                   ✓                    | `linkedin/oauth.ts`                                 | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                          |
 | `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`, `billingNode.ts`           | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                       |
 | `STRIPE_STARTER_PRICE_ID`        |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                               |
@@ -2428,7 +2495,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)                           | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
 | `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`                       | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                     |
 | `OPENROUTER_API_KEY`             |  ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`                           | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                |
-| `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                           | Optional model slug override. Provider routing (ZDR + no-data-collection, cheapest qualifying provider) is enforced in code, not via env.                                                             |
+| `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                           | Optional model slug override. Provider routing (ZDR + no-data-collection pin governs selection, no price-floor suffix) is enforced in code, not via env.                                              |
 | `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                           | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                     |
 
 ### Frontend build-time env — set in **Cloudflare** (each Worker's build settings)
@@ -2487,9 +2554,11 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 
 The codebase follows a consistent, defensible security model:
 
-- **Secrets & internal fields never reach clients.** `toSafeMe` (`users.getMe`) strips tokens **and**
-  `stripeCustomerId`/`bannedBy`/`bannedAt`/raw `isAdmin`. The feed sends authors through an **allow‑list** projection
-  (`toFeedAuthor` — only `_id`/name/headline/picture/industry/country/tier), so other users' `isAdmin`, Stripe id,
+- **Secrets & internal fields never reach clients.** `toSafeMe` (`users.getMe`) strips token **values** (access +
+  refresh) **and** `stripeCustomerId`/`bannedBy`/`bannedAt`/raw `isAdmin` — but intentionally **keeps
+  `tokenExpiresAt`** (an expiry timestamp, not a secret) so the client can drive a reconnect‑before‑expiry banner
+  ([§7](#7-authentication--identity)). The feed sends authors through an **allow‑list** projection (`toFeedAuthor` —
+  only `_id`/name/headline/picture/industry/country/tier), so other users' `isAdmin`, Stripe id,
   `linkedinId`, ban state, etc. are never exposed.
   `users.getWithTokens` is an `internalQuery` (server‑only). The OAuth client secret lives only in Convex env and is
   used only in server‑side token exchange.
@@ -2537,8 +2606,37 @@ The codebase follows a consistent, defensible security model:
   `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`. The old `<meta>` CSP was removed from
   `app/index.html` (a `<meta>` CSP cannot set `frame-ancestors`/HSTS — that needs HTTP headers).
 
-> **Open security‑relevant gaps / hardening backlog:** no LinkedIn token‑refresh flow (tokens
-> silently expire ~60 days); the ban is reactive (a banned user's in‑flight reads still resolve until
+### Observability & Error Monitoring
+
+**Minimal, no‑dependency posture (B05).** The originally‑planned Convex Sentinel component (`@convex-dev/sentinel`) is
+**not published to npm** (registry 404 — no `sentinel` package under the
+`convex-dev` org as of this writing), so it cannot be installed; adding a third‑party sink instead would introduce a new
+compliance sub‑processor. Until Sentinel (or an equivalent) ships, the sink is Convex's own built‑in logging:
+
+- **Frontend:** a top‑level React `ErrorBoundary` (`app/src/components/ErrorBoundary.tsx`) wraps `<App/>` in
+  `main.tsx` ([§14](#14-frontend--authenticated-app-app)) so a render crash shows a friendly fallback instead of a blank
+  page. `componentDidCatch` reports the error via `console.error` — the client‑side sink for now.
+- **Backend:** the existing `console.error` catch seams route their logged context through
+  `convex/lib/scrubError.ts`, a pure, dependency‑free helper (no Convex function, no codegen). It **default‑denies**
+  any key name containing `token`/`access`/`refresh`/`secret`/`authorization`/`email`/`apikey` (case‑insensitive,
+  case‑folded substring match) anywhere in an object — including a string body that parses as JSON — replacing the value
+  with `[REDACTED]`, and **caps the logged string to 500 characters** so a chatty payload (e.g. an LLM response body
+  containing post/article text) can't blow up the logs. Wired at: the OAuth‑callback `catch` and the Stripe `onEvent`
+  log in `convex/http.ts`; the `!res.ok` response‑body log in `convex/ai/openrouter.ts`
+  ([§11A](#11a-ai-reaction--comment-assistance)); the token‑exchange/`refreshAccessToken` error paths in
+  `convex/linkedin/oauth.ts` ([§7](#7-authentication--identity)); and the Resend `!res.ok` send‑failure log in
+  `convex/lib/email.ts` ([§13B](#13b-privacy--compliance)). Routine 302 redirects and expected
+  "not signed in"/empty‑session paths are intentionally **not** logged — only real error paths. Errors still land in
+  Convex's built‑in function‑error logs (Convex Dashboard → Logs); there is **no external monitoring service and no new
+  sub‑processor**.
+- **Deferred:** a durable, queryable capture dashboard and cron/scheduled‑action failure capture (what Sentinel would
+  have added) are out of scope until the component is publishable —
+  see [§19](#19-known-discrepancies-dead-code--roadmap).
+
+> **Open security‑relevant gaps / hardening backlog:** the LinkedIn token‑refresh flow (`linkedin/tokenRefresh`,
+> §19) is dormant at the current Standard‑tier OAuth (no `refresh_token` is issued), so tokens still
+> silently expire ~60 days — the proactive reconnect banner (§7/§14) is the mitigation; the ban is reactive (a banned
+> user's in‑flight reads still resolve until
 > the next protected call / reactive push); `linkedinPublicIdentifier` is now
 > **auto‑derived** (set‑once) from a name‑verified post's author URL — LinkedIn‑authoritative, never
 > user‑typed, so it can't be spoofed via a settings field; LinkedIn actions still use the user's own
@@ -2614,8 +2712,11 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 - **Post sync:** README says "hourly LinkedIn‑API cron"; reality is **daily, Apify‑only, admin‑gated**
   (no direct LinkedIn‑API ingestion path).
 - **OAuth redirect:** README shows `?userId=…`; code uses `?session=…` (a session token).
-- **Token refresh:** README claims a 60‑day refresh flow "implemented"/"attempted within 7 days of expiry"; **no refresh
-  logic exists**.
+- **Token refresh:** README claims a 60‑day refresh flow "implemented"/"attempted within 7 days of expiry" — this is now
+  **accurate for the cron mechanics** (7‑day pre‑expiry window, [§13](#13-scheduled-jobs-crons)), but the README doesn't
+  mention that the refresh itself is **dormant for essentially every user**: the app's OIDC Standard‑tier scopes mean
+  LinkedIn never issues a `refresh_token` in the first place (see [§7](#7-authentication--identity)). The reconnect
+  banner that's the real mitigation for this is now built (task B01b, `ReconnectBanner.tsx`).
 - **Next.js:** README says 14; `landing/` is **15**.
 - **Dev port:** README/`.env.example` assume 5173; Vite is configured for **5174**.
 - README's project tree references files that don't exist (`jobs/syncConnections.ts`,
@@ -2635,14 +2736,20 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   `visibilityIndustries`/`visibilityCountries` fields **are** enforced in the feed, but there's no UI to set them).
 - **AI comment generator** — `CommentBox` advertises "AI suggestions coming soon"; no integration.
 - **Featured posts quota** — `featuredPostUsage` table exists but is unwired.
-- **LinkedIn token refresh** — needed before tokens hit their ~60‑day expiry.
+- ~~LinkedIn token refresh~~ — **resolved**: the refresh action/cron/mutation (backend half, task B01a) are built and
+  documented in [§7](#7-authentication--identity)/[§13](#13-scheduled-jobs-crons), though the path is dormant for
+  essentially every user (no `refresh_token` at this OAuth tier). The reconnect banner (frontend half, task B01b,
+  `app/src/components/ReconnectBanner.tsx`) — the actual user‑facing mitigation for expiry — is now built too.
+- ~~Feed backfill migration missing~~ — **resolved**: `convex/migrations/backfillFeedFields.ts` now stamps
+  `feedRank`/`inFeed` on every `posts` row (see §11). Pre-launch there is no prod data so it's a no-op today; narrowing
+  the schema's `feedRank`/`inFeed` from `v.optional` to required is a separate future item.
 - **Placeholder constants** — `BannedScreen.SUPPORT_EMAIL = 'contact@email.com'` (TODO);
   `STRIPE_WEBHOOK_SECRET=whsec_your_secret` in the committed `.env.local`.
 
 ### Roadmap (from README + specs in `docs/`)
 
 AI comment generator (Pro+), LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs), SSI‑trend
-analytics dashboard, proactive token‑refresh cron.
+analytics dashboard.
 
 ---
 
@@ -2671,32 +2778,56 @@ analytics dashboard, proactive token‑refresh cron.
 This document is **canonical** and must not be allowed to drift. The rule in `CLAUDE.md` requires that **any code change
 or push updates the relevant section (s) here in the same change**. Practical checklist when you touch the codebase:
 
-| If you change…                                                                                                                                                                                                              | Update section(s)                                                                           |
-|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                               |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                  |
-| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)   |
-| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                 |
-| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)               |
-| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                       |
-| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                               |
-| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                |
-| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                            | [§12A](#12a-feedback)                                                                       |
-| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                        |
-| App UI (`app/src/**`)                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                  |
-| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                     | [§14A Design System](#14a-design-system)                                                    |
-| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/layout.tsx`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence) |
-| Landing (`landing/**`)                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                   |
-| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                      |
-| Tooling/tests/deploy                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                   |
-| Resolving a stale item / removing dead code                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                           |
+| If you change…                                                                                                                                                                                                              | Update section(s)                                                                                        |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                                            |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                               |
+| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
+| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                              |
+| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                            |
+| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                    |
+| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                                            |
+| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                             |
+| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                            | [§12A](#12a-feedback)                                                                                    |
+| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                                     |
+| App UI (`app/src/**`)                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                               |
+| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                     | [§14A Design System](#14a-design-system)                                                                 |
+| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/layout.tsx`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)              |
+| Landing (`landing/**`)                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                                |
+| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                                   |
+| Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                            | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app) |
+| Tooling/tests/deploy                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                                |
+| Resolving a stale item / removing dead code                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                                        |
 
 When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add a flow chart
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
 
-_Last updated: 2026‑06‑21. Updated to reflect locale-routed i18n + pt/es legal drafts (Plan 2):
+_Last updated: 2026‑08‑21. Updated to reflect the LinkedIn reconnect banner (task B01b,
+backlog/B01-linkedin-token-refresh.md, steps 6-7 — the frontend half; B01a below is the backend half):
+new `app/src/components/ReconnectBanner.tsx` — a pure, exported `shouldShowReconnect(me, now)` gate
+(`tokenExpiresAt == null` → "expired"; `tokenExpiresAt < now + 7d`, including already past, → "expiring"
+with a day count; otherwise renders nothing; no `me` → nothing) plus the presentational banner, mounted in `App.tsx`'s
+`RequireAuth` alongside `Motd`, authenticated region only. "Reconnect" re‑runs
+`/auth/linkedin` via the same `AUTH_URL` (`app/src/lib/session.ts`) `RequireAuth`'s own auto‑OAuth redirect uses. No
+dismiss (`// ponytail:` noted in the component). New i18n keys:
+`reconnectBanner.expiredMessage`, `reconnectBanner.expiringMessage` (`_one`/`_other`),
+`reconnectBanner.reconnect` (en/pt/es). §7 and §19's "not built yet" notes for B01b are now resolved. Prior: Updated to
+reflect the LinkedIn token-refresh backend (task B01a, backlog/B01-linkedin-token-refresh.md): `linkedin/oauth.ts`
+gained `refreshAccessToken`
+(`grant_type=refresh_token`, same log‑real/throw‑sanitized + no‑new‑env discipline as
+`exchangeCodeForTokens`); `linkedin/auth.ts` gained `updateTokens`/`updateTokensHandler` (patches only the three token
+fields, preserves the existing refresh token when LinkedIn's response omits one); new `linkedin/tokenRefresh.ts` (pure
+`isInRefreshWindow` predicate + `getUsersPendingRefresh`
+internalQuery + `refreshExpiringTokens` internalAction, cursor-paginated — mirrors
+`migrations/backfillFeedFields.ts` — so a full sweep of the pre-expiry window never stalls behind rows stuck at the
+front, with per-user failure isolation); `crons.ts` gained the `refresh LinkedIn
+tokens` cron (every 6h, ahead of the 24h `enforce data retention` cron); `users.toSafeMe`/`getMe` now keep
+`tokenExpiresAt` (not a secret) instead of stripping it, for the still-unbuilt reconnect banner (task B01b) to consume.
+Ground truth reconfirmed: the app's OIDC Standard-tier scopes mean LinkedIn essentially never issues a `refresh_token`,
+so this backend is correct but dormant for nearly every user — the real mitigation is the reconnect banner, out of scope
+for this change. See §7, §13, §16, §17, §19. Prior: Updated to reflect locale-routed i18n + pt/es legal drafts (Plan 2):
 §15 restructured — added "Locale routing" subsection (middleware flow, root layout, dictionary pattern,
 LanguageSelector, hreflang/per-locale metadata, updated route table with locale prefix, legal content modules with pt/es
 drafts); also updated route table and footer link paths. Prior: Updated to reflect cross-site theme + lang persistence
