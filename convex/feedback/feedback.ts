@@ -1,7 +1,7 @@
 // convex/feedback/feedback.ts
 // User feedback: submission (authenticated), admin listing/triage, and admin email replies.
 // Replies are stored in the feedbackResponses table (Task 10); each admin reply is a separate row.
-import { internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
+import { internalAction, internalQuery, mutation, query } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { requireAuth } from '../lib/auth'
@@ -223,32 +223,5 @@ export const sendFeedbackReply = internalAction({
       text: m.text,
       ...(replyTo ? { replyTo } : {})
     })
-  }
-})
-
-// One-time operator migration: backfills feedbackResponses from legacy single-reply fields.
-// Idempotent — rows already cleared (responseText undefined) are skipped.
-// Not auto-scheduled; run once by the operator via the Convex dashboard or CLI.
-export const backfillFeedbackResponses = internalMutation({
-  args: {},
-  handler: async ctx => {
-    // Process in bounded batches to stay within transaction limits.
-    const rows = await ctx.db.query('feedback').take(200)
-    for (const f of rows) {
-      // Only migrate rows that still have both responseText and respondedBy set.
-      if (f.responseText === undefined || f.respondedBy === undefined) continue
-      await ctx.db.insert('feedbackResponses', {
-        feedbackId: f._id,
-        responderId: f.respondedBy,
-        text: f.responseText,
-        createdAt: f.respondedAt ?? f.createdAt
-      })
-      // Clear the legacy fields to make this idempotent.
-      await ctx.db.patch(f._id, {
-        responseText: undefined,
-        respondedAt: undefined,
-        respondedBy: undefined
-      })
-    }
   }
 })

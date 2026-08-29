@@ -66,9 +66,10 @@ export default defineSchema({
     // Used for DSR confirmations and breach notification. Stored under legitimate interest /
     // legal obligation, NOT marketing consent.
     email: v.optional(v.string()),
-    emailVerified: v.optional(v.boolean()),
-    // Account-deletion lifecycle (self-service erasure + dormancy). Presence of
-    // `deletionScheduledAt` means the account is pending hard-deletion by the cron.
+    // Account-deletion lifecycle (self-service erasure + dormancy). `deletionRequestedAt` is an
+    // intentional erasure-audit-trail timestamp (when the user asked) — kept for compliance even
+    // though no query reads it back; do not treat it as dead. Presence of `deletionScheduledAt`
+    // means the account is pending hard-deletion by the cron.
     deletionRequestedAt: v.optional(v.number()),
     deletionScheduledAt: v.optional(v.number()),
     deletionReason: v.optional(v.union(v.literal('user_request'), v.literal('dormancy'))),
@@ -257,17 +258,14 @@ export default defineSchema({
     .index('by_urn', ['linkedinPostUrn']),
 
   // Append-only consent/withdrawal log. Current effective consent for a purpose is the
-  // latest record for (userId, purpose). 'location_enrichment' is reserved for future use
-  // (the Apify profile scrape is disabled at launch).
+  // latest record for (userId, purpose).
   consentRecords: defineTable({
     userId: v.id('users'),
     purpose: v.union(v.literal('marketing'), v.literal('analytics')),
     granted: v.boolean(),
     policyVersion: v.string(),
     createdAt: v.number()
-  })
-    .index('by_user', ['userId'])
-    .index('by_user_and_purpose', ['userId', 'purpose']),
+  }).index('by_user', ['userId']),
 
   // Tracks asynchronous data-export jobs. The generated bundle is held in Convex file
   // storage; the link expires (fileStorageId/expiresAt) and is purged by the retention cron.
@@ -312,19 +310,11 @@ export default defineSchema({
     ),
     message: v.string(),
     status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
-    createdAt: v.number(),
-    // DEPRECATED — superseded by feedbackResponses table (Task 10).
-    // Retained as v.optional to avoid a schema-narrowing migration on existing rows.
-    // Stop writing these fields; read feedbackResponses instead.
-    responseText: v.optional(v.string()),
-    respondedAt: v.optional(v.number()),
-    respondedBy: v.optional(v.id('users'))
-  })
-    .index('by_user', ['userId']) // export + locate rows to anonymize on deletion
-    .index('by_status', ['status', 'createdAt']), // reserved for future server-side status triage
+    createdAt: v.number()
+  }).index('by_user', ['userId']), // export + locate rows to anonymize on deletion
 
   // Append-only reply log for feedback items. Replaces the single-reply fields on the
-  // feedback row (responseText/respondedAt/respondedBy). Each admin reply is a separate row.
+  // feedback row. Each admin reply is a separate row.
   // Index order: feedbackId first (equality), createdAt second (range / chronological).
   feedbackResponses: defineTable({
     feedbackId: v.id('feedback'),
@@ -359,9 +349,7 @@ export default defineSchema({
     reaction: v.optional(reactionValidator),
     comment: v.optional(v.string()),
     createdAt: v.number()
-  })
-    .index('by_user', ['userId']) // DSR export + a user's activity
-    .index('by_post', ['postId']), // admin: who engaged with a post
+  }).index('by_user', ['userId']), // DSR export + a user's activity
 
   // Per-(user, post) engagement state. One lazily-created row per user+post — distinct from the
   // append-only userInteractions LOG above. Holds CURRENT state: `reactedAt` (set on the user's

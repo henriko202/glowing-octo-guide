@@ -60,10 +60,9 @@ describe('upsertUserHandler', () => {
 
   it('stores email, lastLoginAt, and acknowledged policy version for a new user', async () => {
     const db = createMockDb()
-    await upsertUserHandler(db, { ...BASE_ARGS, email: 'jane@example.com', emailVerified: true })
+    await upsertUserHandler(db, { ...BASE_ARGS, email: 'jane@example.com' })
     const inserted = db._inserts[0]
     expect(inserted.email).toBe('jane@example.com')
-    expect(inserted.emailVerified).toBe(true)
     expect(inserted.lastLoginAt).toBeGreaterThan(0)
     expect(inserted.acknowledgedPolicyVersion).toBe(POLICY_VERSION)
   })

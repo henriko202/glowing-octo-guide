@@ -5,6 +5,7 @@ import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { toast } from '@/components/ui/toast'
 import { SUPPORT_EMAIL } from '@/lib/support'
 
 const PLAN_IDS = ['starter', 'growth', 'pro'] as const
@@ -60,6 +61,11 @@ export default function BillingPage() {
   // A user "has a card" if they are trialing or active — these are the only card-backed states.
   const hasCard = me?.subscriptionStatus === 'trialing' || me?.subscriptionStatus === 'active'
 
+  // Renewal/access-end date for the Billing Info Card below — undefined for free/trial users
+  // (no Stripe subscription row yet), so there's simply nothing to format.
+  const periodEndDate =
+    subscriptionInfo?.currentPeriodEnd != null ? new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString() : null
+
   // Derived label shown next to "Current plan:" — lead with X/50 when trialing
   const planLabel = (() => {
     if (isTrialing && !isTrialExpired) {
@@ -78,7 +84,7 @@ export default function BillingPage() {
       const result = await createCheckout({ priceId, sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
-      alert(t('billing.checkoutFailed', { error: err instanceof Error ? err.message : String(err) }))
+      toast(t('billing.checkoutFailed', { error: err instanceof Error ? err.message : String(err) }))
     }
   }
 
@@ -89,7 +95,7 @@ export default function BillingPage() {
       const result = await createPortal({ sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
-      alert(t('billing.portalFailed', { error: err instanceof Error ? err.message : String(err) }))
+      toast(t('billing.portalFailed', { error: err instanceof Error ? err.message : String(err) }))
     } finally {
       setPortalLoading(false)
     }
@@ -113,10 +119,24 @@ export default function BillingPage() {
               <p className="text-muted-foreground m-0 text-xs">{t('billing.status')}</p>
               <p className="text-foreground mt-1 text-sm font-semibold capitalize">{String(subscriptionInfo.status)}</p>
             </div>
-            {(subscriptionInfo as { cancelAtPeriodEnd?: boolean }).cancelAtPeriodEnd && (
+            {(subscriptionInfo.cancelAtPeriodEnd || periodEndDate) && (
               <div>
-                <p className="text-muted-foreground m-0 text-xs">{t('billing.cancelsOn')}</p>
-                <p className="text-destructive mt-1 text-sm font-semibold">{t('billing.endOfPeriod')}</p>
+                <p className="text-muted-foreground m-0 text-xs">
+                  {subscriptionInfo.cancelAtPeriodEnd
+                    ? periodEndDate
+                      ? t('billing.cancelsOn')
+                      : t('billing.renewal')
+                    : t('billing.nextBilling')}
+                </p>
+                <p
+                  className={`mt-1 text-sm font-semibold ${subscriptionInfo.cancelAtPeriodEnd ? 'text-destructive' : 'text-foreground'}`}
+                >
+                  {subscriptionInfo.cancelAtPeriodEnd
+                    ? periodEndDate
+                      ? t('billing.accessUntil', { date: periodEndDate })
+                      : t('billing.cancelPending')
+                    : t('billing.renewsOn', { date: periodEndDate })}
+                </p>
               </div>
             )}
           </div>

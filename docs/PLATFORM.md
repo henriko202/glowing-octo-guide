@@ -129,35 +129,34 @@ Cloudflare **hosts both frontends** (Workers) and provides DNS/CDN/TLS. External
 
 ```mermaid
 flowchart LR
-  subgraph Client["User's Browser"]
-    Landing["Landing site<br/>(Next.js / Cloudflare OpenNext)"]
-    App["SaaS App<br/>(React+Vite / Cloudflare Static Assets)"]
-  end
+    subgraph Client["User's Browser"]
+        Landing["Landing site<br/>(Next.js / Cloudflare OpenNext)"]
+        App["SaaS App<br/>(React+Vite / Cloudflare Static Assets)"]
+    end
 
-  subgraph Convex["Convex Backend (managed)"]
-    direction TB
-    Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
-    Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-    DB[("Convex DB<br/>16 tables")]
-    Crons["Cron scheduler"]
-    Cloud --- DB
-    Site --- DB
-    Crons --- DB
-  end
+    subgraph Convex["Convex Backend (managed)"]
+        direction TB
+        Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
+        Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
+        DB[("Convex DB<br/>16 tables")]
+        Crons["Cron scheduler"]
+        Cloud --- DB
+        Site --- DB
+        Crons --- DB
+    end
 
-  LinkedIn["LinkedIn<br/>OAuth + REST API"]
-  Stripe["Stripe<br/>Checkout + Webhooks"]
-  Apify["Apify<br/>post scraper"]
-
-  Landing -- "CTA links (NEXT_PUBLIC_APP_URL)" --> App
-  App -- "useQuery/useMutation/useAction<br/>(VITE_CONVEX_URL)" --> Cloud
-  App -- "sign-in redirect<br/>(VITE_CONVEX_SITE)/auth/linkedin" --> Site
-  Site <-- "3-legged OAuth + token exchange" --> LinkedIn
-  App -- "engagement handoff: opens post on LinkedIn" --> LinkedIn
-  App -- "Checkout redirect" --> Stripe
-  Stripe -- "webhook → /stripe/webhook" --> Site
-  Crons -- "scrape posts" --> Apify
-  Cloud -- "on subscribe: scrape posts" --> Apify
+    LinkedIn["LinkedIn<br/>OAuth + REST API"]
+    Stripe["Stripe<br/>Checkout + Webhooks"]
+    Apify["Apify<br/>post scraper"]
+    Landing -- " CTA links (NEXT_PUBLIC_APP_URL) " --> App
+    App -- " useQuery/useMutation/useAction<br/>(VITE_CONVEX_URL) " --> Cloud
+    App -- " sign-in redirect<br/>(VITE_CONVEX_SITE)/auth/linkedin " --> Site
+    Site <-- " 3-legged OAuth + token exchange " --> LinkedIn
+    App -- " engagement handoff: opens post on LinkedIn " --> LinkedIn
+    App -- " Checkout redirect " --> Stripe
+    Stripe -- " webhook → /stripe/webhook " --> Site
+    Crons -- " scrape posts " --> Apify
+    Cloud -- " on subscribe: scrape posts " --> Apify
 ```
 
 ### Why OAuth runs through `.convex.site` (key design decision)
@@ -276,58 +275,58 @@ consistency is maintained in application code.
 
 ```mermaid
 erDiagram
-  users ||--o{ posts : "authors"
-  users ||--o{ postQueue : "authors (overflow)"
-  users ||--o{ subscriptions : "has"
-  users ||--o{ sessions : "owns"
-  users ||--o{ rateLimits : "subject of"
-  users ||--o{ featuredPostUsage : "quota"
-  users ||--o| planLimits : "contact override"
-  users ||--o| users : "bannedBy (self-ref)"
-  users ||--o{ consentRecords : "consent log"
-  users ||--o{ dataExportRequests : "DSR exports"
-  users ||--o{ auditLogs : "audit target"
-  users ||--o{ feedback : "submits"
-  feedback ||--o{ feedbackResponses : "replies"
+    users ||--o{ posts: "authors"
+    users ||--o{ postQueue: "authors (overflow)"
+    users ||--o{ subscriptions: "has"
+    users ||--o{ sessions: "owns"
+    users ||--o{ rateLimits: "subject of"
+    users ||--o{ featuredPostUsage: "quota"
+    users ||--o| planLimits: "contact override"
+    users ||--o| users: "bannedBy (self-ref)"
+    users ||--o{ consentRecords: "consent log"
+    users ||--o{ dataExportRequests: "DSR exports"
+    users ||--o{ auditLogs: "audit target"
+    users ||--o{ feedback: "submits"
+    feedback ||--o{ feedbackResponses: "replies"
 
-  users {
-    string linkedinId
-    string name
-    string tier "starter|growth|pro|contact (optional)"
-    string subscriptionStatus "trialing|active|canceled|past_due|none"
-    string linkedinAccessToken "secret - server only"
-    string linkedinRefreshToken "secret - server only"
-    string linkedinPublicIdentifier "vanity name (auto-derived)"
-    boolean isAdmin "DB-edit only"
-    boolean isBanned
-    string email "OIDC email claim - privacy use only"
-    string deletionReason "user_request|dormancy"
-  }
-  posts {
-    string linkedinPostUrn "dedupe key"
-    id authorId FK
-    string content
-    number publishedAt
-    boolean hidden
-    boolean isFeatured
-    number authorTierRank "4=contact..1=starter"
-    boolean interactionLimitReached
-    string sourceUrl
-    number deletedAt "soft-delete; row kept for weekly count"
-  }
-  planLimits {
-    string tier
-    id userId "set only for contact override"
-    number interactionsPerPost
-    number postsPerWeek
-    number featuredPerMonth "optional; coalesced to tier default"
-  }
-  postQueue {
-    string linkedinPostUrn
-    id authorId FK
-    number publishedAt
-    number queuedAt
-  }
+    users {
+        string linkedinId
+        string name
+        string tier "starter|growth|pro|contact (optional)"
+        string subscriptionStatus "trialing|active|canceled|past_due|none"
+        string linkedinAccessToken "secret - server only"
+        string linkedinRefreshToken "secret - server only"
+        string linkedinPublicIdentifier "vanity name (auto-derived)"
+        boolean isAdmin "DB-edit only"
+        boolean isBanned
+        string email "OIDC email claim - privacy use only"
+        string deletionReason "user_request|dormancy"
+    }
+    posts {
+        string linkedinPostUrn "dedupe key"
+        id authorId FK
+        string content
+        number publishedAt
+        boolean hidden
+        boolean isFeatured
+        number authorTierRank "4=contact..1=starter"
+        boolean interactionLimitReached
+        string sourceUrl
+        number deletedAt "soft-delete; row kept for weekly count"
+    }
+    planLimits {
+        string tier
+        id userId "set only for contact override"
+        number interactionsPerPost
+        number postsPerWeek
+        number featuredPerMonth "optional; coalesced to tier default"
+    }
+    postQueue {
+        string linkedinPostUrn
+        id authorId FK
+        number publishedAt
+        number queuedAt
+    }
 ```
 
 ### Table reference
@@ -365,8 +364,7 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `bannedBy`                    | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                                                                                                       |
 | `bannedReason`                | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                                                                                                |
 | `email`                       | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                                                                                                      |
-| `emailVerified`               | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                                                                                                                                                             |
-| `deletionRequestedAt`         | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                                                                                                                                                           |
+| `deletionRequestedAt`         | number                                                 |  –  | When the user requested account deletion (ms). Erasure-audit-trail field — kept for compliance even though no query reads it back (`deletionScheduledAt` drives the actual cron/idempotency logic).                                                                                                                                                                      |
 | `deletionScheduledAt`         | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                                                                                                |
 | `deletionReason`              | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                                                                                                          |
 | `lastLoginAt`                 | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                                                                                                                                            |
@@ -532,11 +530,8 @@ Index: `by_user_month [userId, month]` — read with `.unique()` since a user ha
 #### `consentRecords` — append-only consent/withdrawal log (GDPR)
 
 One row per consent event. Current effective consent for a given `(userId, purpose)` pair is the **most recent** row for
-that pair. Queried via `by_user`; latest-per-purpose is resolved in code, not via the `by_user_and_purpose` index
-below — that index has no query call site and is currently unused (cross-ref [[B20]]/[[B23]]). The `purpose` union is
-intentionally narrow at launch (
-`'marketing' | 'analytics'`); `'location_enrichment'` is reserved for a future Apify profile-scrape opt-in that is
-disabled at launch.
+that pair. Queried via `by_user`; latest-per-purpose is resolved in code (`latestConsentByPurpose`), not via an index.
+The `purpose` union is intentionally narrow at launch (`'marketing' | 'analytics'`).
 
 | Field           | Type                       | Req | Meaning                                                |
 |-----------------|----------------------------|:---:|--------------------------------------------------------|
@@ -546,7 +541,7 @@ disabled at launch.
 | `policyVersion` | string                     | ✓  | Policy version in effect at time of consent event.     |
 | `createdAt`     | number                     | ✓  | Event timestamp (ms).                                  |
 
-Indexes: `by_user [userId]`, `by_user_and_purpose [userId, purpose]`.
+Index: `by_user [userId]`.
 
 #### `dataExportRequests` — asynchronous data-export (Subject Access Request)
 
@@ -583,22 +578,19 @@ Indexes: `by_target [targetUserId]`, `by_created [createdAt]`.
 
 #### `feedback` — user-submitted product feedback
 
-One row per feedback submission. `userId` is cleared on account deletion (anonymization, not deletion). Legacy
-single-reply fields (`responseText`, `respondedAt`, `respondedBy`) are kept as optional but **deprecated** —
-`feedbackResponses` is now the source of truth for replies.
+One row per feedback submission. `userId` is cleared on account deletion (anonymization, not deletion). Replies live
+entirely in the separate `feedbackResponses` table below (one row per admin reply) — the row itself never carries the
+reply text.
 
-| Field          | Type                                                                                            | Req | Meaning                                      |
-|----------------|-------------------------------------------------------------------------------------------------|:---:|----------------------------------------------|
-| `userId`       | `id('users')`                                                                                   |  –  | Submitter (cleared on account deletion).     |
-| `category`     | `'feature_request'\|'bug'\|'comment'\|'criticism'\|'praise'\|'question'\|'suggestion'\|'other'` | ✓  | Feedback category.                           |
-| `message`      | string                                                                                          | ✓  | Free-text feedback body (≤4000 chars).       |
-| `status`       | `'new'\|'responded'\|'archived'`                                                                | ✓  | Triage state.                                |
-| `createdAt`    | number                                                                                          | ✓  | Submission timestamp (ms).                   |
-| `responseText` | string                                                                                          |  –  | **Deprecated.** Legacy single-reply text.    |
-| `respondedAt`  | number                                                                                          |  –  | **Deprecated.** Legacy reply timestamp (ms). |
-| `respondedBy`  | `id('users')`                                                                                   |  –  | **Deprecated.** Legacy responding admin.     |
+| Field       | Type                                                                                            | Req | Meaning                                  |
+|-------------|-------------------------------------------------------------------------------------------------|:---:|------------------------------------------|
+| `userId`    | `id('users')`                                                                                   |  –  | Submitter (cleared on account deletion). |
+| `category`  | `'feature_request'\|'bug'\|'comment'\|'criticism'\|'praise'\|'question'\|'suggestion'\|'other'` | ✓  | Feedback category.                       |
+| `message`   | string                                                                                          | ✓  | Free-text feedback body (≤4000 chars).   |
+| `status`    | `'new'\|'responded'\|'archived'`                                                                | ✓  | Triage state.                            |
+| `createdAt` | number                                                                                          | ✓  | Submission timestamp (ms).               |
 
-Indexes: `by_user [userId]`, `by_status [status]`.
+Index: `by_user [userId]`.
 
 #### `feedbackResponses` — append-only admin reply thread
 
@@ -647,7 +639,7 @@ export** (§13B — included in the user's data bundle, deleted in the erasure c
 | `comment`   | string                    |  –  | Comment text (set when `kind === 'comment'`).    |
 | `createdAt` | number                    | ✓  | Interaction timestamp (ms).                      |
 
-Indexes: `by_user [userId]` (DSR export + a user's activity), `by_post [postId]` (admin: who engaged with a post).
+Index: `by_user [userId]` (DSR export + a user's activity).
 
 #### `userPostState` — per- (user, post) engagement state
 
@@ -769,44 +761,43 @@ together with `interval`, is stored on the `oauthStates` row so it survives the 
 
 ```mermaid
 sequenceDiagram
-  participant U as User (browser)
-  participant LP as Landing (Pricing CTA)
-  participant CV as Convex .site (http.ts)
-  participant LI as LinkedIn
-  participant DB as Convex DB
-  participant A as App (React)
-
-  LP->>CV: /auth/linkedin?plan=growth&interval=annual
-  Note over LP,CV: plan/interval optional — absent on direct app link
-  CV->>DB: createOAuthState(state, +10min, plan?, interval?)
-  CV-->>U: 302 → LinkedIn authorize?scope=…&state
-  U->>LI: authenticate & consent
-  LI-->>CV: 302 /auth/linkedin/callback?code&state
-  CV->>DB: validateAndConsumeOAuthState(state) → { valid, plan?, interval? }
-  alt invalid / expired state
-    CV-->>U: 302 → APP_URL/?error=oauth_failed
-  else valid
-    CV->>LI: exchangeCodeForTokens(code)
-    LI-->>CV: access_token, refresh_token, expires_in
-    CV->>LI: GET /v2/userinfo
-    LI-->>CV: sub, name, picture
-    CV->>DB: upsertUser(...) → userId  (tokens stored server-side)
-    CV->>DB: sessions.create(token=UUID, userId, +30d)
-    CV-->>U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual
-    Note over CV,U: plan/interval omitted from hash when absent
-    U->>A: /auth/success reads hash → stores token + plan/interval → navigate /feed
-  end
+    participant U as User (browser)
+    participant LP as Landing (Pricing CTA)
+    participant CV as Convex .site (http.ts)
+    participant LI as LinkedIn
+    participant DB as Convex DB
+    participant A as App (React)
+    LP ->> CV: /auth/linkedin?plan=growth&interval=annual
+    Note over LP, CV: plan/interval optional — absent on direct app link
+    CV ->> DB: createOAuthState(state, +10min, plan?, interval?)
+    CV -->> U: 302 → LinkedIn authorize?scope=…&state
+    U ->> LI: authenticate & consent
+    LI -->> CV: 302 /auth/linkedin/callback?code&state
+    CV ->> DB: validateAndConsumeOAuthState(state) → { valid, plan?, interval? }
+    alt invalid / expired state
+        CV -->> U: 302 → APP_URL/?error=oauth_failed
+    else valid
+        CV ->> LI: exchangeCodeForTokens(code)
+        LI -->> CV: access_token, refresh_token, expires_in
+        CV ->> LI: GET /v2/userinfo
+        LI -->> CV: sub, name, picture
+        CV ->> DB: upsertUser(...) → userId (tokens stored server-side)
+        CV ->> DB: sessions.create(token=UUID, userId, +30d)
+        CV -->> U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual
+        Note over CV, U: plan/interval omitted from hash when absent
+        U ->> A: /auth/success reads hash → stores token + plan/interval → navigate /feed
+    end
 ```
 
 ### Session‑authenticated request flow
 
 ```mermaid
 flowchart TD
-  C["Client calls fn(sessionToken, …)"] --> R{"requireAuth / requireAuthAction"}
-  R -->|"token missing/expired/invalid"| E1["throw 'Unauthorized'<br/>(reads soft-fail → null/[])"]
-  R -->|"user.isBanned"| E2["throw 'Account suspended'"]
-  R -->|"ok"| OK["resolve Doc&lt;users&gt;<br/>(actions also load tokens)"]
-  OK --> H["function handler runs"]
+    C["Client calls fn(sessionToken, …)"] --> R{"requireAuth / requireAuthAction"}
+    R -->|" token missing/expired/invalid "| E1["throw 'Unauthorized'<br/>(reads soft-fail → null/[])"]
+    R -->|" user.isBanned "| E2["throw 'Account suspended'"]
+    R -->|" ok "| OK["resolve Doc&lt;users&gt;<br/>(actions also load tokens)"]
+    OK --> H["function handler runs"]
 ```
 
 ### Identity / user functions (`convex/users.ts`, `linkedin/auth.ts`, `sessions.ts`)
@@ -917,20 +908,19 @@ Key checkout parameters:
 
 ```mermaid
 sequenceDiagram
-  participant A as App (BillingPage)
-  participant B as billingNode.createCheckoutSession (node action)
-  participant SC as Stripe component
-  participant DB as Convex DB
-  participant S as Stripe Checkout
-
-  A->>B: createCheckoutSession(priceId, sessionToken)
-  B->>B: validate priceId ∈ ALLOWED_PRICE_IDS
-  B->>B: requireAuthAction(sessionToken)
-  B->>SC: getOrCreateCustomer(userId, email, name)
-  B->>S: stripe().checkout.sessions.create(trial=7d, card-required, promo-codes)
-  B->>DB: setStripeCustomerId(userId)  (if not already set)
-  B-->>A: { url }
-  A->>S: window.location = url
+    participant A as App (BillingPage)
+    participant B as billingNode.createCheckoutSession (node action)
+    participant SC as Stripe component
+    participant DB as Convex DB
+    participant S as Stripe Checkout
+    A ->> B: createCheckoutSession(priceId, sessionToken)
+    B ->> B: validate priceId ∈ ALLOWED_PRICE_IDS
+    B ->> B: requireAuthAction(sessionToken)
+    B ->> SC: getOrCreateCustomer(userId, email, name)
+    B ->> S: stripe().checkout.sessions.create(trial=7d, card-required, promo-codes)
+    B ->> DB: setStripeCustomerId(userId) (if not already set)
+    B -->> A: { url }
+    A ->> S: window.location = url
 ```
 
 `createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an existing
@@ -970,18 +960,18 @@ conversion to `active` never misrenders.
 
 ```mermaid
 flowchart TD
-  W["Stripe webhook → /stripe/webhook"] --> T{"event type"}
-  T -->|created/updated| SYNC["syncUserSubscription"]
-  SYNC --> P1["patch user: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
-  SYNC --> P2["re-stamp authorTierRank on all posts"]
-  SYNC --> P3["upsert subscriptions row"]
-  SYNC --> ACT{"status == active?"}
-  ACT -->|yes| U1["un-hide author's hidden posts"]
-  ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
-  G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
-  G -->|no| NOOP["no-op (Apify dormant at launch)"]
-  T -->|deleted| CAN["cancelUserSubscription → tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
-  T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement)"]
+    W["Stripe webhook → /stripe/webhook"] --> T{"event type"}
+    T -->|created/updated| SYNC["syncUserSubscription"]
+    SYNC --> P1["patch user: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
+    SYNC --> P2["re-stamp authorTierRank on all posts"]
+    SYNC --> P3["upsert subscriptions row"]
+    SYNC --> ACT{"status == active?"}
+    ACT -->|yes| U1["un-hide author's hidden posts"]
+    ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
+    G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
+    G -->|no| NOOP["no-op (Apify dormant at launch)"]
+    T -->|deleted| CAN["cancelUserSubscription → tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
+    T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement)"]
 ```
 
 > **Apify dormant guard:** `syncUserSubscription` reads `appSettings` and checks
@@ -992,6 +982,16 @@ flowchart TD
 
 `toSubscriptionStatus(raw)` maps the raw Stripe status onto the
 `trialing|active|canceled|past_due|none` union; **unknown values default to `active`** (with a console warning).
+
+### Renewal / access-end date (B21)
+
+`subscriptions.currentPeriodEnd` (ms — written on every webhook sync from `sub.current_period_end`, see the table above)
+was persisted but never read back anywhere. `getSubscriptionInfo` (`convex/users.ts`) now also returns
+`currentPeriodEnd` (sourced from our own `subscriptions` row, not the user table) alongside `cancelAtPeriodEnd`, so
+`BillingPage` can render "Renews on {date}" / "Access until {date}" (see §14 BillingPage). It is `undefined` when
+there's no non-canceled Stripe subscription at all (never subscribed, or fully canceled) or, transiently, if our own
+`subscriptions` row hasn't yet caught up with a brand-new webhook sync — the UI renders nothing for this line in either
+case.
 
 ---
 
@@ -1688,15 +1688,12 @@ Each feedback item can receive **multiple admin replies** stored as a thread in 
 
 - `feedback` table — `userId?` (submitter; cleared on account deletion), `category` (one of
   `feature_request | bug | comment | criticism | praise | question | suggestion | other`),
-  `message`, `status` (`new | responded | archived`), `createdAt`. The legacy single-reply fields `responseText`,
-  `respondedAt`, `respondedBy` are retained as **optional/deprecated**
-  (no longer written; superseded by `feedbackResponses`). Indexes: `by_user`, `by_status`.
+  `message`, `status` (`new | responded | archived`), `createdAt`. Index: `by_user`.
 
 - `feedbackResponses` table — append-only reply log; each row is one admin reply.
   `feedbackId` (FK → `feedback`), `responderId` (FK → `users`, the admin who replied),
   `text` (reply text), `createdAt` (ms). Index: `by_feedback [feedbackId, createdAt]`
-  (chronological per item). A `backfillFeedbackResponses` internal mutation migrates any existing single-reply rows from
-  the legacy fields — run once from the Convex dashboard after deploying.
+  (chronological per item).
 
 **Backend** (`convex/feedback/`):
 
@@ -1706,7 +1703,6 @@ Each feedback item can receive **multiple admin replies** stored as a thread in 
   `feedbackResponses` row, patches `status=responded`, writes a `feedback.responded` audit log, schedules the email if
   `sendEmail=true`), `archiveFeedback` / `reopenFeedback`, and the internal `getReplyData` + `sendFeedbackReply` action
   (keyed by `responseId`).
-  `backfillFeedbackResponses` (internalMutation — one-time operator migration).
 - `emails.ts` — `feedbackReplyEmail` builder (HTML-escapes user/admin text).
 - Replies use `lib/email.ts:sendEmail` with `Reply-To` = `FEEDBACK_REPLY_TO` so users reply to a human inbox. The admin
   chooses **per reply** whether to send an email (`sendEmail`
@@ -1886,8 +1882,8 @@ flowchart TD
 
 ### Foundations (Phase 1)
 
-- **Email capture.** `linkedin/auth.upsertUser` now stores `email`/`emailVerified` from the OIDC userinfo (previously
-  fetched and discarded) and forwards the address to Stripe (`billing.ts`
+- **Email capture.** `linkedin/auth.upsertUser` now stores `email` from the OIDC userinfo (previously fetched and
+  discarded) and forwards the address to Stripe (`billing.ts`
   `getOrCreateCustomer`). Email is stored under legitimate interest / legal obligation — a contact channel for
   data‑subject rights and breach notification — **not** marketing consent.
 - **Login + policy stamping.** `upsertUser` sets `lastLoginAt` on every login and stamps new users with the current
@@ -2215,8 +2211,9 @@ sync with the compliance docs and live support inbox.
   namespace — each turns **amber** at its cap; the weekly one also disables the composer (`atLimit`). Each post's owner
   action bar gets a **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the monthly cap is
   reached) alongside the existing Hide/Unhide + Delete; a featured post also shows the shared `feed.featured` ("★
-  Featured") badge. Renders each post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on
-  LinkedIn").
+  Featured") badge. **Delete** opens a themed `Modal` confirmation (`myPosts.deleteConfirm`, ghost Cancel + destructive
+  Confirm) instead of a native `window.confirm` ([[B18]]). Renders each post via the shared `LinkedInEmbed` with an app
+  footer (stats, relative time, "View on LinkedIn").
 - **SettingsPage** — `getMe` + `updateProfile` + `refreshProfileFromLinkedIn` + `setCommentLanguage` +
   `setPostVisibility` (the standalone LinkedIn‑identity section was **removed** — the auto‑derived vanity is
   internal‑only now, seeding Apify; the "Refresh from LinkedIn" button remains gated on it). Industry and country are
@@ -2238,7 +2235,8 @@ sync with the compliance docs and live support inbox.
   7-day trial to any valid price (the trial is plan-agnostic at the backend), so there is no separate
   "start trial" gate. Each plan card lists that tier's `features` as a ✓ bullet list (copy mirrored from the landing
   Pricing section's i18n, `billing.plans.<id>.features` in `app/src/i18n/locales/*`). The monthly/annual toggle applies
-  in all states.
+  in all states. Checkout/portal-session failures surface via the app's `toast()` helper (`billing.checkoutFailed` /
+  `billing.portalFailed`) rather than a native `alert()` ([[B18]]).
 
     - **No-card** (`none`/`canceled`/`past_due`): the plan grid is shown under a lead — **"Select a plan below — Growth
       is the best bang for your buck."** + a "every plan starts with a free 7-day trial · cancel anytime" note. The
@@ -2250,10 +2248,19 @@ sync with the compliance docs and live support inbox.
       SSI on LinkedIn" ↗** link-out (`https://linkedin.com/sales/ssi`, new tab). When the user acts on the **Starter**
       card, an inline "what you'll miss" block lists Growth advantages (industry-filtered feed, 50 vs 25
       interactions/post, 2 vs 1 posts/week).
-    - **Active**: the current tier's card shows a "Current plan" badge; "Manage Subscription" → Stripe portal.
-    - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
-      `SUPPORT_EMAIL` constant).
-- **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Four tabs:
+    - **Active**: the current tier's card shows a "Current plan" badge; "Manage Subscription" → Stripe portal. When
+      `getSubscriptionInfo.currentPeriodEnd` is present, a date line renders alongside — "Renews on {date}"
+      normally, or "Access until {date}" (in the destructive color) when `cancelAtPeriodEnd` is set ([[B21]]; see §8
+      "Renewal / access-end date").
+        - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
+          `SUPPORT_EMAIL` constant).
+- **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
+  `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
+  directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
+  admin JSX rendered before the redirect took effect). This is a **UX nicety only**: `checkIsAdmin` soft‑fails to
+  `false` and every `api.admin.*` function independently enforces `assertAdmin` server‑side (§12), so a stale or
+  bypassed client redirect can't grant access. `/admin` is **intentionally URL‑only** (see routing table above) — a
+  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Four tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync status), **Plan
   Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's effective limits, with an "override"
   tag), **Users** (`UsersTab` — per‑user row actions:
@@ -2427,8 +2434,8 @@ surface now routes through `t()`. `MyPostsPage` — `timeAgo()` now uses i18next
 via `t(key, { count })` for "N day (s) ago", plus `myPosts.today` for the zero-day case) instead of string
 concatenation; new `myPosts.tierPlan`, `weeklyUsageHint`, `weeklyUsage`,
 `weeklyLimitReached`, `heading`, `emptyState`, `hiddenFromFeed`, `visibleInFeed`, `hide`, `unhide`, `delete`,
-`deleteConfirm` (the `window.confirm` text — the confirm mechanism itself is unchanged; replacing it with a Modal is
-[[B18]]), `updateError`, `deleteError`. `PostComposer` — new `composer.*` namespace (`shareLabel`, `placeholder`,
+`deleteConfirm` (the `window.confirm` text — the confirm mechanism itself was later replaced with a themed `Modal`,
+see [[B18]]), `updateError`, `deleteError`. `PostComposer` — new `composer.*` namespace (`shareLabel`, `placeholder`,
 `hint`, `submitting`, `submit`, `submitError`); shared by `FeedPage`, `MyPostsPage`, and `FirstPostPromptScreen`, all of
 which now render this copy localized. Gate screens — new `bannedScreen.*` (badge, heading, body, `reasonLabel`,
 `contactSupport`; the support *address* stays the `SUPPORT_EMAIL` constant per the Gate screens subsection above) and
@@ -2444,7 +2451,14 @@ verbatim in `PostComposer`'s or `BillingPage`'s error UI on the rare session-exp
 these same files and fixed at all four call sites with one shared `auth.notSignedIn` key (this string wasn't in B16's
 original inventory, which predates the sweep). Every new key has a genuine `pt`/`es`
 translation (not an English copy); language-neutral glyphs (`↗`, `→`, `↑`) and the LinkedIn URL placeholder are kept
-as-is in the values. Admin UI strings remain out of scope (tracked separately as [[B17]]).
+as-is in the values. Admin UI strings remain out of scope — see [[B17]] below.
+
+**[[B17]] — dead `admin.*` namespace removed:** the locale files carried an `admin` namespace (`title`, `forbidden`,
+`apifySync`, `apifySyncDescription`, `enable`, `disable`, `lastSync`) that no code ever read — a repo-wide grep for
+`t('admin.…')` matched nothing; `AdminPage` and its tabs (`UsersTab`, `PlanLimitsTab`, `FeedbackTab`, …) hardcode
+English throughout. Decision: the admin console is intentionally English-only internal tooling, not worth localizing, so
+the dead namespace was **deleted** from `en.json`/`pt.json`/`es.json` rather than wiring the UI to it. All three locale
+files remain structurally identical (241 keys each, verified by a recursive key-diff).
 
 ---
 

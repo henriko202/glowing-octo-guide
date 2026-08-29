@@ -226,7 +226,10 @@ export const getSubscriptionInfo = query({
         tier: ourSub?.tier ?? user.tier ?? null,
         status: activeSub.status,
         cancelAtPeriodEnd: activeSub.cancelAtPeriodEnd ?? false,
-        stripeSubscriptionId: activeSub.stripeSubscriptionId
+        stripeSubscriptionId: activeSub.stripeSubscriptionId,
+        // Renewal/access-end instant for the billing page — from our own subscriptions row
+        // (the component doesn't store it). Undefined only if our row hasn't caught up yet.
+        currentPeriodEnd: ourSub?.currentPeriodEnd
       }
     }
 
@@ -235,7 +238,8 @@ export const getSubscriptionInfo = query({
       tier: null,
       status: user.subscriptionStatus ?? 'trialing',
       cancelAtPeriodEnd: false,
-      stripeSubscriptionId: null
+      stripeSubscriptionId: null,
+      currentPeriodEnd: undefined
     }
   }
 })

@@ -1,5 +1,5 @@
 // app/src/pages/MyPostsPage.test.tsx
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import MyPostsPage from './MyPostsPage'
@@ -26,11 +26,15 @@ vi.mock('../convex', () => ({
 // Per-test return values keyed by the refs above. Must be `mock`-prefixed so
 // Vitest allows it inside the hoisted vi.mock factory.
 let mockQueryReturns: Record<string, unknown> = {}
+let mockMutations: Record<string, ReturnType<typeof vi.fn>> = {}
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
   useAction: vi.fn(() => async () => {}),
-  useMutation: vi.fn(() => async () => {})
+  useMutation: vi.fn((ref: string) => {
+    mockMutations[ref] ||= vi.fn(async () => {})
+    return mockMutations[ref]
+  })
 }))
 
 function renderPage() {
@@ -43,6 +47,8 @@ function renderPage() {
 
 describe('MyPostsPage', () => {
   beforeEach(() => {
+    sessionStorage.setItem('sessionToken', 'tok')
+    mockMutations = {}
     mockQueryReturns = {
       'users.getMe': { name: 'Henri Durand', tier: 'starter' },
       'posts.getMyPosts': [],
@@ -200,5 +206,52 @@ describe('MyPostsPage', () => {
     ]
     renderPage()
     expect(screen.getByRole('button', { name: /^unfeature$/i })).not.toBeDisabled()
+  })
+
+  it('opens a themed confirm dialog on Delete (not window.confirm), and Cancel closes it', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p7',
+        linkedinPostUrn: 'urn:li:activity:7',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false
+      }
+    ]
+    renderPage()
+
+    // Before confirming, only the row's own Delete button exists — no dialog yet.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/removed from the feed/i)).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('confirming the delete dialog runs the delete and closes the dialog', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p8',
+        linkedinPostUrn: 'urn:li:activity:8',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false
+      }
+    ]
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }))
+
+    expect(mockMutations['posts.deletePost']).toHaveBeenCalledWith({ sessionToken: 'tok', postId: 'p8' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

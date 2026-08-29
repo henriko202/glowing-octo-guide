@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../convex'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PlanLimitsTab from '../components/PlanLimitsTab'
 import UsersTab from '../components/UsersTab'
@@ -15,7 +15,6 @@ import { Button } from '../components/ui/button'
 type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd'
 
 export default function AdminPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = (searchParams.get('tab') ?? 'settings') as TabValue
 
@@ -39,7 +38,12 @@ export default function AdminPage() {
   }
 
   if (!isAdmin) {
-    navigate('/')
+    return (
+      <Navigate
+        to="/"
+        replace
+      />
+    )
   }
 
   async function handleToggle() {

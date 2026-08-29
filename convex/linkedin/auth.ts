@@ -25,7 +25,6 @@ export interface UpsertUserArgs {
   refreshToken?: string // LinkedIn standard OAuth may omit refresh_token
   tokenExpiresAt: number
   email?: string
-  emailVerified?: boolean
 }
 
 // Plain handler function — used by the registered mutation and testable in isolation
@@ -45,7 +44,6 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
       linkedinRefreshToken: args.refreshToken,
       tokenExpiresAt: args.tokenExpiresAt,
       email: args.email,
-      emailVerified: args.emailVerified,
       lastLoginAt: Date.now()
     }
     await db.patch(existing._id, patch)
@@ -64,7 +62,6 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     linkedinRefreshToken: args.refreshToken,
     tokenExpiresAt: args.tokenExpiresAt,
     email: args.email,
-    emailVerified: args.emailVerified,
     lastLoginAt: Date.now(),
     acknowledgedPolicyVersion: POLICY_VERSION,
     createdAt: Date.now()
@@ -81,8 +78,7 @@ export const upsertUser = internalMutation({
     accessToken: v.string(),
     refreshToken: v.optional(v.string()), // optional — LinkedIn may not return it
     tokenExpiresAt: v.number(),
-    email: v.optional(v.string()),
-    emailVerified: v.optional(v.boolean())
+    email: v.optional(v.string())
   },
   handler: async (ctx, args) => upsertUserHandler(ctx.db as unknown as UpsertDb, args as UpsertUserArgs)
 })

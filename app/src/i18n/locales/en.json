@@ -147,7 +147,10 @@
     "status": "Status",
     "nextBilling": "Next Billing Date",
     "cancelsOn": "Cancels On",
-    "endOfPeriod": "End of current period",
+    "renewsOn": "Renews on {{date}}",
+    "accessUntil": "Access until {{date}}",
+    "cancelPending": "Your subscription will not renew.",
+    "renewal": "Renewal",
     "manageSubscription": "Manage Subscription",
     "freeTrial": "Free Trial",
     "daysRemaining_one": "{{count}} day remaining",
@@ -216,15 +219,6 @@
   "auth": {
     "loading": "Loading...",
     "notSignedIn": "Not signed in"
-  },
-  "admin": {
-    "title": "Admin Panel",
-    "forbidden": "You do not have admin access.",
-    "apifySync": "Apify Post Sync",
-    "apifySyncDescription": "Scrapes LinkedIn posts for all active users every hour via Apify.",
-    "enable": "Enable",
-    "disable": "Disable",
-    "lastSync": "Last sync"
   },
   "feedback": {
     "button": "Feedback",

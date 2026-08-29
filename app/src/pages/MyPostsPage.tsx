@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import LoadingSpinner from '../components/LoadingSpinner'
+import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
 import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
 
@@ -60,6 +61,8 @@ export default function MyPostsPage() {
 
   // Transient error surfaced above the list when a hide/delete action fails.
   const [actionError, setActionError] = useState<string | null>(null)
+  // The post awaiting delete confirmation in the themed Dialog below (null = closed).
+  const [confirmDeletePost, setConfirmDeletePost] = useState<MyPost | null>(null)
 
   async function handleSubmit(postUrl: string) {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
@@ -98,14 +101,22 @@ export default function MyPostsPage() {
   }
 
   // Soft-delete: drops the post from the feed and this list. It still counts
-  // toward the weekly limit, so we say so in the confirmation.
-  async function handleDelete(post: MyPost) {
+  // toward the weekly limit, so we say so in the confirmation dialog opened here.
+  function handleDelete(post: MyPost) {
     if (!sessionToken) return
-    const ok = window.confirm(t('myPosts.deleteConfirm'))
-    if (!ok) return
+    setConfirmDeletePost(post)
+  }
+
+  // Runs once the user confirms in the Dialog (see render below). Closes the dialog
+  // immediately — matching the fire-and-forget style of handleToggleHidden/
+  // handleToggleFeatured above — and surfaces any failure in the same error banner.
+  async function handleConfirmDelete() {
+    if (!sessionToken || !confirmDeletePost) return
+    const postId = confirmDeletePost._id
+    setConfirmDeletePost(null)
     setActionError(null)
     try {
-      await deletePost({ sessionToken, postId: post._id })
+      await deletePost({ sessionToken, postId })
     } catch (err) {
       setActionError(err instanceof Error ? err.message : t('myPosts.deleteError'))
     }
@@ -279,6 +290,34 @@ export default function MyPostsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Delete confirmation — themed Dialog replacing window.confirm. Radix handles the
+          focus trap, focus restore, and Escape/overlay dismiss; Cancel sits first in the DOM
+          so it receives initial focus (safe default for a destructive dialog). */}
+      {confirmDeletePost && (
+        <Modal
+          onClose={() => setConfirmDeletePost(null)}
+          title={t('myPosts.delete')}
+        >
+          <p className="text-foreground m-0 text-sm">{t('myPosts.deleteConfirm')}</p>
+          <div className="mt-5 flex items-center justify-end gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setConfirmDeletePost(null)}
+            >
+              {t('privacy.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleConfirmDelete()}
+            >
+              {t('myPosts.delete')}
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   )

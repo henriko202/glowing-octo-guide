@@ -147,7 +147,10 @@
     "status": "Estado",
     "nextBilling": "Próxima Data de Faturação",
     "cancelsOn": "Cancela Em",
-    "endOfPeriod": "Final do período atual",
+    "renewsOn": "Renova em {{date}}",
+    "accessUntil": "Acesso até {{date}}",
+    "cancelPending": "Sua assinatura não será renovada.",
+    "renewal": "Renovação",
     "manageSubscription": "Gerir Assinatura",
     "freeTrial": "Período de Teste Gratuito",
     "daysRemaining_one": "{{count}} dia restante",
@@ -216,15 +219,6 @@
   "auth": {
     "loading": "A carregar...",
     "notSignedIn": "Sessão não iniciada"
-  },
-  "admin": {
-    "title": "Painel de Administração",
-    "forbidden": "Não tem acesso de administrador.",
-    "apifySync": "Sincronização de Publicações via Apify",
-    "apifySyncDescription": "Recolhe publicações do LinkedIn para todos os utilizadores ativos a cada hora via Apify.",
-    "enable": "Ativar",
-    "disable": "Desativar",
-    "lastSync": "Última sincronização"
   },
   "feedback": {
     "button": "Feedback",

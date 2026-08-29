@@ -92,8 +92,7 @@ http.route({
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         tokenExpiresAt,
-        email: userInfo.email,
-        emailVerified: userInfo.email_verified
+        email: userInfo.email
       })
 
       // Issue a cryptographically random session token — never expose the raw userId.
