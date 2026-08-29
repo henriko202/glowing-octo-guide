@@ -312,6 +312,54 @@ export const updateProfile = mutation({
   }
 })
 
+export interface SetPostVisibilityArgs {
+  industries: string[]
+  countries: string[]
+}
+
+/**
+ * Validates + patches the caller's default post-visibility allowlists (backlog/B06). Every post
+ * writer (posts.submitPost, jobs/processQueue.ts, jobs/syncPostsApify.ts) copies these onto
+ * posts.visibilityIndustries/visibilityCountries at insert time — see convex/feed.ts for the
+ * enforcement. Gated to Pro/Contact tiers HERE (server-side) — never trust the caller's UI gate.
+ * Rejects any value not in the canonical INDUSTRIES/COUNTRY_CODES lists (trust boundary). Empty
+ * arrays are valid and mean "visible to everyone" (the feed treats an empty list as unrestricted).
+ */
+export async function setPostVisibilityHandler(
+  db: PatchOnlyDb,
+  userId: string,
+  tier: string | undefined,
+  args: SetPostVisibilityArgs
+): Promise<void> {
+  if (tier !== 'pro' && tier !== 'contact') {
+    throw new Error('Post-visibility controls require a Pro or Contact plan')
+  }
+  if (!args.industries.every(isValidIndustry)) throw new Error('Invalid industry')
+  const countries = args.countries.map(c => c.toUpperCase())
+  if (!countries.every(isValidCountry)) throw new Error('Invalid country')
+  await db.patch(userId, { defaultVisibilityIndustries: args.industries, defaultVisibilityCountries: countries })
+}
+
+// Public: Pro/Contact user sets the default post-visibility allowlists applied to every post they
+// author from now on. Existing posts (and their enforcement) are untouched — see
+// setPostVisibilityHandler. A downgrade does NOT clear these; only this setter is tier-gated.
+export const setPostVisibility = mutation({
+  args: {
+    sessionToken: v.string(),
+    industries: v.array(v.string()),
+    countries: v.array(v.string())
+  },
+  handler: async (ctx, { sessionToken, industries, countries }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await setPostVisibilityHandler(
+      ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> },
+      user._id,
+      user.tier,
+      { industries, countries }
+    )
+  }
+})
+
 // Public: set the default language for AI-generated comments ('auto' or an ISO 639-1 code).
 // Validated against convex/lib/languages.ts. The per-comment picker can still override this.
 export const setCommentLanguage = mutation({

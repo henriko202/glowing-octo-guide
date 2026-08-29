@@ -33,7 +33,12 @@ interface ApifyPostResult {
 
 // ─── Parse Apify result into our post shape ──────────────────────────────────
 
-function apifyPostToUpsertArgs(post: ApifyPostResult, authorId: Id<'users'>, hidden: boolean) {
+function apifyPostToUpsertArgs(
+  post: ApifyPostResult,
+  authorId: Id<'users'>,
+  hidden: boolean,
+  visibility: { industries: string[]; countries: string[] }
+) {
   const urn = post.shareUrn
   const mediaUrls = (post.postImages ?? [])
     .map(img => img.url)
@@ -48,8 +53,10 @@ function apifyPostToUpsertArgs(post: ApifyPostResult, authorId: Id<'users'>, hid
     commentCount: post.engagement?.comments ?? 0,
     mediaUrls,
     isFeatured: false,
-    visibilityIndustries: [] as string[],
-    visibilityCountries: [] as string[],
+    // Copy the author's stored default visibility allowlists (backlog/B06). Absent/empty ⇒
+    // visible to everyone.
+    visibilityIndustries: visibility.industries,
+    visibilityCountries: visibility.countries,
     hidden,
     sourceUrl: post.linkedinUrl
   }
@@ -107,10 +114,14 @@ export const syncUserPostsViaApify = internalAction({
     console.log(`[Apify] Fetched ${posts.length} posts for user ${userId} (${user.linkedinPublicIdentifier as string})`)
 
     const hidden = user.subscriptionStatus === 'trialing'
+    const visibility = {
+      industries: user.defaultVisibilityIndustries ?? [],
+      countries: user.defaultVisibilityCountries ?? []
+    }
 
     for (const post of posts) {
       await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, {
-        ...apifyPostToUpsertArgs(post, userId, hidden),
+        ...apifyPostToUpsertArgs(post, userId, hidden, visibility),
         queueOnLimitReached: true
       })
     }

@@ -48,6 +48,14 @@
     "comment": "Comment",
     "cardGate": "Add a payment method on the Billing page to start engaging."
   },
+  "myPosts": {
+    "featuredPill": "{{used}} of {{limit}} featured this month",
+    "featuredPillUnlimited": "{{used}} featured this month · unlimited",
+    "featuredPillHint": "This calendar month",
+    "feature": "Feature",
+    "unfeature": "Unfeature",
+    "featureLimitReached": "Monthly featured limit reached"
+  },
   "reactions": {
     "react": "React",
     "openHint": "Opening the post on LinkedIn — add your reaction there.",
@@ -91,7 +99,11 @@
     "profileNote": "Edit your industry and country below.",
     "visibility": "Who can see your posts",
     "visibilityNote": "Restrict which industries and countries can see your posts in the feed. Leave empty to show to all users.",
-    "visibilityComingSoon": "Coming in next task",
+    "visibilityIndustries": "Industries",
+    "visibilityCountries": "Countries",
+    "visibilityAddIndustry": "Add an industry…",
+    "visibilityAddCountry": "Add a country…",
+    "visibilityRemove": "Remove {{label}}",
     "upgradePrompt": "Upgrade to Pro to control who sees your posts.",
     "aiComments": "AI Comments",
     "aiCommentsNote": "Default language for AI-drafted comments. You can override it per comment.",

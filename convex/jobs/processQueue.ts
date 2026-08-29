@@ -94,8 +94,10 @@ export const processPostQueue = internalMutation({
           commentCount: queuedPost.commentCount,
           mediaUrls: queuedPost.mediaUrls,
           isFeatured: false,
-          visibilityIndustries: [],
-          visibilityCountries: [],
+          // Copy the author's stored default visibility allowlists (backlog/B06). `author` was
+          // fetched above via ctx.db.get(authorId) — absent/empty ⇒ visible to everyone.
+          visibilityIndustries: author.defaultVisibilityIndustries ?? [],
+          visibilityCountries: author.defaultVisibilityCountries ?? [],
           hidden: queuedPost.hidden,
           sourceUrl: queuedPost.sourceUrl,
           authorTierRank,

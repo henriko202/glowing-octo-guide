@@ -22,6 +22,7 @@ interface MyPost {
   likeCount: number
   commentCount: number
   hidden?: boolean
+  isFeatured?: boolean
   sourceUrl?: string
 }
 
@@ -29,6 +30,12 @@ interface MyPost {
 interface WeeklyUsage {
   postsThisWeek: number
   postsPerWeek: number
+}
+
+// The shape returned by getFeaturedUsage (null when not signed in).
+interface FeaturedUsage {
+  usedCount: number
+  featuredPerMonth: number
 }
 
 function timeAgo(ts: number): string {
@@ -44,10 +51,13 @@ export default function MyPostsPage() {
 
   const me = useQuery(api.users.getMe, { sessionToken })
   const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
+  const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken }) as FeaturedUsage | null | undefined
   const posts = useQuery(api.posts.getMyPosts, { sessionToken }) as unknown as MyPost[] | undefined
   const submitPost = useAction(api.posts.submitPost)
   const setPostHidden = useMutation(api.posts.setPostHidden)
   const deletePost = useMutation(api.posts.deletePost)
+  const featurePost = useMutation(api.posts.featurePost)
+  const unfeaturePost = useMutation(api.posts.unfeaturePost)
 
   // Transient error surfaced above the list when a hide/delete action fails.
   const [actionError, setActionError] = useState<string | null>(null)
@@ -64,6 +74,25 @@ export default function MyPostsPage() {
     setActionError(null)
     try {
       await setPostHidden({ sessionToken, postId: post._id, hidden: !post.hidden })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not update the post.')
+    }
+  }
+
+  // Feature/unfeature toggle. Featuring is quota-gated server-side (getFeaturedUsage
+  // backs the disabled state below), but we still catch here since the cap can tick
+  // over between render and click. No optimistic update needed — getFeaturedUsage and
+  // getMyPosts are both reactive Convex queries, so the pill and badge update together
+  // once the mutation commits.
+  async function handleToggleFeatured(post: MyPost) {
+    if (!sessionToken) return
+    setActionError(null)
+    try {
+      if (post.isFeatured) {
+        await unfeaturePost({ sessionToken, postId: post._id })
+      } else {
+        await featurePost({ sessionToken, postId: post._id })
+      }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not update the post.')
     }
@@ -91,14 +120,19 @@ export default function MyPostsPage() {
 
   // Hit the weekly cap once usage loads and the count meets the plan limit.
   const atLimit = usage != null && usage.postsThisWeek >= usage.postsPerWeek
+  // Hit the monthly featured cap — mirrors the same >= boundary featurePost enforces
+  // server-side (isFeaturedLimitReached), so the button disables in lockstep with the API.
+  const featuredAtCap = featuredUsage != null && featuredUsage.usedCount >= featuredUsage.featuredPerMonth
 
   return (
     <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
       <PageHeader title={t('nav.myPosts')} />
 
-      {/* Profile header — with the weekly-usage pill on the right */}
+      {/* Profile header — with the weekly-usage + featured-usage pills on the right.
+          flex-wrap on both the outer row and the pill group so the pills stack as whole
+          units (never mid-label) instead of overflowing on narrow screens. */}
       {me && (
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Avatar
               name={me.name}
@@ -110,15 +144,31 @@ export default function MyPostsPage() {
               <div className="text-muted-foreground text-xs capitalize">{me.tier} plan</div>
             </div>
           </div>
-          {usage && (
-            <Badge
-              title="In the last 7 days"
-              variant={atLimit ? 'warning' : 'primary'}
-              className="shrink-0 rounded-full px-3 py-1 text-xs"
-            >
-              {usage.postsThisWeek} of {usage.postsPerWeek} posts this week
-            </Badge>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {usage && (
+              <Badge
+                title="In the last 7 days"
+                variant={atLimit ? 'warning' : 'primary'}
+                className="shrink-0 rounded-full px-3 py-1 text-xs"
+              >
+                {usage.postsThisWeek} of {usage.postsPerWeek} posts this week
+              </Badge>
+            )}
+            {featuredUsage && (
+              <Badge
+                title={t('myPosts.featuredPillHint')}
+                variant={featuredAtCap ? 'warning' : 'primary'}
+                className="shrink-0 rounded-full px-3 py-1 text-xs"
+              >
+                {/* featuredPerMonth >= 999 is the contact/enterprise "unlimited" sentinel
+                    (see convex/lib/planLimits.ts DEFAULTS.contact) — never show the raw
+                    number to the user. */}
+                {featuredUsage.featuredPerMonth >= 999
+                  ? t('myPosts.featuredPillUnlimited', { used: featuredUsage.usedCount })
+                  : t('myPosts.featuredPill', { used: featuredUsage.usedCount, limit: featuredUsage.featuredPerMonth })}
+              </Badge>
+            )}
+          </div>
         </div>
       )}
 
@@ -152,19 +202,41 @@ export default function MyPostsPage() {
               key={post._id}
               className={`border-border bg-card overflow-hidden rounded-lg border ${post.hidden ? 'opacity-60' : ''}`}
             >
-              {/* Owner action bar: visibility state + Hide/Unhide + Delete */}
-              <div className="border-border flex items-center justify-between border-b px-[14px] py-2">
-                {post.hidden ? (
-                  <Badge
-                    variant="warning"
-                    className="rounded-full px-2 py-0.5 text-[11px]"
+              {/* Owner action bar: visibility/featured state + Feature/Unfeature + Hide/Unhide + Delete.
+                  flex-wrap on both sides guards against overflow if translated labels run long. */}
+              <div className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-[14px] py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {post.isFeatured && (
+                    <Badge
+                      variant="warning"
+                      className="rounded-full px-2 py-0.5 text-[11px]"
+                    >
+                      {t('feed.featured')}
+                    </Badge>
+                  )}
+                  {post.hidden ? (
+                    <Badge
+                      variant="warning"
+                      className="rounded-full px-2 py-0.5 text-[11px]"
+                    >
+                      Hidden from feed
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-[11px]">Visible in feed</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-pressed={post.isFeatured ?? false}
+                    disabled={!post.isFeatured && featuredAtCap}
+                    title={!post.isFeatured && featuredAtCap ? t('myPosts.featureLimitReached') : undefined}
+                    onClick={() => handleToggleFeatured(post)}
                   >
-                    Hidden from feed
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground text-[11px]">Visible in feed</span>
-                )}
-                <div className="flex items-center gap-2">
+                    {post.isFeatured ? t('myPosts.unfeature') : t('myPosts.feature')}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"

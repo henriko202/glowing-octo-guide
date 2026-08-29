@@ -48,6 +48,14 @@
     "comment": "Comentar",
     "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar."
   },
+  "myPosts": {
+    "featuredPill": "{{used}} de {{limit}} destacadas este mes",
+    "featuredPillUnlimited": "{{used}} destacadas este mes · ilimitado",
+    "featuredPillHint": "Este mes (calendario)",
+    "feature": "Destacar",
+    "unfeature": "Quitar destacado",
+    "featureLimitReached": "Límite mensual de destacados alcanzado"
+  },
   "reactions": {
     "react": "Reaccionar",
     "openHint": "Abriendo la publicación en LinkedIn — reacciona allí.",
@@ -91,7 +99,11 @@
     "profileNote": "Edita tu sector y país abajo.",
     "visibility": "Quién puede ver tus publicaciones",
     "visibilityNote": "Restringe qué sectores y países pueden ver tus publicaciones en el feed. Déjalo vacío para mostrar a todos.",
-    "visibilityComingSoon": "Próximamente",
+    "visibilityIndustries": "Sectores",
+    "visibilityCountries": "Países",
+    "visibilityAddIndustry": "Añadir un sector…",
+    "visibilityAddCountry": "Añadir un país…",
+    "visibilityRemove": "Quitar {{label}}",
     "upgradePrompt": "Mejora a Pro para controlar quién ve tus publicaciones.",
     "aiComments": "Comentarios con IA",
     "aiCommentsNote": "Idioma predeterminado de los comentarios generados por IA. Puedes cambiarlo en cada comentario.",

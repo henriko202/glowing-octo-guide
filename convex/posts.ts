@@ -9,6 +9,7 @@ import { requireAuth, requireAuthAction } from './lib/auth'
 import { postCreatedHidden } from './lib/access'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
+import { currentUtcMonthKey, isFeaturedLimitReached } from './lib/postLimit'
 import {
   appendMediaLinks,
   parseArticle,
@@ -127,6 +128,38 @@ export const getWeeklyUsage = query({
     return {
       postsThisWeek: countPostsSince(posts, sevenDaysAgo),
       postsPerWeek: limits.postsPerWeek
+    }
+  }
+})
+
+/**
+ * Public: returns the authenticated user's featured-post usage for the current UTC calendar
+ * month — backs the My Posts quota pill and the feature-toggle disabled state. Reads the SAME
+ * tier limit + `by_user_month` row that `featurePost` enforces, so the UI never disagrees with
+ * what the backend will allow. Returns null when not signed in (mirrors getWeeklyUsage).
+ */
+export const getFeaturedUsage = query({
+  args: {
+    sessionToken: v.optional(v.string())
+  },
+  handler: async (ctx, { sessionToken }) => {
+    if (!sessionToken) return null
+    let user: Doc<'users'>
+    try {
+      user = (await requireAuth(ctx, sessionToken)) as Doc<'users'>
+    } catch {
+      return null
+    }
+    const tier = user.tier ?? 'starter'
+    const limits = await getPlanLimitsHelper(ctx, user._id, tier)
+    const month = currentUtcMonthKey()
+    const usage = await ctx.db
+      .query('featuredPostUsage')
+      .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
+      .unique()
+    return {
+      usedCount: usage?.usedCount ?? 0,
+      featuredPerMonth: limits.featuredPerMonth
     }
   }
 })
@@ -272,8 +305,10 @@ export const submitPost = action({
       mediaUrls,
       imageUrls,
       isFeatured: false,
-      visibilityIndustries: [],
-      visibilityCountries: [],
+      // Copy the author's stored default visibility allowlists (backlog/B06 — user-default
+      // model, set via users.setPostVisibility). Absent/empty ⇒ visible to everyone.
+      visibilityIndustries: user.defaultVisibilityIndustries ?? [],
+      visibilityCountries: user.defaultVisibilityCountries ?? [],
       hidden: postCreatedHidden(user),
       // Preserve the original submitted URL so we can link back correctly —
       // reconstructing from URN loses information (activity ID ≠ ugcPost ID).
@@ -365,5 +400,100 @@ export const deletePost = mutation({
       deletedAt
     })
     await ctx.db.patch(postId, { deletedAt, hidden: true, ...feed })
+  }
+})
+
+/**
+ * Feature a post: pins it to the top of the feed until unfeatured. Gated by the caller's tier's
+ * monthly quota (`planLimits.featuredPerMonth`), tracked in `featuredPostUsage` keyed by the
+ * current UTC calendar month (`currentUtcMonthKey` — UTC so the quota resets at the same instant
+ * for everyone, not at each user's local midnight). The usage read, cap check, post patch, and
+ * usage upsert all happen inside this one mutation — Convex mutations are transactional, so a
+ * concurrent duplicate call is either serialized after this one commits or retried against the
+ * post-commit state. The `post.isFeatured` early-return below is what makes that retry safe: without
+ * it, a retried call would re-run the whole feature flow (including the usage increment) a second
+ * time even though the post was already featured by the call it raced against — this guard is the
+ * actual double-increment fix, not just an optimization. Authorized for the post's author or any
+ * admin (`canModifyPost`, same as `setPostHidden`/`deletePost`). No quota refund on unfeature
+ * (below) — featuring permanently consumes one monthly slot by design (product decision, backlog/B07).
+ */
+export const featurePost = mutation({
+  args: {
+    sessionToken: v.string(),
+    postId: v.id('posts')
+  },
+  handler: async (ctx, { sessionToken, postId }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const post = await ctx.db.get(postId)
+    if (!post) throw new Error('Post not found')
+    if (!canModifyPost(user, post)) {
+      throw new Error('Forbidden: you can only modify your own posts')
+    }
+    // A soft-deleted post must never be resurfaced by featuring it.
+    if (post.deletedAt !== undefined) {
+      throw new Error('Post has been deleted')
+    }
+    // Idempotent no-op if already featured — see the concurrency note above.
+    if (post.isFeatured) return
+
+    const tier = user.tier ?? 'starter'
+    const limits = await getPlanLimitsHelper(ctx, user._id, tier)
+    const month = currentUtcMonthKey()
+    const usageRow = await ctx.db
+      .query('featuredPostUsage')
+      .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
+      .unique()
+    const usedCount = usageRow?.usedCount ?? 0
+    if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
+      throw new Error(
+        `Monthly featured-post limit reached. Your plan allows ${limits.featuredPerMonth} featured post${limits.featuredPerMonth === 1 ? '' : 's'} per month.`
+      )
+    }
+
+    // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
+    const feed = computeFeedFields({
+      isFeatured: true,
+      publishedAt: post.publishedAt,
+      authorTierRank: post.authorTierRank,
+      hidden: post.hidden,
+      interactionLimitReached: post.interactionLimitReached,
+      deletedAt: post.deletedAt
+    })
+    await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
+
+    if (usageRow) await ctx.db.patch(usageRow._id, { usedCount: usedCount + 1 })
+    else await ctx.db.insert('featuredPostUsage', { userId: user._id, month, usedCount: 1 })
+  }
+})
+
+/**
+ * Reverse `featurePost`. Does NOT decrement `featuredPostUsage` — see the no-refund decision in
+ * the doc comment above `featurePost`. Authorized for the post's author or any admin. Idempotent.
+ */
+export const unfeaturePost = mutation({
+  args: {
+    sessionToken: v.string(),
+    postId: v.id('posts')
+  },
+  handler: async (ctx, { sessionToken, postId }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const post = await ctx.db.get(postId)
+    if (!post) throw new Error('Post not found')
+    if (!canModifyPost(user, post)) {
+      throw new Error('Forbidden: you can only modify your own posts')
+    }
+    if (!post.isFeatured) return // already unfeatured — idempotent no-op
+
+    // Unfeaturing changes feed rank — refresh the denormalized feed fields.
+    const feed = computeFeedFields({
+      isFeatured: false,
+      publishedAt: post.publishedAt,
+      authorTierRank: post.authorTierRank,
+      hidden: post.hidden,
+      interactionLimitReached: post.interactionLimitReached,
+      deletedAt: post.deletedAt
+    })
+    await ctx.db.patch(postId, { isFeatured: false, featuredAt: undefined, ...feed })
+    // No usedCount decrement — unfeaturing does not refund the monthly quota.
   }
 })

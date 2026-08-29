@@ -20,6 +20,14 @@ export default defineSchema({
     // Validated against convex/lib/languages.ts in setCommentLanguage. Distinct from primaryLocale
     // (which only seeds the UI i18n language, not what the AI writes comments in).
     commentLanguage: v.optional(v.string()),
+    // Pro/Contact-only post-visibility defaults (backlog/B06 — "user-default" model, not per-post).
+    // Every post writer (posts.submitPost, jobs/processQueue.ts, jobs/syncPostsApify.ts) copies
+    // these onto posts.visibilityIndustries/visibilityCountries at INSERT time — see convex/feed.ts
+    // for the enforcement. Absent/empty ⇒ visible to everyone (same invariant as the post fields).
+    // Set via users.setPostVisibility, gated server-side to tier 'pro'/'contact'. Downgrading does
+    // NOT clear these or the posts already written with them — only the setter is tier-gated.
+    defaultVisibilityIndustries: v.optional(v.array(v.string())),
+    defaultVisibilityCountries: v.optional(v.array(v.string())),
     tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))),
     subscriptionStatus: v.union(
       v.literal('trialing'),
@@ -221,7 +229,11 @@ export default defineSchema({
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     userId: v.optional(v.id('users')), // Only set for contact-tier per-user overrides
     interactionsPerPost: v.number(),
-    postsPerWeek: v.number()
+    postsPerWeek: v.number(),
+    // Max posts.featurePost calls allowed per calendar month (UTC), enforced against
+    // featuredPostUsage. Optional (widen-safe): getPlanLimitsHelper coalesces a missing
+    // value to the tier's DEFAULTS entry, so existing unseeded rows keep working.
+    featuredPerMonth: v.optional(v.number())
   })
     .index('by_tier', ['tier'])
     .index('by_user', ['userId']),

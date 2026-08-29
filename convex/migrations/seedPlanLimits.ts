@@ -12,11 +12,13 @@ export const seedPlanLimits = internalMutation({
       tier: 'starter' | 'growth' | 'pro' | 'contact'
       interactionsPerPost: number
       postsPerWeek: number
+      featuredPerMonth: number
     }> = [
-      { tier: 'starter', interactionsPerPost: 25, postsPerWeek: 1 },
-      { tier: 'growth', interactionsPerPost: 50, postsPerWeek: 2 },
-      { tier: 'pro', interactionsPerPost: 200, postsPerWeek: 5 },
-      { tier: 'contact', interactionsPerPost: 200, postsPerWeek: 5 }
+      { tier: 'starter', interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
+      { tier: 'growth', interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
+      { tier: 'pro', interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
+      // 999 is a Custom/enterprise sentinel (effectively unlimited) — see lib/planLimits.ts DEFAULTS.
+      { tier: 'contact', interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 999 }
     ]
 
     for (const row of defaults) {
@@ -31,7 +33,8 @@ export const seedPlanLimits = internalMutation({
         await ctx.db.insert('planLimits', {
           tier: row.tier,
           interactionsPerPost: row.interactionsPerPost,
-          postsPerWeek: row.postsPerWeek
+          postsPerWeek: row.postsPerWeek,
+          featuredPerMonth: row.featuredPerMonth
           // userId intentionally omitted — this is the tier default
         })
       }
