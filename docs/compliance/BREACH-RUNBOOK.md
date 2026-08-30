@@ -4,9 +4,8 @@
 # Personal Data Breach Incident-Response Runbook
 
 This runbook governs NEANDERTECH SERVICOS DE TECNOLOGIA LTDA's response to actual or suspected personal data breaches
-affecting data
-processed by the LinkIntoTheSSI platform. It is intended for internal operational and compliance use. All breach events
-must be handled in accordance with GDPR Article 33–34 and LGPD Article 48–49.
+affecting data processed by the LinkIntoTheSSI platform. It is intended for internal operational and compliance use. All
+breach events must be handled in accordance with GDPR Article 33–34 and LGPD Article 48–49.
 
 ---
 
@@ -45,10 +44,9 @@ A breach may be identified through any of the following channels:
 
 ### 1.3 Sub-Processor Notifications
 
-Sub-processors listed in `docs/compliance/SUBPROCESSORS.md` (Convex, LinkedIn, Stripe, Resend, Vercel) may
-notify NEANDERTECH SERVICOS DE TECNOLOGIA LTDA of a security incident on their side. Any such notification must be
-escalated immediately
-to [INCIDENT_OWNER].
+Sub-processors listed in `docs/compliance/SUBPROCESSORS.md` (Convex, LinkedIn, Stripe, Resend, Cloudflare) may notify
+NEANDERTECH SERVICOS DE TECNOLOGIA LTDA of a security incident on their side. Any such notification must be escalated
+immediately to [INCIDENT_OWNER].
 
 ### 1.4 Initial Recording
 
@@ -114,14 +112,14 @@ these tokens may have been exposed:
 
 Rotate all secrets that may have been exposed, in this order of priority:
 
-| Secret                                        | Rotation Action                                                                                                         |
-|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| **LinkedIn Client Secret**                    | Regenerate in the LinkedIn Developer Portal; update `LINKEDIN_CLIENT_SECRET` environment variable in Convex and Vercel. |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Roll keys in the Stripe Dashboard; update `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in Convex and Vercel.         |
-| `RESEND_API_KEY`                              | Regenerate in the Resend dashboard; update in Convex and Vercel.                                                        |
-| **Convex deploy key**                         | Rotate via the Convex dashboard (Project Settings → Deploy Keys); update in CI/CD pipelines and Vercel.                 |
+| Secret                                        | Rotation Action                                                                                                                     |
+|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| **LinkedIn Client Secret**                    | Regenerate in the LinkedIn Developer Portal; update `LINKEDIN_CLIENT_SECRET` environment variable in Convex and Cloudflare.         |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Roll keys in the Stripe Dashboard; update `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in Convex and Cloudflare.                 |
+| `RESEND_API_KEY`                              | Regenerate in the Resend dashboard; update in Convex and Cloudflare.                                                                |
+| **Convex deploy key**                         | Rotate via the Convex dashboard (Project Settings → Deploy Keys); update wherever `convex deploy` runs (Cloudflare Workers Builds). |
 
-After rotating, redeploy the Convex backend and Vercel frontend to pick up the new values.
+After rotating, redeploy the Convex backend and the Cloudflare frontends to pick up the new values.
 
 ### 3.4 Patch & Redeploy
 
@@ -148,12 +146,11 @@ personal data breach
 **, unless the breach is unlikely to result in a risk to the rights and freedoms of natural persons.
 
 - The 72-hour clock starts from the moment NEANDERTECH SERVICOS DE TECNOLOGIA LTDA — or any staff member or processor
-  acting on its behalf —
-  first becomes aware of the incident.
+  acting on its behalf — first becomes aware of the incident.
 - If notification cannot be made within 72 hours, it must still be submitted as soon as possible, with a reasoned
   explanation for the delay.
 
-**The notification must include (Art. 33(3)):**
+**The notification must include (Art. 33 (3)):**
 
 1. **Nature of the breach** — type (confidentiality, integrity, availability), how it occurred, and the systems
    involved.
@@ -164,23 +161,22 @@ personal data breach
 5. **Likely consequences** of the breach for data subjects.
 6. **Measures taken or proposed** to address the breach and mitigate its effects.
 
-Where all required information is not yet available, it may be provided in phases (Art. 33(4)) — submit an initial
+Where all required information is not yet available, it may be provided in phases (Art. 33 (4)) — submit an initial
 notification within 72 hours and supplement it as the investigation progresses.
 
 ### 4.2 LGPD — Article 48
 
 Under Brazil's Lei Geral de Proteção de Dados, NEANDERTECH SERVICOS DE TECNOLOGIA LTDA must notify the **ANPD (
-Autoridade Nacional de
-Proteção de Dados)** and affected data subjects of a breach that may result in risk or relevant harm to data subjects.
-The LGPD notification should mirror the content required under Art. 33 GDPR. Submit via the ANPD's official notification
-portal.
+Autoridade Nacional de Proteção de Dados)** and affected data subjects of a breach that may result in risk or relevant
+harm to data subjects. The LGPD notification should mirror the content required under Art. 33 GDPR. Submit via the
+ANPD's official notification portal.
 
 ### 4.3 Notification Checklist
 
 - [ ] Breach log entry created with date/time of awareness.
 - [ ] Severity assessed (Section 2.2).
 - [ ] 72-hour clock tracked from time of awareness.
-- [ ] Draft notification prepared using Art. 33(3) content requirements above.
+- [ ] Draft notification prepared using Art. 33 (3) content requirements above.
 - [ ] Notification submitted to `[SUPERVISORY_AUTHORITY]` (and ANPD if LGPD applies).
 - [ ] Confirmation / reference number from authority recorded in breach log.
 - [ ] Supplementary notifications filed if initial notification was incomplete.
@@ -192,9 +188,8 @@ portal.
 ### 5.1 When Notification Is Required
 
 Under **GDPR Article 34**, NEANDERTECH SERVICOS DE TECNOLOGIA LTDA must notify affected data subjects **without undue
-delay** when a breach
-is likely to result in a **high risk** to their rights and freedoms (e.g., exposure of LinkedIn OAuth tokens, financial
-data, or credentials enabling identity theft or account takeover).
+delay** when a breach is likely to result in a **high risk** to their rights and freedoms (e.g., exposure of LinkedIn
+OAuth tokens, financial data, or credentials enabling identity theft or account takeover).
 
 Under **LGPD Article 48**, affected data subjects must be notified when the breach may cause relevant harm to them.
 
@@ -264,8 +259,7 @@ We sincerely apologise for any concern or inconvenience this incident may cause.
 Yours sincerely,
 
 [INCIDENT_OWNER]
-NEANDERTECH SERVICOS DE TECNOLOGIA LTDA
-contact@linkintothessi.com
+NEANDERTECH SERVICOS DE TECNOLOGIA LTDA contact@linkintothessi.com
 
 ---
 
@@ -279,8 +273,7 @@ LTDA.)_
 ## 6. Record-Keeping
 
 NEANDERTECH SERVICOS DE TECNOLOGIA LTDA must maintain a written record of **all** personal data breaches under GDPR
-Article 33(5),
-regardless of whether the breach required notification to a supervisory authority or data subjects.
+Article 33 (5), regardless of whether the breach required notification to a supervisory authority or data subjects.
 
 ### 6.1 Internal Breach Log
 
@@ -321,7 +314,7 @@ compliance record-keeping obligations.
 | **LinkedIn Developer Support**                                                                         | https://developer.linkedin.com/support |
 | **Stripe support**                                                                                     | https://support.stripe.com             |
 | **Resend support**                                                                                     | https://resend.com/support             |
-| **Vercel support**                                                                                     | https://vercel.com/support             |
+| **Cloudflare support**                                                                                 | https://www.cloudflare.com/support/    |
 
 ---
 

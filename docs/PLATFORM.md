@@ -470,7 +470,11 @@ On promotion, `authorTierRank` is recomputed and `interactionLimitReached` is se
 
 #### `sessions` — app's own auth tokens
 
-Random UUID tokens issued by the OAuth callback. 30‑day TTL.
+Random UUID tokens issued by the OAuth callback. **15‑day sliding TTL** — the window is renewed on authenticated use
+once it passes the halfway mark, so active users stay logged in while an idle (or stolen‑but‑unused) token dies 15 days
+after its last use. `SESSION_TTL_MS` in `convex/sessions.ts` is the single source of truth; renewal lives in
+`resolveSession` (mutation ctx) / `requireAuthAction` (via
+`sessions.slide`).
 
 | Field       | Type          | Req | Meaning                                                                                                                 |
 |-------------|---------------|:---:|-------------------------------------------------------------------------------------------------------------------------|
@@ -680,11 +684,14 @@ Clients **never** pass a `userId`. They pass a `sessionToken`; the server resolv
 `convex/lib/auth.ts`:
 
 - `resolveSession(ctx, token)` → `Doc<'users'> | null` — resolves token → user **without** ban enforcement. Used by
-  `getMe` so a banned user gets an `isBanned` signal (not `null`).
+  `getMe` so a banned user gets an `isBanned` signal (not `null`). In a **mutation** ctx it also slides the session's
+  expiry forward once past the halfway mark (a query ctx is read‑only and skips the write).
 - `requireAuth(ctx, token)` → `Doc<'users'>` — for queries/mutations. Throws `'Unauthorized'` if the token is
   missing/expired/invalid; throws `'Account suspended'` if banned.
 - `requireAuthAction(ctx, token)` → `Doc<'users'>` — same for actions (resolves via
   `ctx.runQuery(internal.sessions.getByToken)` + `internal.users.getWithTokens`, returning the token‑bearing record).
+  Slides the session forward (past halfway) via `ctx.runMutation(internal.sessions.slide)`, since actions can't write
+  directly.
 - `assertNotBanned(user)` — the single definition of "what a ban blocks"; called by both
   `requireAuth*`.
 
@@ -692,10 +699,24 @@ Clients **never** pass a `userId`. They pass a `sessionToken`; the server resolv
 
 - **Reads soft‑fail:** `getMe`, `getFeed`, `getMyPosts`, `getWeeklyUsage`, `getSubscriptionInfo`,
   `checkIsAdmin` catch auth errors and return `null` / `[]` / `false` rather than throwing.
-- **Writes hard‑fail:** mutations/actions `throw new Error(message)`.
-- Backend throws **plain `Error`** (not `ConvexError`).
-- External‑call failures are **logged server‑side with the real error** and surfaced to clients as **generic sanitized
-  messages** (see [§17](#17-security-posture)).
+- **Writes hard‑fail:** mutations/actions throw on the unhappy path.
+- **User‑facing messages throw `ConvexError(message)`** — its payload is the one thing Convex delivers to the client
+  intact in **production** (plain `Error` messages are redacted there). Used for validation, ownership/authorization,
+  not‑found, and plan‑limit/gate messages across every function the app surfaces to a user or admin: `submitPost` and
+  the
+  `posts` mutations, `reactToPost`/`commentOnPost`, `generateComment`, `createCheckoutSession`/`createPortalSession`,
+  `updateProfile`/`setPostVisibility`/`setCommentLanguage`/`refreshProfileFromLinkedIn`, the admin mutations (sync,
+  `setContactUserLimit`, `setUserTier`, `setUserSubscriptionStatus`, ban/unban, `validateLimitArgs`), the
+  `feedback` mutations, and the `assertCanEngage`/`assertCanRefresh` gate helpers. The card‑gate sentinel
+  `assertCanEngage` throws `ConvexError('PAYMENT_REQUIRED: …')` so the feed can still detect it by prefix in production.
+- **Internal invariants and external‑call failures throw plain `Error`** (e.g. `Failed to upsert post`, missing
+  `STRIPE_SECRET_KEY`) — deliberately redacted in production and **logged server‑side with the real error**, surfaced to
+  clients as generic sanitized messages (see [§17](#17-security-posture)).
+- **Frontend display:** catch sites never render `err.message` directly — Convex frames it as
+  `[CONVEX …] Server Error Uncaught Error: <msg> at handler (…) Called by client` (and redacts `<msg>` in production).
+  All UI catch handlers pass the error through `friendlyError(err, fallback)`
+  (`app/src/lib/errors.ts`), which unwraps `ConvexError.data`, strips the frame off dev messages, and falls back to a
+  caller‑supplied string when nothing readable remains.
 
 ### LinkedIn member‑API calls
 
@@ -736,8 +757,10 @@ OAuth the app uses its **own opaque session tokens**.
   (OIDC; replaces the deprecated `/v2/me`).
 - **CSRF:** a random `state` is stored in `oauthStates` (10‑min TTL) before redirect and is single‑use validated on
   callback (deleted before the expiry check → replay‑safe).
-- **Session token:** a random UUID stored in `sessions` (30‑day TTL); returned to the app in the redirect URL
-  `?session=…`. The app keeps it in **`sessionStorage`** (key `sessionToken`).
+- **Session token:** a random UUID stored in `sessions` (**15‑day sliding TTL** — renewed on authenticated use past the
+  halfway mark; `SESSION_TTL_MS` is the source of truth); returned to the app in the redirect URL **fragment**
+  `#session=…` (fragments never reach servers/proxies/access logs, unlike query strings). The app keeps it in **
+  `sessionStorage`** (key `sessionToken`).
 - **Sign‑out:** the app auto‑starts OAuth for any unauthenticated visit (see `RequireAuth`, §14), and LinkedIn keeps its
   own SSO session — so a naive sign‑out is silently re‑authenticated. Sign‑out therefore sets a **persistent `signedOut`
   marker** (`localStorage`, `lib/session.ts`) _before_
@@ -784,7 +807,7 @@ sequenceDiagram
         CV ->> LI: GET /v2/userinfo
         LI -->> CV: sub, name, picture
         CV ->> DB: upsertUser(...) → userId (tokens stored server-side)
-        CV ->> DB: sessions.create(token=UUID, userId, +30d)
+        CV ->> DB: sessions.create(token=UUID, userId, +15d sliding)
         CV -->> U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual
         Note over CV, U: plan/interval omitted from hash when absent
         U ->> A: /auth/success reads hash → stores token + plan/interval → navigate /feed
@@ -1577,12 +1600,19 @@ non-functional top-bar search placeholder.
   `filterFields: ['inFeed']`) and `users.search_name` (`searchField: 'name'`).
 - The `search` query takes `{ sessionToken, queryText }` and returns `{ posts, people }`. It **requires a valid
   session** (returns empty on missing/invalid token or a query under 2 chars).
-- **Feed-parity visibility (security-critical):** post results reuse the exact same rules as `feed.getFeed` — the
-  `search_content` index is pinned to `inFeed === true`, then per-viewer `visibilityIndustries` / `visibilityCountries`
-  allow-lists and `isAuthorFeedEligible(author)` are applied. Search can never surface a post the feed would hide.
+- **Feed-parity visibility (security-critical):** post results reuse the exact same rules as `feed.getFeed` through the
+  single shared gate `feed.isPostVisibleToViewer(post, viewer, author, now)` — the `search_content` index is pinned to
+  `inFeed === true`, then that gate drops the **viewer's own posts**, applies the per-viewer `visibilityIndustries` /
+  `visibilityCountries` allow-lists, and enforces `isAuthorFeedEligible(author)`. Because feed and search call the same
+  predicate, search can never surface a post the feed would hide (and never the searcher's own posts). Search does
+  **not**
+  apply the feed's tier-based industry/country _preference_ filter — that is a "what I want to see" layer, not an access
+  rule. People results are **not** viewer-filtered (searching for yourself is fine).
 - **Safe projections:** posts expose only `{ _id, content, sourceUrl, author }` (author via `toFeedAuthor`); people via
   the pure allow-list `toSearchPerson` → `{ _id, name, headline, profilePictureUrl, linkedinPublicIdentifier }` — never
-  tokens, email, admin/ban state, or other PII. `toSearchPerson` is unit-tested (`convex/search.test.ts`).
+  tokens, email, admin/ban state, or other PII. The filtering runs in the extracted `searchPostsAndPeople(ctx, viewer,
+  …)` helper (thin `search` wrapper owns auth), unit-tested over a 10-post fixture with a mock `ctx` in
+  `convex/search.test.ts`; `feed.getFeed`'s `fetchFeedPage` is tested the same way in `convex/feed.test.ts`.
 
 ### Frontend (`app/src/components/shell/CommandPalette.tsx`)
 

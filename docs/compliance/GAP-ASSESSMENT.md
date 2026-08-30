@@ -4,10 +4,9 @@
 
 # Compliance Gap Assessment
 
-**Controller:** NEANDERTECH SERVICOS DE TECNOLOGIA LTDA
-**Service:** Link Into The SSI
-**Assessed against:** GDPR (EU) / UK GDPR / LGPD (Brazil) / CCPA-CPRA and comparable US state privacy acts (Virginia
-CDPA, Colorado CPA, Connecticut CTDPA, etc.)
+**Controller:** NEANDERTECH SERVICOS DE TECNOLOGIA LTDA **Service:** Link Into The SSI **Assessed against:** GDPR (EU) /
+UK GDPR / LGPD (Brazil) / CCPA-CPRA and comparable US state privacy acts (Virginia CDPA, Colorado CPA, Connecticut
+CTDPA, etc.)
 
 This document assesses the current implementation of Link Into The SSI's privacy and data-protection controls against
 the key requirements of the frameworks above. It reflects the state after Phases 1–3 of the privacy compliance
@@ -49,9 +48,7 @@ legal input, or business decisions before the privacy programme can be considere
 2. **Fill all `[BRACKETED]` business inputs.** Across all compliance documents and published policy pages:
    `NEANDERTECH SERVICOS DE TECNOLOGIA LTDA`,
    `AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`, `contact@linkintothessi.com`,
-   `Henriko Alberton`,
-   sub-processor DPA
-   links, Railway deployment region, and sub-processor log-retention periods.
+   `Henriko Alberton`, sub-processor DPA links and sub-processor log-retention periods.
 
 3. **Appoint a privacy contact / assess DPO requirement.** Determine whether a formal Data Protection Officer
    appointment is legally required (GDPR Art. 37) based on the nature and scale of processing. Even if a DPO is not
@@ -66,7 +63,7 @@ legal input, or business decisions before the privacy programme can be considere
    is required.
 
 6. **Sign sub-processor DPAs.** A signed Data Processing Agreement must be in place with each sub-processor listed in
-   `SUBPROCESSORS.md` (Convex, Stripe, Vercel, Railway, Cloudflare, Resend) before launch. DPA links are currently
+   `SUBPROCESSORS.md` (Convex, Stripe, Cloudflare, Resend) before launch. DPA links are currently
    `[bracketed]`.
 
 7. **Confirm sub-processor log-retention periods.** Review each sub-processor's DPA or documentation to fill in the
@@ -79,8 +76,8 @@ legal input, or business decisions before the privacy programme can be considere
 9. **Annual review cadence.** Schedule an annual review of this gap assessment, the ROPA, and the retention schedule.
    Assign ownership.
 
-10. **AI features — via OpenRouter, zero data retention (dynamic provider routing).** The AI reaction/comment feature
-    is **live in production**: prompts go to **OpenRouter** (US), which routes each request to a downstream provider it
+10. **AI features — via OpenRouter, zero data retention (dynamic provider routing).** The AI reaction/comment feature is
+    **live in production**: prompts go to **OpenRouter** (US), which routes each request to a downstream provider it
     selects, constrained in code to **zero data retention** + **no training** (`zdr` / `data_collection: "deny"`,
     cheapest qualifying provider). The specific inference provider (e.g. DeepInfra) and **its region are not pinned**.
     Documented in `SUBPROCESSORS.md`, ROPA Activity 13, and the public `/privacy` disclosure. **Residual human/legal:**

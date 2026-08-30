@@ -347,9 +347,7 @@ apply:
 |--------------------------------------------------------------|----------------------------------------------------|----------------------------------------------------|
 | **Convex, Inc.**                                             | Backend / database / file-storage hosting          | Standard Contractual Clauses (SCCs)                |
 | **Stripe, Inc.**                                             | Payment processing                                 | Standard Contractual Clauses (SCCs) + Stripe DPA   |
-| **Vercel, Inc.**                                             | Landing site hosting                               | Standard Contractual Clauses (SCCs)                |
-| **Railway Corp.**                                            | Authenticated app hosting                          | Standard Contractual Clauses (SCCs)                |
-| **Cloudflare, Inc.**                                         | DNS / CDN                                          | Standard Contractual Clauses (SCCs)                |
+| **Cloudflare, Inc.**                                         | Hosting (landing + app) / DNS / CDN                | Standard Contractual Clauses (SCCs)                |
 | **Resend, Inc.**                                             | Transactional email delivery                       | Standard Contractual Clauses (SCCs)                |
 | **OpenRouter, Inc.** (US; downstream provider region varies) | AI reaction/comment inference routing (Gemma, ZDR) | SCCs (OpenRouter); downstream via OpenRouter's DPA |
 
