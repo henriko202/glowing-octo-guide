@@ -1,25 +1,41 @@
 # Profile Enrichment (Industry · Country · Location · Primary Locale) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:
+> executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **⚠️ PROJECT GIT POLICY (overrides the skill template):** This repo's `CLAUDE.md` says **NEVER run `git commit` or `git push`.** Every task below ends with a **Checkpoint** step instead of a commit — stage the files with `git add` and pause for the user (Henriko) to review and commit. Do **not** commit yourself.
+> **⚠️ PROJECT GIT POLICY (overrides the skill template):** This repo's `CLAUDE.md` says **NEVER run `git commit` or
+`git push`.** Every task below ends with a **Checkpoint** step instead of a commit — stage the files with `git add` and
+> pause for the user (Henriko) to review and commit. Do **not** commit yourself.
 
-**Goal:** Enrich users with `country`, `location`, and `primaryLocale` scraped from their LinkedIn profile (new Apify actor), let users edit `industry`/`country` in Settings via canonical dropdowns, seed the UI language from the scraped locale, and gate all Apify usage behind admin flags (incl. a master kill-switch).
+**Goal:** Enrich users with `country`, `location`, and `primaryLocale` scraped from their LinkedIn profile (new Apify
+actor), let users edit `industry`/`country` in Settings via canonical dropdowns, seed the UI language from the scraped
+locale, and gate all Apify usage behind admin flags (incl. a master kill-switch).
 
-**Architecture:** A new Apify _profile_ scraper action runs (scheduled, non-blocking) when a user sets their LinkedIn URL or hits a rate-limited "Refresh" button. It writes `country` (fill-when-empty), `location`/`primaryLocale` (always refresh). Industry stays manual. Canonical lists live in one pure-data module shared by server validation and the client. Three flags (`apifyEnabled` master, `apifySyncEnabled` posts, `apifyProfileScrapeEnabled` profile) gate the integration; clients never read the flags.
+**Architecture:** A new Apify _profile_ scraper action runs (scheduled, non-blocking) when a user sets their LinkedIn
+URL or hits a rate-limited "Refresh" button. It writes `country` (fill-when-empty), `location`/`primaryLocale` (always
+refresh). Industry stays manual. Canonical lists live in one pure-data module shared by server validation and the
+client. Three flags (`apifyEnabled` master, `apifySyncEnabled` posts, `apifyProfileScrapeEnabled` profile) gate the
+integration; clients never read the flags.
 
-**Tech Stack:** Convex (TypeScript backend), React 19 + React Router 7 + raw Tailwind, i18next, Vitest + @testing-library/react. Apify via REST (`run-sync-get-dataset-items`).
+**Tech Stack:** Convex (TypeScript backend), React 19 + React Router 7 + raw Tailwind, i18next, Vitest +
+@testing-library/react. Apify via REST (`run-sync-get-dataset-items`).
 
 **Spec:** [docs/superpowers/specs/2026-06-14-profile-enrichment-design.md](../specs/2026-06-14-profile-enrichment-design.md)
 
-**Before any Convex work:** read `convex/_generated/ai/guidelines.md` first (per `CLAUDE.md`). This plan already conforms (arg validators on every function; no `.filter()`/`.collect()` added; actions use `ctx.runQuery`/`ctx.runMutation`, never `ctx.db`; `fetch` needs no `"use node"`).
+**Before any Convex work:** read `convex/_generated/ai/guidelines.md` first (per `CLAUDE.md`). This plan already
+conforms (arg validators on every function; no `.filter()`/`.collect()` added; actions use `ctx.runQuery`/
+`ctx.runMutation`, never `ctx.db`; `fetch` needs no `"use node"`).
 
-**Testing conventions (follow these — they match the codebase, and intentionally diverge from the guidelines' `convex-test` suggestion):**
+**Testing conventions (follow these — they match the codebase, and intentionally diverge from the guidelines'
+`convex-test` suggestion):**
 
-- This repo does **not** use `convex-test`. `convex/vitest.config.ts` aliases `convex/server` → the `convex-mocks` shim, so backend logic is tested as **plain functions**. Keep this pattern.
-- Convex logic is tested by extracting **pure handler functions** (e.g. `upsertUserHandler`) and testing them with a **hand-rolled mock db**, exactly like [`convex/linkedin/auth.test.ts`](../../../convex/linkedin/auth.test.ts).
+- This repo does **not** use `convex-test`. `convex/vitest.config.ts` aliases `convex/server` → the `convex-mocks` shim,
+  so backend logic is tested as **plain functions**. Keep this pattern.
+- Convex logic is tested by extracting **pure handler functions** (e.g. `upsertUserHandler`) and testing them with a
+  **hand-rolled mock db**, exactly like [`convex/linkedin/auth.test.ts`](../../../convex/linkedin/auth.test.ts).
 - Pure validators/helpers are exported and unit-tested directly (e.g. `validateLimitArgs` in `admin.ts`).
-- Components use `@testing-library/react` with `vi.mock('convex/react')` and `vi.mock('react-router-dom')`, like [`app/src/pages/AdminPage.test.tsx`](../../../app/src/pages/AdminPage.test.tsx).
+- Components use `@testing-library/react` with `vi.mock('convex/react')` and `vi.mock('react-router-dom')`, like [
+  `app/src/pages/AdminPage.test.tsx`](../../../app/src/pages/AdminPage.test.tsx).
 - Run a single backend test: `npx vitest run convex/path/to/file.test.ts`
 - Run a single frontend test: `npx vitest run app/src/path/to/file.test.tsx`
 
@@ -93,7 +109,8 @@ Expected: no errors. (If `convex/_generated` is stale, run `npx convex codegen` 
 git add convex/schema.ts convex/convexTypes.ts
 ```
 
-Pause for Henriko to review and commit (suggested message: `feat(schema): add user location/primaryLocale + apify master/profile flags`).
+Pause for Henriko to review and commit (suggested message:
+`feat(schema): add user location/primaryLocale + apify master/profile flags`).
 
 ---
 
@@ -220,9 +237,11 @@ In `convex/jobs/syncPostsApify.ts`:
 import { runApifyTask, isApifyPostSyncEnabled } from '../lib/apify.js'
 ```
 
-2. **Delete** the local `APIFY_BASE` constant (line 7) and the entire local `runApifyTask` function (the `async function runApifyTask(...) { ... }` block, ~lines 60-81). Both now come from `../lib/apify.js`.
+2. **Delete** the local `APIFY_BASE` constant (line 7) and the entire local `runApifyTask` function (the
+   `async function runApifyTask(...) { ... }` block, ~lines 60-81). Both now come from `../lib/apify.js`.
 
-3. The remaining local `runApifyTask` call returns `unknown[]`, so cast it. Change the call inside `syncUserPostsViaApify`:
+3. The remaining local `runApifyTask` call returns `unknown[]`, so cast it. Change the call inside
+   `syncUserPostsViaApify`:
 
 ```ts
 const items = (await runApifyTask(actorId, token, input)) as ApifyPostResult[] | undefined
@@ -261,7 +280,17 @@ Pause for review/commit (suggested: `feat(apify): shared runApifyTask + 3-flag g
 - Create: `convex/lib/profileOptions.ts`
 - Create: `convex/lib/profileOptions.test.ts`
 
-> **Data sourcing note:** `COUNTRY_CODES` is the full ISO 3166-1 alpha-2 set (below, complete — paste as-is). `INDUSTRIES` is the **full** LinkedIn industry-codes-v2 taxonomy (~420 rows) — store **only** the LinkedIn Industry Code (`code`) and English Label (`label`) columns. Source: <https://learn.microsoft.com/en-us/linkedin/shared/references/reference-tables/industry-codes-v2>. A small accurate seed is given below to make the file compile; **you must populate the remaining rows from the source.** The integrity test in this task fails until the list is complete (it asserts `length >= 400`, unique codes, and the presence of labels that appear _after_ the easily-fetched portion of the table — Software Development, IT Services and IT Consulting, Retail, Real Estate, Telecommunications, Legal Services, Technology/Internet, Transportation/Logistics). Note: a single WebFetch of that page truncates — fetch in sections or copy the rendered table to get all rows.
+> **Data sourcing note:** `COUNTRY_CODES` is the full ISO 3166-1 alpha-2 set (below, complete — paste as-is).
+> `INDUSTRIES` is the **full** LinkedIn industry-codes-v2 taxonomy (~420 rows) — store **only** the LinkedIn Industry
+> Code
+> (`code`) and English Label (`label`) columns.
+> Source: <https://learn.microsoft.com/en-us/linkedin/shared/references/reference-tables/industry-codes-v2>. A small
+> accurate seed is given below to make the file compile; **you must populate the remaining rows from the source.** The
+> integrity test in this task fails until the list is complete (it asserts `length >= 400`, unique codes, and the
+> presence
+> of labels that appear _after_ the easily-fetched portion of the table — Software Development, IT Services and IT
+> Consulting, Retail, Real Estate, Telecommunications, Legal Services, Technology/Internet, Transportation/Logistics).
+> Note: a single WebFetch of that page truncates — fetch in sections or copy the rendered table to get all rows.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -331,7 +360,8 @@ Expected: FAIL — `Cannot find module './profileOptions'`.
 
 - [ ] **Step 3: Create the module (full countries; seed industries)**
 
-Create `convex/lib/profileOptions.ts`. Paste the full `COUNTRY_CODES` exactly as below, the seed `INDUSTRIES` rows, and the helpers. **Then extend `INDUSTRIES` with the rest of the taxonomy from the source URL.**
+Create `convex/lib/profileOptions.ts`. Paste the full `COUNTRY_CODES` exactly as below, the seed `INDUSTRIES` rows, and
+the helpers. **Then extend `INDUSTRIES` with the rest of the taxonomy from the source URL.**
 
 ```ts
 // convex/lib/profileOptions.ts
@@ -666,10 +696,12 @@ export function countryLabel(code: string, locale = 'en'): string {
 
 - [ ] **Step 4: Populate the full industry list, then run the test — expect pass**
 
-After appending the remaining rows from the source URL (keep `{ code, label }` shape; codes are the numeric "LinkedIn Industry Code" as strings; remove the `TODO(data)` comment when done):
+After appending the remaining rows from the source URL (keep `{ code, label }` shape; codes are the numeric "LinkedIn
+Industry Code" as strings; remove the `TODO(data)` comment when done):
 
 Run: `npx vitest run convex/lib/profileOptions.test.ts`
-Expected: PASS (all describe blocks). If `industry list` fails on `length` or required labels, the taxonomy is still incomplete — add the missing rows.
+Expected: PASS (all describe blocks). If `industry list` fails on `length` or required labels, the taxonomy is still
+incomplete — add the missing rows.
 
 - [ ] **Step 5: Checkpoint (user commits)**
 
@@ -751,11 +783,13 @@ describe('checkRateLimit (windowed)', () => {
 - [ ] **Step 2: Run it — expect failure**
 
 Run: `npx vitest run convex/lib/rateLimit.test.ts`
-Expected: FAIL — `checkRateLimit` currently takes only 4 args; the message says "per hour", so the `/per day/` assertion fails (and TS may flag extra args).
+Expected: FAIL — `checkRateLimit` currently takes only 4 args; the message says "per hour", so the `/per day/` assertion
+fails (and TS may flag extra args).
 
 - [ ] **Step 3: Generalize `checkRateLimit`**
 
-In `convex/lib/rateLimit.ts`, replace the `checkRateLimit` function signature + body with the windowed version (keeps backward-compatible defaults so existing 4-arg callers in `posts.ts`/`interactions.ts` are unchanged):
+In `convex/lib/rateLimit.ts`, replace the `checkRateLimit` function signature + body with the windowed version (keeps
+backward-compatible defaults so existing 4-arg callers in `posts.ts`/`interactions.ts` are unchanged):
 
 ```ts
 export async function checkRateLimit(
@@ -1132,7 +1166,8 @@ Pause for review/commit (suggested: `feat(apify): LinkedIn profile scrape action
 
 - [ ] **Step 1: Schedule the scrape after saving the identifier**
 
-In `convex/users.ts`, in the `setPublicIdentifier` mutation handler, change the final line so that after patching the identifier it schedules the scrape (`internal` is already imported in this file):
+In `convex/users.ts`, in the `setPublicIdentifier` mutation handler, change the final line so that after patching the
+identifier it schedules the scrape (`internal` is already imported in this file):
 
 ```ts
 // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
@@ -1149,7 +1184,9 @@ Expected: no errors (the scheduled ref resolves against `_generated/api`).
 
 - [ ] **Step 3: Manual verification (no unit test — scheduler wiring)**
 
-With `npx convex dev` running and `apifyProfileScrapeEnabled` on (Task 9 ships the toggle; until then set it in the dashboard), save a LinkedIn URL in Settings and confirm a `[Apify]` profile-scrape log appears and `location`/`primaryLocale` populate on the user. (Defer this to the end-to-end pass in Task 13 if the toggle isn't built yet.)
+With `npx convex dev` running and `apifyProfileScrapeEnabled` on (Task 9 ships the toggle; until then set it in the
+dashboard), save a LinkedIn URL in Settings and confirm a `[Apify]` profile-scrape log appears and `location`/
+`primaryLocale` populate on the user. (Defer this to the end-to-end pass in Task 13 if the toggle isn't built yet.)
 
 - [ ] **Step 4: Checkpoint (user commits)**
 
@@ -1431,7 +1468,8 @@ In `app/src/i18n/locales/en.json`, replace the entire `"settings": { ... }` obje
 
 - [ ] **Step 2: Replace the `settings` block in `pt.json`**
 
-Find the `"settings": { ... }` object in `app/src/i18n/locales/pt.json` and replace it with (keep the existing non-settings keys untouched):
+Find the `"settings": { ... }` object in `app/src/i18n/locales/pt.json` and replace it with (keep the existing
+non-settings keys untouched):
 
 ```json
   "settings": {
@@ -1597,7 +1635,9 @@ const [refreshError, setRefreshError] = useState<string | null>(null)
 
 Also change the existing `const { t } = useTranslation()` to `const { t, i18n } = useTranslation()`.
 
-3. Seed the local select state **once when the user loads** (keyed on `me?._id`, so reactive updates to other fields — e.g. `location` after a scrape — don't clobber in-progress edits, and selecting "Not set" sticks). Add this `useEffect` among the hooks, **before** the `if (!me) { return <LoadingSpinner /> }` guard:
+3. Seed the local select state **once when the user loads** (keyed on `me?._id`, so reactive updates to other fields —
+   e.g. `location` after a scrape — don't clobber in-progress edits, and selecting "Not set" sticks). Add this
+   `useEffect` among the hooks, **before** the `if (!me) { return <LoadingSpinner /> }` guard:
 
 ```ts
 useEffect(() => {
@@ -1647,7 +1687,8 @@ async function handleRefresh() {
 }
 ```
 
-6. Replace the existing read-only profile `<section>` (the one rendering `settings.industry`/`settings.country` as `<p>`) with the editable version:
+6. Replace the existing read-only profile `<section>` (the one rendering `settings.industry`/`settings.country` as
+   `<p>`) with the editable version:
 
 ```tsx
 <section className="mb-4 rounded-xl border border-slate-200 bg-white p-5">
@@ -1711,7 +1752,7 @@ async function handleRefresh() {
     <button
       onClick={handleSaveProfile}
       disabled={profileSaving}
-      className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${profileSaved ? 'bg-green-500' : 'bg-blue-500'} ${profileSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
+      className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-300 ${profileSaved ? 'bg-green-500' : 'bg-blue-500'} ${profileSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer opacity-100'}`}
     >
       {profileSaved ? t('settings.saved') : profileSaving ? t('settings.saving') : t('settings.save')}
     </button>
@@ -1736,7 +1777,8 @@ Expected: PASS (3 tests).
 - [ ] **Step 5: Typecheck the app**
 
 Run: `npx tsc -p app --noEmit` (or the repo's app typecheck script, e.g. `npm run -w app build` dry-run)
-Expected: no errors. The cross-package import `../../../convex/lib/profileOptions` resolves because the module is pure data (no server imports).
+Expected: no errors. The cross-package import `../../../convex/lib/profileOptions` resolves because the module is pure
+data (no server imports).
 
 - [ ] **Step 6: Checkpoint (user commits)**
 
@@ -1876,7 +1918,8 @@ it('renders the master and profile-scrape Apify toggles', () => {
 })
 ```
 
-(The existing `useQuery` mock returns `undefined` for `getSettings`, which is fine — the cards still render with default labels.)
+(The existing `useQuery` mock returns `undefined` for `getSettings`, which is fine — the cards still render with default
+labels.)
 
 - [ ] **Step 2: Run it — expect failure**
 
@@ -1920,7 +1963,8 @@ async function handleToggleProfile() {
 }
 ```
 
-3. Inside the `{tab === 'settings' && (...)}` block, add two more cards after the existing "Apify Post Sync" card (compute `masterOn = settings?.apifyEnabled !== false`):
+3. Inside the `{tab === 'settings' && (...)}` block, add two more cards after the existing "Apify Post Sync" card
+   (compute `masterOn = settings?.apifyEnabled !== false`):
 
 ```tsx
           <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
@@ -1986,49 +2030,67 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
 
 - Modify: `docs/PLATFORM.md`
 
-> `CLAUDE.md` makes `docs/PLATFORM.md` part of "done": the feature is not complete until the docs reflect it. Apply every edit below in this one task. No automated test — verification is a grep check (Step 9) + a Mermaid sanity read.
+> `CLAUDE.md` makes `docs/PLATFORM.md` part of "done": the feature is not complete until the docs reflect it. Apply
+> every edit below in this one task. No automated test — verification is a grep check (Step 9) + a Mermaid sanity read.
 
 - [ ] **Step 1: §5 Data Model**
-  - In the **`users`** table reference, add two rows after `country`:
-    - `location` | string | – | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).
-    - `primaryLocale` | string | – | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.
-  - In the **`appSettings`** table reference, add two rows after `apifySyncEnabled`:
-    - `apifyEnabled` | boolean | – | **Master Apify kill-switch.** Absent ⇒ treated as enabled. When `false`, all Apify (post sync + profile scrape) halts.
-    - `apifyProfileScrapeEnabled` | boolean | – | Gates the LinkedIn profile scrape. Absent ⇒ disabled (opt-in; paid actor).
-  - In the **`rateLimits`** table, update the `action` row to add `profile_refresh` to the example action names.
+    - In the **`users`** table reference, add two rows after `country`:
+        - `location` | string | – | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only
+          (profile scrape only).
+        - `primaryLocale` | string | – | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n
+          language; not user-editable.
+    - In the **`appSettings`** table reference, add two rows after `apifySyncEnabled`:
+        - `apifyEnabled` | boolean | – | **Master Apify kill-switch.** Absent ⇒ treated as enabled. When `false`, all
+          Apify (post sync + profile scrape) halts.
+        - `apifyProfileScrapeEnabled` | boolean | – | Gates the LinkedIn profile scrape. Absent ⇒ disabled (opt-in; paid
+          actor).
+    - In the **`rateLimits`** table, update the `action` row to add `profile_refresh` to the example action names.
 
 - [ ] **Step 2: §7 Authentication & Identity — identity functions table**
 
   Add three rows:
-  - `users.updateProfile` | mutation (public) | User edits their own `industry`/`country` (validated against canonical lists; empty string clears).
-  - `users.refreshProfileFromLinkedIn` | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited **2/day**; schedules the scrape action.
-  - `users.applyScrapedProfile` | internalMutation | Writes scraped fields: `country` **fill-when-empty**; `location`/`primaryLocale` always refresh.
+    - `users.updateProfile` | mutation (public) | User edits their own `industry`/`country` (validated against canonical
+      lists; empty string clears).
+    - `users.refreshProfileFromLinkedIn` | mutation (public) | User-triggered profile re-scrape; requires a public
+      identifier; **throws when the profile-scrape flag is off**; rate-limited **2/day**; schedules the scrape action.
+    - `users.applyScrapedProfile` | internalMutation | Writes scraped fields: `country` **fill-when-empty**; `location`/
+      `primaryLocale` always refresh.
 
 - [ ] **Step 3: §11 Feed & Engagement — rate limiting paragraph**
 
-  Note that `checkRateLimit` now accepts an optional **window size + label** (defaults 1h/"hour"), and add `profile_refresh` **2/day** to the list of limits.
+  Note that `checkRateLimit` now accepts an optional **window size + label** (defaults 1h/"hour"), and add
+  `profile_refresh` **2/day** to the list of limits.
 
 - [ ] **Step 4: §12 Admin & Moderation — admin functions table**
-  - Update `getSettings` description to "App settings (3 Apify flags + last-sync status)".
-  - Add: `toggleApifyEnabled(enabled)` | mutation | Master Apify kill-switch.
-  - Add: `toggleApifyProfileScrape(enabled)` | mutation | Toggle the LinkedIn profile scrape.
+    - Update `getSettings` description to "App settings (3 Apify flags + last-sync status)".
+    - Add: `toggleApifyEnabled(enabled)` | mutation | Master Apify kill-switch.
+    - Add: `toggleApifyProfileScrape(enabled)` | mutation | Toggle the LinkedIn profile scrape.
 
 - [ ] **Step 5: §14 Frontend — Authenticated App**
-  - Rewrite the **SettingsPage** bullet: `getMe` + `setPublicIdentifier` + `updateProfile` + `refreshProfileFromLinkedIn`. Industry/country are now **editable canonical dropdowns** (country names via `Intl.DisplayNames`); a read-only **Location** row shows when `me.location` is present; a **"Refresh from LinkedIn"** button re-scrapes (disabled without a public identifier; surfaces the server error when scrape is off).
-  - Update the **AdminPage** bullet: the **Settings** tab now has **three** Apify toggles (master, post sync, profile scrape).
-  - In the **i18n** subsection, add: on first authenticated load the UI language is **seeded once** from `me.primaryLocale` (when no `localStorage` `i18nextLng` exists); the AppNav switcher still overrides.
+    - Rewrite the **SettingsPage** bullet: `getMe` + `setPublicIdentifier` + `updateProfile` +
+      `refreshProfileFromLinkedIn`. Industry/country are now **editable canonical dropdowns** (country names via
+      `Intl.DisplayNames`); a read-only **Location** row shows when `me.location` is present; a **"Refresh from
+      LinkedIn"** button re-scrapes (disabled without a public identifier; surfaces the server error when scrape is
+      off).
+    - Update the **AdminPage** bullet: the **Settings** tab now has **three** Apify toggles (master, post sync, profile
+      scrape).
+    - In the **i18n** subsection, add: on first authenticated load the UI language is **seeded once** from
+      `me.primaryLocale` (when no `localStorage` `i18nextLng` exists); the AppNav switcher still overrides.
 
 - [ ] **Step 6: §16 Environment Variables**
 
-  Change the `APIFY_TASK_ID_PROFILE_SCRAPE` row to: Required **✓ (profile scrape)**, Consumed in **`jobs/scrapeProfileApify.ts`**, Purpose "LinkedIn **profile** scraper actor (country/location/primary-locale enrichment)."
+  Change the `APIFY_TASK_ID_PROFILE_SCRAPE` row to: Required **✓ (profile scrape)**, Consumed in **
+  `jobs/scrapeProfileApify.ts`**, Purpose "LinkedIn **profile** scraper actor (country/location/primary-locale
+  enrichment)."
 
 - [ ] **Step 7: §19 Known Discrepancies, Dead Code & Roadmap**
-  - Remove the **"Profile enrichment …"** bullet from **Stubs / planned** (it's now implemented).
-  - Update the roadmap line so it no longer lists profile enrichment as pending.
+    - Remove the **"Profile enrichment …"** bullet from **Stubs / planned** (it's now implemented).
+    - Update the roadmap line so it no longer lists profile enrichment as pending.
 
 - [ ] **Step 8: Add a new numbered section + ToC entry + Mermaid flow**
 
-  Add a Table-of-Contents entry **`13A. Profile Enrichment (LinkedIn Profile Scrape)`** (right after item 13), and a matching section after §13. (Using "13A" deliberately avoids renumbering §14–§21 and their anchor links.) Content:
+  Add a Table-of-Contents entry **`13A. Profile Enrichment (LinkedIn Profile Scrape)`** (right after item 13), and a
+  matching section after §13. (Using "13A" deliberately avoids renumbering §14–§21 and their anchor links.) Content:
 
   ````markdown
   ## 13A. Profile Enrichment (LinkedIn Profile Scrape)
@@ -2076,9 +2138,11 @@ Pause for review/commit (suggested: `feat(admin-ui): master + profile-scrape tog
 
 - [ ] **Step 9: Footer + verification grep**
 
-  Update the _Last updated_ footer line to mention the profile-enrichment feature. Then verify the key tokens are present:
+  Update the _Last updated_ footer line to mention the profile-enrichment feature. Then verify the key tokens are
+  present:
 
-  Run: `npx rg -n "primaryLocale|apifyProfileScrapeEnabled|scrapeProfileApify|refreshProfileFromLinkedIn|13A" docs/PLATFORM.md`
+  Run:
+  `npx rg -n "primaryLocale|apifyProfileScrapeEnabled|scrapeProfileApify|refreshProfileFromLinkedIn|13A" docs/PLATFORM.md`
   Expected: matches in §5, §7, §12/§14, §16, and the new §13A.
 
 - [ ] **Step 10: Checkpoint (user commits)**
@@ -2112,16 +2176,21 @@ Expected: clean.
 
 - [ ] **Step 4: Configure the new env var**
 
-Add `APIFY_TASK_ID_PROFILE_SCRAPE` to the Convex deployment env (dashboard / `npx convex env set APIFY_TASK_ID_PROFILE_SCRAPE <task-id>`). `APIFY_API_TOKEN` already exists.
+Add `APIFY_TASK_ID_PROFILE_SCRAPE` to the Convex deployment env (dashboard /
+`npx convex env set APIFY_TASK_ID_PROFILE_SCRAPE <task-id>`). `APIFY_API_TOKEN` already exists.
 
 - [ ] **Step 5: Manual end-to-end (`npx convex dev` + `npm run dev`)**
 
-1. As an **admin**, open `/admin` → Settings tab → enable **Apify Profile Scrape** (and confirm **Apify (master)** is on).
-2. As a user, open `/settings`, enter your LinkedIn profile URL, Save. Confirm a `[Apify]` profile-scrape log appears and, after the run, **Location** shows and `country`/`primaryLocale` populate (check the dashboard).
+1. As an **admin**, open `/admin` → Settings tab → enable **Apify Profile Scrape** (and confirm **Apify (master)** is
+   on).
+2. As a user, open `/settings`, enter your LinkedIn profile URL, Save. Confirm a `[Apify]` profile-scrape log appears
+   and, after the run, **Location** shows and `country`/`primaryLocale` populate (check the dashboard).
 3. Edit **Industry** + **Country** dropdowns → Save → reload → values persist.
 4. Click **Refresh from LinkedIn** twice → third click within a day surfaces the rate-limit error inline.
-5. Toggle **Apify (master)** OFF → Refresh now surfaces "Profile refresh is currently unavailable."; confirm the hourly post sync also no-ops.
-6. New login with a fresh browser profile (no `i18nextLng` in localStorage) and a non-English `primaryLocale` → UI seeds to that language; switching via AppNav still overrides.
+5. Toggle **Apify (master)** OFF → Refresh now surfaces "Profile refresh is currently unavailable."; confirm the hourly
+   post sync also no-ops.
+6. New login with a fresh browser profile (no `i18nextLng` in localStorage) and a non-English `primaryLocale` → UI seeds
+   to that language; switching via AppNav still overrides.
 
 - [ ] **Step 6: Final checkpoint (user commits)**
 
@@ -2131,8 +2200,17 @@ Stage any remaining generated files and pause for Henriko's final review/commit.
 
 ## Self-review notes (for the planner)
 
-- **Spec coverage:** schema (T1), 3-flag gating + shared runner (T2, T9, T13), canonical lists (T3), 2/day rate limit (T4), fill-when-empty apply (T5), parser + action (T6), setPublicIdentifier trigger (T7), updateProfile + refresh + assertCanRefresh (T8), i18n keys (T10), Settings UI incl. location-on-presence + refresh-via-server-throw (T11), language seeding (T12), admin toggles (T13), **PLATFORM.md sync incl. new §13A + Mermaid (T14)**, env var + E2E (T15). All spec sections map to a task.
-- **CLAUDE.md compliance:** never commit (every task ends in a stage-and-pause Checkpoint); `docs/PLATFORM.md` updated in-feature (T14); Convex guidelines read before backend work (header note).
-- **No client flag read:** confirmed — no `getPublicSettings`; location gates on `me.location`; refresh feedback comes from the mutation throwing (T8/T11).
-- **Type consistency:** `applyScrapedProfileHandler`, `updateProfileHandler`, `assertCanRefresh`, `parseProfileScrapeResult`, `pickSeedLanguage`, `isApify*`, `runApifyTask`, `COUNTRY_CODES`/`INDUSTRIES`/`isValidCountry`/`isValidIndustry`/`countryLabel` are named identically where defined and consumed.
-- **Known data task:** the industry list (T3) is populated from the cited LinkedIn reference and guarded by a completeness test — not a silent placeholder.
+- **Spec coverage:** schema (T1), 3-flag gating + shared runner (T2, T9, T13), canonical lists (T3), 2/day rate limit
+  (T4), fill-when-empty apply (T5), parser + action (T6), setPublicIdentifier trigger (T7), updateProfile + refresh +
+  assertCanRefresh (T8), i18n keys (T10), Settings UI incl. location-on-presence + refresh-via-server-throw (T11),
+  language seeding (T12), admin toggles (T13), **PLATFORM.md sync incl. new §13A + Mermaid (T14)**, env var + E2E (T15).
+  All spec sections map to a task.
+- **CLAUDE.md compliance:** never commit (every task ends in a stage-and-pause Checkpoint); `docs/PLATFORM.md` updated
+  in-feature (T14); Convex guidelines read before backend work (header note).
+- **No client flag read:** confirmed — no `getPublicSettings`; location gates on `me.location`; refresh feedback comes
+  from the mutation throwing (T8/T11).
+- **Type consistency:** `applyScrapedProfileHandler`, `updateProfileHandler`, `assertCanRefresh`,
+  `parseProfileScrapeResult`, `pickSeedLanguage`, `isApify*`, `runApifyTask`, `COUNTRY_CODES`/`INDUSTRIES`/
+  `isValidCountry`/`isValidIndustry`/`countryLabel` are named identically where defined and consumed.
+- **Known data task:** the industry list (T3) is populated from the cited LinkedIn reference and guarded by a
+  completeness test — not a silent placeholder.

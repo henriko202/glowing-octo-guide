@@ -17,7 +17,7 @@ system and bg-ink / bg-ink-800 alternation pattern. No new dependencies.
 ## File Map
 
 | Action | Path                                  | Responsibility                                                     |
-| ------ | ------------------------------------- | ------------------------------------------------------------------ |
+|--------|---------------------------------------|--------------------------------------------------------------------|
 | Create | `landing/components/SSIExplainer.tsx` | SSI education: definition, 4 pillars, impact stats, in-section CTA |
 | Create | `landing/components/StatsBar.tsx`     | Compact platform stats belt with shimmer animation on numbers      |
 | Create | `landing/components/Testimonials.tsx` | 3 social proof quote cards                                         |
@@ -394,7 +394,7 @@ export default function FAQ() {
               >
                 <span className="text-base font-medium text-cream">{faq.q}</span>
                 <span
-                  className="flex-shrink-0 font-display text-2xl text-gold transition-transform duration-200"
+                  className="flex-shrink-0 font-display text-2xl text-gold transition-transform duration-300"
                   style={{ transform: openIndex === i ? 'rotate(45deg)' : 'rotate(0deg)' }}
                 >
                   +
@@ -503,7 +503,7 @@ The full button element after the change:
 ```tsx
 <a
   href={`${APP_URL}`}
-  className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold transition-all duration-200 hover:bg-gold hover:text-ink"
+  className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold transition-all duration-300 hover:bg-gold hover:text-ink"
 >
   Join free
 </a>
@@ -522,8 +522,8 @@ git commit -m "feat(landing): update nav CTA to 'Join free'"
 
 **File:** Modify `landing/components/Hero.tsx`
 
-Add one line of social proof text directly after the `<p className="text-xs tracking-wide text-cream/30">` trial line (
-currently line 102). Insert it between the CTAs block and the existing trial copy line, or directly below it.
+Add one line of social proof text directly after the `<p className="text-xs tracking-wide text-cream/30">` trial line
+(currently line 102). Insert it between the CTAs block and the existing trial copy line, or directly below it.
 
 - [ ] **Step 1: Edit `Hero.tsx`**
 
@@ -647,8 +647,8 @@ Resize browser to 375px width. Verify:
 
 - [ ] **Step 5: Check all CTAs link correctly**
 
-Verify that clicking "Join free" (Nav), "Join the circle — it's free" (Hero), and "Sign in with LinkedIn — it's free" (
-FinalCTA) all navigate to `NEXT_PUBLIC_APP_URL`.
+Verify that clicking "Join free" (Nav), "Join the circle — it's free" (Hero), and "Sign in with LinkedIn — it's free"
+(FinalCTA) all navigate to `NEXT_PUBLIC_APP_URL`.
 
 - [ ] **Step 6: Production build check**
 

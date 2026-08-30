@@ -2631,7 +2631,9 @@ Internal nav (logo, footer, section anchors,
 `:root` (light) and `.dark` (dark) token blocks, plus `@custom-variant dark (.dark)`. The palette (`--ink`, `--cream`,
 `--gold`, `--gold-text`, `--lnblue`, `--on-gold`, `--on-lnblue`, decorative
 `--ring-line`, `--ring-gold`, `--glow-*`) is unified with the app's design system (see §14A/§14B). No
-`tailwind.config.ts` remains (deleted in the v3→v4 migration). Cormorant Garamond (display) + DM Sans (body),
+`tailwind.config.ts` remains (deleted in the v3→v4 migration). Cormorant Garamond (display) + DM Sans (body) are
+**self-hosted via `next/font/google`** in `app/[lang]/layout.tsx` (exposed as `--font-cormorant`/`--font-dm-sans`, wired
+into `--font-display`/`--font-body`) — no runtime `@import` from Google, keeping the CSP free of external font hosts;
 glassmorphic scrolled nav, radial glows, decorative `circle-ring` elements. The hero is a headline + CTA over the
 decorative rings (no SSI gauge, no slot-machine animation). No mobile hamburger menu. `ThemeToggle` (3-state
 system/light/dark) is mounted in `Nav`.
@@ -2794,7 +2796,11 @@ The codebase follows a consistent, defensible security model:
   theme script (no `'unsafe-inline'`), plus `frame-src https://www.linkedin.com` and a
   `connect-src` allowlist (Convex `.cloud`/`.site` + Stripe). The **landing** sets its CSP via
   `next.config.js` `headers()` with `script-src 'self' 'unsafe-inline'` (it renders only static copy, so the pages stay
-  prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data). Both retain
+  prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data). In **dev only**
+  (`NODE_ENV !== 'production'`) the landing adds `'unsafe-eval'` to `script-src` because `next dev` evals every module
+  (eval-source-map devtool + Fast Refresh) — without it the client bundle throws and nothing hydrates; the deployed
+  Worker (built with `NODE_ENV=production`) never gets this relaxation. Landing fonts are **self-hosted** via
+  `next/font/google` (served from `'self'`), so no external font/style host is whitelisted. Both retain
   `style-src 'unsafe-inline'` (Radix + inline styles), and both add
   `frame-ancestors 'none'`, `Strict-Transport-Security` (HSTS, 2y + preload), `X-Content-Type-Options: nosniff`,
   `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`. The old `<meta>` CSP was removed from

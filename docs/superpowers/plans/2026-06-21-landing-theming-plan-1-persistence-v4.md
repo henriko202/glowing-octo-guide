@@ -34,20 +34,20 @@ Every task's requirements implicitly include this section.
 - **Do NOT gate on `pnpm format:check`** (docs are not Prettier-clean repo-wide, so it fails on unrelated files).
   Instead run `pnpm exec prettier --write <files-you-changed>` to normalize, then gate on **lint + typecheck + app
   test + landing build**.
-- **Cookie domain is env-configured, unset in dev.** `VITE_COOKIE_DOMAIN` (app) / `NEXT_PUBLIC_COOKIE_DOMAIN` (
-  landing) = `.linkintothessi.com` in prod, **unset in dev** (host-only cookie; cross-site sync is prod-only because dev
-  is `localhost:3000` vs `:5173`). Cookies: `Path=/`, `SameSite=Lax`, ~1yr.
+- **Cookie domain is env-configured, unset in dev.** `VITE_COOKIE_DOMAIN` (app) / `NEXT_PUBLIC_COOKIE_DOMAIN`
+  (landing) = `.linkintothessi.com` in prod, **unset in dev** (host-only cookie; cross-site sync is prod-only because
+  dev is `localhost:3000` vs `:5173`). Cookies: `Path=/`, `SameSite=Lax`, ~1yr.
 - **Cookie + localStorage:** the cookie is the cross-site source of truth; keep a **localStorage mirror** for
   speed/back-compat. Theme cookie name = `theme` (values `light|dark|system`); language cookie name = `lang` (values
   `en|pt|es`).
 - **v4 must use `@theme inline`** (not plain `@theme`). The landing's tokens are `var(--x)` indirections that flip on
-  `.dark`; `@theme inline` makes utilities emit `color-mix(in oklab, var(--token) N%, transparent)` so opacity
-  utilities (`text-cream/50`, `bg-gold/[0.04]`) stay reactive to the `.dark` override. Plain `@theme` breaks every `/NN`
+  `.dark`; `@theme inline` makes utilities emit `color-mix(in oklab, var(--token) N%, transparent)` so opacity utilities
+  (`text-cream/50`, `bg-gold/[0.04]`) stay reactive to the `.dark` override. Plain `@theme` breaks every `/NN`
   opacity utility in dark mode.
 - **D6 — dark palette unifies with the app.** The landing's deeper navy is replaced by the app's dark values (`#060B18`→
   `#0e1320`, etc.). See the palette table below.
-- **lnblue is a brand color, not a theme color** — `#0077b5` (and `-light` `#0a84ff`) stay constant across both themes (
-  define only in `:root`).
+- **lnblue is a brand color, not a theme color** — `#0077b5` (and `-light` `#0a84ff`) stay constant across both themes
+  (define only in `:root`).
 - **On-accent foregrounds are theme-constant.** `--on-gold` (dark text on gold fills) and `--on-lnblue` (light text on
   the blue badge) do **not** flip — define only in `:root`. Never reuse `text-ink`/`text-cream` as on-accent text (they
   invert per theme and fail contrast).
@@ -819,15 +819,15 @@ export default function ThemeToggle() {
 
 - [ ] **Step 5: Mount ThemeToggle in Nav**
 
-In `landing/components/Nav.tsx`, import the toggle and wrap it with the CTA in a flex row. Replace the lone CTA `<a>` (
-lines ~52-57) with:
+In `landing/components/Nav.tsx`, import the toggle and wrap it with the CTA in a flex row. Replace the lone CTA `<a>`
+(lines ~52-57) with:
 
 ```tsx
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <a
             href={SIGN_IN_URL}
-            className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold-text transition-all duration-200 hover:bg-gold hover:text-on-gold"
+            className="rounded-full border border-gold/60 px-5 py-2 text-sm font-medium text-gold-text transition-all duration-300 hover:bg-gold hover:text-on-gold"
           >
             Start free
           </a>
@@ -972,7 +972,7 @@ Run: `pnpm exec prettier --write landing/components/Hero.tsx landing/components/
 - [ ] **Step 1: Update PLATFORM.md**
 
 Read `docs/PLATFORM.md`'s Table of Contents and its final "Maintaining This Document" mapping. Update (or add) the
-section(s) covering **frontend theming + cross-site persistence**:
+section (s) covering **frontend theming + cross-site persistence**:
 
 - The app + landing now share `theme` + `lang` cookies on `NEXT_PUBLIC_COOKIE_DOMAIN` / `VITE_COOKIE_DOMAIN` (
   `.linkintothessi.com` prod, unset dev; cross-site sync is prod-only).
@@ -1011,5 +1011,5 @@ Leave all changes saved and unstaged. Tell the controller the plan is complete a
 - **Phase C (i18n) depends on `landing/lib/cookies.ts`** (the `lang` cookie) — it is created here, reused there. The
   no-flash script + ThemeToggle currently live in the non-locale `app/layout.tsx`; Phase C moves them into
   `app/[locale]/layout.tsx`.
-- If a reviewer flags that display-headline gold became brighter in dark mode, that is the intended `--gold-text` (
-  #e8c474) per Step B4.1, not a regression.
+- If a reviewer flags that display-headline gold became brighter in dark mode, that is the intended `--gold-text`
+  (#e8c474) per Step B4.1, not a regression.

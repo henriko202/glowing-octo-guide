@@ -1081,7 +1081,7 @@ Add the section (after the "LinkedIn Identity" `</section>`):
           <button
             onClick={handleSaveCommentLanguage}
             disabled={commentLangSaving}
-            className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-200 ${commentLangSaved ? 'bg-green-500' : 'bg-blue-500'} ${commentLangSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+            className={`rounded-md border-none px-4 py-[7px] text-[13px] text-white transition-colors duration-300 ${commentLangSaved ? 'bg-green-500' : 'bg-blue-500'} ${commentLangSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
           >
             {commentLangSaved ? t('settings.saved') : commentLangSaving ? t('settings.saving') : t('settings.save')}
           </button>
