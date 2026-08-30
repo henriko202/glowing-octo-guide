@@ -33,20 +33,28 @@ export function buildPostUrl(urn: string, sourceUrl?: string): string {
 }
 
 /**
- * Renders a LinkedIn post as a clipped embed iframe. The iframe is rendered
- * taller than its container so the container's overflow:hidden clips LinkedIn's
- * native action bar at the bottom. An optional `footer` is overlaid at the
- * bottom (opaque) to cover that strip with app-owned controls.
+ * Renders a LinkedIn post as a fixed-height clipped embed iframe, with an app-owned
+ * `footer` overlaid opaquely at the bottom to cover LinkedIn's native action bar.
+ *
+ * The height is a HEURISTIC, not a precise clip: the embed is cross-origin and emits
+ * no resize message, so we cannot know a post's real height. Consequences of a fixed
+ * `containerHeight` (overflow:hidden clips everything below it):
+ *   - post TALLER than the box → its native bar is below the fold (hidden); the footer
+ *     just covers the bottom strip of real content.
+ *   - post SHORTER than the box → content ends above the footer, so the native bar can
+ *     sit in the gap and peek out above our footer.
+ * So `containerHeight` is tuned a bit BELOW the typical post height: the common (media)
+ * post overflows and its native bar drops out of view; only unusually short posts show
+ * a sliver. Making the iframe taller than the container does NOT help — overflow already
+ * clips at `containerHeight` regardless of the iframe's own height.
  */
 export default function LinkedInEmbed({
   urn,
-  containerHeight = 420,
-  iframeHeight = 470,
+  containerHeight = 400,
   footer
 }: {
   urn: string
   containerHeight?: number
-  iframeHeight?: number
   footer?: ReactNode
 }) {
   const { t } = useTranslation()
@@ -59,8 +67,7 @@ export default function LinkedInEmbed({
         src={buildEmbedUrl(urn)}
         title={t('linkedInEmbed.title')}
         width="100%"
-        height={iframeHeight}
-        // height="100%"
+        height="100%"
         className="block border-none"
         // sandbox: explicit whitelist — prevents the iframe from navigating the
         // top window, opening popups, or submitting forms.

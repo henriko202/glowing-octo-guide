@@ -74,6 +74,13 @@ describe('upsertUserHandler', () => {
     expect(db._patches[0].data.lastLoginAt).toBeGreaterThan(0)
     expect(db._patches[0].data.email).toBe('new@example.com')
   })
+
+  it('does NOT unset a saved headline when login carries no headline (OIDC)', async () => {
+    const existing = { _id: 'existing-id', linkedinId: 'li-123', headline: 'Senior PM · SaaS' }
+    const db = createMockDb(existing)
+    await upsertUserHandler(db, { ...BASE_ARGS, headline: undefined })
+    expect('headline' in db._patches[0].data).toBe(false)
+  })
 })
 
 describe('updateTokensHandler', () => {

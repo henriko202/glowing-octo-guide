@@ -28,6 +28,14 @@ export default defineSchema({
     // NOT clear these or the posts already written with them — only the setter is tier-gated.
     defaultVisibilityIndustries: v.optional(v.array(v.string())),
     defaultVisibilityCountries: v.optional(v.array(v.string())),
+    // Pro/Contact-only feed filter: the viewer sees only posts whose AUTHOR matches one of these
+    // industries AND one of these countries (each dimension is an OR over its list; the two
+    // dimensions are ANDed). A "what I want to see" preference, NOT an access rule — read straight
+    // off the viewer doc by feed.getFeed (via buildFeedFilter). Set via users.setFeedFilter, gated
+    // server-side to tier 'pro'/'contact'. Absent/empty for a dimension ⇒ that dimension isn't
+    // filtered. A downgrade does NOT clear these; only the setter is tier-gated.
+    feedFilterIndustries: v.optional(v.array(v.string())),
+    feedFilterCountries: v.optional(v.array(v.string())),
     tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))),
     subscriptionStatus: v.union(
       v.literal('trialing'),

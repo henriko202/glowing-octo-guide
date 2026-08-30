@@ -47,7 +47,20 @@
     "like": "Gostar",
     "comment": "Comentar",
     "cardGate": "Adicione um método de pagamento na página de Assinatura para começar a interagir.",
-    "viewOnLinkedIn": "Ver no LinkedIn ↗"
+    "viewOnLinkedIn": "Ver no LinkedIn ↗",
+    "emptyFiltered": "Nenhuma publicação corresponde ao seu filtro. Ajuste-o ou limpe-o para ver mais.",
+    "filter": {
+      "toggle": "Filtrar feed",
+      "note": "Mostrar apenas publicações das indústrias e países que escolher. Deixe vazio para ver todos.",
+      "industries": "Indústrias",
+      "countries": "Países",
+      "addIndustry": "Adicionar uma indústria…",
+      "addCountry": "Adicionar um país…",
+      "remove": "Remover {{label}}",
+      "clear": "Limpar filtros",
+      "selectPlaceholder": "Selecionar…",
+      "noResults": "Sem resultados."
+    }
   },
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mês",
@@ -125,6 +138,8 @@
     "profileNote": "Edite seu setor e país abaixo.",
     "visibility": "Quem pode ver suas publicações",
     "visibilityNote": "Restrinja quais setores e países podem ver suas publicações no feed. Deixe vazio para mostrar a todos.",
+    "feedFilter": "O que você vê no seu feed",
+    "feedFilterNote": "Mostrar apenas publicações destes setores e países. Deixe vazio para ver publicações de todos.",
     "visibilityIndustries": "Setores",
     "visibilityCountries": "Países",
     "visibilityAddIndustry": "Adicionar um setor…",

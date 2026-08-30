@@ -1,6 +1,6 @@
 // convex/feed.ts
 import { query, type QueryCtx } from './_generated/server'
-import { v, type Infer } from 'convex/values'
+import { type Infer, v } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth } from './lib/auth'
@@ -69,20 +69,27 @@ export function toFeedAuthor(author: Doc<'users'>) {
 }
 
 /**
- * Author eligibility for the shared feed. Excludes authors pending account deletion (their
- * content disappears from the feed the moment they request erasure, and reappears automatically
- * if they cancel — no post mutation needed). Trialing authors ARE eligible: they hold a
- * card-backed Growth trial (Task 4 / Plan 2B) so their posts belong in the feed (reciprocity).
+ * Author eligibility for the shared feed. Excludes BANNED authors (moderation — their content
+ * leaves the feed and search the moment they are banned, and returns on unban, with no post
+ * mutation) and authors pending account deletion (their content disappears the moment they request
+ * erasure, and reappears if they cancel). Trialing authors ARE eligible: they hold a card-backed
+ * Growth trial (Task 4 / Plan 2B) so their posts belong in the feed (reciprocity).
  *
  * A CANCELED author keeps their posts in the feed only until their paid period ends: cancellation
  * never revokes engage access (see lib/access.canEngage), but the member's own posts drop out once
  * `now` passes `subscriptionEndsAt` (the paid-through instant). Missing/elapsed → not eligible.
  */
 export function isAuthorFeedEligible(
-  author: { subscriptionStatus?: string; subscriptionEndsAt?: number; deletionScheduledAt?: number } | null,
+  author: {
+    subscriptionStatus?: string
+    subscriptionEndsAt?: number
+    deletionScheduledAt?: number
+    isBanned?: boolean
+  } | null,
   now: number
 ): boolean {
   if (!author) return false
+  if (author.isBanned) return false
   if (author.deletionScheduledAt) return false
   if (author.subscriptionStatus === 'canceled') {
     return author.subscriptionEndsAt !== undefined && now < author.subscriptionEndsAt
@@ -101,7 +108,7 @@ export function isAuthorFeedEligible(
 export function isPostVisibleToViewer(
   post: Pick<Doc<'posts'>, 'authorId' | 'visibilityIndustries' | 'visibilityCountries'>,
   viewer: Pick<Doc<'users'>, '_id' | 'industry' | 'country'>,
-  author: Pick<Doc<'users'>, 'subscriptionStatus' | 'subscriptionEndsAt' | 'deletionScheduledAt'> | null,
+  author: Pick<Doc<'users'>, 'subscriptionStatus' | 'subscriptionEndsAt' | 'deletionScheduledAt' | 'isBanned'> | null,
   now: number
 ): boolean {
   if (post.authorId === viewer._id) return false
@@ -121,11 +128,9 @@ const EMPTY_PAGE = { page: [], isDone: true, continueCursor: '' }
 export const getFeed = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    sessionToken: v.optional(v.string()),
-    filterIndustries: v.optional(v.array(v.string())),
-    filterCountries: v.optional(v.array(v.string()))
+    sessionToken: v.optional(v.string())
   },
-  handler: async (ctx, { paginationOpts, sessionToken, filterIndustries, filterCountries }) => {
+  handler: async (ctx, { paginationOpts, sessionToken }) => {
     if (!sessionToken) return EMPTY_PAGE
     let viewer: Doc<'users'>
     try {
@@ -134,12 +139,14 @@ export const getFeed = query({
       return EMPTY_PAGE
     }
 
+    // Pro/Contact filter is a saved preference read straight off the viewer doc (set via
+    // users.setFeedFilter). Patching it re-runs this query reactively — no client-supplied args.
     const filter = buildFeedFilter({
       tier: viewer.tier,
       industry: viewer.industry,
       country: viewer.country,
-      filterIndustries,
-      filterCountries
+      filterIndustries: viewer.feedFilterIndustries,
+      filterCountries: viewer.feedFilterCountries
     })
 
     return fetchFeedPage(ctx, viewer, { paginationOpts, filter, now: Date.now() })

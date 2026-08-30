@@ -47,7 +47,20 @@
     "like": "Like",
     "comment": "Comment",
     "cardGate": "Add a payment method on the Billing page to start engaging.",
-    "viewOnLinkedIn": "View on LinkedIn ↗"
+    "viewOnLinkedIn": "View on LinkedIn ↗",
+    "emptyFiltered": "No posts match your filter yet. Adjust it or clear it to see more.",
+    "filter": {
+      "toggle": "Filter feed",
+      "note": "Show only posts from the industries and countries you choose. Leave empty to see everyone.",
+      "industries": "Industries",
+      "countries": "Countries",
+      "addIndustry": "Add an industry…",
+      "addCountry": "Add a country…",
+      "remove": "Remove {{label}}",
+      "clear": "Clear filters",
+      "selectPlaceholder": "Select…",
+      "noResults": "No results."
+    }
   },
   "myPosts": {
     "featuredPill": "{{used}} of {{limit}} featured this month",
@@ -125,6 +138,8 @@
     "profileNote": "Edit your industry and country below.",
     "visibility": "Who can see your posts",
     "visibilityNote": "Restrict which industries and countries can see your posts in the feed. Leave empty to show to all users.",
+    "feedFilter": "What you see in your feed",
+    "feedFilterNote": "Show only posts from these industries and countries. Leave empty to see posts from everyone.",
     "visibilityIndustries": "Industries",
     "visibilityCountries": "Countries",
     "visibilityAddIndustry": "Add an industry…",

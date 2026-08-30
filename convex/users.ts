@@ -75,8 +75,8 @@ export function toSafeMe(user: Doc<'users'>) {
   return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
 }
 
-/** LinkedIn's own headline limit; used to cap the user-editable headline field. */
-export const MAX_HEADLINE_LENGTH = 220
+/** Cap for the user-editable headline field; mirrored by the Settings input's maxLength. */
+export const MAX_HEADLINE_LENGTH = 65
 
 /** Narrow db surface for applyScrapedProfileHandler — only needs get + patch. */
 interface ScrapedProfileDb {
@@ -102,7 +102,8 @@ export async function applyScrapedProfileHandler(db: ScrapedProfileDb, args: App
   if (args.location !== undefined) patch.location = args.location
   if (args.primaryLocale !== undefined) patch.primaryLocale = args.primaryLocale
   if (args.country !== undefined && !existing?.country) patch.country = args.country.toUpperCase()
-  if (args.headline !== undefined && !existing?.headline) patch.headline = args.headline
+  if (args.headline !== undefined && !existing?.headline)
+    patch.headline = args.headline.trim().slice(0, MAX_HEADLINE_LENGTH)
   if (Object.keys(patch).length > 0) await db.patch(args.userId, patch)
 }
 
@@ -356,6 +357,50 @@ export const setPostVisibility = mutation({
   handler: async (ctx, { sessionToken, industries, countries }) => {
     const user = await requireAuth(ctx, sessionToken)
     await setPostVisibilityHandler(
+      ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> },
+      user._id,
+      user.tier,
+      { industries, countries }
+    )
+  }
+})
+
+/**
+ * Validates + patches the caller's Pro/Contact feed filter. The feed (convex/feed.ts getFeed →
+ * buildFeedFilter) reads these straight off the viewer doc: the viewer sees only posts whose AUTHOR
+ * matches one of `feedFilterIndustries` AND one of `feedFilterCountries` (each dimension ORs over
+ * its list; empty ⇒ that dimension isn't filtered). A "what I want to see" preference, not an access
+ * rule. Gated to Pro/Contact tiers HERE (server-side) — never trust the caller's UI gate. Rejects
+ * any value not in the canonical INDUSTRIES/COUNTRY_CODES lists (trust boundary). Mirrors
+ * setPostVisibilityHandler.
+ */
+export async function setFeedFilterHandler(
+  db: PatchOnlyDb,
+  userId: string,
+  tier: string | undefined,
+  args: SetPostVisibilityArgs
+): Promise<void> {
+  if (tier !== 'pro' && tier !== 'contact') {
+    throw new ConvexError('Feed filtering requires a Pro or Contact plan')
+  }
+  if (!args.industries.every(isValidIndustry)) throw new ConvexError('Invalid industry')
+  const countries = args.countries.map(c => c.toUpperCase())
+  if (!countries.every(isValidCountry)) throw new ConvexError('Invalid country')
+  await db.patch(userId, { feedFilterIndustries: args.industries, feedFilterCountries: countries })
+}
+
+// Public: Pro/Contact user sets the industry/country allowlists that filter THEIR feed. Applied
+// live — the feed reads these from the viewer doc, so patching re-runs getFeed reactively. Empty
+// arrays clear the filter. A downgrade does NOT clear these; only this setter is tier-gated.
+export const setFeedFilter = mutation({
+  args: {
+    sessionToken: v.string(),
+    industries: v.array(v.string()),
+    countries: v.array(v.string())
+  },
+  handler: async (ctx, { sessionToken, industries, countries }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await setFeedFilterHandler(
       ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> },
       user._id,
       user.tier,

@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
-import { X } from 'lucide-react'
 import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { COUNTRY_CODES, countryLabel, INDUSTRIES } from '../../../convex/lib/profileOptions'
 import { type ComboboxOption, VirtualizedCombobox } from '@/components/VirtualizedCombobox'
+import { ChipMultiSelect } from '@/components/ChipMultiSelect'
 import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { friendlyError } from '@/lib/errors'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
@@ -28,6 +27,9 @@ interface MeProfile {
   // Pro/Contact-only defaults copied onto every future post (backlog/B06). See users.setPostVisibility.
   defaultVisibilityIndustries?: string[]
   defaultVisibilityCountries?: string[]
+  // Pro/Contact-only feed filter (what the viewer wants to see). See users.setFeedFilter + feed.getFeed.
+  feedFilterIndustries?: string[]
+  feedFilterCountries?: string[]
   tier: 'starter' | 'growth' | 'pro' | 'contact'
   subscriptionStatus: 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
   trialEndsAt?: number
@@ -36,9 +38,8 @@ interface MeProfile {
 }
 
 /**
- * One "chip picker" field: removable chips for the currently-selected values, plus a searchable
- * combobox (already-selected options excluded) to add more. Shared by the visibility-industries
- * and visibility-countries fields below — same interaction, different option list.
+ * Post-visibility chip field — thin wrapper over the shared ChipMultiSelect that supplies the
+ * Settings-specific i18n strings for the industries/countries variants.
  */
 function VisibilityChipField({
   field,
@@ -54,46 +55,18 @@ function VisibilityChipField({
   onRemove: (value: string) => void
 }) {
   const { t } = useTranslation()
-  const labelFor = (value: string) => options.find(o => o.value === value)?.label ?? value
-  const selectedSet = new Set(selected)
-  const available = options.filter(o => !selectedSet.has(o.value))
-  const ariaLabel = field === 'industries' ? t('settings.visibilityIndustries') : t('settings.visibilityCountries')
-  const addPlaceholder =
-    field === 'industries' ? t('settings.visibilityAddIndustry') : t('settings.visibilityAddCountry')
-
   return (
-    <div className="mb-3">
-      {selected.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {selected.map(value => (
-            <Badge
-              key={value}
-              variant="outline"
-              className="gap-1 py-1 pr-1 pl-2 text-xs font-normal"
-            >
-              {labelFor(value)}
-              <button
-                type="button"
-                onClick={() => onRemove(value)}
-                aria-label={t('settings.visibilityRemove', { label: labelFor(value) })}
-                className="hover:bg-muted focus-visible:ring-ring -mr-0.5 rounded-full p-1 focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
-      <VirtualizedCombobox
-        options={available}
-        value=""
-        onChange={onAdd}
-        ariaLabel={ariaLabel}
-        placeholder={addPlaceholder}
-        searchPlaceholder={t('settings.selectPlaceholder')}
-        emptyText={t('settings.noResults')}
-      />
-    </div>
+    <ChipMultiSelect
+      options={options}
+      selected={selected}
+      onAdd={onAdd}
+      onRemove={onRemove}
+      ariaLabel={field === 'industries' ? t('settings.visibilityIndustries') : t('settings.visibilityCountries')}
+      addPlaceholder={field === 'industries' ? t('settings.visibilityAddIndustry') : t('settings.visibilityAddCountry')}
+      searchPlaceholder={t('settings.selectPlaceholder')}
+      emptyText={t('settings.noResults')}
+      removeLabel={label => t('settings.visibilityRemove', { label })}
+    />
   )
 }
 
@@ -106,6 +79,7 @@ export default function SettingsPage() {
   const refreshEnabled = useQuery(api.users.isProfileRefreshEnabled, sessionToken ? { sessionToken } : 'skip')
   const setCommentLanguage = useMutation(api.users.setCommentLanguage)
   const setPostVisibility = useMutation(api.users.setPostVisibility)
+  const setFeedFilter = useMutation(api.users.setFeedFilter)
 
   const [industry, setIndustry] = useState<string>('')
   const [country, setCountry] = useState<string>('')
@@ -126,6 +100,14 @@ export default function SettingsPage() {
   const [visCountriesDirty, setVisCountriesDirty] = useState(false)
   const [visSaving, setVisSaving] = useState(false)
   const [visSaved, setVisSaved] = useState(false)
+  // Feed filter (what the viewer wants to see) — same dirty-flag + Save pattern as visibility above.
+  const [ffIndustries, setFfIndustries] = useState<string[]>([])
+  const [ffCountries, setFfCountries] = useState<string[]>([])
+  const [ffIndustriesDirty, setFfIndustriesDirty] = useState(false)
+  const [ffCountriesDirty, setFfCountriesDirty] = useState(false)
+  const [ffSaving, setFfSaving] = useState(false)
+  const [ffSaved, setFfSaved] = useState(false)
+  const [ffError, setFfError] = useState<string | null>(null)
   // Save-failure messages (e.g. server-side validation / tier gate), one per save section.
   const [profileError, setProfileError] = useState<string | null>(null)
   const [commentLangError, setCommentLangError] = useState<string | null>(null)
@@ -161,6 +143,16 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
     if (!visCountriesDirty) setVisCountries(meVisCountries ?? [])
   }, [meVisCountries, visCountriesDirty])
+  const meFfIndustries = me?.feedFilterIndustries
+  const meFfCountries = me?.feedFilterCountries
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
+    if (!ffIndustriesDirty) setFfIndustries(meFfIndustries ?? [])
+  }, [meFfIndustries, ffIndustriesDirty])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value into editable state until the user edits the field
+    if (!ffCountriesDirty) setFfCountries(meFfCountries ?? [])
+  }, [meFfCountries, ffCountriesDirty])
 
   if (!me) {
     return <LoadingSpinner />
@@ -251,6 +243,42 @@ export default function SettingsPage() {
     }
   }
 
+  function addFfIndustry(code: string) {
+    if (!code || ffIndustries.includes(code)) return
+    setFfIndustries(prev => [...prev, code])
+    setFfIndustriesDirty(true)
+  }
+  function removeFfIndustry(code: string) {
+    setFfIndustries(prev => prev.filter(c => c !== code))
+    setFfIndustriesDirty(true)
+  }
+  function addFfCountry(code: string) {
+    if (!code || ffCountries.includes(code)) return
+    setFfCountries(prev => [...prev, code])
+    setFfCountriesDirty(true)
+  }
+  function removeFfCountry(code: string) {
+    setFfCountries(prev => prev.filter(c => c !== code))
+    setFfCountriesDirty(true)
+  }
+
+  async function handleSaveFeedFilter() {
+    if (!sessionToken) return
+    setFfSaving(true)
+    setFfError(null)
+    try {
+      await setFeedFilter({ sessionToken, industries: ffIndustries, countries: ffCountries })
+      setFfIndustriesDirty(false)
+      setFfCountriesDirty(false)
+      setFfSaved(true)
+      setTimeout(() => setFfSaved(false), 3000)
+    } catch (err) {
+      setFfError(friendlyError(err, 'Save failed'))
+    } finally {
+      setFfSaving(false)
+    }
+  }
+
   async function handleRefresh() {
     if (!sessionToken) return
     setRefreshing(true)
@@ -307,7 +335,7 @@ export default function SettingsPage() {
         <div className="mb-1">
           <Input
             type="text"
-            maxLength={220}
+            maxLength={65}
             value={headline}
             onChange={e => {
               setHeadline(e.target.value)
@@ -372,7 +400,7 @@ export default function SettingsPage() {
       </section>
 
       {isPro ? (
-        <section className="border-border bg-card rounded-xl border p-5">
+        <section className="border-border bg-card mb-4 rounded-xl border p-5">
           <h2 className="text-foreground mt-0 mb-2 text-base font-semibold">{t('settings.visibility')}</h2>
           <p className="text-muted-foreground mb-3 text-sm">{t('settings.visibilityNote')}</p>
 
@@ -408,6 +436,42 @@ export default function SettingsPage() {
       ) : (
         <section className="border-border bg-accent rounded-xl border p-5">
           <p className="text-accent-foreground m-0 text-sm">{t('settings.upgradePrompt')}</p>
+        </section>
+      )}
+
+      {isPro && (
+        <section className="border-border bg-card rounded-xl border p-5">
+          <h2 className="text-foreground mt-0 mb-2 text-base font-semibold">{t('settings.feedFilter')}</h2>
+          <p className="text-muted-foreground mb-3 text-sm">{t('settings.feedFilterNote')}</p>
+
+          <div className="text-foreground mb-1 text-sm font-medium">{t('settings.visibilityIndustries')}</div>
+          <VisibilityChipField
+            field="industries"
+            options={industryOptions}
+            selected={ffIndustries}
+            onAdd={addFfIndustry}
+            onRemove={removeFfIndustry}
+          />
+
+          <div className="text-foreground mb-1 text-sm font-medium">{t('settings.visibilityCountries')}</div>
+          <VisibilityChipField
+            field="countries"
+            options={countryOptions}
+            selected={ffCountries}
+            onAdd={addFfCountry}
+            onRemove={removeFfCountry}
+          />
+
+          <div className="mt-3">
+            <Button
+              onClick={handleSaveFeedFilter}
+              disabled={ffSaving}
+              className={ffSaved ? 'bg-success text-success-foreground' : undefined}
+            >
+              {ffSaved ? t('settings.saved') : ffSaving ? t('settings.saving') : t('settings.save')}
+            </Button>
+          </div>
+          {ffError && <p className="text-destructive mt-2 mb-0 text-xs">{ffError}</p>}
         </section>
       )}
     </div>

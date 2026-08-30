@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useAction, usePaginatedQuery } from 'convex/react'
+import { useAction, usePaginatedQuery, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -7,10 +7,11 @@ import { api } from '../convex'
 import PostCard, { type PostWithAuthor } from '../components/PostCard'
 import { buildPostUrl } from '../components/LinkedInEmbed'
 import { toast } from '../components/ui/toast'
-import { HANDOFF_DELAY_MS, delay, openLinkedIn } from '../lib/handoff'
+import { delay, HANDOFF_DELAY_MS, openLinkedIn } from '../lib/handoff'
 import CommentBox from '../components/CommentBox'
 import PostComposer from '../components/PostComposer'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { FeedFilterPanel } from '../components/FeedFilterPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useCardGate } from '@/hooks/useCardGate'
@@ -29,6 +30,19 @@ export default function FeedPage() {
     { sessionToken },
     { initialNumItems: FEED_PAGE_SIZE }
   )
+  // Viewer profile — drives the Pro/Contact feed filter (tier gate + saved industries/countries).
+  const me = useQuery(api.users.getMe, { sessionToken }) as
+    | {
+        tier?: string
+        feedFilterIndustries?: string[]
+        feedFilterCountries?: string[]
+      }
+    | null
+    | undefined
+  const canFilter = me?.tier === 'pro' || me?.tier === 'contact'
+  const filterIndustries = me?.feedFilterIndustries ?? []
+  const filterCountries = me?.feedFilterCountries ?? []
+  const filterActive = filterIndustries.length + filterCountries.length > 0
   const react = useAction(api.interactions.reactToPost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
@@ -104,7 +118,19 @@ export default function FeedPage() {
 
       <PostComposer onSubmit={handlePostSubmit} />
 
-      {posts.length === 0 && <p className="text-muted-foreground py-8 text-center">{t('feed.empty')}</p>}
+      {canFilter && sessionToken && (
+        <FeedFilterPanel
+          sessionToken={sessionToken}
+          industries={filterIndustries}
+          countries={filterCountries}
+        />
+      )}
+
+      {posts.length === 0 && (
+        <p className="text-muted-foreground py-8 text-center">
+          {filterActive ? t('feed.emptyFiltered') : t('feed.empty')}
+        </p>
+      )}
 
       {/* Outer list ref used for scrollMargin calculation */}
       <div ref={listRef}>

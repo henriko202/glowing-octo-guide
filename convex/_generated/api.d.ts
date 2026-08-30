@@ -61,6 +61,7 @@ import type * as privacy_emails from "../privacy/emails.js";
 import type * as privacy_export from "../privacy/export.js";
 import type * as privacy_retention from "../privacy/retention.js";
 import type * as search from "../search.js";
+import type * as seed from "../seed.js";
 import type * as sessions from "../sessions.js";
 import type * as stripe from "../stripe.js";
 import type * as users from "../users.js";
@@ -125,6 +126,7 @@ declare const fullApi: ApiFromModules<{
   "privacy/export": typeof privacy_export;
   "privacy/retention": typeof privacy_retention;
   search: typeof search;
+  seed: typeof seed;
   sessions: typeof sessions;
   stripe: typeof stripe;
   users: typeof users;

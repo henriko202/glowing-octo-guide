@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { updateProfileHandler, assertCanRefresh } from './users'
+import { updateProfileHandler, assertCanRefresh, MAX_HEADLINE_LENGTH } from './users'
 
 function createMockDb() {
   const patches: any[] = []
@@ -49,9 +49,18 @@ describe('updateProfileHandler', () => {
     expect(db._patches[0].data.headline).toBeUndefined()
   })
 
-  it('rejects a headline longer than 220 characters', async () => {
+  it('accepts a headline exactly at the max length', async () => {
     const db = createMockDb()
-    await expect(updateProfileHandler(db as any, 'u1', { headline: 'x'.repeat(221) })).rejects.toThrow(/headline/i)
+    const atLimit = 'x'.repeat(MAX_HEADLINE_LENGTH)
+    await updateProfileHandler(db as any, 'u1', { headline: atLimit })
+    expect(db._patches[0].data.headline).toBe(atLimit)
+  })
+
+  it('rejects a headline longer than the max length', async () => {
+    const db = createMockDb()
+    await expect(
+      updateProfileHandler(db as any, 'u1', { headline: 'x'.repeat(MAX_HEADLINE_LENGTH + 1) })
+    ).rejects.toThrow(/headline/i)
     expect(db._patches).toHaveLength(0)
   })
 })

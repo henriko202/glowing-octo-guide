@@ -38,7 +38,6 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     const patch: Record<string, unknown> = {
       // SECURITY: isAdmin is intentionally excluded — it can only be set directly in the DB
       name: args.name,
-      headline: args.headline,
       profilePictureUrl: args.profilePictureUrl,
       linkedinAccessToken: args.accessToken,
       linkedinRefreshToken: args.refreshToken,
@@ -46,6 +45,10 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
       email: args.email,
       lastLoginAt: Date.now()
     }
+    // OIDC login never carries a headline (args.headline is always undefined here), and
+    // patching undefined would UNSET a headline the user set manually or that was scraped.
+    // Only touch it when a headline is actually provided. Same guard idiom as refreshToken below.
+    if (args.headline !== undefined) patch.headline = args.headline
     await db.patch(existing._id, patch)
     return existing._id
   }
