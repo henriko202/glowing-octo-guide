@@ -1,6 +1,6 @@
 // landing/components/LanguageSelector.tsx
 'use client'
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { setCookie } from '../lib/cookies'
 import { i18n, type Locale } from '../i18n/config'
 import type { Dictionary } from '../i18n/getDictionary'
@@ -27,7 +27,7 @@ export default function LanguageSelector({ dict, lang }: { dict: Dictionary['lan
           onClick={() => switchTo(l)}
           aria-label={`${dict.label}: ${dict[l as Locale]}`}
           aria-current={l === lang ? 'true' : undefined}
-          className={`rounded px-1.5 py-0.5 uppercase transition-colors ${
+          className={`rounded px-1.5 py-0.5 uppercase ${
             l === lang ? 'text-gold-text' : 'text-cream/50 hover:text-cream'
           }`}
         >

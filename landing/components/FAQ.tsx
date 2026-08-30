@@ -29,7 +29,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
                 <span className="text-base font-medium text-cream">{faq.q}</span>
                 <span
                   aria-hidden="true"
-                  className="flex-shrink-0 font-display text-2xl text-gold-text transition-transform duration-200"
+                  className="flex-shrink-0 font-display text-2xl text-gold-text transition-transform duration-300"
                   style={{ transform: openIndex === i ? 'rotate(45deg)' : 'rotate(0deg)' }}
                 >
                   +

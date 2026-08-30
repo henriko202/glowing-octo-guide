@@ -25,7 +25,7 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
             >
               <div className="mb-5 flex items-start justify-between">
                 <span className="text-2xl">{pillar.icon}</span>
-                <span className="rounded-full border border-cream/10 px-2.5 py-1 text-xs font-medium text-cream/30">
+                <span className="rounded-full border border-gold/15 px-2.5 py-1 text-xs font-medium text-cream/30 dark:border-cream/10">
                   {pillar.pts} pts
                 </span>
               </div>
@@ -44,7 +44,7 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
               >
                 <p className="font-display text-6xl font-semibold text-gold-text">{stat.value}</p>
                 <p className="mx-auto mt-3 max-w-[180px] text-sm leading-relaxed text-cream/60">{stat.label}</p>
-                <p className="mt-2 text-xs text-cream/25">{stat.source}</p>
+                <p className="mt-2 text-xs text-cream/50 dark:text-cream/25">{stat.source}</p>
               </div>
             ))}
           </div>

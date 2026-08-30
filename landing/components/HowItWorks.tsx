@@ -17,13 +17,13 @@ export default function HowItWorks({ dict }: { dict: Dictionary['howItWorks'] })
               key={i}
               className="group relative"
             >
-              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full border border-cream/15 transition-colors group-hover:border-gold/40">
-                <span className="font-display text-xl font-semibold text-cream/40 transition-colors group-hover:text-gold-text">
+              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full border border-gold/20 transition-colors duration-300 group-hover:border-gold/40 dark:border-cream/15">
+                <span className="font-display text-xl font-semibold text-cream/60 transition-colors duration-300 group-hover:text-gold-text dark:text-cream/40">
                   {String(i + 1).padStart(2, '0')}
                 </span>
               </div>
               <h3 className="mb-3 font-display text-2xl font-semibold text-cream">{step.title}</h3>
-              <p className="text-sm leading-relaxed text-cream/50">{step.body}</p>
+              <p className="text-sm leading-relaxed text-cream/70 dark:text-cream/50">{step.body}</p>
             </div>
           ))}
         </div>

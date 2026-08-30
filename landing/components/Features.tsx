@@ -18,10 +18,10 @@ export default function Features({ dict, tiers }: { dict: Dictionary['features']
               className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-all duration-300 hover:border-cream/15"
             >
               <div className="mb-5 flex items-start justify-between">
-                <span className="text-2xl text-gold-text opacity-70 transition-opacity group-hover:opacity-100">
+                <span className="text-2xl text-gold-text opacity-70 transition-opacity duration-300 group-hover:opacity-100">
                   {f.icon}
                 </span>
-                <span className="rounded-full border border-cream/10 px-2.5 py-1 text-xs font-medium text-cream/30">
+                <span className="rounded-full border border-gold/15 px-2.5 py-1 text-xs font-medium text-cream/30 dark:border-cream/10">
                   {tiers[f.tier as keyof typeof tiers]}
                 </span>
               </div>

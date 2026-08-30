@@ -39,13 +39,13 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
           <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-cream/10 bg-ink-800 p-1 text-sm">
             <button
               onClick={() => setAnnual(true)}
-              className={`rounded-full px-4 py-1.5 transition-colors ${annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
+              className={`rounded-full px-4 py-1.5 transition-colors duration-300 ${annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
             >
               {dict.toggleAnnual} <span className="text-xs opacity-80">{dict.toggleAnnualSuffix}</span>
             </button>
             <button
               onClick={() => setAnnual(false)}
-              className={`rounded-full px-4 py-1.5 transition-colors ${!annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
+              className={`rounded-full px-4 py-1.5 transition-colors duration-300 ${!annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
             >
               {dict.toggleMonthly}
             </button>
@@ -94,7 +94,7 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
                 </ul>
                 <a
                   href={`${SIGN_IN_URL}?plan=${plan.id}&interval=${annual ? 'annual' : 'monthly'}`}
-                  className={`block rounded-xl py-3 text-center text-sm font-semibold transition-all duration-200 ${
+                  className={`block rounded-xl py-3 text-center text-sm font-semibold transition-all duration-300 ${
                     highlight
                       ? 'bg-lnblue text-on-lnblue shadow-[0_0_20px_rgba(0,119,181,0.4)] hover:bg-lnblue-light'
                       : 'border border-cream/15 text-cream hover:border-cream/30 hover:bg-cream/5'

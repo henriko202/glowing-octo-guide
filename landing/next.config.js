@@ -3,9 +3,13 @@
 // dictionary copy (no user input), so the inline-script risk is negligible and the
 // pages stay prerendered/cached. The app (which renders untrusted data) uses the
 // stricter hashed CSP. frame-ancestors/HSTS etc. only work as real HTTP headers.
+// `next dev` evals every module (eval-source-map devtool + Fast Refresh runtime), so
+// dev needs 'unsafe-eval' or the client bundle throws and nothing hydrates. NODE_ENV
+// is 'production' under `next build`, so the deployed Worker never gets this relaxation.
+const isDev = process.env.NODE_ENV !== 'production'
 const CONTENT_SECURITY_POLICY = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline'`,
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' https: data:`,
   `connect-src 'self' https://*.convex.cloud https://*.convex.site`,

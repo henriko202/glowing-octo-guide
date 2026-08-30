@@ -194,15 +194,17 @@ token and redirects the browser back to the app. This is the backbone of the [se
 /
 ├── landing/                     # Next.js marketing site → Cloudflare Workers (OpenNext)
 │   ├── app/
-│   │   ├── layout.tsx           # root layout + SEO metadata + no-flash theme script
 │   │   ├── globals.css          # Tailwind v4 CSS-first: @theme inline, :root/:dark tokens
-│   │   ├── page.tsx             # home (composes 11 section components)
-│   │   ├── pricing/page.tsx
-│   │   ├── privacy/page.tsx     # LinkedIn app-review requirement
-│   │   └── terms/page.tsx       # LinkedIn app-review requirement
-│   ├── components/              # Nav, Hero, SSIExplainer, StatsBar, HowItWorks,
-│   │                            #   Features, Testimonials, Pricing, FAQ, FinalCTA, Footer
-│   │                            #   ThemeToggle (3-state light/dark/system)
+│   │   └── [lang]/              # lang ∈ {en,pt,es} (default en)
+│   │       ├── layout.tsx       # root <html>; inline no-flash script (cookie→localStorage→system)
+│   │       ├── page.tsx         # home (composes section components)
+│   │       ├── privacy/         # +content/{en,pt,es}.tsx — LinkedIn app-review requirement
+│   │       ├── terms/           # +content/{en,pt,es}.tsx — LinkedIn app-review requirement
+│   │       └── cookies/         # +content/{en,pt,es}.tsx — cookie & storage policy
+│   ├── middleware.ts            # bare / or unprefixed path → locale redirect (cookie→Accept-Language→en)
+│   ├── components/              # Nav, Hero, SSIExplainer, HowItWorks, Features,
+│   │                            #   Pricing, FAQ, FinalCTA, Footer, CookieNotice,
+│   │                            #   ThemeToggle (3-state light/dark/system), LanguageSelector
 │   ├── lib/
 │   │   ├── cookies.ts           # SSR-safe cookie read/write (Next/process.env)
 │   │   └── theme.ts             # resolveTheme / applyTheme / cookie get/set
@@ -2072,16 +2074,16 @@ across origins in dev — cross-site sync is prod-only. Each site honours its ow
 
 ### Source files
 
-| Site    | File                                 | Responsibility                                                                                                                                                                        |
-|---------|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| App     | `app/src/lib/cookies.ts`             | SSR-safe cookie read (`document.cookie` parse) + `serializeCookie` + `getCookie`/`setCookie`. Reads `VITE_COOKIE_DOMAIN`.                                                             |
-| App     | `app/src/lib/theme.ts`               | `getStoredTheme`/`setStoredTheme` — reads cookie first, falls back to `localStorage` mirror; `applyTheme` sets `.dark` on `<html>`, `color-scheme` meta, `<meta name="theme-color">`. |
-| App     | `app/src/i18n/index.ts`              | `cookie` detector added to i18next-browser-languagedetector detection order (before `localStorage`).                                                                                  |
-| Landing | `landing/lib/cookies.ts`             | Same SSR-safe cookie I/O for Next.js. Reads `NEXT_PUBLIC_COOKIE_DOMAIN`.                                                                                                              |
-| Landing | `landing/lib/theme.ts`               | `resolveTheme` / `applyTheme` + cookie get/set.                                                                                                                                       |
-| Landing | `landing/app/layout.tsx`             | Inline no-flash `<script>` reads the `theme` cookie and applies `.dark` before React hydrates; sets `suppressHydrationWarning` on `<html>`.                                           |
-| Landing | `landing/components/ThemeToggle.tsx` | `'use client'` 3-state toggle (system → light → dark → system); updates cookie + DOM immediately.                                                                                     |
-| Landing | `landing/components/Nav.tsx`         | Mounts `<ThemeToggle>` in the nav bar.                                                                                                                                                |
+| Site    | File                                 | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+|---------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| App     | `app/src/lib/cookies.ts`             | SSR-safe cookie read (`document.cookie` parse) + `serializeCookie` + `getCookie`/`setCookie`. Reads `VITE_COOKIE_DOMAIN`.                                                                                                                                                                                                                                                                                                                                 |
+| App     | `app/src/lib/theme.ts`               | `getStoredTheme`/`setStoredTheme` — reads cookie first, falls back to `localStorage` mirror; `applyTheme` sets `.dark` on `<html>`, `color-scheme` meta, `<meta name="theme-color">`.                                                                                                                                                                                                                                                                     |
+| App     | `app/src/i18n/index.ts`              | `cookie` detector added to i18next-browser-languagedetector detection order (before `localStorage`).                                                                                                                                                                                                                                                                                                                                                      |
+| Landing | `landing/lib/cookies.ts`             | Same SSR-safe cookie I/O for Next.js. Reads `NEXT_PUBLIC_COOKIE_DOMAIN`.                                                                                                                                                                                                                                                                                                                                                                                  |
+| Landing | `landing/lib/theme.ts`               | `resolveTheme` / `applyTheme` + cookie get/set.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Landing | `landing/app/[lang]/layout.tsx`      | Carries the inline no-flash `<script>` in `<head>` that applies the theme **before first paint**, resolving with the **same** precedence as `lib/theme.ts` `getStoredTheme` (**cookie → localStorage → system**) so the pre-paint theme matches what `ThemeToggle`'s post-hydration effect applies (a mismatch — e.g. pref in the localStorage mirror but cookie absent — is what caused the refresh flash). Sets `suppressHydrationWarning` on `<html>`. |
+| Landing | `landing/components/ThemeToggle.tsx` | `'use client'` 3-state toggle (system → light → dark → system); updates cookie + DOM immediately.                                                                                                                                                                                                                                                                                                                                                         |
+| Landing | `landing/components/Nav.tsx`         | Mounts `<ThemeToggle>` in the nav bar.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### Theme resolution flow
 
@@ -2469,17 +2471,21 @@ Pure marketing — **no API/Convex calls**; all content (pricing, FAQ, stats) is
 
 ### Locale routing (Plan 2 — i18n)
 
-All pages are **locale-routed** under `app/[lang]/` where `lang ∈ { en, pt, es }` (default `en`).
+All pages live under `app/[lang]/` where `lang ∈ { en, pt, es }` (default `en`).
 `pt` is **Brazilian Portuguese**; `es` is **neutral Latin-American Spanish**.
 
 #### Middleware (`landing/middleware.ts`)
 
-`middleware.ts` intercepts every request whose pathname does not start with a known locale prefix (plus static/API
-exclusions). It selects the target locale in priority order:
+`middleware.ts` handles locale routing only (static/API paths are excluded via the matcher config):
+
+- **Locale redirect** — a request with no known locale prefix is 307-redirected to `/<lang>/original-path`, choosing
+  `<lang>` in priority order below. A request that already carries a locale prefix passes through untouched.
 
 ```mermaid
 flowchart TD
-    REQ["Incoming request\n(no /en|pt|es prefix)"] --> CK{"lang cookie\npresent?"}
+    REQ["Incoming request"] --> HAS{"has /en|pt|es\nprefix?"}
+    HAS -->|yes| PASS["pass through\n(serve as-is)"]
+    HAS -->|no| CK{"lang cookie\npresent?"}
     CK -->|yes| USE["use cookie value"]
     CK -->|no| AL{"Accept-Language\nmatches en/pt/es?"}
     AL -->|yes| USE
@@ -2493,17 +2499,31 @@ The `Accept-Language` matcher is hand-rolled (no `negotiator`/`@formatjs/intl-lo
 order. Paths starting with `/api/`, `/_next/`, and static file extensions are excluded from interception (Next's
 built-in exclusion list is replicated in the matcher config).
 
+##### Flash-free refresh (no-flash script)
+
+The theme is applied **before first paint** by the inline `<head>` script in the root layout, not by a per-theme
+prerender. The script resolves the theme with the **same** precedence as `lib/theme.ts` `getStoredTheme` (**cookie →
+localStorage → system**) and toggles `.dark` + `color-scheme` on `<html>`. Matching that precedence is the whole fix:
+`ThemeToggle`'s post-hydration effect also resolves via `getStoredTheme`, so when the pre-paint script uses the same
+order they always agree and no frame flips. The earlier bug was an asymmetry — the script read the **cookie only** and
+fell through to `system` (= OS) whenever the pref lived in the localStorage mirror with no cookie (cleared, or host-only
+in dev), while hydration later applied the localStorage value; the two disagreeing produced the ~0.5s refresh flash. (A
+render-blocking stylesheet does **not** out-race the inline script — rendering is blocked too, so the script always runs
+before first paint — which is why no server-side per-theme prerender is needed and the pages stay statically cacheable
+at `/<lang>`.)
+
 #### Root layout (`app/[lang]/layout.tsx`)
 
 `app/[lang]/layout.tsx` is the **single** root layout — there is no `app/layout.tsx`. It:
 
 - Awaits `params` (`const { lang } = await params` — Next 15 `params` is a `Promise`).
-- Renders `<html lang={lang}>` with `suppressHydrationWarning` (theme no-flash script).
-- Applies the dark/light theme no-flash inline `<script>` (reads the `theme` cookie before React hydrates — identical to
-  the Plan 1 pattern; see §14B).
+- Renders `<html lang={lang}>` (theme-less) with `suppressHydrationWarning` and the self-hosted font `variable`
+  classes; the no-flash inline `<head>` script sets the `.dark` class + `color-scheme` before paint (see above).
+- Sets a static `<meta name="theme-color">` (`ThemeToggle`'s post-hydration `applyTheme` updates it for the resolved
+  theme).
 - Renders `<CookieNotice>` (banner).
-- Calls `generateStaticParams` exporting `[{ lang: 'en' }, { lang: 'pt' }, { lang: 'es' }]` so all three locales are
-  **statically pre-rendered** at build time.
+- Calls `generateStaticParams` returning the three locales (`{en,pt,es}`) so every locale is **statically pre-rendered**
+  at build time.
 
 #### Dictionary (`landing/i18n/`)
 
@@ -2513,7 +2533,7 @@ UI strings live in `i18n/dictionaries/{en,pt,es}.json` (~208 keys in groups: `me
 `i18n/getDictionary.ts` imports the correct JSON at request time and returns a typed `Dictionary`
 (type derived from `en.json`). `i18n/config.ts` exports the `locales` array and `Locale` type.
 
-Server components (`app/[lang]/page.tsx`, `app/[lang]/pricing/page.tsx`, legal pages) call
+Server components (`app/[lang]/page.tsx`, legal pages) call
 `getDictionary(lang)` and pass the relevant dict slice as props to child components.
 
 #### Client components and `LanguageSelector`
@@ -2541,18 +2561,18 @@ sourced from `dict.meta`. It also injects `alternates.languages` with the three 
 
 ### Routes
 
-All routes now include the locale prefix. The canonical forms are:
+Every URL carries a locale prefix. The canonical forms are:
 
 | Route             | Purpose                                                                                                                     |
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------|
 | `/<lang>`         | Home — composes `Nav → Hero → PainBeat → HowItWorks → SSIExplainer → Proof → Features → Pricing → FAQ → FinalCTA → Footer`. |
-| `/<lang>/pricing` | Standalone pricing (`Nav` + `Pricing`).                                                                                     |
 | `/<lang>/privacy` | Privacy Policy — **required for LinkedIn app review**.                                                                      |
 | `/<lang>/terms`   | Terms of Service — **required for LinkedIn app review**.                                                                    |
 | `/<lang>/cookies` | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`.     |
 
 A bare `/` (or any path without a locale prefix) is 307-redirected by middleware to the detected locale (see middleware
-section above). Static generation covers all 5 route types × 3 locales = 15 pages, plus `ƒ Middleware`.
+section above). Static generation covers all 4 route types × 3 locales = **12 pages**, plus `ƒ Middleware`. Pricing is a
+section of the Home page (`Pricing` component), not a standalone route.
 
 `app/[lang]/layout.tsx` renders `<CookieNotice>` (see below) and contains the no-flash theme script. **Notable section
 content** (encodes the business rules):
@@ -2594,8 +2614,9 @@ as an internal status — translation does not constitute legal sign-off.
 
 ### CookieNotice (Phase 3b)
 
-`CookieNotice` is a **client component** rendered in `landing/app/layout.tsx`. It displays a dismissible first-visit
-banner informing visitors that the site uses only essential storage (no tracking). Dismissal is persisted in **
+`CookieNotice` is a **client component** rendered in `landing/app/[lang]/layout.tsx`. It displays a dismissible
+first-visit banner informing visitors that the site uses only essential storage (no tracking). Dismissal is persisted
+in **
 `localStorage`** (key `cookieNoticeDismissed`). The component uses **`useSyncExternalStore`** with a no-op server
 snapshot so it hydrates safely without an SSR/client mismatch — the notice is invisible on the server render and appears
 only after hydration confirms the key is absent. The banner is **not** shown to returning visitors (key already set) and
@@ -2987,34 +3008,47 @@ LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs), SS
 This document is **canonical** and must not be allowed to drift. The rule in `CLAUDE.md` requires that **any code change
 or push updates the relevant section (s) here in the same change**. Practical checklist when you touch the codebase:
 
-| If you change…                                                                                                                                                                                                              | Update section(s)                                                                                        |
-|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                                            |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                               |
-| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
-| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                              |
-| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                            |
-| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                    |
-| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                                            |
-| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                             |
-| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                            | [§12A](#12a-feedback)                                                                                    |
-| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                                     |
-| App UI (`app/src/**`)                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                               |
-| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                     | [§14A Design System](#14a-design-system)                                                                 |
-| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/layout.tsx`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)              |
-| Landing (`landing/**`)                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                                |
-| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                                   |
-| Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                            | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app) |
-| Tooling/tests/deploy                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                                |
-| Resolving a stale item / removing dead code                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                                        |
+| If you change…                                                                                                                                                                                                                                              | Update section(s)                                                                                        |
+|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                                            |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                               |
+| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
+| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                              |
+| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                            |
+| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                    |
+| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                                            |
+| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                             |
+| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                            | [§12A](#12a-feedback)                                                                                    |
+| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                                     |
+| App UI (`app/src/**`)                                                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                               |
+| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                                                     | [§14A Design System](#14a-design-system)                                                                 |
+| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/[lang]/layout.tsx`, `landing/middleware.ts`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)              |
+| Landing (`landing/**`)                                                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                                |
+| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                                   |
+| Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                                                            | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app) |
+| Tooling/tests/deploy                                                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                                |
+| Resolving a stale item / removing dead code                                                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                                        |
 
 When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add a flow chart
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
 
-_Last updated: 2026‑08‑29. Updated to reflect the plan‑limits self‑heal fix (task B27, backlog/B27-seed-plan-limits.md,
-approach B): `admin.updateTierDefault` threw `No default row found for tier —
+_Last updated: 2026‑08‑30. Updated to reflect the landing theme-flash (FOUC) refresh fix. Symptom: on refresh, when the
+OS scheme differed from the stored theme, the page painted the OS theme for ~0.5s before flipping to the stored one.
+Root cause: the inline no-flash `<head>` script read the theme from the **cookie only**, while `ThemeToggle`'s
+post-hydration effect resolves via `lib/theme.ts` `getStoredTheme` (**cookie → localStorage → system**). When the pref
+lived in the localStorage mirror but the cookie was absent (cleared or host-only in dev), the pre-paint script fell
+through to
+`system` (= OS) while hydration later applied the localStorage value — the two resolvers disagreed, producing the flash.
+Fix: the no-flash script now resolves with the **same** cookie → localStorage → system precedence, so pre-paint and
+post-hydration agree and no frame flips. This is a one-file change in `landing/app/[lang]/layout.tsx` (the `NO_FLASH`
+string). An earlier `app/[theme]/[lang]/` server-prerender refactor was tried and **reverted** — it was unnecessary: a
+render-blocking stylesheet does not out-race an inline `<head>` script (rendering is blocked too, so the script always
+runs before first paint), so no per-theme prerender is needed and routes stay `app/[lang]/` with a locale-only
+`middleware.ts`. §4 tree and §15 describe `app/[lang]/`; the stale standalone `/pricing` route (now a Home section) was
+dropped from the route table. Prior: Updated to reflect the plan‑limits self‑heal fix (task B27,
+backlog/B27-seed-plan-limits.md, approach B): `admin.updateTierDefault` threw `No default row found for tier —
 run seedPlanLimits first` in any environment where the one‑time `migrations/seedPlanLimits.ts` mutation had never been
 run, blocking the admin edit path entirely. It now self‑heals — inserts the missing tier‑default row before patching it,
 the same idempotent `userId === undefined` check `seedPlanLimits` already used, so it still can't duplicate a row or

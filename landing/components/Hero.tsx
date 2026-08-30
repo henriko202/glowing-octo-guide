@@ -56,10 +56,10 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
         <div className="flex flex-col items-center justify-center gap-3 pt-2">
           <a
             href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-on-gold shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-all duration-200 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)]"
+            className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-on-gold shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-all duration-300 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)]"
           >
             {dict.cta}
-            <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">→</span>
+            <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
           </a>
           {/* Click trigger */}
           <p className="text-xs tracking-wide text-cream/40">{dict.ctaDisclaimer}</p>
@@ -69,7 +69,7 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
       </div>
 
       {/* Scroll indicator */}
-      <div className="absolute bottom-10 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 opacity-30">
+      <div className="absolute bottom-10 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 dark:opacity-30">
         <span className="text-xs tracking-widest text-cream/50 uppercase">{dict.scrollLabel}</span>
         <div className="h-10 w-px bg-gradient-to-b from-cream/40 to-transparent" />
       </div>
