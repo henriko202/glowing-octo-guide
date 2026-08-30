@@ -11,6 +11,7 @@ import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
 import AdminPage from './pages/AdminPage'
 import AppShell from './components/shell/AppShell'
+import ScrollToTop from './components/ScrollToTop'
 import Motd from './components/Motd'
 import ReconnectBanner from './components/ReconnectBanner'
 import FeedbackButton from './components/FeedbackButton'
@@ -74,6 +75,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col">
       <Toaster />
+      <ScrollToTop />
       <Routes>
         <Route
           path="/auth/success"

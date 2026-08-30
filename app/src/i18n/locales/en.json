@@ -128,6 +128,7 @@
     "headlineHint": "Shown under your name in the feed and sidebar. Falls back to your industry if left blank.",
     "location": "Location",
     "notSet": "Not set",
+    "clear": "Clear selection",
     "selectPlaceholder": "Select…",
     "noResults": "No results.",
     "save": "Save",

@@ -1111,7 +1111,7 @@ inserts, throws, or (Apify path) diverts to `postQueue`. The weekly‑limit deci
 ```mermaid
 flowchart TD
     S["submitPost(sessionToken, postUrl)"] --> RS["resolveLinkedInShortlink(postUrl)<br/>lnkd.in → linkedin.com (manual redirect, per‑hop host check)"]
-    RS -->|off‑allowlist / not linkedin.com| X1
+    RS -->|off‑allowlist / not linkedin . com| X1
     RS -->|resolvedUrl| P["parseLinkedInPostUrl(resolvedUrl)"]
     P -->|unrecognized| X1["throw 'Unrecognized LinkedIn post URL'"]
     P -->|ok| AU["requireAuthAction → user (+ token)"]
@@ -1124,18 +1124,18 @@ flowchart TD
     WL -->|no| F
     F -->|no urn| X4["throw 'Could not find urn'"]
     F -->|urn| EMB["fetch(/embed/feed/update/{urn}) → isEmbeddablePostHtml?<br/>(main-feed-activity-embed-card__ marker — applies to admins too)"]
-    EMB -->|auth‑walled (non‑public)| X5["throw 'post not publicly visible'"]
-    EMB -->|embeddable| OWN{"admin override?"}
-    OWN -->|yes: skip ownership| PC["parsePostContent(html) → text + media; appendMediaLinks"]
-    OWN -->|no| V["verifyPostOwnership(postAuthorName vs OIDC name; vanity fallback)"]
-    V --> PC
-    PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
-    ENG --> ART{"post links an article?<br/>(extractArticleUrl finds the /pulse/… anchor)"}
-    ART -->|no| UP
-    ART -->|yes| AF["fetch(articleUrl) → parseArticle → article<br/>(best‑effort, SSRF‑guarded, non‑fatal)"]
-    AF --> UP
-    UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = false, sourceUrl=resolvedUrl, article?)"]
-    UP --> R["return { postId }"]
+    EMB -->|auth‑walled (non‑public )|X5["throw 'post not publicly visible'"]
+EMB -->|embeddable|OWN{"admin override?"}
+OWN -->|yes: skip ownership|PC["parsePostContent(html) → text + media; appendMediaLinks"]
+OWN -->|no|V["verifyPostOwnership(postAuthorName vs OIDC name; vanity fallback)"]
+V --> PC
+PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
+ENG --> ART{"post links an article?<br/>(extractArticleUrl finds the /pulse/… anchor)"}
+ART -->|no| UP
+ART -->|yes|AF["fetch(articleUrl) → parseArticle → article<br/>(best‑effort, SSRF‑guarded, non‑fatal)"]
+AF --> UP
+UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = false, sourceUrl=resolvedUrl, article?)"]
+UP --> R["return { postId }"]
 ```
 
 **Ownership verification** (`linkedin/verifyPostOwnership.ts`) anchors on the member's LinkedIn **name**, not an
@@ -2214,7 +2214,10 @@ Imports `./i18n` (side‑effect init) → `./index.css` → mounts
 ### Routing & session handling (`App.tsx`)
 
 Declarative `react-router-dom` routes. The session token lives in **`sessionStorage`** (key
-`sessionToken`) — there's no React context/store; each page reads it directly.
+`sessionToken`) — there's no React context/store; each page reads it directly. A `<ScrollToTop/>`
+sibling of `<Routes>` resets `window.scrollTo(0, 0)` on every pathname change (skipped when the URL carries an in-page
+`#anchor`) — the declarative router doesn't restore scroll on its own, and the app uses a page-scroll model (the window
+is the scroller; see AppShell), so without it a scrolled feed would carry its scroll into the next page.
 
 | Path            | Page              |                               Guarded                               |
 |-----------------|-------------------|:-------------------------------------------------------------------:|

@@ -312,6 +312,8 @@ export default function SettingsPage() {
             placeholder={t('settings.notSet')}
             searchPlaceholder={t('settings.selectPlaceholder')}
             emptyText={t('settings.noResults')}
+            clearable
+            clearLabel={t('settings.clear')}
           />
         </div>
 
@@ -328,6 +330,8 @@ export default function SettingsPage() {
             placeholder={t('settings.notSet')}
             searchPlaceholder={t('settings.selectPlaceholder')}
             emptyText={t('settings.noResults')}
+            clearable
+            clearLabel={t('settings.clear')}
           />
         </div>
 

@@ -128,6 +128,7 @@
     "headlineHint": "Exibido abaixo do seu nome no feed e na barra lateral. Usa seu setor se ficar em branco.",
     "location": "Localização",
     "notSet": "Não definido",
+    "clear": "Limpar seleção",
     "selectPlaceholder": "Selecione…",
     "noResults": "Nenhum resultado.",
     "save": "Salvar",

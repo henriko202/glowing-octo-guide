@@ -4,7 +4,7 @@ import { useAction, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import { api } from '../convex'
-import { HANDOFF_DELAY_MS, delay, openLinkedIn } from '../lib/handoff'
+import { delay, HANDOFF_DELAY_MS, openLinkedIn } from '../lib/handoff'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/toast'
@@ -134,7 +134,7 @@ export default function CommentBox({
           onClick={handleGenerate}
           disabled={generating || gated || submitting}
           title={gated ? t('feed.cardGate') : undefined}
-          className="px-3 py-1.5 text-[13px] font-semibold"
+          className="cursor-pointer px-3 py-1.5 text-[13px] font-semibold"
         >
           {generating ? t('comment.generating') : hasDraft ? t('comment.regenerate') : t('comment.generate')}
         </Button>
@@ -163,19 +163,10 @@ export default function CommentBox({
         ))}
       <div className="mt-2 flex justify-end gap-2">
         <Button
-          type="button"
-          variant="ghost"
-          onClick={onClose}
-          disabled={submitting}
-          className="text-[13px]"
-        >
-          {t('comment.cancel')}
-        </Button>
-        <Button
           type="submit"
           disabled={submitting || !text.trim() || gated}
           title={gated ? t('feed.cardGate') : undefined}
-          className="px-4 py-1.5 text-[13px] font-semibold"
+          className="cursor-pointer px-4 py-1.5 text-[13px] font-semibold"
         >
           {submitting && (
             <Loader2
