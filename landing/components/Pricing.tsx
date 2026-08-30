@@ -52,7 +52,7 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-3">
+        <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
           {dict.plans.map(plan => {
             const highlight = plan.id === 'growth'
             const p = priceLabel(plan, annual, dict)
@@ -61,7 +61,7 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
                 key={plan.id}
                 className={`relative flex flex-col rounded-2xl p-7 transition-all duration-300 ${
                   highlight
-                    ? 'border border-lnblue bg-lnblue/[0.08] shadow-[0_0_48px_rgba(0,119,181,0.2)] md:-translate-y-3'
+                    ? 'border border-lnblue bg-lnblue/[0.08] shadow-[0_0_48px_rgba(0,119,181,0.2)]'
                     : 'border border-cream/[0.08] bg-ink-600 hover:border-cream/15'
                 }`}
               >

@@ -19,21 +19,37 @@ export default function LanguageSelector({ dict, lang }: { dict: Dictionary['lan
   }
 
   return (
-    <div className="flex items-center gap-1 text-sm">
-      {i18n.locales.map(l => (
-        <button
-          key={l}
-          type="button"
-          onClick={() => switchTo(l)}
-          aria-label={`${dict.label}: ${dict[l as Locale]}`}
-          aria-current={l === lang ? 'true' : undefined}
-          className={`rounded px-1.5 py-0.5 uppercase ${
-            l === lang ? 'text-gold-text' : 'text-cream/50 hover:text-cream'
-          }`}
-        >
-          {l}
-        </button>
-      ))}
+    <div className="relative inline-flex items-center">
+      <select
+        value={lang}
+        onChange={e => switchTo(e.target.value as Locale)}
+        aria-label={dict.label}
+        className="cursor-pointer appearance-none rounded-md border border-cream/15 bg-transparent py-1 pr-7 pl-2.5 text-sm font-medium text-cream/70 uppercase hover:border-cream/30 hover:text-cream focus:outline-none focus-visible:ring-1 focus-visible:ring-gold/40"
+      >
+        {i18n.locales.map(l => (
+          <option
+            key={l}
+            value={l}
+          >
+            {l.toUpperCase()}
+          </option>
+        ))}
+      </select>
+      {/* Custom chevron — appearance-none drops the native arrow, which varies wildly across OSes. */}
+      <svg
+        className="pointer-events-none absolute right-2 h-3 w-3 text-cream/40"
+        viewBox="0 0 12 12"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M3 4.5 6 7.5 9 4.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </div>
   )
 }

@@ -47,12 +47,14 @@ export default function En({ lang }: { lang: Locale }) {
           and country in your profile settings.
         </p>
         <p>
-          <strong className="text-cream">Posts you submit.</strong> We store the LinkedIn posts you create or schedule
+          <strong className="text-cream">Posts you submit.</strong> We store the posts you submit to the shared feed
           through the platform.
         </p>
         <p>
-          <strong className="text-cream">Engagement actions.</strong> We record comments and reactions made through your
-          LinkedIn access token on your behalf as part of the platform&rsquo;s core feed-engagement feature.
+          <strong className="text-cream">Engagement activity.</strong> When you choose to react to or comment on a post
+          in the feed, we record that engagement (the reaction type, or the comment text you use) to measure your
+          activity and interaction counts. The reaction or comment itself is made by you, directly on LinkedIn &mdash;
+          the Service opens the post so you can act, and does not react or comment on LinkedIn on your behalf.
         </p>
         <p>
           <strong className="text-cream">Billing.</strong> Subscription payments are processed by Stripe. We store your
@@ -72,8 +74,8 @@ export default function En({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">3. Why We Use It &amp; Legal Bases</h2>
         <p>
           <strong className="text-cream">Contract (Art. 6(1)(b) GDPR).</strong> Providing the core service:
-          authenticating you, displaying your feed, publishing posts and engagement actions, and managing your
-          subscription.
+          authenticating you, displaying your feed, letting you submit posts and record your engagement, and managing
+          your subscription.
         </p>
         <p>
           <strong className="text-cream">Legitimate interests (Art. 6(1)(f) GDPR).</strong> Optimising feed quality,
@@ -97,7 +99,7 @@ export default function En({ lang }: { lang: Locale }) {
         <p>We engage the following sub-processors who may process personal data on our behalf:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong className="text-cream">LinkedIn</strong> &mdash; authentication (OIDC) and engagement API.
+            <strong className="text-cream">LinkedIn</strong> &mdash; authentication (OpenID Connect sign-in).
           </li>
           <li>
             <strong className="text-cream">Stripe</strong> &mdash; payment processing and subscription management.

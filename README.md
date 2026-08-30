@@ -1,138 +1,147 @@
 # Link Into The SSI
 
-A LinkedIn growth accelerator SaaS. Users authorize the app to read their LinkedIn posts, then get access to a real-time
-feed of posts from all other subscribers. They engage (comment, react) directly from the app using their LinkedIn
-identity — growing their LinkedIn Social Selling Index (SSI) through consistent, relevant engagement.
+A LinkedIn growth accelerator SaaS. Users sign in with LinkedIn, join a real-time feed of posts from all other
+subscribers, and engage with those posts to grow their LinkedIn Social Selling Index (SSI). LinkedIn exposes no member
+API to react/comment on someone else's post, so the app **hands off** to LinkedIn — it surfaces the post plus an
+AI-drafted comment, opens it on LinkedIn, and the member acts there under their own identity.
 
-**Network effect:** More users → richer feed → more engagement → higher SSI → more users.
+**Network effect:** more users → richer feed → more engagement → higher SSI → more users.
+
+> **`docs/PLATFORM.md` is the canonical, code-derived reference** (architecture, data model, every backend function,
+> security, deployment). This README is the quickstart; when in doubt, PLATFORM.md wins.
 
 ---
 
 ## Architecture
 
+pnpm monorepo — three deployable packages sharing one Convex backend:
+
 ```
 /
-├── landing/    # Next.js — marketing site, SEO, pricing
-├── app/        # React + Vite — authenticated SaaS dashboard
-└── convex/     # Convex backend — shared by both apps
+├── landing/    # Next.js 15 — marketing site, SEO, pricing, legal (locale-routed en/pt/es)
+├── app/        # React 19 + Vite — authenticated SaaS dashboard
+└── convex/     # Convex backend — shared by both frontends
 ```
 
-| Service   | Platform   | URL                             |
-|-----------|------------|---------------------------------|
-| landing/  | Vercel     | `linkintothessi.com`            |
-| app/      | Railway    | `app.linkintothessi.com`        |
-| Backend   | Convex.dev | Managed serverless              |
-| DNS / CDN | Cloudflare | In front of both Vercel/Railway |
+| Package    | Stack                                         | Deploy target                          | Domain (prod)                                |
+|------------|-----------------------------------------------|----------------------------------------|----------------------------------------------|
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
+| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4     | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
+| `convex/`  | Convex (serverless, real-time, TS-native)     | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
+
+Cloudflare hosts both frontends and provides DNS/CDN/TLS. External services: **LinkedIn** (OAuth + profile/posts),
+**Stripe** (billing), **Apify** (LinkedIn post/profile scraping), **OpenRouter** (AI), **Resend** (transactional email).
 
 ---
 
 ## Tech Stack
 
-- **Frontend (app):** React 19, Vite, TypeScript, Tailwind CSS, react-i18next (en/pt/es)
-- **Landing:** Next.js 14, TypeScript, Tailwind CSS
-- **Backend:** [Convex](https://convex.dev) — real-time, serverless, TypeScript-native
-- **Auth:** LinkedIn 3-legged OAuth — Sign In with LinkedIn / OpenID Connect (`openid profile email`)
-- **Payments:** Stripe via [@convex-dev/stripe](https://www.convex.dev/components/stripe)
-- **Testing:** Vitest + React Testing Library
+- **Backend:** [Convex](https://convex.dev) — real-time serverless TypeScript (queries, mutations, actions, HTTP
+  actions, crons). Stripe via [@convex-dev/stripe](https://www.convex.dev/components/stripe).
+- **App (`app/`):** React 19, Vite 6, TypeScript (strict), Tailwind CSS 4, `react-router-dom` 7, `convex/react`,
+  `i18next` (en/pt/es), shadcn/ui primitives.
+- **Landing (`landing/`):** Next.js 15 (App Router), React 19, Tailwind CSS 4 (CSS-first), TypeScript.
+- **Auth:** LinkedIn 3-legged OAuth — Sign In with LinkedIn / OpenID Connect (`openid profile email`, Standard tier).
+- **Payments:** Stripe (Checkout + Customer Portal + webhooks).
+- **Post ingestion:** Apify REST (`harvestapi~linkedin-profile-posts` actor) + user-pasted post URLs.
+- **AI:** OpenRouter → DeepInfra (Gemma, fp8, zero data retention) for reaction prediction + comment drafting.
+- **Testing:** Vitest across all workspaces (React Testing Library + jsdom for the app; a `convex-mocks` shim for
+  backend).
 
 ---
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm 9+
+- Node.js 20+ and pnpm 9+
 - A [Convex](https://dashboard.convex.dev) account
-- A [LinkedIn Developer App](https://www.linkedin.com/developers/apps) with OAuth 2.0 enabled
-- A [Stripe](https://dashboard.stripe.com) account
+- A [LinkedIn Developer App](https://www.linkedin.com/developers/apps) with Sign In with LinkedIn (OIDC) enabled
+- A [Stripe](https://dashboard.stripe.com) account (for billing)
+- An [Apify](https://apify.com) account (post/profile ingestion) — sync no-ops without it
+- An [OpenRouter](https://openrouter.ai) key (AI features) — AI no-ops without it
 
 ---
 
 ## Local Development
 
-### 1. Install dependencies
+### 1. Install
 
 ```bash
 pnpm install
 ```
 
-### 2. Set up Convex
+### 2. Convex backend
 
 ```bash
-cd convex
-npx convex dev --once   # creates convex.json and _generated/
+pnpm dev:convex   # runs `convex ai-files update && convex dev` — creates _generated/ on first run
 ```
 
-Set environment variables in the [Convex dashboard](https://dashboard.convex.dev) (Settings → Environment Variables):
+Set the backend environment variables in the [Convex dashboard](https://dashboard.convex.dev)
+(Settings → Environment Variables). See `convex/.env.local.example` for the full annotated list — the essentials:
 
 ```
-LINKEDIN_CLIENT_ID=<your LinkedIn app client ID>
-LINKEDIN_CLIENT_SECRET=<your LinkedIn app client secret>
+LINKEDIN_CLIENT_ID=...
+LINKEDIN_CLIENT_SECRET=...
 LINKEDIN_REDIRECT_URI=https://<your-deployment>.convex.site/auth/linkedin/callback
-# ↑ Must point to Convex (.convex.site), NOT the React app.
-#   LinkedIn sends the code to Convex, which exchanges it server-side (keeps client secret safe).
-#   After upsert, Convex redirects the user to APP_URL/auth/success?userId=...
-APP_URL=http://localhost:5173
+#   ↑ Must point to Convex (.convex.site), NOT the app. LinkedIn returns the code to Convex,
+#     which exchanges it server-side so the client secret + user tokens never touch the browser.
+APP_URL=http://localhost:5174
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_STARTER_PRICE_ID=price_...
-STRIPE_GROWTH_PRICE_ID=price_...
-STRIPE_PRO_PRICE_ID=price_...
+STRIPE_{STARTER,GROWTH,PRO}_PRICE_ID=price_...          # monthly
+STRIPE_{STARTER,GROWTH,PRO}_ANNUAL_PRICE_ID=price_...   # annual (create in Stripe first)
+APIFY_API_TOKEN=...                                     # post/profile sync (no-ops if unset)
+OPENROUTER_API_KEY=...                                  # AI features (no-ops if unset)
 ```
 
-### 3. Configure the app
+### 3. App (`app/`)
 
 ```bash
 cp app/.env.example app/.env.local
 ```
 
-Edit `app/.env.local`:
+Fill in `VITE_CONVEX_URL` / `VITE_CONVEX_SITE` (your deployment's `.convex.cloud` / `.convex.site`), the six
+`VITE_STRIPE_*_PRICE_ID` values (**must match** the Convex `STRIPE_*_PRICE_ID`), and `VITE_LANDING_URL`.
 
-```
-VITE_CONVEX_URL=https://<your-deployment>.convex.cloud
-VITE_STRIPE_STARTER_PRICE_ID=price_...
-VITE_STRIPE_GROWTH_PRICE_ID=price_...
-VITE_STRIPE_PRO_PRICE_ID=price_...
-```
-
-### 4. Configure the landing page
+### 4. Landing (`landing/`)
 
 ```bash
 cp landing/.env.example landing/.env.local
 ```
 
-Edit `landing/.env.local`:
+Set `NEXT_PUBLIC_CONVEX_SITE` (landing CTAs link straight to `/auth/linkedin`) and `NEXT_PUBLIC_APP_URL`.
 
-```
-NEXT_PUBLIC_APP_URL=http://localhost:5173
-```
-
-### 5. Start all services
+### 5. Run
 
 ```bash
-# Terminal 1 — Convex backend
-pnpm dev:convex
-
-# Terminal 2 — React app
-pnpm dev:app
-
-# Terminal 3 — Next.js landing (optional for local dev)
-pnpm dev:landing
+pnpm dev:convex   # Terminal 1 — Convex backend
+pnpm dev:app      # Terminal 2 — React app  → http://localhost:5174
+pnpm dev:landing  # Terminal 3 — Next.js landing → http://localhost:3000 (optional locally)
 ```
 
-The app runs at `http://localhost:5173`, landing at `http://localhost:3000`.
+> The Vite dev server runs on **5174**; align `LINKEDIN_REDIRECT_URI` / `APP_URL` with the port you actually run.
 
 ---
 
 ## Subscription Tiers
 
-| Feature                             | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) | Contact |
-|-------------------------------------|:---------------:|:---------------:|:------------:|:-------:|
-| Access feed                         |       ✓        |       ✓        |      ✓      |   ✓    |
-| 3-day free trial                    |       ✓        |        —        |      —       |    —    |
-| Feed filtered by industry + country |       ✗        |    ✓ (auto)    | ✓ (custom)  |   ✓    |
-| Filter who sees your posts          |       ✗        |       ✗        |      ✓      |   ✓    |
-| Featured posts / month              |        0        |        1        |      3       | Custom  |
-| AI comment generator                |   ✗ (future)   |   ✓ (future)   | ✓ (future)  |   ✓    |
+Numeric caps are **enforced** (read from the `planLimits` table). The 7-day trial requires a card and starts a real
+Stripe subscription for the tier chosen on the billing grid; it converts on **50 combined interactions OR 7 days**,
+whichever comes first. Cancellation never revokes access — a canceled member keeps engaging; only their own posts stop
+entering the feed once the paid period ends.
+
+| Capability                          | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) |   Contact   |
+|-------------------------------------|:---------------:|:---------------:|:------------:|:-----------:|
+| Access shared feed                  |       ✓        |       ✓        |      ✓      |     ✓      |
+| 7-day trial (card required)         |       ✓        |       ✓        |      ✓      |      —      |
+| Feed filtered by industry + country |       ✗        |    ✓ (auto)    | ✓ (custom)  | ✓ (custom) |
+| Control who sees your posts         |       ✗        |       ✗        |      ✓      |     ✓      |
+| Interactions counted per post (cap) |       25        |       50        |     200      |    200+     |
+| Posts admitted to feed / week       |        1        |        2        |      5       |     5+      |
+| Featured posts / month              |        0        |        1        |      3       |   Custom    |
+| AI comment generator                |       ✓        |       ✓        |      ✓      |     ✓      |
+
+> AI comment drafting is **live for every tier** — gated on an active subscription (the same card-on-file gate as
+> engaging) and rate-limited, but **not** tier-gated. See `docs/PLATFORM.md` §11A.
 
 ---
 
@@ -140,161 +149,85 @@ The app runs at `http://localhost:5173`, landing at `http://localhost:3000`.
 
 ### LinkedIn OAuth
 
-1. User clicks "Sign in with LinkedIn" → Convex HTTP action redirects to LinkedIn
-2. LinkedIn returns `code` → Convex exchanges for tokens + fetches profile
-3. User record created/updated in Convex (tokens stored server-side only — never exposed to clients)
+1. User clicks "Sign in with LinkedIn" → Convex HTTP action (`.convex.site`) redirects to LinkedIn.
+2. LinkedIn returns `code` → Convex exchanges it for tokens **server-side** + fetches the OIDC profile.
+3. User record upserted; tokens stored server-side only. Convex issues an opaque session token and redirects to the app.
 
-### Post Sync (hourly cron)
+### Post ingestion (Apify)
 
-- Active subscribers: posts fetched and stored with `hidden = false`
-- Trial users: posts stored with `hidden = true`
-- When trial user subscribes, Stripe webhook triggers un-hiding of their posts
-- Token refresh attempted automatically when within 7 days of expiry
+- Posts are scraped via **Apify** (not the LinkedIn API): scheduled crons plus an on-subscribe scrape when a member
+  starts a trial. Members can also paste their own post URLs.
+- Feed admission is capped per week by tier; overflow lands in `postQueue` and is drained by `processQueue` as capacity
+  frees up.
 
-### Feed Query (real-time)
+### Feed (real-time, tier-gated)
 
-Sort priority across all tiers:
+- **Starter:** all visible posts, chronological. **Growth:** filtered to the member's industry + country (auto from
+  profile). **Pro/Contact:** user-configurable industry/country filters for both viewing and post visibility.
+- Featured posts sort first; the rest is chronological.
 
-1. Featured posts first (Pro)
-2. Mutual LinkedIn connections (cached weekly from `r_network` scope)
-3. Same industry + same country
-4. Chronological
+### Engagement (handoff)
 
-Tier gating:
+User taps comment/react → the app opens the post on LinkedIn (copying any AI-drafted comment to the clipboard) and the
+member acts there under their own identity. The count is incremented **optimistically on tap** — the app cannot confirm
+the LinkedIn action, and makes **no LinkedIn API writes**. Counters push in real-time to everyone viewing that post.
 
-- **Starter:** all visible posts, chronological
-- **Growth:** filtered to user's LinkedIn industry + country (auto-detected)
-- **Pro:** user-configurable industry/country filters for both viewing and visibility
+### AI assistance
 
-### Comment / React
-
-User submits → Convex action calls LinkedIn API using the **user's own** stored token → count updated in Convex →
-real-time push to all clients viewing that post.
-
----
-
-## Project Structure
-
-```
-convex/
-├── schema.ts                  # Database schema (5 tables)
-├── convex.config.ts           # Registers @convex-dev/stripe component
-├── http.ts                    # LinkedIn OAuth HTTP endpoints
-├── users.ts                   # Public + internal user queries
-├── feed.ts                    # Tier-gated feed query
-├── interactions.ts            # Comment + reaction actions
-├── billing.ts                 # Stripe Checkout session creation
-├── stripe.ts                  # Stripe webhook mutation handlers
-├── convexTypes.ts             # Structural ctx/db types (pre-codegen)
-├── linkedin/
-│   ├── types.ts               # LinkedIn API response interfaces
-│   ├── oauth.ts               # OAuth URL builder + token exchange
-│   ├── posts.ts               # Post fetcher + parser
-│   └── auth.ts                # User upsert mutation
-└── jobs/
-    ├── syncPosts.ts           # Hourly post sync cron
-    └── syncConnections.ts     # Weekly connections cache cron
-
-app/src/
-├── i18n/
-│   ├── index.ts               # i18next init (?lang= → browser language)
-│   └── locales/               # en.json, pt.json, es.json
-├── pages/
-│   ├── LoginPage.tsx
-│   ├── FeedPage.tsx
-│   ├── SettingsPage.tsx
-│   ├── BillingPage.tsx
-│   └── AuthSuccessPage.tsx
-├── components/
-│   ├── PostCard.tsx
-│   └── CommentBox.tsx
-├── convex.ts                  # API shim until npx convex dev generates _generated/
-└── main.tsx
-
-landing/
-├── app/
-│   ├── page.tsx               # Homepage
-│   ├── pricing/page.tsx
-│   ├── privacy/page.tsx
-│   └── terms/page.tsx
-└── components/
-    ├── Nav.tsx
-    ├── Hero.tsx               # Slot-machine headline animation
-    ├── HowItWorks.tsx
-    ├── Features.tsx
-    ├── Pricing.tsx
-    └── FinalCTA.tsx
-```
+An action calls OpenRouter (pinned to a zero-data-retention DeepInfra Gemma model) to predict the best reaction and
+draft a comment tailored to the post (including any linked article's full text). Gated on an active subscription; no-ops
+gracefully if `OPENROUTER_API_KEY` is unset.
 
 ---
 
 ## Testing
 
 ```bash
-# Convex backend
-pnpm --filter convex test
-
-# React app
-pnpm --filter app test
-
-# Run all tests
-pnpm -r test
+pnpm --filter convex test    # backend
+pnpm --filter app test       # React app
+pnpm -r test                 # everything
+pnpm verify                  # format:check + lint + typecheck + all tests
 ```
 
 ---
 
 ## Internationalisation
 
-The app supports English, Portuguese, and Spanish. Language is detected in order:
-
-1. `?lang=en` / `?lang=pt` / `?lang=es` URL query parameter
-2. Browser language (`navigator.language`)
-3. Fallback: English
+App and landing both support **en / pt / es**. Selection is driven by a cross-site `lang` cookie shared between the two
+sites (see `docs/PLATFORM.md` §14B), falling back to `?lang=` / `Accept-Language`, then English. The landing site is
+locale-routed (`/[lang]/…`); legal pages (privacy / terms / cookies) are localised and required for LinkedIn app review.
 
 ---
 
 ## Deployment
 
-### Convex
+Both frontends deploy to **Cloudflare Workers**; the backend deploys to Convex.
 
 ```bash
-cd convex && npx convex deploy
+pnpm build:convex     # convex deploy
+pnpm deploy:app       # build + wrangler deploy   (Cloudflare Static Assets)
+pnpm deploy:landing   # OpenNext build + deploy    (Cloudflare Workers)
 ```
 
-### App (Railway)
-
-The `app/` directory includes a `Dockerfile` and `nginx.conf` for Railway deployment. Set the same environment variables
-as local dev (using production values).
-
-### Landing (Vercel)
-
-Connect the repo to Vercel, set the root directory to `landing/`, and add
-`NEXT_PUBLIC_APP_URL=https://app.linkintothessi.com`.
+Set the production env vars in each Worker's build settings (`VITE_*` / `NEXT_PUBLIC_*`) and in the Convex dashboard.
+Full inventory: `docs/PLATFORM.md` §16.
 
 ---
 
 ## LinkedIn API Notes
 
 Login uses **Sign In with LinkedIn (OpenID Connect)** only — scopes `openid profile email` (Standard tier, so any member
-can authenticate). The app makes **no LinkedIn API writes**: reactions and comments happen on LinkedIn itself via the
-in-app handoff (the app opens the post; the member acts there). See `docs/PLATFORM.md` §11.
+can authenticate). The app makes **no LinkedIn API writes**.
 
 | Capability                | How                                                                  |
 |---------------------------|----------------------------------------------------------------------|
 | Sign in / identity        | `openid profile email` → `/v2/userinfo` (Standard tier, all members) |
-| Ingest a member's posts   | Apify sync (daily, admin-gated) — not the LinkedIn API               |
+| Ingest a member's posts   | Apify scraper — not the LinkedIn API                                 |
 | React / comment on a post | Handoff: app opens the post, member acts on LinkedIn (no API write)  |
-| Post-ownership check      | UGC API if ever granted, else local vanity-name comparison           |
 | Read connections' feed    | ✗ — requires LinkedIn MDP partner access (not used)                 |
 
-Only `openid profile email` are needed to go live — all granted by the Standard-tier Sign In product. The
-`/privacy` and `/terms` pages are still required by LinkedIn for app review.
+The `/privacy`, `/terms`, and `/cookies` pages are required by LinkedIn for app review.
 
 ---
 
-## Open Questions / Roadmap
-
-- **AI comment generator** — Placeholder in `CommentBox`. Wire to Claude API in a future sprint (Pro+ tier).
-- **LinkedIn MDP** — Apply for partner status to unlock mutual-connections API and potentially the home feed endpoint.
-- **Analytics dashboard** — Show user's SSI trend over time (requires SSI API, MDP-only).
-- **Token refresh cron** — LinkedIn tokens expire after 60 days. Implement proactive refresh job.
+For roadmap, known discrepancies, and dead-code tracking, see `docs/PLATFORM.md` §19.

@@ -134,12 +134,14 @@ export const getFeed = query({
     const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
 
     // Viewer-/author-dependent filters that can't live in the global index (plan §3c):
-    // post visibility allowlists, author eligibility (trialing / pending deletion), and the
-    // viewer's industry/country filters. Pages may come back short when these drop posts —
-    // `usePaginatedQuery` just loads more.
+    // the viewer's own posts, post visibility allowlists, author eligibility (trialing /
+    // pending deletion), and the viewer's industry/country filters. Pages may come back short
+    // when these drop posts — `usePaginatedQuery` just loads more.
     const now = Date.now()
     const enriched = result.page
       .filter(post => {
+        // A member's own posts never appear in their own feed — the feed is for others' content.
+        if (post.authorId === viewer._id) return false
         if (post.visibilityIndustries.length > 0) {
           if (!viewer.industry || !post.visibilityIndustries.includes(viewer.industry)) return false
         }

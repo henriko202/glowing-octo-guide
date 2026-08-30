@@ -25,9 +25,11 @@ export default function Pt({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. O Serviço</h2>
         <p>
           Link Into The SSI e uma plataforma SaaS conectada ao LinkedIn que oferece um feed compartilhado de posts de
-          membros e permite engajamento real no LinkedIn &mdash; comentarios e reações &mdash; em seu nome. Seu objetivo
-          e ajudar profissionais a aumentar seu Indice de Vendas Sociais (SSI) do LinkedIn por meio de engajamento
-          autentico e mutuo dentro da comunidade.
+          membros e ajuda você a engajar com eles. Reações e comentarios são feitos por você, diretamente no LinkedIn: o
+          Serviço mostra posts relevantes, pode sugerir uma reação e um rascunho de comentario, e então abre o post no
+          LinkedIn para que você decida agir. O Serviço não publica, comenta nem reage no LinkedIn em seu nome. Seu
+          objetivo e ajudar profissionais a aumentar seu Indice de Vendas Sociais (SSI) do LinkedIn por meio de
+          engajamento autentico e mutuo dentro da comunidade.
         </p>
 
         {/* 3. Sua conta LinkedIn e autorização */}
@@ -35,17 +37,16 @@ export default function Pt({ lang }: { lang: Locale }) {
           3. Sua Conta LinkedIn &amp; Autorização
         </h2>
         <p>
-          Para usar o Serviço você deve conectar sua conta do LinkedIn via LinkedIn OAuth. Ao fazer isso, você concede
-          ao Link Into The SSI permissão para:
+          Para usar o Serviço você entra com sua conta do LinkedIn via LinkedIn OpenID Connect. Isso confirma sua
+          identidade e fornece suas informações básicas de perfil &mdash; seu ID de membro do LinkedIn, nome, foto de
+          perfil e endereço de e-mail. O Serviço não solicita permissão para publicar, comentar ou reagir no LinkedIn e
+          não faz nenhuma escrita na sua conta do LinkedIn.
         </p>
-        <ul className="list-disc space-y-1 pl-5">
-          <li>ler as publicações do LinkedIn associadas a sua conta; e</li>
-          <li>publicar comentarios e reações no LinkedIn em seu nome.</li>
-        </ul>
         <p>
           Você permanece totalmente responsavel por toda a atividade que ocorra em sua conta do LinkedIn, incluindo
-          quaisquer comentarios ou reações publicados por meio do Serviço. Você pode revogar esta autorizacao a qualquer
-          momento pelas configurações da sua conta do LinkedIn ou excluindo sua conta.
+          quaisquer comentarios ou reações que você faça no LinkedIn após abrir um post por meio do Serviço. Você pode
+          revogar esta autorizacao a qualquer momento pelas configurações da sua conta do LinkedIn ou excluindo sua
+          conta.
         </p>
 
         {/* 4. Uso aceitável */}

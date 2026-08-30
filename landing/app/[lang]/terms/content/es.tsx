@@ -25,9 +25,12 @@ export default function Es({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. El Servicio</h2>
         <p>
           Link Into The SSI es una plataforma SaaS conectada a LinkedIn que ofrece un feed compartido de publicaciones
-          de miembros y permite la interaccion real en LinkedIn &mdash; comentarios y reacciones &mdash; en su nombre.
-          Su proposito es ayudar a los profesionales a aumentar su Indice de Ventas Sociales (SSI) de LinkedIn mediante
-          una interaccion autentica y mutua dentro de la comunidad.
+          de miembros y le ayuda a interactuar con ellas. Las reacciones y los comentarios los realiza usted,
+          directamente en LinkedIn: el Servicio muestra publicaciones relevantes, puede sugerir una reaccion y un
+          borrador de comentario, y luego abre la publicacion en LinkedIn para que usted decida actuar. El Servicio no
+          publica, comenta ni reacciona en LinkedIn en su nombre. Su proposito es ayudar a los profesionales a aumentar
+          su Indice de Ventas Sociales (SSI) de LinkedIn mediante una interaccion autentica y mutua dentro de la
+          comunidad.
         </p>
 
         {/* 3. Su cuenta LinkedIn y autorizacion */}
@@ -35,17 +38,16 @@ export default function Es({ lang }: { lang: Locale }) {
           3. Su Cuenta LinkedIn &amp; Autorizacion
         </h2>
         <p>
-          Para usar el Servicio debe conectar su cuenta de LinkedIn a traves de LinkedIn OAuth. Al hacerlo, otorga a
-          Link Into The SSI permiso para:
+          Para usar el Servicio debe iniciar sesion con su cuenta de LinkedIn a traves de LinkedIn OpenID Connect. Esto
+          confirma su identidad y proporciona su informacion basica de perfil &mdash; su ID de miembro de LinkedIn,
+          nombre, foto de perfil y direccion de correo electronico. El Servicio no solicita permiso para publicar,
+          comentar ni reaccionar en LinkedIn, y no realiza ninguna escritura en su cuenta de LinkedIn.
         </p>
-        <ul className="list-disc space-y-1 pl-5">
-          <li>leer las publicaciones de LinkedIn asociadas a su cuenta; y</li>
-          <li>publicar comentarios y reacciones en LinkedIn en su nombre.</li>
-        </ul>
         <p>
           Usted sigue siendo plenamente responsable de toda la actividad que ocurra en su cuenta de LinkedIn, incluidos
-          los comentarios o reacciones publicados a traves del Servicio. Puede revocar esta autorizacion en cualquier
-          momento desde la configuracion de su cuenta de LinkedIn o eliminando su cuenta.
+          los comentarios o reacciones que realice en LinkedIn despues de abrir una publicacion a traves del Servicio.
+          Puede revocar esta autorizacion en cualquier momento desde la configuracion de su cuenta de LinkedIn o
+          eliminando su cuenta.
         </p>
 
         {/* 4. Uso aceptable */}

@@ -24,8 +24,10 @@ export default function En({ lang }: { lang: Locale }) {
         {/* 2. The service */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. The Service</h2>
         <p>
-          Link Into The SSI is a LinkedIn-connected SaaS platform that provides a shared feed of member posts and
-          enables real LinkedIn engagement &mdash; comments and reactions &mdash; on your behalf. Its purpose is to help
+          Link Into The SSI is a LinkedIn-connected SaaS platform that provides a shared feed of member posts and helps
+          you engage with them. Reactions and comments are made by you, directly on LinkedIn: the Service surfaces
+          relevant posts, can suggest a reaction and draft a comment, and then opens the post on LinkedIn so you can
+          choose to act. The Service does not post, comment, or react on LinkedIn on your behalf. Its purpose is to help
           professionals grow their LinkedIn Social Selling Index (SSI) through authentic, mutual engagement within the
           community.
         </p>
@@ -35,17 +37,15 @@ export default function En({ lang }: { lang: Locale }) {
           3. Your LinkedIn Account &amp; Authorization
         </h2>
         <p>
-          To use the Service you must connect your LinkedIn account via LinkedIn OAuth. By doing so you grant Link Into
-          The SSI permission to:
+          To use the Service you sign in with your LinkedIn account via LinkedIn OpenID Connect. This confirms your
+          identity and provides your basic profile information &mdash; your LinkedIn member ID, name, profile picture,
+          and email address. The Service requests no permission to post, comment, or react on LinkedIn, and makes no
+          writes to your LinkedIn account.
         </p>
-        <ul className="list-disc space-y-1 pl-5">
-          <li>read the LinkedIn posts associated with your account; and</li>
-          <li>publish comments and reactions on LinkedIn on your behalf.</li>
-        </ul>
         <p>
           You remain fully responsible for all activity that occurs under your LinkedIn account, including any comments
-          or reactions published through the Service. You may revoke this authorization at any time through your
-          LinkedIn account settings or by deleting your account.
+          or reactions you make on LinkedIn after opening a post through the Service. You may revoke this authorization
+          at any time through your LinkedIn account settings or by deleting your account.
         </p>
 
         {/* 4. Acceptable use */}

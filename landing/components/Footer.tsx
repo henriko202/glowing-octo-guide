@@ -1,8 +1,17 @@
 import Link from 'next/link'
+import LanguageSelector from './LanguageSelector'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
 
-export default function Footer({ dict, lang }: { dict: Dictionary['footer']; lang: Locale }) {
+export default function Footer({
+  dict,
+  languageSelectorDict,
+  lang
+}: {
+  dict: Dictionary['footer']
+  languageSelectorDict: Dictionary['languageSelector']
+  lang: Locale
+}) {
   return (
     <footer className="border-t border-cream/5 bg-ink-800 px-6 py-10">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
@@ -14,7 +23,7 @@ export default function Footer({ dict, lang }: { dict: Dictionary['footer']; lan
           <span>·</span>
           <span>© {new Date().getFullYear()}</span>
         </div>
-        <div className="flex items-center gap-6 text-xs text-cream/55 dark:text-cream/30">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-cream/55 dark:text-cream/30">
           <Link
             href={`/${lang}/privacy`}
             className="transition-colors duration-300 hover:text-cream/60"
@@ -39,6 +48,10 @@ export default function Footer({ dict, lang }: { dict: Dictionary['footer']; lan
           >
             {dict.contact}
           </a>
+          <LanguageSelector
+            dict={languageSelectorDict}
+            lang={lang}
+          />
         </div>
       </div>
     </footer>

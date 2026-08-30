@@ -38,6 +38,7 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
       <FinalCTA dict={dict.finalCta} />
       <Footer
         dict={dict.footer}
+        languageSelectorDict={dict.languageSelector}
         lang={lang}
       />
     </div>

@@ -258,7 +258,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │
 ├── convex-mocks/                # Vitest mock for `convex/server` (backend unit tests)
 ├── docs/                        # planning/spec markdown + THIS document
-├── README.md                    # quickstart (partially stale — see §19)
+├── README.md                    # quickstart (reconciled to code 2026-08-30 — see §19)
 ├── CLAUDE.md / AGENTS.md        # agent instructions
 └── pnpm-workspace.yaml, tsconfig.base.json, eslint.config.js, .prettierrc
 ```
@@ -1323,7 +1323,8 @@ flowchart TD
     G["getFeed(paginationOpts, sessionToken, filters)"] --> AU{"valid session?"}
     AU -->|no| EMPTY["return empty page { page: [], isDone: true, continueCursor: '' }"]
     AU -->|yes| BASE["paginate posts by_feed_rank(inFeed=true) desc — one page"]
-    BASE --> AUTHF["fetch this page's authors (≤ numItems)"]
+    BASE --> F1["drop the viewer's OWN posts (authorId === viewer._id)"]
+    F1 --> AUTHF["fetch this page's authors (≤ numItems)"]
     AUTHF --> F2["post visibility: visibilityIndustries/Countries must include viewer's"]
     F2 --> F3["viewer industry filter (growth/pro)"]
     F3 --> F4["viewer country filter (pro)"]
@@ -1335,7 +1336,8 @@ flowchart TD
 > `getFeed` walks the `by_feed_rank` index with `.paginate()`: `inFeed === true` pre-encodes the
 > hidden / interaction-limit / soft-delete filters, and descending `feedRank` (featured → author
 > tier → recency, see [`lib/feedRank.ts`](../convex/lib/feedRank.ts)) **is** the sort — so each call
-> reads only one page and applies just the viewer-/author-dependent filters in memory. The denormalized
+> reads only one page and applies just the viewer-/author-dependent filters in memory — including dropping
+> the viewer's **own** posts (`authorId === viewer._id`), since the feed is for others' content. The denormalized
 > fields are kept in sync by every post writer (`computeFeedFields`). Heavy viewer filters can yield
 > short pages; the client's **Load more** (`usePaginatedQuery`) requests the next page. Design + rollout:
 > [feed-cursor-pagination-plan.md](./feed-cursor-pagination-plan.md).
@@ -2929,19 +2931,15 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 
 ### README ↔ code mismatches (trust the code)
 
-- **Tables:** README says 5; there are **10**.
-- **Post sync:** README says "hourly LinkedIn‑API cron"; reality is **daily, Apify‑only, admin‑gated**
-  (no direct LinkedIn‑API ingestion path).
-- **OAuth redirect:** README shows `?userId=…`; code uses `?session=…` (a session token).
-- **Token refresh:** README claims a 60‑day refresh flow "implemented"/"attempted within 7 days of expiry" — this is now
-  **accurate for the cron mechanics** (7‑day pre‑expiry window, [§13](#13-scheduled-jobs-crons)), but the README doesn't
-  mention that the refresh itself is **dormant for essentially every user**: the app's OIDC Standard‑tier scopes mean
-  LinkedIn never issues a `refresh_token` in the first place (see [§7](#7-authentication--identity)). The reconnect
-  banner that's the real mitigation for this is now built (task B01b, `ReconnectBanner.tsx`).
-- **Next.js:** README says 14; `landing/` is **15**.
-- **Dev port:** README/`.env.example` assume 5173; Vite is configured for **5174**.
-- README's project tree references files that don't exist (`jobs/syncConnections.ts`,
-  `pages/LoginPage.tsx`).
+The root `README.md` was **reconciled to the code on 2026‑08‑30** (Cloudflare hosting, Apify ingestion, handoff
+engagement, live all‑tier AI, 7‑day trial, 16 tables, session‑token OAuth redirect, Next.js 15, dev port 5174). The
+former mismatch list (5 tables, hourly LinkedIn‑API sync, `?userId=` redirect, Next.js 14, port 5173, phantom
+`syncConnections.ts`/`LoginPage.tsx` in the project tree) is resolved. Two code facts the README intentionally omits,
+for the record:
+
+- **Token refresh** is dormant for essentially every user: the app's OIDC Standard‑tier scopes mean LinkedIn never
+  issues a `refresh_token` (see [§7](#7-authentication--identity)); the reconnect banner (`ReconnectBanner.tsx`, task
+  B01b) is the real mitigation.
 
 ### Dead / vestigial code
 

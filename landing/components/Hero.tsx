@@ -17,7 +17,7 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
           height: 560,
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%) translateY(-40px)'
+          transform: 'translate(-50%, -50%)'
         }}
       />
       <div
@@ -27,18 +27,12 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
           height: 860,
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%) translateY(-40px)',
+          transform: 'translate(-50%, -50%)',
           opacity: 0.5
         }}
       />
 
       <div className="relative z-10 mx-auto max-w-3xl space-y-8">
-        {/* Eyebrow */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/5 px-4 py-1.5 text-xs font-medium tracking-widest text-gold-text uppercase">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" />
-          {dict.eyebrow}
-        </div>
-
         {/* Outcome-led headline */}
         <h1 className="font-display text-5xl leading-tight font-semibold text-cream md:text-7xl">
           {dict.headlineLine1}
@@ -63,8 +57,6 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
           </a>
           {/* Click trigger */}
           <p className="text-xs tracking-wide text-cream/40">{dict.ctaDisclaimer}</p>
-          {/* Above-fold trust line */}
-          <p className="text-sm text-cream-muted">{dict.trustLine}</p>
         </div>
       </div>
 

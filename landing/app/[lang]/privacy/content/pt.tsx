@@ -49,13 +49,15 @@ export default function Pt({ lang }: { lang: Locale }) {
           seu setor e pais nas configurações do perfil.
         </p>
         <p>
-          <strong className="text-cream">Posts que você envia.</strong> Armazenamos as publicações do LinkedIn que você
-          cria ou agenda pela plataforma.
+          <strong className="text-cream">Posts que você envia.</strong> Armazenamos os posts que você envia ao feed
+          compartilhado pela plataforma.
         </p>
         <p>
-          <strong className="text-cream">Ações de engajamento.</strong> Registramos comentarios e reações feitas por
-          meio do seu token de acesso do LinkedIn em seu nome, como parte do recurso principal de engajamento no feed da
-          plataforma.
+          <strong className="text-cream">Atividade de engajamento.</strong> Quando você escolhe reagir ou comentar em um
+          post do feed, registramos esse engajamento (o tipo de reação ou o texto do comentario que você usa) para medir
+          sua atividade e a contagem de interações. A reação ou o comentario em si você faz por conta própria,
+          diretamente no LinkedIn &mdash; o Serviço abre o post para que você aja e não reage nem comenta no LinkedIn em
+          seu nome.
         </p>
         <p>
           <strong className="text-cream">Cobrança.</strong> Os pagamentos de assinatura são processados pelo Stripe.
@@ -77,7 +79,7 @@ export default function Pt({ lang }: { lang: Locale }) {
         </h2>
         <p>
           <strong className="text-cream">Contrato (Art. 6(1)(b) GDPR).</strong> Fornecimento do serviço principal:
-          autenticacao, exibicao do feed, publicacao de posts e ações de engajamento, e gerenciamento da assinatura.
+          autenticacao, exibicao do feed, envio de posts e registro do seu engajamento, e gerenciamento da assinatura.
         </p>
         <p>
           <strong className="text-cream">Interesses legitimos (Art. 6(1)(f) GDPR).</strong> Otimizacao da qualidade do
@@ -101,7 +103,7 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>Contratamos os seguintes subprocessadores, que podem tratar dados pessoais em nosso nome:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong className="text-cream">LinkedIn</strong> &mdash; autenticacao (OIDC) e API de engajamento.
+            <strong className="text-cream">LinkedIn</strong> &mdash; autenticacao (login OpenID Connect).
           </li>
           <li>
             <strong className="text-cream">Stripe</strong> &mdash; processamento de pagamentos e gestao de assinaturas.

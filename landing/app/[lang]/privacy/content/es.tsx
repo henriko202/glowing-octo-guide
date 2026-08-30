@@ -49,13 +49,15 @@ export default function Es({ lang }: { lang: Locale }) {
           voluntariamente su sector e industria y pais en la configuracion de su perfil.
         </p>
         <p>
-          <strong className="text-cream">Publicaciones que envias.</strong> Almacenamos las publicaciones de LinkedIn
-          que crea o programa a traves de la plataforma.
+          <strong className="text-cream">Publicaciones que envias.</strong> Almacenamos las publicaciones que envia al
+          feed compartido a traves de la plataforma.
         </p>
         <p>
-          <strong className="text-cream">Acciones de interaccion.</strong> Registramos comentarios y reacciones
-          realizados a traves de su token de acceso de LinkedIn en su nombre como parte de la funcion principal de
-          interaccion con el feed de la plataforma.
+          <strong className="text-cream">Actividad de interaccion.</strong> Cuando decide reaccionar o comentar en una
+          publicacion del feed, registramos esa interaccion (el tipo de reaccion o el texto del comentario que utiliza)
+          para medir su actividad y el conteo de interacciones. La reaccion o el comentario en si lo realiza usted,
+          directamente en LinkedIn &mdash; el Servicio abre la publicacion para que usted actue y no reacciona ni
+          comenta en LinkedIn en su nombre.
         </p>
         <p>
           <strong className="text-cream">Facturacion.</strong> Los pagos de suscripcion son procesados por Stripe.
@@ -78,7 +80,7 @@ export default function Es({ lang }: { lang: Locale }) {
         </h2>
         <p>
           <strong className="text-cream">Contrato (Art. 6(1)(b) GDPR).</strong> Prestacion del servicio principal:
-          autenticacion, visualizacion de su feed, publicacion de posts y acciones de interaccion, y gestion de su
+          autenticacion, visualizacion de su feed, envio de posts y registro de su interaccion, y gestion de su
           suscripcion.
         </p>
         <p>
@@ -103,7 +105,7 @@ export default function Es({ lang }: { lang: Locale }) {
         <p>Contratamos los siguientes subencargados que pueden tratar datos personales en nuestro nombre:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong className="text-cream">LinkedIn</strong> &mdash; autenticacion (OIDC) y API de interaccion.
+            <strong className="text-cream">LinkedIn</strong> &mdash; autenticacion (inicio de sesion OpenID Connect).
           </li>
           <li>
             <strong className="text-cream">Stripe</strong> &mdash; procesamiento de pagos y gestion de suscripciones.
