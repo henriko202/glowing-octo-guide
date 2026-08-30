@@ -1,7 +1,7 @@
 // convex/interactions.ts
 import { action, internalMutation, internalQuery, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth, requireAuthAction } from './lib/auth'
@@ -192,7 +192,7 @@ export const commentOnPost = action({
   },
   handler: async (ctx, { postId, commentText, sessionToken }) => {
     if (commentText.length > 3000) {
-      throw new Error('Comment text exceeds maximum length of 3000 characters')
+      throw new ConvexError('Comment text exceeds maximum length of 3000 characters')
     }
 
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
@@ -208,9 +208,9 @@ export const commentOnPost = action({
     }
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new Error('Post not found')
-    if (post.hidden) throw new Error('This post is not available.')
-    if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
+    if (!post) throw new ConvexError('Post not found')
+    if (post.hidden) throw new ConvexError('This post is not available.')
+    if (post.interactionLimitReached) throw new ConvexError('This post has reached its interaction limit.')
 
     await ctx.runMutation(internal.interactions.incrementCommentCount, { postId, actorId: user._id })
     try {
@@ -250,9 +250,9 @@ export const reactToPost = action({
     }
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new Error('Post not found')
-    if (post.hidden) throw new Error('This post is not available.')
-    if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
+    if (!post) throw new ConvexError('Post not found')
+    if (post.hidden) throw new ConvexError('This post is not available.')
+    if (post.interactionLimitReached) throw new ConvexError('This post has reached its interaction limit.')
 
     const { counted }: { counted: boolean } = await ctx.runMutation(internal.interactions.incrementLikeCount, {
       postId,

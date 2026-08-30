@@ -6,6 +6,7 @@ import Modal from './Modal'
 import LoadingSpinner from './LoadingSpinner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { friendlyError } from '@/lib/errors'
 
 type PlanLimitRow = {
   _id: Id<'planLimits'>
@@ -81,7 +82,8 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
       })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setError(friendlyError(e, 'Save failed'))
+    } finally {
       setSaving(false)
     }
   }
@@ -93,7 +95,8 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
       await removeContactUserLimit({ sessionToken, userId: user._id })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Reset failed')
+      setError(friendlyError(e, 'Reset failed'))
+    } finally {
       setResetting(false)
     }
   }

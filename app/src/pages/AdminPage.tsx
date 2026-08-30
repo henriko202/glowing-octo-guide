@@ -11,6 +11,7 @@ import { Flash, useFlash } from '../components/useFlash'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Button } from '../components/ui/button'
+import { friendlyError } from '@/lib/errors'
 
 type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd'
 
@@ -83,7 +84,7 @@ export default function AdminPage() {
       await syncAllPostsM({ sessionToken })
       showFlash('success', 'Post sync started — running in the background.')
     } catch (err) {
-      showFlash('error', err instanceof Error ? err.message : 'Could not start post sync.')
+      showFlash('error', friendlyError(err, 'Could not start post sync.'))
     } finally {
       setSyncingPosts(false)
     }
@@ -96,7 +97,7 @@ export default function AdminPage() {
       await syncAllProfilesM({ sessionToken })
       showFlash('success', 'Profile sync started — running in the background.')
     } catch (err) {
-      showFlash('error', err instanceof Error ? err.message : 'Could not start profile sync.')
+      showFlash('error', friendlyError(err, 'Could not start profile sync.'))
     } finally {
       setSyncingProfiles(false)
     }

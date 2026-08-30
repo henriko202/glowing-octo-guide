@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import Modal from './Modal'
 import { Button } from '@/components/ui/button'
+import { friendlyError } from '@/lib/errors'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
 
@@ -31,7 +32,8 @@ export default function ChangeTierModal({ user, sessionToken, onClose }: Props) 
       await setUserTier({ sessionToken, userId: user._id, tier })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to change tier')
+      setError(friendlyError(e, 'Failed to change tier'))
+    } finally {
       setSaving(false)
     }
   }

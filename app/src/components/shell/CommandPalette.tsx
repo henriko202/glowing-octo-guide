@@ -53,15 +53,17 @@ export default function CommandPalette({ open, onOpenChange }: { open: boolean; 
         <CommandList>
           {!searching ? (
             <CommandGroup heading={t('shell.groupActions')}>
-              {NAV_GROUPS.flatMap(g => g.items).map(item => (
-                <CommandItem
-                  key={item.path}
-                  value={item.path}
-                  onSelect={() => run(() => navigate(item.path))}
-                >
-                  {t(item.labelKey)}
-                </CommandItem>
-              ))}
+              {NAV_GROUPS.flatMap(g =>
+                g.items.map(item => (
+                  <CommandItem
+                    key={item.path}
+                    value={item.path}
+                    onSelect={() => run(() => navigate(item.path))}
+                  >
+                    {t(item.labelKey)}
+                  </CommandItem>
+                ))
+              )}
               <CommandItem
                 value="__toggle-theme"
                 onSelect={() => run(() => setPref(resolved === 'dark' ? 'light' : 'dark'))}

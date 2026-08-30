@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAction, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
@@ -12,6 +12,7 @@ import { VirtualizedCombobox } from './VirtualizedCombobox'
 import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
 
 import type { Id } from '../../../convex/_generated/dataModel'
+import { friendlyError } from '@/lib/errors'
 
 export default function CommentBox({
   postId,
@@ -31,6 +32,7 @@ export default function CommentBox({
   const [submitting, setSubmitting] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
+  const [draftHydrated, setDraftHydrated] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const comment = useAction(api.interactions.commentOnPost)
   const generate = useAction(api.ai.comments.generateComment)
@@ -38,26 +40,21 @@ export default function CommentBox({
   // Load the user's saved draft for this post and hydrate the textarea once, so they can reuse it or
   // regenerate. Applied only on first load; later generations set the text directly.
   const savedDraft = useQuery(api.interactions.getCommentDraft, { sessionToken, postId })
-  const hydratedRef = useRef(false)
-  useEffect(() => {
-    if (hydratedRef.current || savedDraft === undefined) return
-    hydratedRef.current = true
-    if (!savedDraft) return
-    /* eslint-disable react-hooks/set-state-in-effect -- one-time hydrate of the saved draft on open */
-    setText(savedDraft)
-    setHasDraft(true)
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [savedDraft])
+  // Hydrate the saved draft once, when the query first resolves — a guarded render-phase update that
+  // converges (draftHydrated flips true and never re-enters). Later generations set the text directly.
+  if (!draftHydrated && savedDraft !== undefined) {
+    setDraftHydrated(true)
+    if (savedDraft) {
+      setText(savedDraft)
+      setHasDraft(true)
+    }
+  }
 
-  // The per-comment language mirrors the user's saved default until they change it here.
+  // The per-comment language mirrors the user's saved default until they pick one here (the override wins).
   const me = useQuery(api.users.getMe, { sessionToken }) as { commentLanguage?: string } | null | undefined
   const meCommentLanguage = me?.commentLanguage
-  const [language, setLanguage] = useState<string>(AUTO_LANGUAGE)
-  const [languageDirty, setLanguageDirty] = useState(false)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror the saved default until the user picks a per-comment language
-    if (!languageDirty) setLanguage(resolveCommentLanguage(meCommentLanguage))
-  }, [meCommentLanguage, languageDirty])
+  const [languageOverride, setLanguageOverride] = useState<string | null>(null)
+  const language = languageOverride ?? resolveCommentLanguage(meCommentLanguage)
 
   const uiLang = i18n.language?.split('-')[0] ?? 'en'
   const languageOptions = useMemo(
@@ -78,7 +75,7 @@ export default function CommentBox({
       setText(draft)
       setHasDraft(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('comment.generateError'))
+      setError(friendlyError(err, t('comment.generateError')))
     } finally {
       setGenerating(false)
     }
@@ -100,19 +97,20 @@ export default function CommentBox({
     } catch {
       // Copy blocked/denied — no toast; the draft stays in the box so it can be copied manually.
     }
+    let submitted = false
     try {
       // Optimistic: record + count the engagement now; the API can't confirm the LinkedIn post.
       await comment({ postId, commentText: draft, sessionToken })
+      // Keep the toast + spinner on screen for a beat, THEN open LinkedIn.
+      await delay(HANDOFF_DELAY_MS)
+      openLinkedIn(postUrl)
+      submitted = true
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('comment.generateError'))
+      setError(friendlyError(err, t('comment.generateError')))
+    } finally {
       setSubmitting(false)
-      return
     }
-    // Keep the toast + spinner on screen for a beat, THEN open LinkedIn.
-    await delay(HANDOFF_DELAY_MS)
-    openLinkedIn(postUrl)
-    setSubmitting(false)
-    if (copied) onClose()
+    if (submitted && copied) onClose()
   }
 
   return (
@@ -125,10 +123,7 @@ export default function CommentBox({
           <VirtualizedCombobox
             options={languageOptions}
             value={language}
-            onChange={value => {
-              setLanguage(value === '' ? AUTO_LANGUAGE : value)
-              setLanguageDirty(true)
-            }}
+            onChange={value => setLanguageOverride(value === '' ? AUTO_LANGUAGE : value)}
             ariaLabel={t('comment.language')}
             placeholder={t('comment.languageAuto')}
           />

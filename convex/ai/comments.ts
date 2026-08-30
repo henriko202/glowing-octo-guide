@@ -4,7 +4,7 @@
 // this clear of the old spam-detection worry (which was about reusing one comment across many posts).
 // fetch() → no "use node".
 import { action } from '../_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import type { Doc } from '../_generated/dataModel'
 import { requireAuthAction } from '../lib/auth'
@@ -34,7 +34,7 @@ export const generateComment = action({
     }
 
     const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new Error('Post not found')
+    if (!post) throw new ConvexError('Post not found')
     const author = await ctx.runQuery(internal.users.getPublicAuthor, { userId: post.authorId })
 
     const lang = resolveCommentLanguage(language ?? user.commentLanguage)

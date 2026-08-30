@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { friendlyError } from '@/lib/errors'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -54,7 +55,8 @@ function VisibilityChipField({
 }) {
   const { t } = useTranslation()
   const labelFor = (value: string) => options.find(o => o.value === value)?.label ?? value
-  const available = options.filter(o => !selected.includes(o.value))
+  const selectedSet = new Set(selected)
+  const available = options.filter(o => !selectedSet.has(o.value))
   const ariaLabel = field === 'industries' ? t('settings.visibilityIndustries') : t('settings.visibilityCountries')
   const addPlaceholder =
     field === 'industries' ? t('settings.visibilityAddIndustry') : t('settings.visibilityAddCountry')
@@ -115,8 +117,7 @@ export default function SettingsPage() {
   const [profileSaved, setProfileSaved] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
-  const [commentLang, setCommentLang] = useState<string>(AUTO_LANGUAGE)
-  const [commentLangDirty, setCommentLangDirty] = useState(false)
+  const [commentLangOverride, setCommentLangOverride] = useState<string | null>(null)
   const [commentLangSaving, setCommentLangSaving] = useState(false)
   const [commentLangSaved, setCommentLangSaved] = useState(false)
   const [visIndustries, setVisIndustries] = useState<string[]>([])
@@ -125,6 +126,10 @@ export default function SettingsPage() {
   const [visCountriesDirty, setVisCountriesDirty] = useState(false)
   const [visSaving, setVisSaving] = useState(false)
   const [visSaved, setVisSaved] = useState(false)
+  // Save-failure messages (e.g. server-side validation / tier gate), one per save section.
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [commentLangError, setCommentLangError] = useState<string | null>(null)
+  const [visError, setVisError] = useState<string | null>(null)
 
   // Mirror the server value for each field so a backend scrape that fills country/industry shows up
   // live — but stop mirroring a field once the user edits it (their unsaved edit wins until save).
@@ -144,10 +149,8 @@ export default function SettingsPage() {
     if (!headlineDirty) setHeadline(meHeadline ?? '')
   }, [meHeadline, headlineDirty])
   const meCommentLanguage = me?.commentLanguage
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror server value until the user picks a language
-    if (!commentLangDirty) setCommentLang(resolveCommentLanguage(meCommentLanguage))
-  }, [meCommentLanguage, commentLangDirty])
+  // Mirror the saved language until the user picks one here (the override wins); cleared on save.
+  const commentLang = commentLangOverride ?? resolveCommentLanguage(meCommentLanguage)
   const meVisIndustries = me?.defaultVisibilityIndustries
   const meVisCountries = me?.defaultVisibilityCountries
   useEffect(() => {
@@ -180,6 +183,7 @@ export default function SettingsPage() {
   async function handleSaveProfile() {
     if (!sessionToken) return
     setProfileSaving(true)
+    setProfileError(null)
     try {
       await updateProfile({ sessionToken, industry, country, headline })
       // Saved values are now the server truth — resume mirroring the reactive `me`.
@@ -188,6 +192,8 @@ export default function SettingsPage() {
       setHeadlineDirty(false)
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 3000)
+    } catch (err) {
+      setProfileError(friendlyError(err, 'Save failed'))
     } finally {
       setProfileSaving(false)
     }
@@ -196,11 +202,14 @@ export default function SettingsPage() {
   async function handleSaveCommentLanguage() {
     if (!sessionToken) return
     setCommentLangSaving(true)
+    setCommentLangError(null)
     try {
       await setCommentLanguage({ sessionToken, commentLanguage: commentLang })
-      setCommentLangDirty(false)
+      setCommentLangOverride(null)
       setCommentLangSaved(true)
       setTimeout(() => setCommentLangSaved(false), 3000)
+    } catch (err) {
+      setCommentLangError(friendlyError(err, 'Save failed'))
     } finally {
       setCommentLangSaving(false)
     }
@@ -228,12 +237,15 @@ export default function SettingsPage() {
   async function handleSaveVisibility() {
     if (!sessionToken) return
     setVisSaving(true)
+    setVisError(null)
     try {
       await setPostVisibility({ sessionToken, industries: visIndustries, countries: visCountries })
       setVisIndustriesDirty(false)
       setVisCountriesDirty(false)
       setVisSaved(true)
       setTimeout(() => setVisSaved(false), 3000)
+    } catch (err) {
+      setVisError(friendlyError(err, 'Save failed'))
     } finally {
       setVisSaving(false)
     }
@@ -246,7 +258,7 @@ export default function SettingsPage() {
     try {
       await refreshProfile({ sessionToken })
     } catch (err) {
-      setRefreshError(err instanceof Error ? err.message : 'Refresh failed')
+      setRefreshError(friendlyError(err, 'Refresh failed'))
     } finally {
       setRefreshing(false)
     }
@@ -331,6 +343,7 @@ export default function SettingsPage() {
             </Button>
           )}
         </div>
+        {profileError && <p className="text-destructive mt-2 mb-0 text-xs">{profileError}</p>}
         {refreshError && <p className="text-destructive mt-2 mb-0 text-xs">{refreshError}</p>}
         <p className="text-muted-foreground mt-2 mb-0 text-xs">{t('settings.profileNote')}</p>
       </section>
@@ -342,10 +355,7 @@ export default function SettingsPage() {
         <VirtualizedCombobox
           options={commentLangOptions}
           value={commentLang}
-          onChange={value => {
-            setCommentLang(value === '' ? AUTO_LANGUAGE : value)
-            setCommentLangDirty(true)
-          }}
+          onChange={value => setCommentLangOverride(value === '' ? AUTO_LANGUAGE : value)}
           ariaLabel={t('settings.commentLanguage')}
           placeholder={t('comment.languageAuto')}
         />
@@ -358,6 +368,7 @@ export default function SettingsPage() {
             {commentLangSaved ? t('settings.saved') : commentLangSaving ? t('settings.saving') : t('settings.save')}
           </Button>
         </div>
+        {commentLangError && <p className="text-destructive mt-2 mb-0 text-xs">{commentLangError}</p>}
       </section>
 
       {isPro ? (
@@ -392,6 +403,7 @@ export default function SettingsPage() {
               {visSaved ? t('settings.saved') : visSaving ? t('settings.saving') : t('settings.save')}
             </Button>
           </div>
+          {visError && <p className="text-destructive mt-2 mb-0 text-xs">{visError}</p>}
         </section>
       ) : (
         <section className="border-border bg-accent rounded-xl border p-5">

@@ -14,6 +14,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useCardGate } from '@/hooks/useCardGate'
+import { friendlyError } from '@/lib/errors'
 
 const FEED_PAGE_SIZE = 20
 
@@ -148,7 +149,7 @@ export default function FeedPage() {
                       try {
                         await react({ postId: id, reactionType, sessionToken: sessionToken ?? '' })
                       } catch (err: unknown) {
-                        const msg = err instanceof Error ? err.message : String(err)
+                        const msg = friendlyError(err, String(err))
                         setReactError({
                           postId: id,
                           msg: msg.startsWith('PAYMENT_REQUIRED') ? t('feed.cardGate') : msg

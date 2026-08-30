@@ -122,12 +122,12 @@ export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
               <p className="text-foreground mt-1 line-clamp-2 text-sm">{row.message}</p>
               {row.responses.length > 0 && (
                 <div className="mt-1.5 flex flex-col gap-1">
-                  {row.responses.map((r, i) => (
+                  {row.responses.map(r => (
                     <div
-                      key={i}
+                      key={r.createdAt}
                       className="border-primary border-l-2 pl-2"
                     >
-                      <span className="text-gold-text text-[10px] font-semibold uppercase tracking-wide">Reply</span>
+                      <span className="text-[10px] font-semibold tracking-wide text-gold-text uppercase">Reply</span>
                       <p className="text-muted-foreground line-clamp-2 text-[12px]">{r.text}</p>
                       <span className="text-muted-foreground text-[11px]">
                         {r.responderName ? `${r.responderName} · ` : ''}

@@ -13,6 +13,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
 import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
+import { friendlyError } from '@/lib/errors'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -77,7 +78,7 @@ export default function MyPostsPage() {
     try {
       await setPostHidden({ sessionToken, postId: post._id, hidden: !post.hidden })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('myPosts.updateError'))
+      setActionError(friendlyError(err, t('myPosts.updateError')))
     }
   }
 
@@ -96,7 +97,7 @@ export default function MyPostsPage() {
         await featurePost({ sessionToken, postId: post._id })
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('myPosts.updateError'))
+      setActionError(friendlyError(err, t('myPosts.updateError')))
     }
   }
 
@@ -118,7 +119,7 @@ export default function MyPostsPage() {
     try {
       await deletePost({ sessionToken, postId })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : t('myPosts.deleteError'))
+      setActionError(friendlyError(err, t('myPosts.deleteError')))
     }
   }
 

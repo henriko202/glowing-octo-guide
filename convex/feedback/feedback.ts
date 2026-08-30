@@ -2,7 +2,7 @@
 // User feedback: submission (authenticated), admin listing/triage, and admin email replies.
 // Replies are stored in the feedbackResponses table (Task 10); each admin reply is a separate row.
 import { internalAction, internalQuery, mutation, query } from '../_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { requireAuth } from '../lib/auth'
 import { assertAdmin } from '../admin'
@@ -39,9 +39,9 @@ const categoryValidator = v.union(
 // Pure validator — exported for unit testing. Returns the trimmed message or throws.
 export function validateFeedbackMessage(message: string): string {
   const trimmed = message.trim()
-  if (trimmed.length === 0) throw new Error('Feedback message cannot be empty.')
+  if (trimmed.length === 0) throw new ConvexError('Feedback message cannot be empty.')
   if (trimmed.length > MAX_FEEDBACK_LENGTH) {
-    throw new Error(`Feedback must be ${MAX_FEEDBACK_LENGTH} characters or fewer.`)
+    throw new ConvexError(`Feedback must be ${MAX_FEEDBACK_LENGTH} characters or fewer.`)
   }
   return trimmed
 }
@@ -122,7 +122,7 @@ export const respondToFeedback = mutation({
     assertAdmin(admin)
     const reply = validateFeedbackMessage(responseText)
     const feedback = await ctx.db.get(feedbackId)
-    if (!feedback) throw new Error('Feedback not found')
+    if (!feedback) throw new ConvexError('Feedback not found')
 
     // Insert a new response row — feedbackResponses is the source of truth for replies.
     const responseId = await ctx.db.insert('feedbackResponses', {
@@ -155,7 +155,7 @@ export const archiveFeedback = mutation({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const f = await ctx.db.get(feedbackId)
-    if (!f) throw new Error('Feedback not found')
+    if (!f) throw new ConvexError('Feedback not found')
     await ctx.db.patch(feedbackId, { status: 'archived' })
     await writeAuditLog(ctx.db as unknown as AuditDb, {
       actor: 'admin',
@@ -173,7 +173,7 @@ export const reopenFeedback = mutation({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const f = await ctx.db.get(feedbackId)
-    if (!f) throw new Error('Feedback not found')
+    if (!f) throw new ConvexError('Feedback not found')
     // Source of truth: feedbackResponses existence (not the legacy responseText field).
     const hasResponse = await ctx.db
       .query('feedbackResponses')

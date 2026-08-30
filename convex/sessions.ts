@@ -7,14 +7,52 @@
 import { internalMutation, internalQuery } from './_generated/server'
 import { v } from 'convex/values'
 
+// ─── Session lifetime ────────────────────────────────────────────────────────
+// 15-day sliding window: an idle (or stolen-but-unused) token expires SESSION_TTL_MS after its last
+// authenticated use, while active users are renewed transparently (see resolveSession /
+// requireAuthAction in lib/auth.ts). Renewal is guarded to the second half of the window so the
+// sessions row is written at most ~once per (TTL/2) of activity — keeping reactive invalidation of
+// the queries that read it (getMe, feed) negligible.
+export const SESSION_TTL_MS = 15 * 24 * 60 * 60 * 1000
+
+/** Absolute expiry (ms) for a session minted or touched at `now`. */
+export function sessionExpiryFrom(now: number): number {
+  return now + SESSION_TTL_MS
+}
+
+/** True once a session is past the halfway point of its window and should be slid forward. */
+export function shouldRenewSession(expiresAt: number, now: number): boolean {
+  return expiresAt - now < SESSION_TTL_MS / 2
+}
+
 export const create = internalMutation({
   args: {
     token: v.string(),
-    userId: v.id('users'),
-    expiresAt: v.number()
+    userId: v.id('users')
   },
-  handler: async (ctx, args) => {
-    await ctx.db.insert('sessions', args)
+  handler: async (ctx, { token, userId }) => {
+    await ctx.db.insert('sessions', { token, userId, expiresAt: sessionExpiryFrom(Date.now()) })
+  }
+})
+
+/**
+ * Sliding-expiry renewal used by the action auth path (actions can't write directly, so they call
+ * this via ctx.runMutation). Re-checks the guard inside the transaction so racing calls don't
+ * double-write, and never resurrects an already-expired session.
+ */
+export const slide = internalMutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const session = await ctx.db
+      .query('sessions')
+      .withIndex('by_token', q => q.eq('token', token))
+      .unique()
+    if (!session) return
+    const now = Date.now()
+    if (session.expiresAt < now) return
+    if (shouldRenewSession(session.expiresAt, now)) {
+      await ctx.db.patch(session._id, { expiresAt: sessionExpiryFrom(now) })
+    }
   }
 })
 

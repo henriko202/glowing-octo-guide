@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { friendlyError } from '@/lib/errors'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
 
@@ -120,7 +121,7 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
       await syncUserPosts({ sessionToken, userId: user._id })
       showFlash('success', `Post sync started for ${user.name}.`)
     } catch (err) {
-      showFlash('error', err instanceof Error ? err.message : 'Could not start post sync.')
+      showFlash('error', friendlyError(err, 'Could not start post sync.'))
     }
   }
 
@@ -130,7 +131,7 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
       await syncUserProfile({ sessionToken, userId: user._id })
       showFlash('success', `Profile sync started for ${user.name}.`)
     } catch (err) {
-      showFlash('error', err instanceof Error ? err.message : 'Could not start profile sync.')
+      showFlash('error', friendlyError(err, 'Could not start profile sync.'))
     }
   }
 

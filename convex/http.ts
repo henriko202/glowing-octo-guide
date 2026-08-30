@@ -96,12 +96,12 @@ http.route({
       })
 
       // Issue a cryptographically random session token — never expose the raw userId.
-      // The client stores this token; all protected functions resolve it server-side.
+      // The client stores this token; all protected functions resolve it server-side. The 15-day
+      // sliding TTL is owned by sessions.create (see SESSION_TTL_MS).
       const sessionToken = crypto.randomUUID()
       await ctx.runMutation(internal.sessions.create, {
         token: sessionToken,
-        userId: userId as Id<'users'>,
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days
+        userId: userId as Id<'users'>
       })
 
       // Append plan/interval to the success redirect when they were carried through OAuth.

@@ -1,3 +1,4 @@
+import { ConvexError } from 'convex/values'
 import type { Doc } from '../_generated/dataModel'
 
 type Status = Doc<'users'>['subscriptionStatus']
@@ -14,7 +15,7 @@ export function assertCanEngage(user: Pick<Doc<'users'>, 'subscriptionStatus' | 
   if (user.isAdmin) return // admins always bypass the card gate
   if (!canEngage(user.subscriptionStatus)) {
     // Prefixed so the app can detect this case and show the card-gate (Plan 2C).
-    throw new Error('PAYMENT_REQUIRED: Add a payment method to start engaging.')
+    throw new ConvexError('PAYMENT_REQUIRED: Add a payment method to start engaging.')
   }
 }
 

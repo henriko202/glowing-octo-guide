@@ -55,9 +55,10 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
     return <LoadingSpinner />
   }
 
-  const defaults = TIER_ORDER.map(tier => rows.find(r => r.tier === tier && !r.userId)).filter(
-    Boolean
-  ) as PlanLimitRow[]
+  const defaults = TIER_ORDER.flatMap(tier => {
+    const row = rows.find(r => r.tier === tier && !r.userId)
+    return row ? [row] : []
+  })
 
   return (
     <div>

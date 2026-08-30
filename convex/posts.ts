@@ -1,6 +1,6 @@
 // convex/posts.ts
 import { action, internalQuery, mutation, query } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { isAllowedLinkedInUrl, parseLinkedInPostUrl } from './linkedin/parsePostUrl'
@@ -173,13 +173,13 @@ export const submitPost = action({
     // 1. Parse URL
     const parsed = parseLinkedInPostUrl(postUrl)
     if (!parsed) {
-      throw new Error('Unrecognized LinkedIn post URL. Use a /posts/… or /feed/update/… URL.')
+      throw new ConvexError('Unrecognized LinkedIn post URL. Use a /posts/… or /feed/update/… URL.')
     }
 
     // 2. Resolve authenticated user from session token (never trusts client-supplied userId)
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) {
-      throw new Error('No LinkedIn access token. Please sign in again.')
+      throw new ConvexError('No LinkedIn access token. Please sign in again.')
     }
     // No card-gate here: a not-yet-subscribed member CAN submit (incl. the onboarding first post).
     // The post is created HIDDEN for non-active authors (postCreatedHidden, at the upsert below) and
@@ -213,7 +213,7 @@ export const submitPost = action({
         since: sevenDaysAgo
       })
       if (recentPostCount >= planLimits.postsPerWeek) {
-        throw new Error(
+        throw new ConvexError(
           `Weekly post limit reached. Your plan allows ${planLimits.postsPerWeek} post${planLimits.postsPerWeek === 1 ? '' : 's'} per week.`
         )
       }
@@ -226,7 +226,7 @@ export const submitPost = action({
 
     // Validate the URN shape before using it downstream (ownership check, DB, later API calls).
     if (!urn || !/^urn:li:(ugcPost|activity|share):\d+$/.test(urn)) {
-      throw new Error('Could not find a valid LinkedIn post URN')
+      throw new ConvexError('Could not find a valid LinkedIn post URN')
     }
 
     // 4. Verify ownership — skipped only under the admin override (dev-only), so a
@@ -350,13 +350,13 @@ export const setPostHidden = mutation({
   handler: async (ctx, { sessionToken, postId, hidden }) => {
     const user = await requireAuth(ctx, sessionToken)
     const post = await ctx.db.get(postId)
-    if (!post) throw new Error('Post not found')
+    if (!post) throw new ConvexError('Post not found')
     if (!canModifyPost(user, post)) {
-      throw new Error('Forbidden: you can only modify your own posts')
+      throw new ConvexError('Forbidden: you can only modify your own posts')
     }
     // A soft-deleted post must never be resurfaced by un-hiding it.
     if (post.deletedAt !== undefined) {
-      throw new Error('Post has been deleted')
+      throw new ConvexError('Post has been deleted')
     }
     // Hiding/unhiding flips feed eligibility — refresh the denormalized feed fields.
     const feed = computeFeedFields({
@@ -386,9 +386,9 @@ export const deletePost = mutation({
   handler: async (ctx, { sessionToken, postId }) => {
     const user = await requireAuth(ctx, sessionToken)
     const post = await ctx.db.get(postId)
-    if (!post) throw new Error('Post not found')
+    if (!post) throw new ConvexError('Post not found')
     if (!canModifyPost(user, post)) {
-      throw new Error('Forbidden: you can only modify your own posts')
+      throw new ConvexError('Forbidden: you can only modify your own posts')
     }
     if (post.deletedAt !== undefined) return // already deleted — idempotent no-op
     const deletedAt = Date.now()
@@ -427,13 +427,13 @@ export const featurePost = mutation({
   handler: async (ctx, { sessionToken, postId }) => {
     const user = await requireAuth(ctx, sessionToken)
     const post = await ctx.db.get(postId)
-    if (!post) throw new Error('Post not found')
+    if (!post) throw new ConvexError('Post not found')
     if (!canModifyPost(user, post)) {
-      throw new Error('Forbidden: you can only modify your own posts')
+      throw new ConvexError('Forbidden: you can only modify your own posts')
     }
     // A soft-deleted post must never be resurfaced by featuring it.
     if (post.deletedAt !== undefined) {
-      throw new Error('Post has been deleted')
+      throw new ConvexError('Post has been deleted')
     }
     // Idempotent no-op if already featured — see the concurrency note above.
     if (post.isFeatured) return
@@ -447,7 +447,7 @@ export const featurePost = mutation({
       .unique()
     const usedCount = usageRow?.usedCount ?? 0
     if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
-      throw new Error(
+      throw new ConvexError(
         `Monthly featured-post limit reached. Your plan allows ${limits.featuredPerMonth} featured post${limits.featuredPerMonth === 1 ? '' : 's'} per month.`
       )
     }
@@ -480,9 +480,9 @@ export const unfeaturePost = mutation({
   handler: async (ctx, { sessionToken, postId }) => {
     const user = await requireAuth(ctx, sessionToken)
     const post = await ctx.db.get(postId)
-    if (!post) throw new Error('Post not found')
+    if (!post) throw new ConvexError('Post not found')
     if (!canModifyPost(user, post)) {
-      throw new Error('Forbidden: you can only modify your own posts')
+      throw new ConvexError('Forbidden: you can only modify your own posts')
     }
     if (!post.isFeatured) return // already unfeatured — idempotent no-op
 

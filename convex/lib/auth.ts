@@ -11,6 +11,7 @@
 import type { ActionCtx, MutationCtx, QueryCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
 import type { Doc } from '../_generated/dataModel'
+import { sessionExpiryFrom, shouldRenewSession } from '../sessions'
 
 /**
  * Resolves a session token to a user document WITHOUT enforcing ban state.
@@ -23,14 +24,22 @@ export async function resolveSession(
 ): Promise<Doc<'users'> | null> {
   if (!sessionToken) return null
 
-  const session = await (ctx as QueryCtx).db
+  const db = (ctx as QueryCtx).db
+  const now = Date.now()
+  const session = await db
     .query('sessions')
     .withIndex('by_token', q => q.eq('token', sessionToken))
     .unique()
 
-  if (!session || session.expiresAt < Date.now()) return null
+  if (!session || session.expiresAt < now) return null
 
-  const user = await (ctx as QueryCtx).db.get(session.userId)
+  // Sliding expiry: in a write-capable (mutation) ctx, extend the window once it's past halfway. Query
+  // ctx is read-only and skips this — active users trigger mutations/actions regularly, which renew it.
+  if ('patch' in db && shouldRenewSession(session.expiresAt, now)) {
+    await (ctx as MutationCtx).db.patch(session._id, { expiresAt: sessionExpiryFrom(now) })
+  }
+
+  const user = await db.get(session.userId)
   return user ?? null
 }
 
@@ -68,9 +77,16 @@ export async function requireAuth(
 export async function requireAuthAction(ctx: ActionCtx, sessionToken: string | undefined): Promise<Doc<'users'>> {
   if (!sessionToken) throw new Error('Unauthorized')
 
+  const now = Date.now()
   const session = await ctx.runQuery(internal.sessions.getByToken, { token: sessionToken })
-  if (!session || session.expiresAt < Date.now()) {
+  if (!session || session.expiresAt < now) {
     throw new Error('Unauthorized')
+  }
+
+  // Sliding expiry: actions can't write, so renew via an internal mutation — but only once past the
+  // halfway mark, to avoid a mutation round-trip on every action.
+  if (shouldRenewSession(session.expiresAt, now)) {
+    await ctx.runMutation(internal.sessions.slide, { token: sessionToken })
   }
 
   const user = await ctx.runQuery(internal.users.getWithTokens, { userId: session.userId })

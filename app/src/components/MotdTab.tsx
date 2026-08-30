@@ -160,7 +160,7 @@ export default function MotdTab({ sessionToken, isAdmin }: { sessionToken?: stri
               key={loc}
               className="mt-3 flex flex-col gap-1"
             >
-              <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+              <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
                 {loc.toUpperCase()} {loc === 'en' ? '(required)' : '(optional)'}
               </span>
               <Textarea
@@ -217,8 +217,9 @@ export default function MotdTab({ sessionToken, isAdmin }: { sessionToken?: stri
 
           <div className="mt-4">
             <div className="mb-1 flex items-center gap-2">
-              <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">Preview</span>
+              <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Preview</span>
               <select
+                aria-label="Preview locale"
                 value={previewLocale}
                 onChange={e => setPreviewLocale(e.target.value as Locale)}
                 className="border-border bg-card text-foreground rounded border text-xs"
@@ -233,7 +234,7 @@ export default function MotdTab({ sessionToken, isAdmin }: { sessionToken?: stri
                 ))}
               </select>
             </div>
-            <div className="border-border bg-muted [&_a]:text-gold-text rounded-md border p-3 text-sm [&_a]:underline">
+            <div className="border-border bg-muted rounded-md border p-3 text-sm [&_a]:text-gold-text [&_a]:underline">
               <MarkdownView markdown={edit.bodies[previewLocale] || edit.bodies.en || ''} />
             </div>
           </div>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { SUPPORT_EMAIL } from '@/lib/support'
+import { friendlyError } from '@/lib/errors'
 
 const PLAN_IDS = ['starter', 'growth', 'pro'] as const
 
@@ -44,8 +45,9 @@ export default function BillingPage() {
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
   const [portalLoading, setPortalLoading] = useState(false)
-  const [interval, setInterval] = useState<Interval>(
-    (sessionStorage.getItem('chosenInterval') as Interval | null) ?? 'annual'
+  // NB: named setBillingInterval (not setInterval) so it doesn't shadow the global timer API.
+  const [billingInterval, setBillingInterval] = useState<Interval>(
+    () => (sessionStorage.getItem('chosenInterval') as Interval | null) ?? 'annual'
   )
 
   const isTrialing = me?.subscriptionStatus === 'trialing'
@@ -84,7 +86,7 @@ export default function BillingPage() {
       const result = await createCheckout({ priceId, sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
-      toast(t('billing.checkoutFailed', { error: err instanceof Error ? err.message : String(err) }))
+      toast(t('billing.checkoutFailed', { error: friendlyError(err, String(err)) }))
     }
   }
 
@@ -95,7 +97,7 @@ export default function BillingPage() {
       const result = await createPortal({ sessionToken })
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
-      toast(t('billing.portalFailed', { error: err instanceof Error ? err.message : String(err) }))
+      toast(t('billing.portalFailed', { error: friendlyError(err, String(err)) }))
     } finally {
       setPortalLoading(false)
     }
@@ -166,7 +168,7 @@ export default function BillingPage() {
               </p>
               <div className="bg-accent-foreground/20 h-2 w-full overflow-hidden rounded-full">
                 <div
-                  className="bg-primary h-2 rounded-full transition-all"
+                  className="bg-primary h-2 rounded-full transition-[width]"
                   style={{
                     width: `${Math.min(100, Math.round((progress.combined / progress.threshold) * 100))}%`
                   }}
@@ -204,14 +206,14 @@ export default function BillingPage() {
       {/* Monthly / Annual toggle — always visible */}
       <div className="mb-4 inline-flex items-center gap-2 rounded-full border p-1 text-sm">
         <button
-          onClick={() => setInterval('annual')}
-          className={`rounded-full px-3 py-1 ${interval === 'annual' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+          onClick={() => setBillingInterval('annual')}
+          className={`rounded-full px-3 py-1 ${billingInterval === 'annual' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
         >
           {t('billing.annual')}
         </button>
         <button
-          onClick={() => setInterval('monthly')}
-          className={`rounded-full px-3 py-1 ${interval === 'monthly' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+          onClick={() => setBillingInterval('monthly')}
+          className={`rounded-full px-3 py-1 ${billingInterval === 'monthly' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
         >
           {t('billing.monthly')}
         </button>
@@ -225,7 +227,7 @@ export default function BillingPage() {
           const isCurrent = hasCard && me?.tier === planId && me?.subscriptionStatus !== 'trialing'
           // Nudge new / no-card users toward Growth without hiding the other plans.
           const isRecommended = planId === 'growth' && !hasCard
-          const priceId = PLAN_PRICE_IDS[interval][planId]
+          const priceId = PLAN_PRICE_IDS[billingInterval][planId]
           const showWhatYouLlMiss = isTrialing && planId === 'starter'
           const features = t(`billing.plans.${planId}.features`, { returnObjects: true }) as unknown as string[]
           return (
@@ -248,7 +250,7 @@ export default function BillingPage() {
                 </Badge>
               )}
               <h2 className="text-foreground mt-0 text-lg font-bold">{t(`billing.plans.${planId}.name`)}</h2>
-              <p className="text-foreground my-2 text-2xl font-bold">{PLAN_PRICES[interval][planId]}</p>
+              <p className="text-foreground my-2 text-2xl font-bold">{PLAN_PRICES[billingInterval][planId]}</p>
               <p className="text-muted-foreground mb-4 text-[13px]">{t(`billing.plans.${planId}.description`)}</p>
               {Array.isArray(features) && (
                 <ul className="text-muted-foreground mb-5 space-y-2 text-[13px]">

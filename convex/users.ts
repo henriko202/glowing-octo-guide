@@ -1,5 +1,5 @@
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth, resolveSession } from './lib/auth'
@@ -120,17 +120,17 @@ export interface UpdateProfileArgs {
 export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args: UpdateProfileArgs): Promise<void> {
   const patch: Record<string, unknown> = {}
   if (args.industry !== undefined) {
-    if (args.industry !== '' && !isValidIndustry(args.industry)) throw new Error('Invalid industry')
+    if (args.industry !== '' && !isValidIndustry(args.industry)) throw new ConvexError('Invalid industry')
     patch.industry = args.industry === '' ? undefined : args.industry
   }
   if (args.country !== undefined) {
     const normalized = args.country.toUpperCase()
-    if (args.country !== '' && !isValidCountry(normalized)) throw new Error('Invalid country')
+    if (args.country !== '' && !isValidCountry(normalized)) throw new ConvexError('Invalid country')
     patch.country = args.country === '' ? undefined : normalized
   }
   if (args.headline !== undefined) {
     const trimmed = args.headline.trim()
-    if (trimmed.length > MAX_HEADLINE_LENGTH) throw new Error('Headline too long')
+    if (trimmed.length > MAX_HEADLINE_LENGTH) throw new ConvexError('Headline too long')
     patch.headline = trimmed === '' ? undefined : trimmed
   }
   if (Object.keys(patch).length > 0) await db.patch(userId, patch)
@@ -139,8 +139,8 @@ export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args
 /** Guard for the refresh mutation. Throws a user-facing message; never leaks the flag. */
 export function assertCanRefresh(user: { linkedinPublicIdentifier?: string }, settings: ApifyFlags): void {
   if (!user.linkedinPublicIdentifier)
-    throw new Error('Submit one of your posts first so we can detect your LinkedIn profile.')
-  if (!isApifyProfileScrapeEnabled(settings)) throw new Error('Profile refresh is currently unavailable.')
+    throw new ConvexError('Submit one of your posts first so we can detect your LinkedIn profile.')
+  if (!isApifyProfileScrapeEnabled(settings)) throw new ConvexError('Profile refresh is currently unavailable.')
 }
 
 // Public: whether the dev-only LinkedIn profile refresh (Apify scrape) is currently enabled.
@@ -336,11 +336,11 @@ export async function setPostVisibilityHandler(
   args: SetPostVisibilityArgs
 ): Promise<void> {
   if (tier !== 'pro' && tier !== 'contact') {
-    throw new Error('Post-visibility controls require a Pro or Contact plan')
+    throw new ConvexError('Post-visibility controls require a Pro or Contact plan')
   }
-  if (!args.industries.every(isValidIndustry)) throw new Error('Invalid industry')
+  if (!args.industries.every(isValidIndustry)) throw new ConvexError('Invalid industry')
   const countries = args.countries.map(c => c.toUpperCase())
-  if (!countries.every(isValidCountry)) throw new Error('Invalid country')
+  if (!countries.every(isValidCountry)) throw new ConvexError('Invalid country')
   await db.patch(userId, { defaultVisibilityIndustries: args.industries, defaultVisibilityCountries: countries })
 }
 
@@ -370,7 +370,7 @@ export const setCommentLanguage = mutation({
   args: { sessionToken: v.string(), commentLanguage: v.string() },
   handler: async (ctx, { sessionToken, commentLanguage }) => {
     const user = await requireAuth(ctx, sessionToken)
-    if (!isValidCommentLanguage(commentLanguage)) throw new Error('Unsupported language')
+    if (!isValidCommentLanguage(commentLanguage)) throw new ConvexError('Unsupported language')
     await ctx.db.patch(user._id, { commentLanguage })
   }
 })

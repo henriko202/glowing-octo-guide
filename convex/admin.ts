@@ -1,6 +1,6 @@
 import type { DatabaseWriter, MutationCtx } from './_generated/server'
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { requireAuth } from './lib/auth'
@@ -20,7 +20,7 @@ export function assertAdmin(user: Doc<'users'>): void {
 // is intentionally allowed — self-ban being blocked guarantees at least one admin
 // always remains.)
 export function assertNotSelfBan(adminId: string, targetId: string): void {
-  if (adminId === targetId) throw new Error("You can't ban yourself")
+  if (adminId === targetId) throw new ConvexError("You can't ban yourself")
 }
 
 // Returns global app settings (creates default if missing)
@@ -143,8 +143,8 @@ export const syncUserPosts = mutation({
       'Post sync is disabled — enable it in Settings first.'
     )
     const target = await ctx.db.get(userId)
-    if (!target) throw new Error('User not found')
-    if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')
+    if (!target) throw new ConvexError('User not found')
+    if (!target.linkedinPublicIdentifier) throw new ConvexError('User has no LinkedIn URL on file.')
     await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId })
   }
 })
@@ -172,8 +172,8 @@ export const syncUserProfile = mutation({
       'Profile scrape is disabled — enable it in Settings first.'
     )
     const target = await ctx.db.get(userId)
-    if (!target) throw new Error('User not found')
-    if (!target.linkedinPublicIdentifier) throw new Error('User has no LinkedIn URL on file.')
+    if (!target) throw new ConvexError('User not found')
+    if (!target.linkedinPublicIdentifier) throw new ConvexError('User has no LinkedIn URL on file.')
     await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId })
   }
 })
@@ -181,7 +181,7 @@ export const syncUserProfile = mutation({
 // Exported for testing.
 export function validateLimitArgs(interactionsPerPost: number, postsPerWeek: number): void {
   if (interactionsPerPost < 1 || postsPerWeek < 1) {
-    throw new Error('interactionsPerPost and postsPerWeek must each be >= 1')
+    throw new ConvexError('interactionsPerPost and postsPerWeek must each be >= 1')
   }
 }
 
@@ -220,8 +220,8 @@ export const setContactUserLimit = mutation({
     validateLimitArgs(interactionsPerPost, postsPerWeek)
 
     const targetUser = await ctx.db.get(userId)
-    if (!targetUser) throw new Error('User not found')
-    if (targetUser.tier !== 'contact') throw new Error('User is not on the contact tier')
+    if (!targetUser) throw new ConvexError('User not found')
+    if (targetUser.tier !== 'contact') throw new ConvexError('User is not on the contact tier')
 
     const existing = await ctx.db
       .query('planLimits')
@@ -401,7 +401,7 @@ export const setUserTier = mutation({
     assertAdmin(admin)
 
     const targetUser = await ctx.db.get(userId)
-    if (!targetUser) throw new Error('User not found')
+    if (!targetUser) throw new ConvexError('User not found')
 
     await ctx.db.patch(userId, { tier })
 
@@ -459,7 +459,7 @@ export const setUserSubscriptionStatus = mutation({
     assertAdmin(admin)
 
     const targetUser = await ctx.db.get(userId)
-    if (!targetUser) throw new Error('User not found')
+    if (!targetUser) throw new ConvexError('User not found')
 
     await ctx.db.patch(userId, { subscriptionStatus: status })
   }
@@ -479,11 +479,11 @@ export const banUser = mutation({
     assertNotSelfBan(admin._id, userId)
 
     const targetUser = await ctx.db.get(userId)
-    if (!targetUser) throw new Error('User not found')
+    if (!targetUser) throw new ConvexError('User not found')
 
     const trimmed = reason?.trim()
     if (trimmed && trimmed.length > 500) {
-      throw new Error('Ban reason must be 500 characters or fewer.')
+      throw new ConvexError('Ban reason must be 500 characters or fewer.')
     }
     await ctx.db.patch(userId, {
       isBanned: true,
@@ -505,7 +505,7 @@ export const unbanUser = mutation({
     assertAdmin(admin)
 
     const targetUser = await ctx.db.get(userId)
-    if (!targetUser) throw new Error('User not found')
+    if (!targetUser) throw new ConvexError('User not found')
 
     await ctx.db.patch(userId, {
       isBanned: false,

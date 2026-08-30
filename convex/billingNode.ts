@@ -1,7 +1,7 @@
 'use node'
 import Stripe from 'stripe'
 import { action, internalAction } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
 import { requireAuthAction } from './lib/auth'
@@ -23,10 +23,10 @@ const TRIAL_PERIOD_DAYS = 7
 export const createCheckoutSession = action({
   args: { priceId: v.string(), sessionToken: v.string() },
   handler: async (ctx, { priceId, sessionToken }) => {
-    if (!ALLOWED_PRICE_IDS.has(priceId)) throw new Error('Invalid price ID')
+    if (!ALLOWED_PRICE_IDS.has(priceId)) throw new ConvexError('Invalid price ID')
 
     const user = await requireAuthAction(ctx, sessionToken)
-    if (!user) throw new Error('User not found')
+    if (!user) throw new ConvexError('User not found')
 
     const customer = await stripeComponent.getOrCreateCustomer(ctx, {
       userId: user._id,

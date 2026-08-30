@@ -1,6 +1,6 @@
 // convex/feed.ts
-import { query } from './_generated/server'
-import { v } from 'convex/values'
+import { query, type QueryCtx } from './_generated/server'
+import { v, type Infer } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth } from './lib/auth'
@@ -90,6 +90,30 @@ export function isAuthorFeedEligible(
   return true
 }
 
+/**
+ * Whether a single post should be shown to `viewer`. The SINGLE per-viewer access gate shared by
+ * getFeed and search, so neither can bypass the other's rules. A post is hidden when it is the
+ * viewer's OWN post (feed/search surface other members' content), when the viewer falls outside the
+ * post's visibility allowlists, or when its author isn't feed-eligible (see isAuthorFeedEligible).
+ * The feed's tier-based industry/country filter is layered on top by fetchFeedPage — it is a
+ * "what I want to see" preference, not an access rule, so it is not part of this gate.
+ */
+export function isPostVisibleToViewer(
+  post: Pick<Doc<'posts'>, 'authorId' | 'visibilityIndustries' | 'visibilityCountries'>,
+  viewer: Pick<Doc<'users'>, '_id' | 'industry' | 'country'>,
+  author: Pick<Doc<'users'>, 'subscriptionStatus' | 'subscriptionEndsAt' | 'deletionScheduledAt'> | null,
+  now: number
+): boolean {
+  if (post.authorId === viewer._id) return false
+  if (post.visibilityIndustries.length > 0) {
+    if (!viewer.industry || !post.visibilityIndustries.includes(viewer.industry)) return false
+  }
+  if (post.visibilityCountries.length > 0) {
+    if (!viewer.country || !post.visibilityCountries.includes(viewer.country)) return false
+  }
+  return isAuthorFeedEligible(author, now)
+}
+
 // Empty pagination page for unauthenticated/invalid sessions — the shape
 // `usePaginatedQuery` expects so the client renders an empty feed, not an error.
 const EMPTY_PAGE = { page: [], isDone: true, continueCursor: '' }
@@ -118,52 +142,58 @@ export const getFeed = query({
       filterCountries
     })
 
-    // Walk posts in feed order straight off the index: `inFeed === true` already encodes the
-    // hidden / interaction-limit / soft-delete filters, and descending `feedRank` yields
-    // featured → author tier → recency (see lib/feedRank.ts). The cursor reads only one page.
-    const numItems = Math.min(Math.max(1, paginationOpts.numItems), MAX_FEED_PAGE)
-    const result = await ctx.db
-      .query('posts')
-      .withIndex('by_feed_rank', q => q.eq('inFeed', true))
-      .order('desc')
-      .paginate({ ...paginationOpts, numItems })
-
-    // Authors for THIS page only (≤ numItems). Fetched once, reused by the filters + enrichment.
-    const uniqueAuthorIds = [...new Set(result.page.map(p => p.authorId))]
-    const authors = await Promise.all(uniqueAuthorIds.map(id => ctx.db.get(id)))
-    const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
-
-    // Viewer-/author-dependent filters that can't live in the global index (plan §3c):
-    // the viewer's own posts, post visibility allowlists, author eligibility (trialing /
-    // pending deletion), and the viewer's industry/country filters. Pages may come back short
-    // when these drop posts — `usePaginatedQuery` just loads more.
-    const now = Date.now()
-    const enriched = result.page
-      .filter(post => {
-        // A member's own posts never appear in their own feed — the feed is for others' content.
-        if (post.authorId === viewer._id) return false
-        if (post.visibilityIndustries.length > 0) {
-          if (!viewer.industry || !post.visibilityIndustries.includes(viewer.industry)) return false
-        }
-        if (post.visibilityCountries.length > 0) {
-          if (!viewer.country || !post.visibilityCountries.includes(viewer.country)) return false
-        }
-        const author = authorMap.get(post.authorId)
-        if (!isAuthorFeedEligible(author ?? null, now)) return false
-        if (filter.applyIndustry && filter.industries.length > 0) {
-          if (!author?.industry || !filter.industries.includes(author.industry)) return false
-        }
-        if (filter.applyCountry && filter.countries.length > 0) {
-          if (!author?.country || !filter.countries.includes(author.country)) return false
-        }
-        return true
-      })
-      .map(post => {
-        const author = authorMap.get(post.authorId)
-        return author ? { ...post, author: toFeedAuthor(author) } : { ...post, author: null }
-      })
-
-    // Preserve isDone + continueCursor from the index walk; only `page` is filtered/enriched.
-    return { ...result, page: enriched }
+    return fetchFeedPage(ctx, viewer, { paginationOpts, filter, now: Date.now() })
   }
 })
+
+/**
+ * Reads one page of the shared feed for `viewer` and applies every per-request filter. Split out
+ * of the `getFeed` wrapper so the filtering is unit-testable with a mock `ctx` (the query wrapper
+ * itself isn't callable in unit tests). The wrapper owns auth + tier→filter mapping; `now` is
+ * passed in so the query stays deterministic per the wall-clock guideline.
+ */
+export async function fetchFeedPage(
+  ctx: QueryCtx,
+  viewer: Doc<'users'>,
+  opts: { paginationOpts: Infer<typeof paginationOptsValidator>; filter: FeedFilter; now: number }
+) {
+  const { filter, now } = opts
+  // Walk posts in feed order straight off the index: `inFeed === true` already encodes the
+  // hidden / interaction-limit / soft-delete filters, and descending `feedRank` yields
+  // featured → author tier → recency (see lib/feedRank.ts). The cursor reads only one page.
+  const numItems = Math.min(Math.max(1, opts.paginationOpts.numItems), MAX_FEED_PAGE)
+  const result = await ctx.db
+    .query('posts')
+    .withIndex('by_feed_rank', q => q.eq('inFeed', true))
+    .order('desc')
+    .paginate({ ...opts.paginationOpts, numItems })
+
+  // Authors for THIS page only (≤ numItems). Fetched once, reused by the filters + enrichment.
+  const uniqueAuthorIds = [...new Set(result.page.map(p => p.authorId))]
+  const authors = await Promise.all(uniqueAuthorIds.map(id => ctx.db.get(id)))
+  const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
+
+  // Viewer-/author-dependent filters that can't live in the global index (plan §3c): the viewer's
+  // own posts + visibility allowlists + author eligibility (shared with search via
+  // isPostVisibleToViewer), then the viewer's tier-based industry/country filter. Pages may come
+  // back short when these drop posts — `usePaginatedQuery` just loads more.
+  const enriched = result.page
+    .filter(post => {
+      const author = authorMap.get(post.authorId) ?? null
+      if (!isPostVisibleToViewer(post, viewer, author, now)) return false
+      if (filter.applyIndustry && filter.industries.length > 0) {
+        if (!author?.industry || !filter.industries.includes(author.industry)) return false
+      }
+      if (filter.applyCountry && filter.countries.length > 0) {
+        if (!author?.country || !filter.countries.includes(author.country)) return false
+      }
+      return true
+    })
+    .map(post => {
+      const author = authorMap.get(post.authorId)
+      return author ? { ...post, author: toFeedAuthor(author) } : { ...post, author: null }
+    })
+
+  // Preserve isDone + continueCursor from the index walk; only `page` is filtered/enriched.
+  return { ...result, page: enriched }
+}

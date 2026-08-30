@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { friendlyError } from '@/lib/errors'
 
 interface PostComposerProps {
   onSubmit: (url: string) => Promise<void>
@@ -30,7 +31,7 @@ export default function PostComposer({ onSubmit, atLimit = false, limitHint }: P
       await onSubmit(url.trim())
       setUrl('')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('composer.submitError'))
+      setError(friendlyError(err, t('composer.submitError')))
     } finally {
       setSubmitting(false)
     }
