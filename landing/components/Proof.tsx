@@ -1,4 +1,4 @@
-import type { Dictionary } from '../i18n/getDictionary'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 const FOUNDER_PHOTO = '/founder.jpg' // add landing/public/founder.jpg
 

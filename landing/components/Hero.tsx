@@ -1,5 +1,5 @@
-import { SIGN_IN_URL } from '../lib/links'
-import type { Dictionary } from '../i18n/getDictionary'
+import { SIGN_IN_URL } from '@/lib/links'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
   return (

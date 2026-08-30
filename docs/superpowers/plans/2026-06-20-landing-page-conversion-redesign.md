@@ -94,7 +94,7 @@ pnpm dev:landing                          # visual check at http://localhost:300
 
 - Produces: `SSIGauge` (default export, no props) — a self-contained server component rendering an animated SVG ring + "
   70 / SSI".
-- Consumes: `SIGN_IN_URL` from `../lib/links` (unchanged).
+- Consumes: `SIGN_IN_URL` from `@/lib/links` (unchanged).
 
 - [ ] **Step 1: Add the gauge keyframe to `globals.css`**
 
@@ -187,7 +187,7 @@ export default function SSIGauge() {
 Replace the entire contents of `landing/components/Hero.tsx` with:
 
 ```tsx
-import {SIGN_IN_URL} from '../lib/links'
+import {SIGN_IN_URL} from '@/lib/links'
 import SSIGauge from './SSIGauge'
 
 export default function Hero() {
@@ -784,14 +784,14 @@ Visual: exactly 3 cards; no "coming soon"; AI card sold by outcome (no "AI-power
 
 - Produces: `Pricing` (default export), **client** component (`useState` for the annual toggle), `id="pricing"`,
   `bg-ink`.
-- Consumes: `SIGN_IN_URL` from `../lib/links`.
+- Consumes: `SIGN_IN_URL` from `@/lib/links`.
 
 - [ ] **Step 1: Rewrite `Pricing.tsx`**
 
 ```tsx
 'use client'
 import {useState} from 'react'
-import {SIGN_IN_URL} from '../lib/links'
+import {SIGN_IN_URL} from '@/lib/links'
 
 type Plan = {
     id: string
@@ -1043,7 +1043,7 @@ Visual: safety question is first; the trial answer states card-required + 50-int
 - [ ] **Step 1: Rewrite `FinalCTA.tsx`**
 
 ```tsx
-import {SIGN_IN_URL} from '../lib/links'
+import {SIGN_IN_URL} from '@/lib/links'
 
 export default function FinalCTA() {
     return (

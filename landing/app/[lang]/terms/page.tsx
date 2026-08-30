@@ -1,4 +1,4 @@
-import type { Locale } from '../../../i18n/config'
+import type { Locale } from '@/i18n/config'
 import En from './content/en'
 import Pt from './content/pt'
 import Es from './content/es'

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import { Cormorant_Garamond, DM_Sans } from 'next/font/google'
 import '../globals.css'
-import CookieNotice from '../../components/CookieNotice'
-import { getDictionary } from '../../i18n/getDictionary'
-import { i18n, type Locale } from '../../i18n/config'
+import { getDictionary } from '@/i18n/getDictionary'
+import { i18n, type Locale } from '@/i18n/config'
+import CookieNotice from '@/components/CookieNotice'
 
 // Self-hosted at build time → served from 'self', so the tight CSP needs no font/style host.
 const display = Cormorant_Garamond({

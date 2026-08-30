@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import type { Dictionary } from '../i18n/getDictionary'
-import type { Locale } from '../i18n/config'
+import type { Dictionary } from '@/i18n/getDictionary'
+import type { Locale } from '@/i18n/config'
 
 export default function Footer({ dict, lang }: { dict: Dictionary['footer']; lang: Locale }) {
   return (

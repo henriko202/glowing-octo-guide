@@ -92,8 +92,8 @@ locale-prefixed links.
 
 **Interfaces:**
 
-- Produces: `i18n` + `Locale` (config); `getDictionary(locale): Promise<Dictionary>` + `Dictionary` type (
-  getDictionary); the canonical `en.json` (source of truth for the `Dictionary` shape).
+- Produces: `i18n` + `Locale` (config); `getDictionary(locale): Promise<Dictionary>` + `Dictionary` type
+  (getDictionary); the canonical `en.json` (source of truth for the `Dictionary` shape).
 
 - [ ] **Step 1: Locale config**
 
@@ -178,8 +178,8 @@ Run: `pnpm --filter landing exec tsc --noEmit` (the JSON imports + `Dictionary` 
 
 ### Task C2: Convert all components to `dict` props (strings only, links unchanged)
 
-Switch every component from hardcoded English to reading its `dict` slice from props, and update the **current** (
-pre-move) pages to feed them `getDictionary('en')`. This keeps a green build before the `[lang]` move. **Do not touch
+Switch every component from hardcoded English to reading its `dict` slice from props, and update the **current**
+(pre-move) pages to feed them `getDictionary('en')`. This keeps a green build before the `[lang]` move. **Do not touch
 links/hrefs yet** (locale-prefixing lands in C3).
 
 **Files (modify):** all of
@@ -197,8 +197,8 @@ links/hrefs yet** (locale-prefixing lands in C3).
 
 ```tsx
 // landing/components/Hero.tsx
-import type { Dictionary } from '../i18n/getDictionary'
-import { SIGN_IN_URL } from '../lib/links'
+import type { Dictionary } from '@/i18n/getDictionary'
+import { SIGN_IN_URL } from '@/lib/links'
 
 export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
   return (
@@ -223,7 +223,7 @@ Example:
 
 ```tsx
 // landing/app/page.tsx (temporary — replaced by app/[lang]/page.tsx in C3)
-import {getDictionary} from '../i18n/getDictionary'
+import {getDictionary} from '@/i18n/getDictionary'
 import Nav from '../components/Nav'
 // ...other imports
 export default async function Home() {
@@ -267,8 +267,8 @@ per-locale metadata + hreflang. After this the site lives at `/<lang>/...`.
 import type {Metadata} from 'next'
 import '../globals.css'
 import CookieNotice from '../../components/CookieNotice'
-import {getDictionary} from '../../i18n/getDictionary'
-import {i18n, type Locale} from '../../i18n/config'
+import {getDictionary} from '@/i18n/getDictionary'
+import {i18n, type Locale} from '@/i18n/config'
 
 const NO_FLASH = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([^;]*)/);var p=m?decodeURIComponent(m[1]):'system';var d=p==='dark'||(p!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;e.classList.toggle('dark',d);e.style.colorScheme=d?'dark':'light';}catch(e){}})();`
 
@@ -329,8 +329,8 @@ export default async function RootLayout({
   `../../components/...`, `../../i18n/...`). Example home page:
 
 ```tsx
-import { getDictionary } from '../../i18n/getDictionary'
-import type { Locale } from '../../i18n/config'
+import { getDictionary } from '@/i18n/getDictionary'
+import type { Locale } from '@/i18n/config'
 import Nav from '../../components/Nav'
 // ...
 export default async function Home({ params }: { params: Promise<{ lang: Locale }> }) {
@@ -415,8 +415,8 @@ export const config = {
 }
 ```
 
-- [ ] **Step 2: Verify** — `pnpm --filter landing exec tsc --noEmit`, `pnpm lint`, `pnpm --filter landing build`. (
-  Middleware runs at request time; the build just compiles it.) `pnpm exec prettier --write landing/middleware.ts`.
+- [ ] **Step 2: Verify** — `pnpm --filter landing exec tsc --noEmit`, `pnpm lint`, `pnpm --filter landing build`.
+  (Middleware runs at request time; the build just compiles it.) `pnpm exec prettier --write landing/middleware.ts`.
 
 - [ ] **Step 3: Save (do NOT commit).**
 
@@ -456,9 +456,9 @@ export const config = {
 // landing/components/LanguageSelector.tsx
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { setCookie } from '../lib/cookies'
-import { i18n, type Locale } from '../i18n/config'
-import type { Dictionary } from '../i18n/getDictionary'
+import { setCookie } from '@/lib/cookies'
+import { i18n, type Locale } from '@/i18n/config'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function LanguageSelector({ dict, lang }: { dict: Dictionary['languageSelector']; lang: Locale }) {
   const router = useRouter()
@@ -495,8 +495,8 @@ export default function LanguageSelector({ dict, lang }: { dict: Dictionary['lan
 ```
 
 - [ ] **Step 2: Mount in Nav** — `Nav` already receives `lang`; add
-  `<LanguageSelector dict={dict.languageSelector} lang={lang} />` into the right-side `flex items-center gap-3` div (
-  before `<ThemeToggle />`). `Nav`'s page caller passes `dict.languageSelector` (thread it through, or pass the whole
+  `<LanguageSelector dict={dict.languageSelector} lang={lang} />` into the right-side `flex items-center gap-3` div
+  (before `<ThemeToggle />`). `Nav`'s page caller passes `dict.languageSelector` (thread it through, or pass the whole
   `dict` to Nav — keep the slice approach: add `languageSelector` to Nav's props, or have the page render
   `<LanguageSelector>` as a sibling — simplest: give Nav `dict={dict.nav}`, `langSelectorDict={dict.languageSelector}`,
   `lang`). Pick one and keep types tight.
@@ -529,7 +529,7 @@ hand-styled markup, `[PLACEHOLDER]` tokens, the draft banner, and the incomplete
 
 ```tsx
 // landing/app/[lang]/privacy/page.tsx
-import type {Locale} from '../../../i18n/config'
+import type {Locale} from '@/i18n/config'
 import En from './content/en'
 import Pt from './content/pt'
 import Es from './content/es'
@@ -598,8 +598,8 @@ the approach that builds; the cleanest is to add the imports in D2.)
 
 ## Risks / notes
 
-- **The `[lang]` move (C3) is the high-risk task** — every route relocates and the root layout changes. The build (
-  static generation of all per-locale routes) is the gate. Keep C1/C2 (string conversion) landing first so C3 is a pure
+- **The `[lang]` move (C3) is the high-risk task** — every route relocates and the root layout changes. The build
+  (static generation of all per-locale routes) is the gate. Keep C1/C2 (string conversion) landing first so C3 is a pure
   move + link-prefix, not a move + rewrite.
 - **Dictionary key parity** (en/pt/es) is enforced loosely by types — eyeball the key trees in C5/D2; a missing key
   renders blank, not an error.

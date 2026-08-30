@@ -1,9 +1,9 @@
 // landing/components/LanguageSelector.tsx
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
-import { setCookie } from '../lib/cookies'
-import { i18n, type Locale } from '../i18n/config'
-import type { Dictionary } from '../i18n/getDictionary'
+import { setCookie } from '@/lib/cookies'
+import { i18n, type Locale } from '@/i18n/config'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function LanguageSelector({ dict, lang }: { dict: Dictionary['languageSelector']; lang: Locale }) {
   const router = useRouter()

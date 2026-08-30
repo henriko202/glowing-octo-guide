@@ -1,4 +1,4 @@
-import type { Dictionary } from '../i18n/getDictionary'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function PainBeat({ dict }: { dict: Dictionary['painBeat'] }) {
   return (
