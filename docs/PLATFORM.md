@@ -245,7 +245,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │   ├── linkedin/
 │   │   ├── oauth.ts             # auth URL builder + token exchange + userinfo
 │   │   ├── auth.ts              # upsertUser mutation
-│   │   ├── parsePostUrl.ts      # /posts/… and /feed/update/… URL parser
+│   │   ├── parsePostUrl.ts      # /posts/… + /feed/update/… parser & lnkd.in shortlink resolver
 │   │   ├── parsePostContent.ts  # HTML → text/media + shared-article link (extractArticleUrl) + article enrichment (parseArticle)
 │   │   ├── verifyPostOwnership.ts
 │   │   └── types.ts             # LinkedIn API response interfaces
@@ -1107,19 +1107,23 @@ inserts, throws, or (Apify path) diverts to `postQueue`. The weekly‑limit deci
 
 ```mermaid
 flowchart TD
-    S["submitPost(sessionToken, postUrl)"] --> P["parseLinkedInPostUrl(url)"]
+    S["submitPost(sessionToken, postUrl)"] --> RS["resolveLinkedInShortlink(postUrl)<br/>lnkd.in → linkedin.com (manual redirect, per‑hop host check)"]
+    RS -->|off‑allowlist / not linkedin.com| X1
+    RS -->|resolvedUrl| P["parseLinkedInPostUrl(resolvedUrl)"]
     P -->|unrecognized| X1["throw 'Unrecognized LinkedIn post URL'"]
     P -->|ok| AU["requireAuthAction → user (+ token)"]
     AU -->|no token| X2["throw 'No LinkedIn access token'"]
     AU --> ADM{"admin override?<br/>(isAdmin AND ALLOW_ADMIN_SHARE_ANY_POST=true)"}
-    ADM -->|yes: skip throttles| F["fetch(postUrl) HTML → extract data-attributed-urn"]
+    ADM -->|yes: skip throttles| F["fetch(resolvedUrl) HTML → extractPostUrn<br/>(namespace-preserving: data-attributed-urn, else -{ns}-{id}- slug of submitted/canonical URL)"]
     ADM -->|no| RL["rateLimit submitPost: 10/hour"]
     RL --> WL{"recent posts (7d) ≥ postsPerWeek?"}
     WL -->|yes| X3["throw 'Weekly post limit reached'"]
     WL -->|no| F
     F -->|no urn| X4["throw 'Could not find urn'"]
-    F --> OWN{"admin override?"}
-    OWN -->|yes: share ANY post| PC["parsePostContent(html) → text + media; appendMediaLinks"]
+    F -->|urn| EMB["fetch(/embed/feed/update/{urn}) → isEmbeddablePostHtml?<br/>(main-feed-activity-embed-card__ marker — applies to admins too)"]
+    EMB -->|auth‑walled (non‑public)| X5["throw 'post not publicly visible'"]
+    EMB -->|embeddable| OWN{"admin override?"}
+    OWN -->|yes: skip ownership| PC["parsePostContent(html) → text + media; appendMediaLinks"]
     OWN -->|no| V["verifyPostOwnership(postAuthorName vs OIDC name; vanity fallback)"]
     V --> PC
     PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
@@ -1127,7 +1131,7 @@ flowchart TD
     ART -->|no| UP
     ART -->|yes| AF["fetch(articleUrl) → parseArticle → article<br/>(best‑effort, SSRF‑guarded, non‑fatal)"]
     AF --> UP
-    UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = false, sourceUrl=postUrl, article?)"]
+    UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = false, sourceUrl=resolvedUrl, article?)"]
     UP --> R["return { postId }"]
 ```
 
@@ -1168,6 +1172,32 @@ This mirrors the Apify path, which reads `engagement.likes/comments`.
   `findPdfLinks` tests only the path segment (before `?`/`#`) for the `.pdf` extension but **returns the full URL
   including its query string**, so signed/expiring document tokens are preserved (the
   `4603f40` fix).
+
+**Post URN** (`extractPostUrn`). The submitted post's URN is read from the fetched page HTML, **preserving its
+namespace** (`ugcPost` / `share` / `activity`). Namespace matters: LinkedIn addresses one post under all three with
+**different ids**, and the embed endpoint auth‑walls a post addressed under the wrong one (see `buildEmbedUrl` — forcing
+`activity` broke share/ugcPost embeds). Priority: **(1)** the legacy `data-attributed-urn="…"` attribute (authoritative
+when present); **(2)** a `-{namespace}-{id}-` slug from a candidate URL — the submitted/redirected URL first (it carries
+the `ugcPost`/`share` id LinkedIn minted for sharing), then the page's `<link rel="canonical">`, then `og:url`; **(3)**
+last resort, a bare activity id (`/feed/update/urn:li:activity:{id}` or a plain slug) → `urn:li:activity:{id}`. Only
+https `linkedin.com` candidate URLs are trusted (the URN seeds the embed URL and the dedup key). LinkedIn's newer
+`/posts/…` markup **no longer emits** `data-attributed-urn`, which is why the URL‑slug path exists. A format‑validated
+URN (or a `'Could not find a valid LinkedIn post URN'` throw) is the result.
+
+**Embeddability gate** (`isEmbeddablePostHtml`). LinkedIn serves a post to the **logged‑out** embed iframe
+(`/embed/feed/update/{urn}/`) only when its audience is public ("Anyone"). A restricted‑audience post —
+Connections‑only, or some "new position" occasion posts — instead returns an auth‑wall stub ("This post is
+unavailable"), which every feed viewer would see as a dead embed. Since that stub is **server‑rendered**, `submitPost`
+detects it with a second plain
+`fetch` of the embed URL and requires the `main-feed-activity-embed-card__` CSS‑class marker (present on every rendered
+card — text, image, or video — and **locale‑independent**, unlike the wall copy). A miss throws *"This LinkedIn post is
+not publicly visible…"*, telling the member to set the post's audience to **Anyone** and resubmit — so the shared feed
+never carries a walling embed. The probe runs **after** URN extraction (it needs the URN) and **applies to everyone,
+including admins under the share-any-post override** — unlike ownership/throttles (curation conveniences), a walling
+embed is a dead card in the feed no matter who submits it, so the gate is deliberately *not* skipped for admins. Note:
+post **type** (`activity` vs `ugcPost`) and **author kind** (personal vs company page) do *not*
+decide this — public `activity` posts and public personal posts embed fine; only the audience setting does. Not wrapped
+in `try/catch` (matching the page fetch above): a transient LinkedIn error propagates to the client, who can retry.
 
 **Shared‑article link** (`extractArticleUrl`). A LinkedIn post that links an article (e.g. a Pulse post) does **not**
 expose the article URL in its JSON‑LD — the post is typed `SocialMediaPosting`, whose only URLs are the post's own
@@ -2824,11 +2854,14 @@ The codebase follows a consistent, defensible security model:
   (`console.error`) and returns a sanitized message — no stack traces or upstream bodies leak to clients.
 - **SSRF guard on outbound fetches.** `submitPost` fetches a user‑supplied URL, so
   `parseLinkedInPostUrl` rejects any non‑`https` scheme or non‑`linkedin.com` host **before** the fetch, and the URN
-  scraped from the returned page is format‑validated before any downstream use. The follow‑up **article‑enrichment
-  fetch** runs the URL extracted from the page HTML through the same host allowlist (`isAllowedLinkedInUrl`, which
-  shares `ALLOWED_LINKEDIN_HOST` with
-  `parseLinkedInPostUrl`) **before** fetching, so a malicious/derived link cannot redirect the server‑side fetch
-  off‑LinkedIn.
+  scraped from the returned page is format‑validated before any downstream use. **`lnkd.in` shortlinks** are accepted
+  via `resolveLinkedInShortlink`, which follows the shortener redirect **manually** (`redirect: 'manual'`) and
+  re‑validates **every hop** against the host allowlist (`lnkd.in` + `linkedin.com` only, https only, 5‑hop budget)
+  before requesting it — the redirect **target** is never fetched until it is proven to be a `linkedin.com` URL, so a
+  shortlink cannot steer the server‑side fetch off‑LinkedIn. The follow‑up **article‑enrichment fetch** runs the URL
+  extracted from the page HTML through the same host allowlist (`isAllowedLinkedInUrl`, which shares
+  `ALLOWED_LINKEDIN_HOST` with `parseLinkedInPostUrl`) **before** fetching, so a malicious/derived link cannot redirect
+  the server‑side fetch off‑LinkedIn.
 - **Payments fail safe.** The Stripe webhook signature is verified by `@convex-dev/stripe` before any handler runs;
   checkout/portal require auth and an allow‑listed price id; `toSubscriptionStatus`
   maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a half‑finished or

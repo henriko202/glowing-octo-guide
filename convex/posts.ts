@@ -3,7 +3,7 @@ import { action, internalQuery, mutation, query } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
-import { isAllowedLinkedInUrl, parseLinkedInPostUrl } from './linkedin/parsePostUrl'
+import { isAllowedLinkedInUrl, parseLinkedInPostUrl, resolveLinkedInShortlink } from './linkedin/parsePostUrl'
 import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { postCreatedHidden } from './lib/access'
@@ -12,6 +12,8 @@ import { computeFeedFields } from './lib/feedRank'
 import { currentUtcMonthKey, isFeaturedLimitReached } from './lib/postLimit'
 import {
   appendMediaLinks,
+  extractPostUrn,
+  isEmbeddablePostHtml,
   parseArticle,
   parsePostAuthor,
   parsePostContent,
@@ -170,9 +172,12 @@ export const submitPost = action({
     postUrl: v.string()
   },
   handler: async (ctx, { sessionToken, postUrl }): Promise<{ postId: string }> => {
-    // 1. Parse URL
-    const parsed = parseLinkedInPostUrl(postUrl)
-    if (!parsed) {
+    // 1. Resolve any lnkd.in shortlink to its underlying linkedin.com URL (SSRF-safe: manual
+    //    redirect, every hop re-validated against the host allowlist). A normal linkedin.com URL
+    //    passes straight through with no network call. Everything downstream uses `resolvedUrl`.
+    const resolvedUrl = await resolveLinkedInShortlink(postUrl)
+    const parsed = resolvedUrl ? parseLinkedInPostUrl(resolvedUrl) : null
+    if (!resolvedUrl || !parsed) {
       throw new ConvexError('Unrecognized LinkedIn post URL. Use a /posts/… or /feed/update/… URL.')
     }
 
@@ -219,14 +224,32 @@ export const submitPost = action({
       }
     }
 
-    // fetch the URL and try to get data-attributed-urn
-    const rawLinkedinResponse = await fetch(postUrl)
+    // Fetch the post page, then extract its URN — namespace-preserving (ugcPost/share/activity),
+    // since LinkedIn's embed auth-walls a post addressed under the wrong namespace. `extractPostUrn`
+    // tries the legacy `data-attributed-urn` attribute, then the `-{ns}-{id}-` slug of the submitted
+    // URL (preferred — it carries the shared ugcPost id) and the final redirected URL. It returns a
+    // format-validated URN, so it's safe downstream (ownership check, DB, later API calls).
+    const rawLinkedinResponse = await fetch(resolvedUrl)
     const rawLinkedinText = await rawLinkedinResponse.text()
-    const urn = rawLinkedinText.match(/data-attributed-urn="([^"]+)"/)?.[1]
-
-    // Validate the URN shape before using it downstream (ownership check, DB, later API calls).
-    if (!urn || !/^urn:li:(ugcPost|activity|share):\d+$/.test(urn)) {
+    const urn = extractPostUrn(rawLinkedinText, [resolvedUrl, rawLinkedinResponse.url])
+    if (!urn) {
       throw new ConvexError('Could not find a valid LinkedIn post URN')
+    }
+
+    // 3b. Embeddability gate. LinkedIn only serves a post to the logged-out embed iframe when its
+    // audience is public; a restricted-audience post (Connections-only, or some "new position"
+    // occasion posts) auth-walls with "This post is unavailable". We probe the embed endpoint —
+    // the wall is server-rendered, so a plain fetch reveals it (see isEmbeddablePostHtml) — and
+    // reject at submit, so the shared feed never carries a dead embed. This applies to EVERYONE,
+    // including admins under the share-any-post override: unlike ownership/throttles (curation
+    // conveniences), a walling embed is a useless dead card in the feed no matter who submits it,
+    // so the gate is deliberately NOT skipped for admins. The fetch (not wrapped in try/catch,
+    // matching the page fetch above) propagates a transient LinkedIn error to the client.
+    const embedHtml = await (await fetch(`https://www.linkedin.com/embed/feed/update/${urn}/`)).text()
+    if (!isEmbeddablePostHtml(embedHtml)) {
+      throw new ConvexError(
+        'This LinkedIn post is not publicly visible, so it can\'t be shown here. Open the post on LinkedIn, change its audience to "Anyone" (the globe icon), then submit it again.'
+      )
     }
 
     // 4. Verify ownership — skipped only under the admin override (dev-only), so a
@@ -312,9 +335,9 @@ export const submitPost = action({
       visibilityIndustries: user.defaultVisibilityIndustries ?? [],
       visibilityCountries: user.defaultVisibilityCountries ?? [],
       hidden: postCreatedHidden(user),
-      // Preserve the original submitted URL so we can link back correctly —
-      // reconstructing from URN loses information (activity ID ≠ ugcPost ID).
-      sourceUrl: postUrl,
+      // Store the resolved linkedin.com URL so we can link back correctly — it preserves the
+      // ugcPost ID (activity ID ≠ ugcPost ID) and, unlike a lnkd.in shortlink, won't rot.
+      sourceUrl: resolvedUrl,
       // Best-effort article data (undefined when the post shares no article).
       article
     })

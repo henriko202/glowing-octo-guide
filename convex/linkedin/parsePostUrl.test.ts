@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { parseLinkedInPostUrl } from './parsePostUrl'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { parseLinkedInPostUrl, resolveLinkedInShortlink } from './parsePostUrl'
 
 describe('parseLinkedInPostUrl', () => {
   it('parses Format 1 — /posts/{vanity}_{slug}-{activityId}-{hash}/', () => {
@@ -55,5 +55,62 @@ describe('parseLinkedInPostUrl', () => {
     const r = parseLinkedInPostUrl('https://de.linkedin.com/posts/x_y-7234567890123456789-Abcd/')
     expect(r).not.toBeNull()
     expect(r!.activityId).toBe('7234567890123456789')
+  })
+})
+
+describe('resolveLinkedInShortlink', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  // Redirect responses only expose Location; assert we never fetch the redirect TARGET.
+  function stubRedirects(chain: Record<string, string>) {
+    const fetchMock = vi.fn(async (input: string) => {
+      const location = chain[input]
+      if (!location) throw new Error(`unexpected fetch to ${input}`)
+      return { headers: new Headers({ location }) } as unknown as Response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('returns a linkedin.com URL unchanged WITHOUT any network call', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const url = 'https://www.linkedin.com/posts/x_y-7234567890123456789-Abcd/'
+    expect(await resolveLinkedInShortlink(url)).toBe(url)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('follows a lnkd.in shortlink to its linkedin.com target', async () => {
+    const target = 'https://www.linkedin.com/posts/henriko202_x-7152671040479911937-O4Ev/'
+    const fetchMock = stubRedirects({ 'https://lnkd.in/p/dzsyKxh9': target })
+    expect(await resolveLinkedInShortlink('https://lnkd.in/p/dzsyKxh9')).toBe(target)
+    // Only the shortener was fetched — never the linkedin.com target.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('https://lnkd.in/p/dzsyKxh9', { redirect: 'manual' })
+  })
+
+  it('rejects a shortlink that redirects off the allowlist WITHOUT fetching the target (SSRF)', async () => {
+    const fetchMock = stubRedirects({ 'https://lnkd.in/evil': 'https://evil.com/pwn' })
+    expect(await resolveLinkedInShortlink('https://lnkd.in/evil')).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1) // evil.com was never requested
+  })
+
+  it('rejects a shortlink redirect to a non-https target', async () => {
+    stubRedirects({ 'https://lnkd.in/x': 'http://169.254.169.254/' })
+    expect(await resolveLinkedInShortlink('https://lnkd.in/x')).toBeNull()
+  })
+
+  it('gives up after the hop budget on a shortener loop', async () => {
+    stubRedirects({ 'https://lnkd.in/loop': 'https://lnkd.in/loop' })
+    expect(await resolveLinkedInShortlink('https://lnkd.in/loop')).toBeNull()
+  })
+
+  it('returns null for non-allowlisted or malformed input without fetching', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await resolveLinkedInShortlink('https://evil.com/x')).toBeNull()
+    expect(await resolveLinkedInShortlink('http://www.linkedin.com/posts/x')).toBeNull()
+    expect(await resolveLinkedInShortlink('not-a-url')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

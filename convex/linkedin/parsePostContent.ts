@@ -1,5 +1,5 @@
 // convex/linkedin/parsePostContent.ts
-import { isAllowedLinkedInUrl } from './parsePostUrl'
+import { isAllowedLinkedInUrl, parseLinkedInPostUrl } from './parsePostUrl'
 
 export type PostMedia = { type: 'image' | 'article' | 'document'; url: string }
 
@@ -146,6 +146,63 @@ export function extractArticleUrl(html: string): string | null {
     if (isAllowedLinkedInUrl(clean)) return clean
   }
   return null
+}
+
+const URN_RE = /^urn:li:(ugcPost|activity|share):\d+$/
+
+/**
+ * Extracts the post's LinkedIn URN, **preserving its namespace** (ugcPost / share / activity).
+ *
+ * The namespace matters: LinkedIn addresses one post under all three with DIFFERENT ids, and its
+ * embed endpoint auth-walls a post addressed under the wrong one (see `buildEmbedUrl` — forcing
+ * `activity` broke share/ugcPost embeds). Priority:
+ *   1. legacy `data-attributed-urn="…"` attribute — authoritative when present.
+ *   2. a `-{namespace}-{id}-` slug from a candidate URL — the submitted/redirected URL first (it
+ *      carries the ugcPost/share id LinkedIn minted for sharing), then the page's canonical
+ *      permalink, then `og:url`. This is the "use the redirected URL" path.
+ *   3. last resort: a bare activity id (Format-2 `/feed/update/urn:li:activity:{id}` or a plain
+ *      slug) → `urn:li:activity:{id}`.
+ *
+ * `candidateUrls` are real URLs (submitted/resolved, then final Response.url), highest-priority
+ * first. Returns a format-validated URN or null.
+ */
+export function extractPostUrn(html: string, candidateUrls: string[]): string | null {
+  const attributed = html.match(/data-attributed-urn=["']([^"']+)["']/)?.[1]
+  if (attributed && URN_RE.test(attributed)) return attributed
+
+  const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1]
+  // Only trust https linkedin.com URLs to seed the URN — it feeds the embed URL and the dedup key.
+  const urls = [...candidateUrls, canonical, getMeta(html, 'og:url')]
+    .filter((u): u is string => !!u)
+    .map(decodeEntities)
+    .filter(isAllowedLinkedInUrl)
+
+  // Prefer an explicit namespace slug (`…-ugcPost-{id}-…`) over the bare-activity fallback.
+  for (const u of urls) {
+    const ns = u.match(/-(ugcPost|activity|share)-(\d{15,20})-/)
+    if (ns) return `urn:li:${ns[1]}:${ns[2]}`
+  }
+  for (const u of urls) {
+    const parsed = parseLinkedInPostUrl(u)
+    if (parsed) return `urn:li:activity:${parsed.activityId}`
+  }
+  return null
+}
+
+/**
+ * Whether a LinkedIn embed (`/embed/feed/update/{urn}/`) will actually render the post to a
+ * logged-out viewer — i.e. the iframe won't show LinkedIn's "This post is unavailable" auth-wall.
+ *
+ * LinkedIn only serves a post to the anonymous embed when its audience is public ("Anyone"); a
+ * restricted-audience post (e.g. Connections-only, or some "new position" occasion posts) returns
+ * a stub auth-wall instead. That decision is server-rendered, so we can detect it from a plain
+ * `fetch` of the embed URL — no browser needed. The marker is the `main-feed-activity-embed-card__`
+ * CSS-class prefix, which is present on every rendered card (text, image, or video post) and, being
+ * a class name, is locale-independent (survives an `Accept-Language: pt-BR` request); the auth-wall
+ * stub carries none of them. Verified empirically against walled vs. public embeds.
+ */
+export function isEmbeddablePostHtml(embedHtml: string): boolean {
+  return embedHtml.includes('main-feed-activity-embed-card__')
 }
 
 /**

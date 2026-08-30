@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
+import type {ReactNode} from 'react'
+import {useTranslation} from 'react-i18next'
 
 /**
  * Build a LinkedIn embed iframe URL from a post URN.
@@ -41,7 +41,7 @@ export function buildPostUrl(urn: string, sourceUrl?: string): string {
 export default function LinkedInEmbed({
   urn,
   containerHeight = 420,
-  iframeHeight = 480,
+  iframeHeight = 470,
   footer
 }: {
   urn: string
@@ -52,7 +52,7 @@ export default function LinkedInEmbed({
   const { t } = useTranslation()
   return (
     <div
-      className="relative overflow-hidden pl-2"
+      className="relative overflow-hidden pb-2 pl-2"
       style={{ height: containerHeight }}
     >
       <iframe
@@ -60,6 +60,7 @@ export default function LinkedInEmbed({
         title={t('linkedInEmbed.title')}
         width="100%"
         height={iframeHeight}
+        // height="100%"
         className="block border-none"
         // sandbox: explicit whitelist — prevents the iframe from navigating the
         // top window, opening popups, or submitting forms.

@@ -17,6 +17,47 @@ export interface ParsedPostUrl {
 // SSRF guard: the path checks below are NOT sufficient on their own — the caller fetch()es
 // this URL server-side, so scheme + host MUST be restricted. Allows linkedin.com + subdomains.
 const ALLOWED_LINKEDIN_HOST = /^([a-z0-9-]+\.)?linkedin\.com$/
+// lnkd.in is LinkedIn's own URL shortener. It is the ONLY non-linkedin.com host we ever fetch,
+// and only to read its redirect Location (never its target) — see resolveLinkedInShortlink.
+const ALLOWED_SHORTLINK_HOST = /^([a-z0-9-]+\.)?lnkd\.in$/
+
+/**
+ * Resolves a lnkd.in shortlink to the underlying linkedin.com post URL, SSRF-safely.
+ *
+ * lnkd.in shortens ANY link posted on LinkedIn — not just posts — so we must never let a
+ * shortener redirect steer a server-side fetch to an attacker-chosen host. We therefore follow
+ * redirects MANUALLY (`redirect: 'manual'`), re-validating every hop against the host allowlist
+ * before touching it, and stop at the first linkedin.com URL (handed off to the caller's normal
+ * auto-follow fetch, which already stays within linkedin.com).
+ *
+ * A URL that is already on linkedin.com is returned unchanged WITHOUT any network call.
+ * Returns null when the input is not an https linkedin.com / lnkd.in URL, the chain leaves the
+ * allowlist, a hop has no Location, or the hop budget is exceeded.
+ *
+ * ponytail: 5-hop budget — real lnkd.in links resolve in a single hop; raise only if LinkedIn
+ * ever chains shorteners.
+ */
+export async function resolveLinkedInShortlink(url: string): Promise<string | null> {
+  let current = url
+  for (let hop = 0; hop < 5; hop++) {
+    let parsed: URL
+    try {
+      parsed = new URL(current)
+    } catch {
+      return null
+    }
+    if (parsed.protocol !== 'https:') return null
+    const host = parsed.hostname.toLowerCase()
+    if (ALLOWED_LINKEDIN_HOST.test(host)) return current // reached the real post URL
+    if (!ALLOWED_SHORTLINK_HOST.test(host)) return null // off-allowlist → reject before fetching
+    // Shortener hop: read ONE redirect without auto-following it to an unvalidated host.
+    const res = await fetch(current, { redirect: 'manual' })
+    const location = res.headers.get('location')
+    if (!location) return null
+    current = new URL(location, current).toString() // resolve a possibly-relative Location
+  }
+  return null // exceeded the hop budget without reaching linkedin.com
+}
 
 /**
  * SSRF guard for any LinkedIn URL we are about to fetch server-side (e.g. a shared

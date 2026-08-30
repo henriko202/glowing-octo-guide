@@ -134,7 +134,7 @@ export default function MyPostsPage() {
   const featuredAtCap = featuredUsage != null && featuredUsage.usedCount >= featuredUsage.featuredPerMonth
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
+    <div className="mx-auto max-w-160 px-4 py-8 font-sans">
       <PageHeader title={t('nav.myPosts')} />
 
       {/* Profile header — with the weekly-usage + featured-usage pills on the right.
@@ -215,7 +215,7 @@ export default function MyPostsPage() {
             >
               {/* Owner action bar: visibility/featured state + Feature/Unfeature + Hide/Unhide + Delete.
                   flex-wrap on both sides guards against overflow if translated labels run long. */}
-              <div className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-[14px] py-2">
+              <div className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-2">
                 <div className="flex flex-wrap items-center gap-2">
                   {post.isFeatured && (
                     <Badge
@@ -245,6 +245,7 @@ export default function MyPostsPage() {
                     disabled={!post.isFeatured && featuredAtCap}
                     title={!post.isFeatured && featuredAtCap ? t('myPosts.featureLimitReached') : undefined}
                     onClick={() => handleToggleFeatured(post)}
+                    className="cursor-pointer"
                   >
                     {post.isFeatured ? t('myPosts.unfeature') : t('myPosts.feature')}
                   </Button>
@@ -253,6 +254,7 @@ export default function MyPostsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => handleToggleHidden(post)}
+                    className="cursor-pointer"
                   >
                     {post.hidden ? t('myPosts.unhide') : t('myPosts.hide')}
                   </Button>
@@ -261,6 +263,7 @@ export default function MyPostsPage() {
                     variant="destructive"
                     size="sm"
                     onClick={() => handleDelete(post)}
+                    className="cursor-pointer"
                   >
                     {t('myPosts.delete')}
                   </Button>
@@ -269,7 +272,7 @@ export default function MyPostsPage() {
               <LinkedInEmbed
                 urn={post.linkedinPostUrn}
                 footer={
-                  <div className="border-border bg-card flex h-[52px] items-center justify-between border-t px-[14px]">
+                  <div className="border-border bg-card flex h-13 items-center justify-between border-t px-3.5">
                     {/* Engagement stats from our own tracking data */}
                     <span className="text-muted-foreground text-xs">
                       👍 {post.likeCount} · 💬 {post.commentCount}
@@ -306,6 +309,7 @@ export default function MyPostsPage() {
             <Button
               type="button"
               variant="ghost"
+              className="cursor-pointer"
               onClick={() => setConfirmDeletePost(null)}
             >
               {t('privacy.cancel')}
@@ -313,6 +317,7 @@ export default function MyPostsPage() {
             <Button
               type="button"
               variant="destructive"
+              className="cursor-pointer"
               onClick={() => void handleConfirmDelete()}
             >
               {t('myPosts.delete')}
