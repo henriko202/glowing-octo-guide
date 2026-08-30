@@ -29,7 +29,7 @@ export default function FinalCTA({ dict }: { dict: Dictionary['finalCta'] }) {
         <div className="flex flex-col items-center gap-3">
           <a
             href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-on-gold shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-all duration-300 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
+            className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-on-gold shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-[background-color,box-shadow] duration-300 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
           >
             {dict.cta} →
           </a>

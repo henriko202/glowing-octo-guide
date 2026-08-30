@@ -50,7 +50,7 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
         <div className="flex flex-col items-center justify-center gap-3 pt-2">
           <a
             href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-on-gold shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-all duration-300 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)]"
+            className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-on-gold shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-[background-color,box-shadow] duration-300 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)]"
           >
             {dict.cta}
             <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>

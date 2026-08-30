@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import type { Dictionary } from '@/i18n/getDictionary'
 
 const FOUNDER_PHOTO = '/founder.jpg' // add landing/public/founder.jpg
@@ -22,10 +23,11 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
           {/* Founder note */}
           <div className="flex flex-col rounded-2xl border border-cream/[0.08] bg-ink-800 p-8 md:col-span-2">
             <div className="mb-5 flex items-center gap-4">
-              {/* plain <img> is fine here: founder photo is a known static asset, not user content */}
-              <img
+              <Image
                 src={FOUNDER_PHOTO}
                 alt={dict.founderName}
+                width={48}
+                height={48}
                 className="h-12 w-12 rounded-full object-cover"
               />
               <div>

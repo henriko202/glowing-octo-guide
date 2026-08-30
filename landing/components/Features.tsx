@@ -15,7 +15,7 @@ export default function Features({ dict, tiers }: { dict: Dictionary['features']
           {dict.items.map(f => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-all duration-300 hover:border-cream/15"
+              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-colors duration-300 hover:border-cream/15"
             >
               <div className="mb-5 flex items-start justify-between">
                 <span className="text-2xl text-gold-text opacity-70 transition-opacity duration-300 group-hover:opacity-100">

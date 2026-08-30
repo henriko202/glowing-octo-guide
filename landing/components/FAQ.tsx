@@ -39,7 +39,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
                 id={`faq-panel-${i}`}
                 role="region"
                 aria-labelledby={`faq-btn-${i}`}
-                className="overflow-hidden transition-all duration-300 ease-in-out"
+                className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
                 style={{ maxHeight: openIndex === i ? '600px' : '0px' }}
               >
                 <p className="pb-6 text-sm leading-relaxed text-cream/50">{faq.a}</p>

@@ -53,8 +53,8 @@ export default function En({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Engagement activity.</strong> When you choose to react to or comment on a post
           in the feed, we record that engagement (the reaction type, or the comment text you use) to measure your
-          activity and interaction counts. The reaction or comment itself is made by you, directly on LinkedIn &mdash;
-          the Service opens the post so you can act, and does not react or comment on LinkedIn on your behalf.
+          activity and interaction counts. The reaction or comment itself is made by you, directly on LinkedIn. The
+          Service opens the post so you can act; it does not react or comment on LinkedIn on your behalf.
         </p>
         <p>
           <strong className="text-cream">Billing.</strong> Subscription payments are processed by Stripe. We store your
@@ -108,13 +108,8 @@ export default function En({ lang }: { lang: Locale }) {
             <strong className="text-cream">Convex</strong> &mdash; backend database and serverless functions.
           </li>
           <li>
-            <strong className="text-cream">Vercel</strong> &mdash; landing-site hosting and edge delivery.
-          </li>
-          <li>
-            <strong className="text-cream">Railway</strong> &mdash; application server hosting.
-          </li>
-          <li>
-            <strong className="text-cream">Cloudflare</strong> &mdash; DNS, CDN, and DDoS protection.
+            <strong className="text-cream">Cloudflare</strong> &mdash; hosting for the landing site and the application,
+            plus DNS, CDN, and DDoS protection.
           </li>
           <li>
             <strong className="text-cream">Resend</strong> &mdash; transactional email delivery.
@@ -126,7 +121,7 @@ export default function En({ lang }: { lang: Locale }) {
           </li>
         </ul>
         <p>
-          <strong className="text-cream">We do NOT sell or share your personal information</strong> for cross-context
+          <strong className="text-cream">We do not sell or share your personal information</strong> for cross-context
           behavioural advertising or any other commercial purpose.
         </p>
 
@@ -304,7 +299,7 @@ export default function En({ lang }: { lang: Locale }) {
           top of this page reflects the most recent revision.
         </p>
         <p>
-          Questions or concerns? Contact us at{' '}
+          Contact us with any questions at{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"

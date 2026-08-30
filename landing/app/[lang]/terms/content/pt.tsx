@@ -6,13 +6,13 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Termos de Serviço</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Ultima atualizacao:</strong> Junho 2026
+          <strong className="text-cream">Última atualização:</strong> Junho 2026
         </p>
 
         {/* 1. Aceitação */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Aceitação</h2>
         <p>
-          Ao acessar ou usar Link Into The SSI (&ldquo;o Serviço&rdquo;, &ldquo;nos&rdquo;) você concorda em se vincular
+          Ao acessar ou usar Link Into The SSI (&ldquo;o Serviço&rdquo;, &ldquo;nós&rdquo;) você concorda em se vincular
           a estes Termos de Serviço. Se você não concordar, não use o Serviço.
         </p>
         <p>
@@ -24,12 +24,12 @@ export default function Pt({ lang }: { lang: Locale }) {
         {/* 2. O serviço */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. O Serviço</h2>
         <p>
-          Link Into The SSI e uma plataforma SaaS conectada ao LinkedIn que oferece um feed compartilhado de posts de
-          membros e ajuda você a engajar com eles. Reações e comentarios são feitos por você, diretamente no LinkedIn: o
-          Serviço mostra posts relevantes, pode sugerir uma reação e um rascunho de comentario, e então abre o post no
+          Link Into The SSI é uma plataforma SaaS conectada ao LinkedIn que oferece um feed compartilhado de posts de
+          membros e ajuda você a engajar com eles. Reações e comentários são feitos por você, diretamente no LinkedIn: o
+          Serviço mostra posts relevantes, pode sugerir uma reação e um rascunho de comentário, e então abre o post no
           LinkedIn para que você decida agir. O Serviço não publica, comenta nem reage no LinkedIn em seu nome. Seu
-          objetivo e ajudar profissionais a aumentar seu Indice de Vendas Sociais (SSI) do LinkedIn por meio de
-          engajamento autentico e mutuo dentro da comunidade.
+          objetivo é ajudar profissionais a aumentar seu Índice de Vendas Sociais (SSI) do LinkedIn por meio de
+          engajamento autêntico e mútuo dentro da comunidade.
         </p>
 
         {/* 3. Sua conta LinkedIn e autorização */}
@@ -38,14 +38,14 @@ export default function Pt({ lang }: { lang: Locale }) {
         </h2>
         <p>
           Para usar o Serviço você entra com sua conta do LinkedIn via LinkedIn OpenID Connect. Isso confirma sua
-          identidade e fornece suas informações básicas de perfil &mdash; seu ID de membro do LinkedIn, nome, foto de
-          perfil e endereço de e-mail. O Serviço não solicita permissão para publicar, comentar ou reagir no LinkedIn e
-          não faz nenhuma escrita na sua conta do LinkedIn.
+          identidade e fornece suas informações básicas de perfil: seu ID de membro do LinkedIn, nome, foto de perfil e
+          endereço de e-mail. O Serviço não solicita permissão para publicar, comentar ou reagir no LinkedIn e não faz
+          nenhuma escrita na sua conta do LinkedIn.
         </p>
         <p>
-          Você permanece totalmente responsavel por toda a atividade que ocorra em sua conta do LinkedIn, incluindo
-          quaisquer comentarios ou reações que você faça no LinkedIn após abrir um post por meio do Serviço. Você pode
-          revogar esta autorizacao a qualquer momento pelas configurações da sua conta do LinkedIn ou excluindo sua
+          Você permanece totalmente responsável por toda a atividade que ocorra em sua conta do LinkedIn, incluindo
+          quaisquer comentários ou reações que você faça no LinkedIn após abrir um post por meio do Serviço. Você pode
+          revogar esta autorização a qualquer momento pelas configurações da sua conta do LinkedIn ou excluindo sua
           conta.
         </p>
 
@@ -56,24 +56,24 @@ export default function Pt({ lang }: { lang: Locale }) {
           <li>enviar spam ou mensagens não solicitadas;</li>
           <li>assediar, abusar ou prejudicar outros membros;</li>
           <li>
-            executar atividades automatizadas ou de bot alem dos recursos expressamente fornecidos pelo Serviço (ex.:
+            executar atividades automatizadas ou de bot além dos recursos expressamente fornecidos pelo Serviço (ex.:
             engajamento scriptado fora da plataforma);
           </li>
-          <li>violar qualquer lei ou regulamentacao local, nacional ou internacional aplicavel; ou</li>
+          <li>violar qualquer lei ou regulamentação local, nacional ou internacional aplicável; ou</li>
           <li>
-            contornar ou tentar contornar quaisquer medidas tecnicas ou controles de segurança do Serviço ou do
+            contornar ou tentar contornar quaisquer medidas técnicas ou controles de segurança do Serviço ou do
             LinkedIn.
           </li>
         </ul>
         <p>
-          Você tambem deve cumprir o{' '}
+          Você também deve cumprir o{' '}
           <a
             href="https://www.linkedin.com/legal/user-agreement"
             className="text-gold-text hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Contrato do Usuario do LinkedIn
+            Contrato do Usuário do LinkedIn
           </a>{' '}
           em todos os momentos.
         </p>
@@ -83,16 +83,16 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>
           O acesso ao Serviço requer uma assinatura paga ativa. As assinaturas são cobradas{' '}
           <strong className="text-cream">mensalmente</strong> via Stripe. Ao assinar você autoriza o Stripe a cobrar o
-          metodo de pagamento informado de forma recorrente mensalmente ate que você cancele.
+          método de pagamento informado de forma recorrente mensalmente até que você cancele.
         </p>
         <p>
           <strong className="text-cream">Cancelamento.</strong> Você pode cancelar sua assinatura a qualquer momento
           pelas configurações da conta. O cancelamento entra em vigor no{' '}
-          <strong className="text-cream">fim do periodo de cobrança atual</strong>; você mantem acesso ao Serviço ate
-          essa data e nenhum reembolso parcial e emitido pelo tempo não utilizado.
+          <strong className="text-cream">fim do período de cobrança atual</strong>; você mantém acesso ao Serviço até
+          essa data e nenhum reembolso parcial é emitido pelo tempo não utilizado.
         </p>
         <p>
-          <strong className="text-cream">Exclusão de conta.</strong> A solicitacao de exclusão de conta cancela
+          <strong className="text-cream">Exclusão de conta.</strong> A solicitação de exclusão de conta cancela
           automaticamente qualquer assinatura ativa. Os registros de cobrança são mantidos conforme exigido por lei
           (consulte a{' '}
           <a
@@ -110,13 +110,13 @@ export default function Pt({ lang }: { lang: Locale }) {
         </h2>
         <p>
           Podemos suspender ou banir permanentemente contas que violem estes Termos, pratiquem uso indevido ou
-          prejudiquem a comunidade ou o Serviço, sem aviso previo quando necessário para proteger membros ou a
+          prejudiquem a comunidade ou o Serviço, sem aviso prévio quando necessário para proteger membros ou a
           plataforma.
         </p>
         <p>
           <strong className="text-cream">Autoexclusão.</strong> Você pode excluir sua conta a qualquer momento pelas
-          configurações da conta. Um <strong className="text-cream">periodo de tolerancia de 30 dias</strong> se aplica,
-          durante o qual sua conta pode ser recuperada. Apos 30 dias seus dados pessoais são permanentemente removidos,
+          configurações da conta. Um <strong className="text-cream">período de tolerância de 30 dias</strong> se aplica,
+          durante o qual sua conta pode ser recuperada. Após 30 dias seus dados pessoais são permanentemente removidos,
           exceto registros de cobrança que devem ser mantidos para fins de conformidade fiscal ou financeira (consulte
           nossa{' '}
           <a
@@ -130,17 +130,17 @@ export default function Pt({ lang }: { lang: Locale }) {
 
         {/* 7. Isenções de responsabilidade e limitação de responsabilidade */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">
-          7. Isenções de Responsabilidade &amp; Limitacao de Responsabilidade
+          7. Isenções de Responsabilidade &amp; Limitação de Responsabilidade
         </h2>
         <p>
-          Esta secao, incluindo quaisquer isenções de garantia, disposições de indenizacao e limites de
-          responsabilidade, sera redigida e inserida por advogados qualificados antes do lancamento publico do Serviço.
-          Ate que esses termos sejam finalizados, nenhuma limitacao vinculante de responsabilidade se aplica em nenhuma
-          direcao.
+          Esta seção, incluindo quaisquer isenções de garantia, disposições de indenização e limites de
+          responsabilidade, será redigida e inserida por advogados qualificados antes do lançamento público do Serviço.
+          Até que esses termos sejam finalizados, nenhuma limitação vinculante de responsabilidade se aplica em nenhuma
+          direção.
         </p>
 
-        {/* 8. Contrato do Usuario do LinkedIn */}
-        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">8. Contrato do Usuario do LinkedIn</h2>
+        {/* 8. Contrato do Usuário do LinkedIn */}
+        <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">8. Contrato do Usuário do LinkedIn</h2>
         <p>
           Você deve cumprir independentemente o{' '}
           <a
@@ -149,10 +149,10 @@ export default function Pt({ lang }: { lang: Locale }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Contrato do Usuario do LinkedIn
+            Contrato do Usuário do LinkedIn
           </a>{' '}
-          e todas as politicas do LinkedIn. Link Into The SSI e um produto independente e{' '}
-          <strong className="text-cream">não e afiliado, endossado ou patrocinado pela LinkedIn Corporation</strong> ou
+          e todas as políticas do LinkedIn. Link Into The SSI é um produto independente e{' '}
+          <strong className="text-cream">não é afiliado, endossado ou patrocinado pela LinkedIn Corporation</strong> ou
           qualquer de suas afiliadas.
         </p>
 
@@ -161,18 +161,18 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>
           Estes Termos são regidos e interpretados de acordo com as leis do{' '}
           <strong className="text-cream">Brasil</strong>. Quaisquer disputas decorrentes ou relacionadas a estes Termos
-          estarão sujeitas a jurisdicao exclusiva dos tribunais do <strong className="text-cream">Brasil</strong>.
+          estarão sujeitas à jurisdição exclusiva dos tribunais do <strong className="text-cream">Brasil</strong>.
         </p>
 
         {/* 10. Alterações e contato */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">10. Alterações &amp; Contato</h2>
         <p>
-          Podemos atualizar estes Termos periodicamente. Mudancas relevantes serão comunicadas por e-mail ou aviso no
-          aplicativo antes de entrarem em vigor. O uso continuado do Serviço apos a data de vigencia de uma mudanca
-          constitui aceitacao dos Termos revisados.
+          Podemos atualizar estes Termos periodicamente. Mudanças relevantes serão comunicadas por e-mail ou aviso no
+          aplicativo antes de entrarem em vigor. O uso continuado do Serviço após a data de vigência de uma mudança
+          constitui aceitação dos Termos revisados.
         </p>
         <p>
-          Duvidas sobre estes Termos? Entre em contato em{' '}
+          Para dúvidas sobre estes Termos, entre em contato em{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"

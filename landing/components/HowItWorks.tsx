@@ -14,7 +14,7 @@ export default function HowItWorks({ dict }: { dict: Dictionary['howItWorks'] })
         <div className="grid grid-cols-1 gap-10 md:grid-cols-3">
           {dict.steps.map((step, i) => (
             <div
-              key={i}
+              key={step.title}
               className="group relative"
             >
               <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-gold/10 transition-colors duration-300 group-hover:bg-gold/20 dark:bg-gold/15">

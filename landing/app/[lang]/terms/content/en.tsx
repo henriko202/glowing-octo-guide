@@ -38,9 +38,9 @@ export default function En({ lang }: { lang: Locale }) {
         </h2>
         <p>
           To use the Service you sign in with your LinkedIn account via LinkedIn OpenID Connect. This confirms your
-          identity and provides your basic profile information &mdash; your LinkedIn member ID, name, profile picture,
-          and email address. The Service requests no permission to post, comment, or react on LinkedIn, and makes no
-          writes to your LinkedIn account.
+          identity and provides your basic profile information: your LinkedIn member ID, name, profile picture, and
+          email address. The Service requests no permission to post, comment, or react on LinkedIn, and makes no writes
+          to your LinkedIn account.
         </p>
         <p>
           You remain fully responsible for all activity that occurs under your LinkedIn account, including any comments
@@ -166,7 +166,7 @@ export default function En({ lang }: { lang: Locale }) {
           acceptance of the revised Terms.
         </p>
         <p>
-          Questions about these Terms? Contact us at{' '}
+          Contact us about these Terms at{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"

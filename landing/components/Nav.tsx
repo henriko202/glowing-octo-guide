@@ -28,7 +28,7 @@ export default function Nav({
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-50 bg-ink/90 backdrop-blur-md transition-all duration-300 ${
+      className={`fixed inset-x-0 top-0 z-50 bg-ink/90 backdrop-blur-md transition-colors duration-300 ${
         scrolled ? 'border-b border-cream/5' : 'border-b border-transparent'
       }`}
     >
@@ -37,7 +37,7 @@ export default function Nav({
           href={`/${lang}`}
           className="group flex shrink-0 items-center gap-2.5"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gold transition-all duration-300 group-hover:border-gold-light group-hover:shadow-[0_0_12px_rgba(201,150,62,0.4)]">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gold transition-[border-color,box-shadow] duration-300 group-hover:border-gold-light group-hover:shadow-[0_0_12px_rgba(201,150,62,0.4)]">
             <div className="h-2 w-2 rounded-full bg-gold transition-colors duration-300 group-hover:bg-gold-light" />
           </div>
           {/* Icon-only below ~430px so the language select + CTA never collide on the smallest phones. */}
@@ -75,7 +75,7 @@ export default function Nav({
           <ThemeToggle dict={themeToggleDict} />
           <a
             href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="rounded-full border border-gold/60 px-4 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-all duration-300 hover:bg-gold hover:text-on-gold md:px-5"
+            className="rounded-full border border-gold/60 px-4 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold md:px-5"
           >
             {dict.cta}
           </a>
