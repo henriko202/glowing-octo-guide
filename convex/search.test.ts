@@ -36,7 +36,7 @@ function searchCtx(posts: Doc<'posts'>[], authors: Doc<'users'>[], people: Doc<'
 
 // Search applies the SAME per-viewer gate as the feed (isPostVisibleToViewer), so the same 10-post
 // fixture proves search excludes the viewer's own posts and honors visibility + author eligibility.
-describe('searchPostsAndPeople — filters posts over 10 posts', () => {
+describe('searchPostsAndPeople — filters posts over 10 posts', ;() => {
   const viewer = user('viewer', { industry: 'tech', country: 'US' })
 
   const posts = [
@@ -79,5 +79,22 @@ describe('searchPostsAndPeople — filters posts over 10 posts', () => {
     })
     expect(got).toHaveLength(3)
     expect(got[0]).toEqual(toSearchPerson(people[0]))
+  })
+
+  // People results honor the SAME eligibility rule as posts (isAuthorFeedEligible): banned,
+  // pending-deletion and canceled-lapsed members are hidden; active and still-paid are kept.
+  it('excludes banned / pending-deletion / lapsed people from people results', async () => {
+    const mixed = [
+      user('ok'), //                                                                       active   → keep
+      user('banned', { isBanned: true }), //                                               banned   → DROP
+      user('leaving', { deletionScheduledAt: 5 }), //                                       deletion → DROP
+      user('lapsed', { subscriptionStatus: 'canceled', subscriptionEndsAt: NOW - 1 }), //   lapsed   → DROP
+      user('paid', { subscriptionStatus: 'canceled', subscriptionEndsAt: NOW + 1000 }) //   paid     → keep
+    ]
+    const { people: got } = await searchPostsAndPeople(searchCtx(posts, authors, mixed), viewer, {
+      text: 'q',
+      now: NOW
+    })
+    expect(got.map(p => p._id)).toEqual(['ok', 'paid'])
   })
 })

@@ -3,7 +3,12 @@ import { action, internalQuery, mutation, query } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
-import { isAllowedLinkedInUrl, parseLinkedInPostUrl, resolveLinkedInShortlink } from './linkedin/parsePostUrl'
+import {
+  isAllowedLinkedInUrl,
+  isHttpsUrl,
+  parseLinkedInPostUrl,
+  resolveLinkedInShortlink
+} from './linkedin/parsePostUrl'
 import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { postCreatedHidden } from './lib/access'
@@ -289,9 +294,14 @@ export const submitPost = action({
     const parsedContent = parsePostContent(rawLinkedinText)
     const baseText = ownership.content || parsedContent.text
     const composedContent = appendMediaLinks(baseText, parsedContent.media)
-    const mediaUrls = parsedContent.media.map(m => m.url)
+    // https-only: these URLs are stored and (imageUrls) fetched by the AI vision provider — drop any
+    // non-https scheme parsed out of the page HTML before it reaches storage/a third party.
+    const mediaUrls = parsedContent.media.map(m => m.url).filter(isHttpsUrl)
     // Image-typed media only — sent to the AI as vision input (a non-image URL would error the model).
-    const imageUrls = parsedContent.media.filter(m => m.type === 'image').map(m => m.url)
+    const imageUrls = parsedContent.media
+      .filter(m => m.type === 'image')
+      .map(m => m.url)
+      .filter(isHttpsUrl)
 
     // 4c. Pull current engagement (reactions + comments) from the same page HTML's
     // JSON-LD. Best-effort: missing data degrades to 0, so the post just starts at

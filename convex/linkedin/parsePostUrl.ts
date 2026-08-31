@@ -75,6 +75,21 @@ export function isAllowedLinkedInUrl(url: string): boolean {
   return parsed.protocol === 'https:' && ALLOWED_LINKEDIN_HOST.test(parsed.hostname.toLowerCase())
 }
 
+/**
+ * Minimal scheme guard for URLs we STORE and later hand to a third party (LinkedIn media/image links
+ * sent to the AI vision provider, which fetches them). Blocks javascript:/data:/file:/http and other
+ * non-https schemes. Not host-pinned on purpose: LinkedIn media is served from licdn.com — NOT
+ * linkedin.com — so isAllowedLinkedInUrl is too strict for image URLs. https-only is the
+ * proportionate SSRF/scheme guard for a URL fetched off-app.
+ */
+export function isHttpsUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {
   if (!url) return null
 

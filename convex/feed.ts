@@ -1,6 +1,6 @@
 // convex/feed.ts
 import { query, type QueryCtx } from './_generated/server'
-import { type Infer, v } from 'convex/values'
+import { ConvexError, type Infer, v } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth } from './lib/auth'
@@ -119,6 +119,31 @@ export function isPostVisibleToViewer(
     if (!viewer.country || !post.visibilityCountries.includes(viewer.country)) return false
   }
   return isAuthorFeedEligible(author, now)
+}
+
+/**
+ * The single engagement gate, shared by commentOnPost, reactToPost and generateComment (via
+ * interactions.getEngageablePost) so the three can never diverge on what a viewer may act on. A post
+ * is engageable exactly when it would surface in this viewer's feed: not at its interaction cap, not
+ * hidden / soft-deleted (the `inFeed` storage conditions that a direct `ctx.db.get(id)` bypasses),
+ * and visible to the viewer (isPostVisibleToViewer: not own-post, within visibility allowlists,
+ * author feed-eligible). Throws ConvexError with a viewer-facing message; returns when engageable.
+ */
+export function assertPostEngageable(
+  post: Pick<
+    Doc<'posts'>,
+    'authorId' | 'visibilityIndustries' | 'visibilityCountries' | 'hidden' | 'deletedAt' | 'interactionLimitReached'
+  >,
+  viewer: Pick<Doc<'users'>, '_id' | 'industry' | 'country'>,
+  author: Pick<Doc<'users'>, 'subscriptionStatus' | 'subscriptionEndsAt' | 'deletionScheduledAt' | 'isBanned'> | null,
+  now: number
+): void {
+  // Interaction cap keeps its own message — a meaningful "this post is full" signal for the UI.
+  if (post.interactionLimitReached) throw new ConvexError('This post has reached its interaction limit.')
+  // Everything else the viewer isn't allowed to reach collapses to one generic "not available".
+  if (post.hidden || post.deletedAt || !isPostVisibleToViewer(post, viewer, author, now)) {
+    throw new ConvexError('This post is not available.')
+  }
 }
 
 // Empty pagination page for unauthenticated/invalid sessions — the shape

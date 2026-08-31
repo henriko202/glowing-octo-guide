@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFeedFilter, fetchFeedPage, isAuthorFeedEligible, toFeedAuthor } from './feed'
+import { assertPostEngageable, buildFeedFilter, fetchFeedPage, isAuthorFeedEligible, toFeedAuthor } from './feed'
 import { computeFeedFields } from './lib/feedRank'
 import type { Doc, Id } from './_generated/dataModel'
 
@@ -165,6 +165,41 @@ describe('isAuthorFeedEligible', () => {
     expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled', subscriptionEndsAt: NOW + 1 }, NOW)).toBe(true)
     expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled', subscriptionEndsAt: NOW - 1 }, NOW)).toBe(false)
     expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled' }, NOW)).toBe(false) // unknown end → dropped
+  })
+})
+
+// The engagement gate reuses isPostVisibleToViewer + the inFeed storage conditions, so the three
+// engagement paths (comment / react / AI draft) can't diverge from what the viewer's feed shows.
+describe('assertPostEngageable', () => {
+  const viewer = user('viewer', { industry: 'tech', country: 'US' })
+  const author = user('author', { subscriptionStatus: 'active' })
+  const ok = (over: Record<string, unknown> = {}) => post('p', 'author', over)
+
+  it('allows an engageable post (eligible author, visible, in feed)', () => {
+    expect(() => assertPostEngageable(ok(), viewer, author, NOW)).not.toThrow()
+  })
+  it('rejects a post at its interaction limit (its own distinct message)', () => {
+    expect(() => assertPostEngageable(ok({ interactionLimitReached: true }), viewer, author, NOW)).toThrow(
+      /interaction limit/
+    )
+  })
+  it('rejects a hidden or soft-deleted post', () => {
+    expect(() => assertPostEngageable(ok({ hidden: true }), viewer, author, NOW)).toThrow(/not available/)
+    expect(() => assertPostEngageable(ok({ deletedAt: NOW - 1 }), viewer, author, NOW)).toThrow(/not available/)
+  })
+  it('rejects the viewer’s own post', () => {
+    expect(() => assertPostEngageable(post('p', 'viewer'), viewer, viewer, NOW)).toThrow(/not available/)
+  })
+  it('rejects a post outside the viewer’s visibility allowlist', () => {
+    expect(() => assertPostEngageable(ok({ visibilityIndustries: ['finance'] }), viewer, author, NOW)).toThrow(
+      /not available/
+    )
+  })
+  it('rejects a post whose author is banned or pending deletion', () => {
+    expect(() => assertPostEngageable(ok(), viewer, user('a', { isBanned: true }), NOW)).toThrow(/not available/)
+    expect(() => assertPostEngageable(ok(), viewer, user('a', { deletionScheduledAt: 5 }), NOW)).toThrow(
+      /not available/
+    )
   })
 })
 

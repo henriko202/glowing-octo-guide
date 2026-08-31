@@ -5,6 +5,7 @@ import { internal } from '../_generated/api.js'
 import type { ActionCtx } from '../_generated/server'
 import type { Id } from '../_generated/dataModel'
 import { isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js'
+import { isAllowedLinkedInUrl, isHttpsUrl } from '../linkedin/parsePostUrl.js'
 
 // ─── Types for Apify LinkedIn post scraper output ────────────────────────────
 
@@ -43,6 +44,9 @@ function apifyPostToUpsertArgs(
   const mediaUrls = (post.postImages ?? [])
     .map(img => img.url)
     .filter((url): url is string => typeof url === 'string' && url.length > 0)
+    // Scraper output is untrusted: only keep https media URLs (blocks javascript:/data:/etc. that
+    // would reach an href sink or the AI vision provider). See isHttpsUrl.
+    .filter(isHttpsUrl)
 
   return {
     linkedinPostUrn: urn,
@@ -58,7 +62,11 @@ function apifyPostToUpsertArgs(
     visibilityIndustries: visibility.industries,
     visibilityCountries: visibility.countries,
     hidden,
-    sourceUrl: post.linkedinUrl
+    // Untrusted scraper output reaches client navigation sinks (PostCard href, CommandPalette
+    // window.open, handoff window.location.href). Only store a validated linkedin.com post URL —
+    // a javascript:/data: URL would otherwise be click-to-execute. The manual path (posts.ts) already
+    // stores a resolved+validated URL; this closes the Apify path to the same guarantee.
+    sourceUrl: post.linkedinUrl && isAllowedLinkedInUrl(post.linkedinUrl) ? post.linkedinUrl : undefined
   }
 }
 

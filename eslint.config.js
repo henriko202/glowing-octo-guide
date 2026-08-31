@@ -18,6 +18,7 @@ export default tseslint.config(
       '**/build/**',
       '**/_generated/**',
       'convex-mocks/**',
+      'docs/**',
       '**/*.config.js',
       '**/*.config.ts',
       '**/*.config.mjs',

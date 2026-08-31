@@ -1,5 +1,21 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { parseLinkedInPostUrl, resolveLinkedInShortlink } from './parsePostUrl'
+import { parseLinkedInPostUrl, resolveLinkedInShortlink, isHttpsUrl } from './parsePostUrl'
+
+describe('isHttpsUrl', () => {
+  it('accepts https URLs (incl. non-linkedin CDN hosts like licdn)', () => {
+    expect(isHttpsUrl('https://media.licdn.com/dms/image/abc.jpg')).toBe(true)
+    expect(isHttpsUrl('https://www.linkedin.com/posts/x')).toBe(true)
+  })
+
+  it('rejects non-https schemes and garbage', () => {
+    expect(isHttpsUrl('javascript:alert(1)')).toBe(false)
+    expect(isHttpsUrl('data:text/html,<script>1</script>')).toBe(false)
+    expect(isHttpsUrl('http://media.licdn.com/x.jpg')).toBe(false)
+    expect(isHttpsUrl('file:///etc/passwd')).toBe(false)
+    expect(isHttpsUrl('not a url')).toBe(false)
+    expect(isHttpsUrl('')).toBe(false)
+  })
+})
 
 describe('parseLinkedInPostUrl', () => {
   it('parses Format 1 — /posts/{vanity}_{slug}-{activityId}-{hash}/', () => {

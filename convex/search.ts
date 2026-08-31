@@ -2,10 +2,13 @@ import { query, type QueryCtx } from './_generated/server'
 import { v } from 'convex/values'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth } from './lib/auth'
-import { toFeedAuthor, isPostVisibleToViewer } from './feed'
+import { toFeedAuthor, isPostVisibleToViewer, isAuthorFeedEligible } from './feed'
 
 const MAX_POSTS = 8
 const MAX_PEOPLE = 6
+// Upper bound on the search box input. Full-text search consumes any string safely (no injection),
+// so this is a resource guard only — a pathologically long query is treated as no query.
+const MAX_QUERY_LENGTH = 200
 
 /**
  * Pure allow-list projection of a person for search results. Returns ONLY safe display
@@ -31,7 +34,7 @@ export const search = query({
   args: { sessionToken: v.optional(v.string()), queryText: v.string() },
   handler: async (ctx, { sessionToken, queryText }) => {
     const text = queryText.trim()
-    if (!sessionToken || text.length < 2) return { posts: [], people: [] }
+    if (!sessionToken || text.length < 2 || text.length > MAX_QUERY_LENGTH) return { posts: [], people: [] }
 
     let viewer: Doc<'users'>
     try {
@@ -77,12 +80,18 @@ export async function searchPostsAndPeople(ctx: QueryCtx, viewer: Doc<'users'>, 
       }
     })
 
+  // People: hide anyone the feed also hides (banned, pending-deletion, canceled-and-lapsed) via the
+  // SAME isAuthorFeedEligible rule the post results use, so moderation is consistent across both.
+  // Over-fetch then slice so the eligibility drops don't starve the result count.
   const people = (
     await ctx.db
       .query('users')
       .withSearchIndex('search_name', q => q.search('name', text))
-      .take(MAX_PEOPLE)
-  ).map(toSearchPerson)
+      .take(MAX_PEOPLE * 3)
+  )
+    .filter(u => isAuthorFeedEligible(u, now))
+    .slice(0, MAX_PEOPLE)
+    .map(toSearchPerson)
 
   return { posts, people }
 }

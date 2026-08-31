@@ -4,7 +4,7 @@
 // this clear of the old spam-detection worry (which was about reusing one comment across many posts).
 // fetch() → no "use node".
 import { action } from '../_generated/server'
-import { ConvexError, v } from 'convex/values'
+import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import type { Doc } from '../_generated/dataModel'
 import { requireAuthAction } from '../lib/auth'
@@ -33,8 +33,9 @@ export const generateComment = action({
       })
     }
 
-    const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new ConvexError('Post not found')
+    // Same engagement gate as commentOnPost/reactToPost: a hidden / soft-deleted / capped post, or
+    // one this viewer can't see, must not be fed to the AI (it would leak the post's content).
+    const post = await ctx.runQuery(internal.interactions.getEngageablePost, { postId, viewerId: user._id })
     const author = await ctx.runQuery(internal.users.getPublicAuthor, { userId: post.authorId })
 
     const lang = resolveCommentLanguage(language ?? user.commentLanguage)

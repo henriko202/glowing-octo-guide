@@ -1434,6 +1434,18 @@ gate. The frontend mirror `useCardGate()` (`app/src/hooks/useCardGate.ts`) uses 
 sync. The in-app UI for this gate (disabled buttons, progress bar, CTA) is **Plan 2C** — shipped; see
 [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
 
+**Per-post engageability gate.** The card gate answers *"may this member engage at all?"*; a second gate answers *"is
+**this post** engageable?"*. All three engagement entry points — `commentOnPost`, `reactToPost` (below) and
+`generateComment` ([§11A](#11a-ai-reaction--comment-assistance)) — resolve the target post through one shared internal
+query, `internal.interactions.getEngageablePost({ postId, viewerId })`, which loads the post + viewer + author and runs
+the pure `feed.assertPostEngageable(post, viewer, author, now)`. That helper throws on a spent budget
+(`interactionLimitReached` → *"reached its interaction limit"*), and otherwise mirrors the feed's own access rule
+(`isPostVisibleToViewer`): a `hidden`/soft-deleted post, one outside the viewer's `visibilityIndustries` /
+`visibilityCountries` allow-lists, or one from an ineligible author is rejected as *"not available."* A raw
+`ctx.db.get(postId)` bypasses the `inFeed` search index, so these actions **must** re-check — sharing one gate is what
+keeps the three from diverging (a post the feed hides can never be engaged, or AI-drafted against, through any of them).
+The three are Convex **actions** with no `ctx.db`, so they reach the gate via `ctx.runQuery`.
+
 ### Sort priority (effective order)
 
 1. **Featured** posts first (newest first).
@@ -1483,7 +1495,7 @@ sequenceDiagram
     I ->> I: requireAuthAction + assertCanEngage (card gate)
     I ->> RL: checkAndIncrement(userId, action, maxPerHour)
     RL -->> I: ok (or throw 'Rate limit exceeded')
-    I ->> DB: getPost + increment count → maybe set interactionLimitReached
+    I ->> DB: getEngageablePost (assertPostEngageable) + increment count → maybe set interactionLimitReached
     I ->> DB: recordInteraction (best-effort)
     I -->> A: { success: true } (reactive feed updates everywhere)
     Note over A, LI: user performs the real reaction/comment on LinkedIn
@@ -1600,7 +1612,9 @@ confirms or changes before `reactToPost` sends the chosen reaction (§11).
 `api.ai.comments.generateComment({ sessionToken, postId, language? })` → `{ comment }`. It auth-checks, then **
 `assertCanEngage`** — AI drafting requires an active subscription (the same card-on-file gate as `commentOnPost`:
 `none`/`past_due` are blocked, all tiers otherwise pass, admins bypass), so the OpenRouter spend is never reachable
-without a subscription. It then rate-limits (30/h, admins exempt), loads the post + the author's public name/headline
+without a subscription. It then rate-limits (30/h, admins exempt), loads the post through the shared
+`internal.interactions.getEngageablePost` gate (so a hidden / limit-reached / not-visible post is rejected exactly as in
+`commentOnPost` / `reactToPost` — see the per-post engageability gate in §11) plus the author's public name/headline
 (`internal.users.getPublicAuthor`), resolves the language, builds the comment prompt (≤2 paragraphs, concise, no
 hashtags/@-mentions; article + media URLs included), calls OpenRouter, and returns the draft. The draft is **persisted
 per (user, post)** on `userPostState` (`internal.interactions.saveCommentDraft`) so `CommentBox` can reload it on reopen
@@ -1646,12 +1660,19 @@ non-functional top-bar search placeholder.
   predicate, search can never surface a post the feed would hide (and never the searcher's own posts). Search does
   **not**
   apply the feed's tier-based industry/country _preference_ filter — that is a "what I want to see" layer, not an access
-  rule. People results are **not** viewer-filtered (searching for yourself is fine).
+  rule. People results are **not** viewer-filtered (searching for yourself is fine), but they **are
+  eligibility-filtered**:
+  the same `isAuthorFeedEligible(person, now)` predicate the post results apply drops **banned, pending-deletion, and
+  canceled-and-lapsed** members — so a moderated (or gone) person is hidden from people-search exactly as their posts
+  are hidden from post-search. Note this also hides a canceled member once they lapse (`now ≥ subscriptionEndsAt`),
+  matching the feed's own author eligibility. Both searches **over-fetch** (`take(MAX × 3)`) then filter and slice to
+  the cap, so the eligibility/visibility drops don't starve the result count.
 - **Safe projections:** posts expose only `{ _id, content, sourceUrl, author }` (author via `toFeedAuthor`); people via
   the pure allow-list `toSearchPerson` → `{ _id, name, headline, profilePictureUrl, linkedinPublicIdentifier }` — never
   tokens, email, admin/ban state, or other PII. The filtering runs in the extracted `searchPostsAndPeople(ctx, viewer,
   …)` helper (thin `search` wrapper owns auth), unit-tested over a 10-post fixture with a mock `ctx` in
-  `convex/search.test.ts`; `feed.getFeed`'s `fetchFeedPage` is tested the same way in `convex/feed.test.ts`.
+  `convex/search.test.ts` (including a people-eligibility case); `feed.getFeed`'s `fetchFeedPage` is tested the same way
+  in `convex/feed.test.ts`.
 
 ### Frontend (`app/src/components/shell/CommandPalette.tsx`)
 
@@ -2888,7 +2909,13 @@ The codebase follows a consistent, defensible security model:
   shortlink cannot steer the server‑side fetch off‑LinkedIn. The follow‑up **article‑enrichment fetch** runs the URL
   extracted from the page HTML through the same host allowlist (`isAllowedLinkedInUrl`, which shares
   `ALLOWED_LINKEDIN_HOST` with `parseLinkedInPostUrl`) **before** fetching, so a malicious/derived link cannot redirect
-  the server‑side fetch off‑LinkedIn.
+  the server‑side fetch off‑LinkedIn. The **Apify sync path** applies the same discipline to untrusted scraper output
+  (`jobs/syncPostsApify.ts`): a scraped post `sourceUrl` is stored only when it passes `isAllowedLinkedInUrl` (else
+  dropped to `undefined`), and stored `mediaUrls`/`imageUrls` are filtered to **https‑only** (`isHttpsUrl`, which is
+  host‑agnostic because LinkedIn media is served from `licdn.com`, not `linkedin.com`). This closes two sinks:
+  `sourceUrl`
+  reaches client navigation (`PostCard` href, `CommandPalette` `window.open`, `handoff` `window.location.href`) where a
+  `javascript:`/`data:` URL would be click‑to‑execute, and `imageUrls` are fetched by the AI vision provider.
 - **Payments fail safe.** The Stripe webhook signature is verified by `@convex-dev/stripe` before any handler runs;
   checkout/portal require auth and an allow‑listed price id; `toSubscriptionStatus`
   maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a half‑finished or
@@ -2901,9 +2928,11 @@ The codebase follows a consistent, defensible security model:
 - **Input validation:** the LinkedIn vanity is **auto‑derived** (LinkedIn‑authoritative, never user‑typed) — post
   ownership is verified by matching the post's author name to the member's OIDC `name` (§11), not a user‑set field;
   `commentOnPost`
-  caps text at 3000 chars; `reactToPost` constrains the reaction enum; `commentOnPost`/`reactToPost`
-  reject `hidden`/interaction‑limit‑reached posts; `banUser` caps the reason at 500 chars; checkout validates the price
-  id against an allowlist before any work.
+  caps text at 3000 chars; `reactToPost` constrains the reaction enum; `commentOnPost`, `reactToPost`, **and**
+  `generateComment` reject `hidden` / soft‑deleted / interaction‑limit‑reached / not‑visible posts through the single
+  shared `assertPostEngageable` gate (§11), so the three engagement paths can't diverge; `banUser` caps the reason at
+  500 chars; checkout validates the price id against an allowlist before any work; the ⌘K `search` query ignores inputs
+  over 200 chars (resource guard); MOTD authoring rejects body keys outside the supported `en`/`pt`/`es` locales.
 - **CSP + security headers (served at the Cloudflare HTTP layer).** The **app** generates `dist/_headers`
   at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the **SHA-256 hash** of the one pre-paint inline
   theme script (no `'unsafe-inline'`), plus `frame-src https://www.linkedin.com` and a
@@ -2918,6 +2947,10 @@ The codebase follows a consistent, defensible security model:
   `frame-ancestors 'none'`, `Strict-Transport-Security` (HSTS, 2y + preload), `X-Content-Type-Options: nosniff`,
   `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`. The old `<meta>` CSP was removed from
   `app/index.html` (a `<meta>` CSP cannot set `frame-ancestors`/HSTS — that needs HTTP headers).
+- **Referer minimization on remote images.** The shared `Avatar` (`app/src/components/ui/avatar.tsx`) — the single
+  `<img>` that renders LinkedIn/Apify‑hosted `profilePictureUrl` everywhere in the app — sets
+  `referrerPolicy="no-referrer"`, so a member's browser never leaks the app URL (which can identify the profile being
+  viewed) to the third‑party image host. Defense‑in‑depth on top of the page‑level `Referrer-Policy` header.
 
 ### Observability & Error Monitoring
 

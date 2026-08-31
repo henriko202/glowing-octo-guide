@@ -6,6 +6,7 @@ import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { assertCanEngage } from './lib/access'
+import { assertPostEngageable } from './feed'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { shouldFlipInteractionLimit } from './lib/interactionLimit'
@@ -41,6 +42,22 @@ export const getPost = internalQuery({
   args: { postId: v.id('posts') },
   handler: async (ctx, { postId }) => {
     return ctx.db.get(postId)
+  }
+})
+
+// Load a post for engagement (comment / react / AI draft) and enforce the SAME gate the feed and
+// search apply — so a direct get() by id can't reach a post the viewer could never see or act on.
+// Throws ConvexError when the post isn't engageable by this viewer; returns the post otherwise.
+export const getEngageablePost = internalQuery({
+  args: { postId: v.id('posts'), viewerId: v.id('users') },
+  handler: async (ctx, { postId, viewerId }) => {
+    const post = await ctx.db.get(postId)
+    if (!post) throw new ConvexError('Post not found')
+    const viewer = await ctx.db.get(viewerId)
+    if (!viewer) throw new ConvexError('Post not found')
+    const author = await ctx.db.get(post.authorId)
+    assertPostEngageable(post, viewer, author, Date.now())
+    return post
   }
 })
 
@@ -207,10 +224,9 @@ export const commentOnPost = action({
       })
     }
 
-    const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new ConvexError('Post not found')
-    if (post.hidden) throw new ConvexError('This post is not available.')
-    if (post.interactionLimitReached) throw new ConvexError('This post has reached its interaction limit.')
+    // Enforce the shared engagement gate (hidden / soft-deleted / at cap / not visible to this
+    // viewer) — the same rule the feed, search and AI-draft paths use, so none can diverge.
+    await ctx.runQuery(internal.interactions.getEngageablePost, { postId, viewerId: user._id })
 
     await ctx.runMutation(internal.interactions.incrementCommentCount, { postId, actorId: user._id })
     try {
@@ -249,10 +265,9 @@ export const reactToPost = action({
       })
     }
 
-    const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new ConvexError('Post not found')
-    if (post.hidden) throw new ConvexError('This post is not available.')
-    if (post.interactionLimitReached) throw new ConvexError('This post has reached its interaction limit.')
+    // Enforce the shared engagement gate (hidden / soft-deleted / at cap / not visible to this
+    // viewer) — the same rule the feed, search and AI-draft paths use, so none can diverge.
+    await ctx.runQuery(internal.interactions.getEngageablePost, { postId, viewerId: user._id })
 
     const { counted }: { counted: boolean } = await ctx.runMutation(internal.interactions.incrementLikeCount, {
       postId,
