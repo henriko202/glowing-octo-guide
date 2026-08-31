@@ -22,6 +22,7 @@ import type * as feedback_feedback from "../feedback/feedback.js";
 import type * as http from "../http.js";
 import type * as interactions from "../interactions.js";
 import type * as jobs_processQueue from "../jobs/processQueue.js";
+import type * as jobs_refreshFeedEngagement from "../jobs/refreshFeedEngagement.js";
 import type * as jobs_scrapeProfileApify from "../jobs/scrapeProfileApify.js";
 import type * as jobs_syncPosts from "../jobs/syncPosts.js";
 import type * as jobs_syncPostsApify from "../jobs/syncPostsApify.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   interactions: typeof interactions;
   "jobs/processQueue": typeof jobs_processQueue;
+  "jobs/refreshFeedEngagement": typeof jobs_refreshFeedEngagement;
   "jobs/scrapeProfileApify": typeof jobs_scrapeProfileApify;
   "jobs/syncPosts": typeof jobs_syncPosts;
   "jobs/syncPostsApify": typeof jobs_syncPostsApify;

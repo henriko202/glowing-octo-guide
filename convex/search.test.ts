@@ -36,7 +36,7 @@ function searchCtx(posts: Doc<'posts'>[], authors: Doc<'users'>[], people: Doc<'
 
 // Search applies the SAME per-viewer gate as the feed (isPostVisibleToViewer), so the same 10-post
 // fixture proves search excludes the viewer's own posts and honors visibility + author eligibility.
-describe('searchPostsAndPeople — filters posts over 10 posts', ;() => {
+describe('searchPostsAndPeople — filters posts over 10 posts', () => {
   const viewer = user('viewer', { industry: 'tech', country: 'US' })
 
   const posts = [

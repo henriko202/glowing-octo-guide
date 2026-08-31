@@ -1,5 +1,5 @@
 // convex/jobs/syncPosts.ts
-import { internalAction, internalMutation } from '../_generated/server'
+import { internalAction, internalMutation, internalQuery } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
@@ -132,6 +132,41 @@ export const syncAllPosts = internalAction({
     if (isApifyPostSyncEnabled(settings as ApifyFlags)) {
       await ctx.runAction(internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
       return
+    }
+  }
+})
+
+// ─── Feed engagement refresh (30-min cron) ────────────────────────────────────
+
+// Feed-eligible posts for the 30-min Apify engagement refresh. `inFeed === true` is the same
+// structural gate the feed itself walks (not hidden / not interaction-capped / not soft-deleted),
+// so this returns exactly "all posts visible in the feed" minus per-viewer filters. Only the fields
+// the refresh needs: the URN to match scraped results back, and the URL to scrape.
+// ponytail: .take(500) bound — dev feeds are tiny; paginate only if a feed ever exceeds this.
+export const getFeedPostsForRefresh = internalQuery({
+  args: {},
+  handler: async ctx => {
+    const posts = await ctx.db
+      .query('posts')
+      .withIndex('by_feed_rank', q => q.eq('inFeed', true))
+      .take(500)
+    return posts.map(p => ({ _id: p._id, linkedinPostUrn: p.linkedinPostUrn, sourceUrl: p.sourceUrl }))
+  }
+})
+
+// Patch like/comment COUNTS on a batch of existing feed posts (the 30-min refresh). Counts-only,
+// exactly like upsertPost's update branch: interactionLimitReached is intentionally NOT re-evaluated
+// from external LinkedIn engagement — only in-app interactions trip that gate, so the two sync paths
+// stay consistent. Skips any id that vanished between the query and this write.
+export const applyEngagementCounts = internalMutation({
+  args: {
+    updates: v.array(v.object({ postId: v.id('posts'), likeCount: v.number(), commentCount: v.number() }))
+  },
+  handler: async (ctx, { updates }) => {
+    for (const u of updates) {
+      const post = await ctx.db.get(u.postId)
+      if (!post) continue
+      await ctx.db.patch(u.postId, { likeCount: u.likeCount, commentCount: u.commentCount })
     }
   }
 })
