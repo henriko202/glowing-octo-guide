@@ -77,36 +77,44 @@ export const listFeedback = query({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const rows = await ctx.db.query('feedback').order('desc').take(500)
-    return await Promise.all(
-      rows.map(async f => {
-        const u = f.userId ? await ctx.db.get(f.userId) : null
-        // Fetch all responses for this feedback item, chronological ascending.
-        const responseRows = await ctx.db
+
+    // Fetch each item's responses (one bounded indexed read per item — the unavoidable join), then
+    // resolve submitter + responder names through a single batched get() per unique id instead of one
+    // per row/response. Prevents the up-to-500×101 read fan-out on this admin listing.
+    const responseRowsByFeedback = await Promise.all(
+      rows.map(f =>
+        ctx.db
           .query('feedbackResponses')
           .withIndex('by_feedback', q => q.eq('feedbackId', f._id))
           .take(100)
-        const responses = await Promise.all(
-          responseRows.map(async r => {
-            const responder = await ctx.db.get(r.responderId)
-            return {
-              text: r.text,
-              createdAt: r.createdAt,
-              responderName: responder?.name ?? null
-            }
-          })
-        )
-        return {
-          _id: f._id,
-          category: f.category,
-          message: f.message,
-          status: f.status,
-          createdAt: f.createdAt,
-          userName: u?.name ?? null,
-          userEmail: u?.email ?? null,
-          responses
-        }
-      })
+      )
     )
+
+    const userIds = new Set(rows.map(f => f.userId).filter((id): id is NonNullable<typeof id> => !!id))
+    const responderIds = new Set(responseRowsByFeedback.flat().map(r => r.responderId))
+    const userDocs = await Promise.all([...userIds].map(id => ctx.db.get(id)))
+    const responderDocs = await Promise.all([...responderIds].map(id => ctx.db.get(id)))
+    const userMap = new Map(userDocs.filter(u => u !== null).map(u => [u!._id, u!]))
+    const responderMap = new Map(responderDocs.filter(u => u !== null).map(u => [u!._id, u!]))
+
+    return rows.map((f, i) => {
+      const u = f.userId ? userMap.get(f.userId) : null
+      const responses = responseRowsByFeedback[i].map(r => ({
+        text: r.text,
+        createdAt: r.createdAt,
+        responderName: responderMap.get(r.responderId)?.name ?? null
+      }))
+      return {
+        _id: f._id,
+        category: f.category,
+        message: f.message,
+        status: f.status,
+        createdAt: f.createdAt,
+        userName: u?.name ?? null,
+        userEmail: u?.email ?? null,
+        responses
+      }
+    })
   }
 })
 

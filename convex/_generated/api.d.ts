@@ -31,8 +31,10 @@ import type * as lib_apify from "../lib/apify.js";
 import type * as lib_articleValidator from "../lib/articleValidator.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_concurrency from "../lib/concurrency.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_feedRank from "../lib/feedRank.js";
+import type * as lib_fetchWithTimeout from "../lib/fetchWithTimeout.js";
 import type * as lib_interactionLimit from "../lib/interactionLimit.js";
 import type * as lib_languages from "../lib/languages.js";
 import type * as lib_planLimits from "../lib/planLimits.js";
@@ -97,8 +99,10 @@ declare const fullApi: ApiFromModules<{
   "lib/articleValidator": typeof lib_articleValidator;
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
+  "lib/concurrency": typeof lib_concurrency;
   "lib/email": typeof lib_email;
   "lib/feedRank": typeof lib_feedRank;
+  "lib/fetchWithTimeout": typeof lib_fetchWithTimeout;
   "lib/interactionLimit": typeof lib_interactionLimit;
   "lib/languages": typeof lib_languages;
   "lib/planLimits": typeof lib_planLimits;
@@ -162,4 +166,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   stripe: import("@convex-dev/stripe/_generated/component.js").ComponentApi<"stripe">;
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
 };

@@ -212,12 +212,8 @@ export default defineSchema({
     // full-table .filter() scan that would read every live session to find the expired tail.
     .index('by_expires_at', ['expiresAt']),
 
-  rateLimits: defineTable({
-    userId: v.id('users'),
-    action: v.string(),
-    windowStart: v.number(),
-    count: v.number()
-  }).index('by_user_and_action', ['userId', 'action']),
+  // Rate-limit state lives in the @convex-dev/rate-limiter component's own isolated tables (mounted in
+  // convex.config.ts, consumed via lib/rateLimit.ts) — no app-level table needed.
 
   // Ephemeral OAuth state storage for CSRF protection.
   // Each entry lives for 10 minutes — enough time to complete the LinkedIn OAuth flow.
@@ -357,7 +353,11 @@ export default defineSchema({
     reaction: v.optional(reactionValidator),
     comment: v.optional(v.string()),
     createdAt: v.number()
-  }).index('by_user', ['userId']), // DSR export + a user's activity
+  })
+    .index('by_user', ['userId']) // DSR export + a user's activity
+    // Locate rows referencing a given post so account erasure can delete OTHER users' interactions
+    // on the deleted user's posts (they aren't caught by the by_user drain). See privacy/deletion.ts.
+    .index('by_post', ['postId']),
 
   // Per-(user, post) engagement state. One lazily-created row per user+post — distinct from the
   // append-only userInteractions LOG above. Holds CURRENT state: `reactedAt` (set on the user's
@@ -370,5 +370,9 @@ export default defineSchema({
     postId: v.id('posts'),
     reactedAt: v.optional(v.number()),
     commentDraft: v.optional(v.string())
-  }).index('by_user_and_post', ['userId', 'postId'])
+  })
+    .index('by_user_and_post', ['userId', 'postId'])
+    // Locate rows referencing a given post so account erasure can delete OTHER users' per-post state
+    // on the deleted user's posts (not caught by the by_user_and_post drain). See privacy/deletion.ts.
+    .index('by_post', ['postId'])
 })

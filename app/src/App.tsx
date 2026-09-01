@@ -21,6 +21,7 @@ import CancelDeletionScreen from './components/CancelDeletionScreen'
 import PolicyUpdateScreen from './components/PolicyUpdateScreen'
 import ConsentPromptScreen from './components/ConsentPromptScreen'
 import FirstPostPromptScreen from './components/FirstPostPromptScreen'
+import AnalyticsConsentGate from './components/AnalyticsConsentGate'
 import PrivacyDataPage from './pages/PrivacyDataPage'
 import { Toaster } from './components/ui/toast'
 import { POLICY_VERSION } from '../../convex/lib/policy'
@@ -63,6 +64,10 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
   return (
     <AppShell>
+      <AnalyticsConsentGate
+        userId={me._id}
+        sessionToken={sessionToken}
+      />
       <Motd />
       <ReconnectBanner />
       {children}

@@ -1,83 +1,76 @@
-import { describe, it, expect } from 'vitest'
-import { checkRateLimit, tryConsumeRateLimit } from './rateLimit'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { checkRateLimit, RATE_LIMIT_ACTIONS, resetUserRateLimits, tryConsumeRateLimit } from './rateLimit'
+
+// The rate-limit algorithm itself now lives in @convex-dev/rate-limiter (tested upstream). These
+// tests pin OUR wiring: that each helper hands the component the right inline config + key, throws
+// with the expected message on denial, passes the boolean through, and that erasure resets every
+// rate-limited action for the key.
+const calls = vi.hoisted(() => ({
+  limit: [] as Array<{ name: string; opts: any }>,
+  reset: [] as Array<{ name: string; args: any }>,
+  nextOk: true
+}))
+
+vi.mock('@convex-dev/rate-limiter', () => ({
+  RateLimiter: class {
+    constructor(_component: unknown) {}
+    async limit(_ctx: unknown, name: string, opts: any) {
+      calls.limit.push({ name, opts })
+      return { ok: calls.nextOk, retryAfter: calls.nextOk ? undefined : 1000 }
+    }
+    async reset(_ctx: unknown, name: string, args: any) {
+      calls.reset.push({ name, args })
+    }
+  }
+}))
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const ctx = { runMutation: async () => undefined } as any
 
-// Minimal mock ctx: db.query(...).withIndex(...).unique() + patch + insert
-function createMockCtx(existing?: any) {
-  const inserts: any[] = []
-  const patches: any[] = []
-  return {
-    db: {
-      query: () => ({
-        withIndex: () => ({ unique: async () => existing ?? null })
-      }),
-      insert: async (_t: string, d: any) => {
-        inserts.push(d)
-      },
-      patch: async (id: string, d: any) => {
-        patches.push({ id, d })
-      }
-    },
-    _inserts: inserts,
-    _patches: patches
-  } as any
-}
+beforeEach(() => {
+  calls.limit.length = 0
+  calls.reset.length = 0
+  calls.nextOk = true
+})
 
-describe('checkRateLimit (windowed)', () => {
-  it('inserts a fresh counter when none exists', async () => {
-    const ctx = createMockCtx()
+describe('checkRateLimit', () => {
+  it('consumes an inline fixed-window limit keyed by userId (rate = max, period = window)', async () => {
     await checkRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS, 'day')
-    expect(ctx._inserts).toHaveLength(1)
-    expect(ctx._inserts[0]).toMatchObject({ action: 'profile_refresh', count: 1 })
+    expect(calls.limit).toHaveLength(1)
+    expect(calls.limit[0]).toMatchObject({
+      name: 'profile_refresh',
+      opts: { key: 'u1', config: { kind: 'fixed window', rate: 2, period: DAY_MS } }
+    })
   })
 
-  it('increments within the window below the cap', async () => {
-    const ctx = createMockCtx({ _id: 'r1', windowStart: Date.now(), count: 1 })
-    await checkRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS, 'day')
-    expect(ctx._patches[0].d).toEqual({ count: 2 })
-  })
-
-  it('throws once the cap is hit within the window', async () => {
-    const ctx = createMockCtx({ _id: 'r1', windowStart: Date.now(), count: 2 })
+  it('throws with the window label when the component denies the call', async () => {
+    calls.nextOk = false
     await expect(checkRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS, 'day')).rejects.toThrow(
       /at most 2 times per day/
     )
   })
 
-  it('resets after the window elapses', async () => {
-    const ctx = createMockCtx({ _id: 'r1', windowStart: Date.now() - 2 * DAY_MS, count: 2 })
-    await checkRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS, 'day')
-    expect(ctx._patches[0].d).toMatchObject({ count: 1 })
+  it('defaults to a 1-hour window when none is passed', async () => {
+    await checkRateLimit(ctx, 'u1' as any, 'submitFeedback', 5)
+    expect(calls.limit[0].opts.config.period).toBe(60 * 60 * 1000)
   })
 })
 
-describe('tryConsumeRateLimit (non-throwing)', () => {
-  it('returns true and inserts when no counter exists', async () => {
-    const ctx = createMockCtx()
-    const allowed = await tryConsumeRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS)
-    expect(allowed).toBe(true)
-    expect(ctx._inserts[0]).toMatchObject({ action: 'profile_refresh', count: 1 })
+describe('tryConsumeRateLimit', () => {
+  it('returns true when the component allows the call', async () => {
+    expect(await tryConsumeRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS)).toBe(true)
   })
 
-  it('returns true and increments below the cap', async () => {
-    const ctx = createMockCtx({ _id: 'r1', windowStart: Date.now(), count: 1 })
-    const allowed = await tryConsumeRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS)
-    expect(allowed).toBe(true)
-    expect(ctx._patches[0].d).toEqual({ count: 2 })
+  it('returns false (no throw) when the component denies the call', async () => {
+    calls.nextOk = false
+    expect(await tryConsumeRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS)).toBe(false)
   })
+})
 
-  it('returns false WITHOUT incrementing once the cap is reached', async () => {
-    const ctx = createMockCtx({ _id: 'r1', windowStart: Date.now(), count: 2 })
-    const allowed = await tryConsumeRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS)
-    expect(allowed).toBe(false)
-    expect(ctx._patches).toHaveLength(0)
-  })
-
-  it('returns true and resets after the window elapses', async () => {
-    const ctx = createMockCtx({ _id: 'r1', windowStart: Date.now() - 2 * DAY_MS, count: 2 })
-    const allowed = await tryConsumeRateLimit(ctx, 'u1' as any, 'profile_refresh', 2, DAY_MS)
-    expect(allowed).toBe(true)
-    expect(ctx._patches[0].d).toMatchObject({ count: 1 })
+describe('resetUserRateLimits', () => {
+  it('resets every rate-limited action for the key (erasure completeness)', async () => {
+    await resetUserRateLimits(ctx, 'u1' as any)
+    expect(calls.reset.map(r => r.name).sort()).toEqual([...RATE_LIMIT_ACTIONS].sort())
+    for (const r of calls.reset) expect(r.args).toEqual({ key: 'u1' })
   })
 })

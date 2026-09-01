@@ -111,6 +111,11 @@ export const incrementCommentCount = internalMutation({
   handler: async (ctx, { postId, actorId }) => {
     const post = await ctx.db.get(postId)
     if (!post) return
+    // Already at the cap — never overshoot. Under concurrent engagement, OCC retries this mutation
+    // against the now-flagged post, and this guard turns that retry into a no-op (mirrors
+    // featurePost's `if (post.isFeatured) return`). getEngageablePost gates the happy path; this
+    // closes the race window.
+    if (post.interactionLimitReached) return
     const newCommentCount = post.commentCount + 1
     await ctx.db.patch(postId, { commentCount: newCommentCount })
 
@@ -126,7 +131,8 @@ export const incrementCommentCount = internalMutation({
           post.likeCount,
           newCommentCount,
           limits.interactionsPerPost,
-          post.interactionLimitReached === true
+          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
+          false
         )
       ) {
         // Hitting the interaction limit removes the post from the feed — refresh feed fields.
@@ -158,6 +164,9 @@ export const incrementLikeCount = internalMutation({
 
     const post = await ctx.db.get(postId)
     if (!post) return { counted: false }
+    // Already at the cap — never overshoot (see incrementCommentCount). Bail before writing
+    // reactedAt so a capped post never records a reaction that wasn't counted.
+    if (post.interactionLimitReached) return { counted: false }
 
     const now = Date.now()
     if (state) await ctx.db.patch(state._id, { reactedAt: now })
@@ -178,7 +187,8 @@ export const incrementLikeCount = internalMutation({
           newLikeCount,
           post.commentCount,
           limits.interactionsPerPost,
-          post.interactionLimitReached === true
+          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
+          false
         )
       ) {
         // Hitting the interaction limit removes the post from the feed — refresh feed fields.

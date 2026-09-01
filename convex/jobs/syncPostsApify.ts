@@ -4,7 +4,8 @@ import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
 import type { ActionCtx } from '../_generated/server'
 import type { Id } from '../_generated/dataModel'
-import { isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js'
+import { APIFY_FANOUT_CONCURRENCY, isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js'
+import { settledInBatches } from '../lib/concurrency.js'
 import { isAllowedLinkedInUrl, isHttpsUrl } from '../linkedin/parsePostUrl.js'
 
 // ─── Types for Apify LinkedIn post scraper output ────────────────────────────
@@ -170,8 +171,11 @@ export const syncAllPostsViaApify = internalAction({
 
     const users = await actionCtx.runQuery(internal.users.getActiveSubscribers, {})
 
-    const results = await Promise.allSettled(
-      users.map(u => actionCtx.runAction(internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId: u._id }))
+    // Bounded fan-out: at most APIFY_FANOUT_CONCURRENCY users scraped at once (each is a paid,
+    // rate-limited Apify run) instead of an unbounded users.map(). settledInBatches never rejects,
+    // so one user's failure can't sink the sweep — mirrors the previous Promise.allSettled semantics.
+    const results = await settledInBatches(users, APIFY_FANOUT_CONCURRENCY, u =>
+      actionCtx.runAction(internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId: u._id })
     )
 
     const failed = results.filter(r => r.status === 'rejected')

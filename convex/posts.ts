@@ -11,10 +11,12 @@ import {
 } from './linkedin/parsePostUrl'
 import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
+import { fetchWithTimeout } from './lib/fetchWithTimeout'
 import { postCreatedHidden } from './lib/access'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { currentUtcMonthKey, isFeaturedLimitReached } from './lib/postLimit'
+import { hasReachedInteractionLimit } from './lib/interactionLimit'
 import {
   appendMediaLinks,
   extractPostUrn,
@@ -203,6 +205,10 @@ export const submitPost = action({
     // 3. Posting throttles — skipped only under the admin override. It lets a dev
     //    admin curate the shared feed by submitting any post in any volume, so both
     //    the hourly rate limit and the weekly per-plan limit are bypassed.
+    // Hoisted out of the block so the per-post interaction cap (checked after we've read the post's
+    // engagement, below) can reuse it; stays undefined under the admin override, so the cap check
+    // there is skipped too — consistent with the other per-plan throttles.
+    let interactionsPerPost: number | undefined
     if (!adminShareOverride) {
       // Rate limit: max 10 post submissions per hour per user
       await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
@@ -217,6 +223,7 @@ export const submitPost = action({
         userId: user._id,
         tier: effectiveTier
       })
+      interactionsPerPost = planLimits.interactionsPerPost
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
       const recentPostCount = await ctx.runQuery(internal.posts.countRecentPosts, {
         authorId: user._id,
@@ -234,7 +241,15 @@ export const submitPost = action({
     // tries the legacy `data-attributed-urn` attribute, then the `-{ns}-{id}-` slug of the submitted
     // URL (preferred — it carries the shared ugcPost id) and the final redirected URL. It returns a
     // format-validated URN, so it's safe downstream (ownership check, DB, later API calls).
-    const rawLinkedinResponse = await fetch(resolvedUrl)
+    const rawLinkedinResponse = await fetchWithTimeout(resolvedUrl)
+    // A public post page returns 200. A non-2xx here is a transient/blocked LinkedIn response
+    // (429 rate-limit, 999 anti-bot, 5xx) — surface a retryable error instead of letting an empty
+    // body fall through to the misleading "Could not find a valid LinkedIn post URN". ponytail:
+    // ceiling — if LinkedIn ever 999s a genuinely-valid public post, the user just retries (usually
+    // succeeds on a later attempt); still strictly better than today's wrong message.
+    if (!rawLinkedinResponse.ok) {
+      throw new ConvexError('Could not reach LinkedIn to read this post. Please try again in a moment.')
+    }
     const rawLinkedinText = await rawLinkedinResponse.text()
     const urn = extractPostUrn(rawLinkedinText, [resolvedUrl, rawLinkedinResponse.url])
     if (!urn) {
@@ -250,7 +265,14 @@ export const submitPost = action({
     // conveniences), a walling embed is a useless dead card in the feed no matter who submits it,
     // so the gate is deliberately NOT skipped for admins. The fetch (not wrapped in try/catch,
     // matching the page fetch above) propagates a transient LinkedIn error to the client.
-    const embedHtml = await (await fetch(`https://www.linkedin.com/embed/feed/update/${urn}/`)).text()
+    const embedResponse = await fetchWithTimeout(`https://www.linkedin.com/embed/feed/update/${urn}/`)
+    // Distinguish a transient/blocked response (non-2xx) from the restricted-audience wall, which
+    // LinkedIn serves as a 200 with wall HTML (detected by isEmbeddablePostHtml below). Without this,
+    // a rate-limit/5xx would be mislabeled as "change your post's audience" — a confusing dead end.
+    if (!embedResponse.ok) {
+      throw new ConvexError('Could not reach LinkedIn to verify this post. Please try again in a moment.')
+    }
+    const embedHtml = await embedResponse.text()
     if (!isEmbeddablePostHtml(embedHtml)) {
       throw new ConvexError(
         'This LinkedIn post is not publicly visible, so it can\'t be shown here. Open the post on LinkedIn, change its audience to "Anyone" (the globe icon), then submit it again.'
@@ -308,6 +330,20 @@ export const submitPost = action({
     // zero engagement rather than failing the submit.
     const engagement = parsePostEngagement(rawLinkedinText)
 
+    // 4c-ii. Reject a post whose current LinkedIn engagement already meets the author's per-post
+    // interaction cap (Option A: total engagement counts). Such a post would insert as
+    // interactionLimitReached ⇒ never visible in the feed, so tell the submitter up front instead of
+    // silently creating a hidden post. Skipped under the admin share-override (interactionsPerPost is
+    // left undefined there), matching the other per-plan throttles.
+    if (
+      interactionsPerPost !== undefined &&
+      hasReachedInteractionLimit(engagement.likeCount, engagement.commentCount, interactionsPerPost)
+    ) {
+      throw new ConvexError(
+        `This LinkedIn post already has ${engagement.likeCount + engagement.commentCount} reactions and comments, which meets your plan's limit of ${interactionsPerPost} interactions per post — so it can't be added to your feed.`
+      )
+    }
+
     // 4d. Best-effort article enrichment. If the post shares a LinkedIn article (e.g. a
     // Pulse post), fetch that article page and capture its title/summary/author/images to
     // seed a future AI-comment feature. Non-fatal: no article link, a network error, or a
@@ -319,9 +355,12 @@ export const submitPost = action({
     const articleUrl = parsedContent.media.find(m => m.type === 'article')?.url
     if (articleUrl && isAllowedLinkedInUrl(articleUrl)) {
       try {
-        const articleResponse = await fetch(articleUrl)
-        const articleHtml = await articleResponse.text()
-        article = { url: articleUrl, ...parseArticle(articleHtml) }
+        const articleResponse = await fetchWithTimeout(articleUrl)
+        // Best-effort: skip a non-OK article page rather than parsing a block/error body into `article`.
+        if (articleResponse.ok) {
+          const articleHtml = await articleResponse.text()
+          article = { url: articleUrl, ...parseArticle(articleHtml) }
+        }
       } catch {
         // best-effort — article enrichment must never block a submission
       }

@@ -3,6 +3,7 @@ packages:
   - 'app'
   - 'convex'
 allowBuilds:
+  core-js: false # posthog-js transitive dep; postinstall is only a funding message — no build needed
   esbuild: true
   sharp: true
   workerd: true

@@ -100,9 +100,13 @@ describe('resolveLinkedInShortlink', () => {
     const target = 'https://www.linkedin.com/posts/henriko202_x-7152671040479911937-O4Ev/'
     const fetchMock = stubRedirects({ 'https://lnkd.in/p/dzsyKxh9': target })
     expect(await resolveLinkedInShortlink('https://lnkd.in/p/dzsyKxh9')).toBe(target)
-    // Only the shortener was fetched — never the linkedin.com target.
+    // Only the shortener was fetched — never the linkedin.com target. redirect:'manual' is the
+    // security-critical option (objectContaining tolerates the AbortSignal the timeout wrapper adds).
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledWith('https://lnkd.in/p/dzsyKxh9', { redirect: 'manual' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://lnkd.in/p/dzsyKxh9',
+      expect.objectContaining({ redirect: 'manual' })
+    )
   })
 
   it('rejects a shortlink that redirects off the allowlist WITHOUT fetching the target (SSRF)', async () => {

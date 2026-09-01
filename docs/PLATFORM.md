@@ -116,11 +116,11 @@ for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prom
 
 The repository is a **pnpm monorepo** with **three deployable packages sharing one Convex backend**:
 
-| Package    | Stack                                                            | Deploy target                          | Domain (prod)                                |
-|------------|------------------------------------------------------------------|----------------------------------------|----------------------------------------------|
-| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)        | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
-| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next         | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
-| `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
+| Package    | Stack                                                                                         | Deploy target                          | Domain (prod)                                |
+|------------|-----------------------------------------------------------------------------------------------|----------------------------------------|----------------------------------------------|
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)                                     | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
+| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next                                      | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
+| `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` + `@convex-dev/rate-limiter` | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
 
 Cloudflare **hosts both frontends** (Workers) and provides DNS/CDN/TLS. External services: **LinkedIn**
 (OAuth + posting), **Stripe** (billing), **Apify** (LinkedIn post scraping).
@@ -227,7 +227,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │
 ├── convex/                      # Convex backend (shared by both apps)
 │   ├── schema.ts                # 16-table database schema
-│   ├── convex.config.ts         # registers @convex-dev/stripe component
+│   ├── convex.config.ts         # registers @convex-dev/stripe + @convex-dev/rate-limiter components
 │   ├── crons.ts                 # the ONLY file Convex reads for scheduled jobs
 │   ├── http.ts                  # LinkedIn OAuth + Stripe webhook HTTP routes
 │   ├── users.ts                 # getMe, subscription info, public identifier, logout
@@ -241,7 +241,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │   ├── lib/
 │   │   ├── auth.ts              # requireAuth / requireAuthAction / resolveSession / assertNotBanned
 │   │   ├── planLimits.ts        # plan-limit lookup + tierToRank
-│   │   └── rateLimit.ts         # fixed-window rate limiter
+│   │   └── rateLimit.ts         # wraps @convex-dev/rate-limiter (fixed-window, per user+action)
 │   ├── linkedin/
 │   │   ├── oauth.ts             # auth URL builder + token exchange + userinfo
 │   │   ├── auth.ts              # upsertUser mutation
@@ -281,7 +281,6 @@ erDiagram
     users ||--o{ postQueue: "authors (overflow)"
     users ||--o{ subscriptions: "has"
     users ||--o{ sessions: "owns"
-    users ||--o{ rateLimits: "subject of"
     users ||--o{ featuredPostUsage: "quota"
     users ||--o| planLimits: "contact override"
     users ||--o| users: "bannedBy (self-ref)"
@@ -468,7 +467,9 @@ Posts that couldn't be inserted because the author hit their weekly limit. Drain
 | `content`, `publishedAt`, `likeCount`, `commentCount`, `mediaUrls`, `hidden`, `sourceUrl` | —             | ✓/– | Snapshot carried so promotion needs no re‑fetch. |
 | `queuedAt`                                                                                | number        |  ✓  | Enqueue timestamp (ms).                          |
 
-On promotion, `authorTierRank` is recomputed and `interactionLimitReached` is set `false`.
+On promotion, `authorTierRank` is recomputed and `interactionLimitReached` is derived from the queued engagement counts
+against the author's cap (`hasReachedInteractionLimit`) — an already‑over‑cap queued post is promoted flagged (out of
+feed).
 
 #### `sessions` — app's own auth tokens
 
@@ -496,16 +497,12 @@ made on the landing page, so it survives the OAuth redirect round-trip.
 | `plan`      | `'starter'\|'growth'\|'pro'` |  –  | Tier chosen on the landing Pricing page before starting OAuth. Absent when OAuth is initiated without a plan selection (e.g. direct app link). |
 | `interval`  | `'monthly'\|'annual'`        |  –  | Billing interval chosen alongside `plan`. Absent when `plan` is absent.                                                                        |
 
-#### `rateLimits` — fixed‑window counters
+#### Rate‑limit counters — the `@convex-dev/rate-limiter` component
 
-| Field         | Type          | Req | Meaning                                                                        |
-|---------------|---------------|:---:|--------------------------------------------------------------------------------|
-| `userId`      | `id('users')` | ✓  | Subject.                                                                       |
-| `action`      | string        | ✓  | Action name (`submitPost`, `commentOnPost`, `reactToPost`, `profile_refresh`). |
-| `windowStart` | number        | ✓  | Window start (ms).                                                             |
-| `count`       | number        | ✓  | Calls in window.                                                               |
-
-Index: `by_user_and_action [userId, action]`.
+There is **no app `rateLimits` table**. Per‑user, per‑action fixed‑window counters live in the **
+`@convex-dev/rate-limiter`** component's own isolated tables (mounted in `convex.config.ts`, consumed through
+`lib/rateLimit.ts`). Keys are `(action, userId)`; each caller's window is passed inline. See **§11 — Rate limiting**.
+Erasure clears a user's counters via `resetUserRateLimits` (see **§14 — Privacy & Compliance**).
 
 #### `appSettings` — singleton global settings
 
@@ -1033,9 +1030,15 @@ case.
 Three enforced limits per tier, stored in `planLimits` and looked up via
 `lib/planLimits.getPlanLimitsHelper`:
 
-- **`interactionsPerPost`** — once a post's `likeCount + commentCount ≥ interactionsPerPost`, the post is flagged
-  `interactionLimitReached = true` and **filtered out of the feed** (its engagement budget is spent). Set in
-  `interactions.ts`.
+- **`interactionsPerPost`** — the cap counts **total engagement** (the LinkedIn‑seeded `likeCount + commentCount` at
+  import **plus** in‑app taps): once `likeCount + commentCount ≥ interactionsPerPost`, the post is flagged
+  `interactionLimitReached = true` and **filtered out of the feed** (its engagement budget is spent). The flag is a
+  **one‑way flip** — never un‑set — and is evaluated at every point a post's counts are written: **at insert** by all
+  three post writers (`jobs/syncPosts.upsertPost`, `jobs/processQueue`, so an already‑over‑cap import never enters the
+  feed), on the **30‑min Apify engagement refresh** (`jobs/syncPosts.applyEngagementCounts`, so a post that crosses the
+  cap on external LinkedIn growth drops out), and on each **in‑app increment** (`interactions.ts`). The manual submit
+  path (`posts.submitPost`) instead **rejects up front** with a user‑facing message when the pasted post's current
+  LinkedIn engagement already meets the cap, rather than silently creating a hidden post.
 - **`postsPerWeek`** — max posts admitted to `posts` within a **rolling 7‑day window** (counted via
   `by_author_and_publishedAt`). Overflow either **throws** (manual submit) or is **queued** to
   `postQueue` (Apify path).
@@ -1202,6 +1205,14 @@ post **type** (`activity` vs `ugcPost`) and **author kind** (personal vs company
 decide this — public `activity` posts and public personal posts embed fine; only the audience setting does. Not wrapped
 in `try/catch` (matching the page fetch above): a transient LinkedIn error propagates to the client, who can retry.
 
+**Interaction‑cap gate** (`hasReachedInteractionLimit`). After parsing the post's current LinkedIn engagement,
+`submitPost`
+rejects a post whose `likeCount + commentCount` already meets the author's `interactionsPerPost` cap (total‑engagement
+semantics, §9) with a user‑facing *"…already has N reactions and comments, which meets your plan's limit…"* — such a
+post would insert as `interactionLimitReached` and never appear in the feed, so the submitter is told up front rather
+than silently getting a hidden post. **Skipped under the admin share‑override** (the cap is left unresolved there),
+consistent with the hourly/weekly throttles it shares that bypass.
+
 **Shared‑article link** (`extractArticleUrl`). A LinkedIn post that links an article (e.g. a Pulse post) does **not**
 expose the article URL in its JSON‑LD — the post is typed `SocialMediaPosting`, whose only URLs are the post's own
 `@id`, the author profile, and the cover image. The article link lives only in the post body as an
@@ -1292,7 +1303,7 @@ flowchart TD
     EN -->|no| STOP["return (no-op)"]
     EN -->|yes| FAN["syncAllPostsViaApify"]
     FAN --> SUBS["getActiveSubscribers (status=active)"]
-    SUBS --> EACH["per user: syncUserPostsViaApify"]
+    SUBS --> EACH["per user (batches of APIFY_FANOUT_CONCURRENCY): syncUserPostsViaApify"]
     EACH --> PID{"has linkedinPublicIdentifier?"}
     PID -->|no| SKIP["skip"]
     PID -->|yes| API["Apify run-sync-get-dataset-items<br/>(maxPosts=3, postedLimit=month,<br/>targetUrls=/in/{vanity})"]
@@ -1308,6 +1319,11 @@ flowchart TD
 > members (trialing/active) post visibly (Plan 2B), while a no-card member (`none`/`past_due`) — e.g. a
 > new member’s onboarding first post — is created hidden and revealed when they add a card.
 
+> **Bounded fan-out:** both `syncAllPostsViaApify` and `scrapeAllProfilesViaApify` fan out through
+> `settledInBatches` (`lib/concurrency.ts`) at `APIFY_FANOUT_CONCURRENCY` (5) — capping how many paid,
+> rate-limited per-user Apify runs execute at once instead of an unbounded `users.map()`, while keeping
+> the previous `Promise.allSettled` "one failure can't sink the sweep" semantics.
+
 ### Queue drain (`jobs/processQueue.processPostQueue`, daily cron)
 
 ```mermaid
@@ -1322,7 +1338,7 @@ flowchart TD
     C0 -->|yes| PROMO["promote oldest queued posts (by publishedAt)"]
     PROMO --> DUP{"URN already in posts?"}
     DUP -->|yes| DEL["delete queued row (dedupe)"]
-    DUP -->|no| INS["insert into posts (recompute authorTierRank, interactionLimitReached=false) + delete queued row"]
+    DUP -->|no| INS["insert into posts (recompute authorTierRank, interactionLimitReached from counts vs cap) + delete queued row"]
     PQ --> RES{"batch full (100)?"}
     RES -->|yes| RE["scheduler.runAfter(0) reschedule itself"]
 ```
@@ -1469,7 +1485,12 @@ repeats (no count, billing, or log) — a member holds at most one reaction per 
 `userPostState.commentDraft` on generate and reloaded into `CommentBox` on open (reuse or regenerate). Counts propagate
 to all viewers in real time via Convex reactivity. The interaction‑limit flip decision is the pure helper
 `lib/interactionLimit.ts`
-`shouldFlipInteractionLimit(likeCount, commentCount, interactionsPerPost, alreadyReached)`.
+`shouldFlipInteractionLimit(likeCount, commentCount, interactionsPerPost, alreadyReached)`; both increment mutations
+first **guard on the flag** (`if (post.interactionLimitReached) return`) so a concurrent tap that already tripped the
+cap can't overshoot the count on the OCC retry. The same cap counts LinkedIn‑seeded engagement too — it is seeded at
+import and re‑evaluated on the Apify refresh, and blocks an already‑over‑cap post at submit — see the
+`interactionsPerPost`
+bullet under [§9](#9-plan-limits-system).
 
 | Action                                             | Validation                                                                 | Rate limit | Effect (no LinkedIn call)                      |
 |----------------------------------------------------|----------------------------------------------------------------------------|------------|------------------------------------------------|
@@ -1501,13 +1522,18 @@ sequenceDiagram
     Note over A, LI: user performs the real reaction/comment on LinkedIn
 ```
 
-### Rate limiting (`lib/rateLimit.ts`)
+### Rate limiting (`lib/rateLimit.ts` + `@convex-dev/rate-limiter`)
 
-A **fixed window** keyed on `(userId, action)`: `WINDOW_MS = 3,600,000` (1h). On each call it reads the current window
-row; if `windowStart` is older than the window it resets, otherwise it increments and throws once `count` reaches the
-limit (`maxPerWindow`). (The header comment says "sliding window" but the implementation is fixed‑window.)
-`checkRateLimit` now accepts an optional `windowMs` + `windowLabel`
-(defaults to 1h / "hour") so callers can specify non-hourly windows. Limits: `submitPost` 10/h,
+A **fixed window** keyed on `(userId, action)`, enforced by the **`@convex-dev/rate-limiter`** component (mounted in
+`convex.config.ts`; its counter state lives in the component's own isolated tables, not an app table).
+`lib/rateLimit.ts`
+wraps it behind three unchanged entry points — `checkRateLimit` (throws), `tryConsumeRateLimit` (returns a boolean), and
+the `checkAndIncrement` internal mutation that actions call via `ctx.runMutation`. No named limits are pre‑registered:
+every call passes an **inline config** (`kind: 'fixed window'`, `rate = maxPerWindow`, `period = windowMs`), so each
+caller keeps its own window; `WINDOW_MS` defaults to 1h. The component performs the check **and** consume atomically in
+one transaction, closing the read‑modify‑write race the former hand‑rolled `rateLimits` table admitted (two concurrent
+taps could both read `count = N-1` and both write `N`). `checkRateLimit` accepts an optional `windowMs` + `windowLabel`
+(defaults to 1h / "hour") for non‑hourly windows. Limits: `submitPost` 10/h,
 `commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget
 is **shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the non-throwing
 `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier. **Admins (`user.isAdmin`) bypass the
@@ -1578,7 +1604,8 @@ branch). See `backlog/B09-ai-reaction-apify-posts.md`.
 No proactive throttle guards the resulting OpenRouter burst (`convex/ai/openrouter.ts`'s `callOpenRouter` has no rate
 limiting of its own): the daily cron, ≤3 new posts/user, and the `created`-only gate above already bound a single run to
 at most a few predictions per newly-active user, and any OpenRouter failure/429 is swallowed by the same best-effort
-handling. Revisit with `@convex-dev/rate-limiter` if usage growth makes that bound too loose.
+handling. The `@convex-dev/rate-limiter` component is now mounted (it backs the per‑user limits above), so it can be
+applied to this OpenRouter prediction burst too if usage growth ever makes that bound too loose.
 
 ```mermaid
 sequenceDiagram
@@ -1809,7 +1836,7 @@ Each feedback item can receive **multiple admin replies** stored as a thread in 
 
 **Privacy:** `feedback` rows are **anonymized, not deleted**, on account erasure (`cascadeDeleteUser` clears `userId`;
 content retained). `feedbackResponses` rows are retained attached to the anonymized feedback after account deletion.
-Both are included in the DSR export bundle (`gatherUserData` collects `feedbackResponses` for each of the user's
+Both are included in the DSR export bundle (`gatherFeedbackResponses` collects `feedbackResponses` for the user's
 feedback items).
 
 ```mermaid
@@ -2007,9 +2034,13 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
 
 - `requestDataExport` (mutation, rate-limited 1/day) inserts a `dataExportRequests` row and schedules
   `generateExport`.
-- `generateExport` (action) gathers the user's own rows (`gatherUserData`), assembles a JSON bundle via the pure
-  `buildExportBundle` — which **strips token secrets** and **redacts other actors** from audit entries — stores it in
-  Convex file storage, marks the row `ready` with a **7-day** `expiresAt`, and emails the user (`exportReadyEmail`).
+- `generateExport` (action) gathers the user's own rows **table-by-table with pagination**
+  (`gatherUserTablePage`, 500/page, looped on the cursor until `isDone`) so a very active user's posts/interactions/
+  post-state can't exceed a single query's read limit and permanently fail the export; the user doc comes from
+  `getExportUser` and feedback replies from `gatherFeedbackResponses` (keyed by feedbackId). It then assembles a JSON
+  bundle via the pure `buildExportBundle` — which **strips token secrets** and **redacts other actors** from audit
+  entries — stores it in Convex file storage, marks the row `ready` with a **7-day** `expiresAt`, and emails the user
+  (`exportReadyEmail`).
 - `getExportStatus` / `getExportDownloadUrl` return the status and a short-lived **owner-only** download URL
   (`ctx.storage.getUrl`); expired links return null.
 
@@ -2024,11 +2055,17 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
 - `cancelAccountDeletion` clears the deletion fields (the user must re-subscribe for paid features).
 - `processAccountDeletions` (daily cron) erases accounts past their grace window, **one account per invocation**. The
   pure `cascadeDeleteUser` deletes up to a bounded batch of rows **per table per pass** — every owned row (posts,
-  postQueue, subscriptions, sessions, rateLimits, featuredPostUsage, planLimits, consentRecords, dataExportRequests +
-  their storage files) — and **pseudonymizes
-  `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata). The `users` row is deleted **last**, so a
-  half-drained account stays "due" and the cron re-selects it until every table is clear — keeping each pass within one
-  transaction's budget even for an author with an unbounded number of posts. On the final pass it writes an
+  postQueue, subscriptions, sessions, featuredPostUsage, planLimits, consentRecords, dataExportRequests + their storage
+  files) — and **pseudonymizes
+  `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata). **Posts are handled specially**: before a post
+  is deleted, the cross-user rows referencing it (`userInteractions`/`userPostState` from OTHER users who reacted or
+  commented — located via each table's `by_post` index) are drained first, and the post is only deleted once none
+  remain, so erasure never leaves those rows dangling at a deleted post. **Rate‑limit counters** live in the
+  `@convex-dev/rate-limiter` component's isolated tables (not reachable by the by‑index db drains), so on the terminal
+  pass `processAccountDeletions` calls `resetUserRateLimits` to clear every per‑action counter for the key. The `users`
+  row is deleted **last**, so a half-drained account stays "due" and the cron re-selects it until every table is clear —
+  keeping each pass within one transaction's budget even for an author with an unbounded number of posts. On the final
+  pass it writes an
   `account.deleted` system audit entry, then emails
   `deletionCompletedEmail`. **Billing invoices are retained inside Stripe** for tax/accounting law.
 - A schema-derived completeness test asserts the cascade covers every user-referencing table, so a future table cannot
@@ -2046,7 +2083,7 @@ flowchart TD
     GRACE -->|" re-auth (Phase 2b screen) "| CANCELSCR["cancelAccountDeletion"]
     CANCELSCR --> RESTORE["clear fields → feed auto-restores"]
     GRACE -->|" elapsed "| CRON["processAccountDeletions cron"]
-    CRON --> CASCADE["cascadeDeleteUser (bounded passes, re-run until drained): delete owned rows + export files; pseudonymize auditLogs; delete user last"]
+    CRON --> CASCADE["cascadeDeleteUser (bounded passes, re-run until drained): delete owned rows + export files; drain cross-user interaction/state rows on each post before deleting it (by_post); pseudonymize auditLogs; delete user last"]
     CASCADE --> DONE["deletion-completed email; Stripe retains invoices"]
 ```
 
@@ -2851,18 +2888,21 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
-| Variable                              |                    Required                     | Consumed in       | Purpose                                                                                                                                                                  |
-|---------------------------------------|:-----------------------------------------------:|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `VITE_CONVEX_URL`                     |                       ✓                        | `main.tsx`        | `.convex.cloud` URL for `ConvexReactClient` (data transport). **Left as the placeholder ⇒ every query/mutation/action fails — the app cannot reach the backend at all.** |
-| `VITE_CONVEX_SITE`                    |                       ✓                        | `App.tsx`         | `.convex.site` base for the `/auth/linkedin` sign‑in redirect. **Left as the placeholder ⇒ sign-in redirects to a dead host and OAuth cannot start.**                    |
-| `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`  | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                                                                       |
-| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`  | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                   |
-| `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                 | `BillingPage.tsx` | Monthly price id for Starter checkout. Must match `STRIPE_STARTER_PRICE_ID` in Convex.                                                                                   |
-| `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                 | `BillingPage.tsx` | Monthly price id for Growth checkout. Must match `STRIPE_GROWTH_PRICE_ID` in Convex.                                                                                     |
-| `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx` | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                               |
-| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx` | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                             |
-| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                 | `BillingPage.tsx` | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                                                                              |
-| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx` | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                    |
+| Variable                              |                    Required                     | Consumed in                  | Purpose                                                                                                                                                                             |
+|---------------------------------------|:-----------------------------------------------:|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `VITE_CONVEX_URL`                     |                       ✓                        | `main.tsx`                   | `.convex.cloud` URL for `ConvexReactClient` (data transport). **Left as the placeholder ⇒ every query/mutation/action fails — the app cannot reach the backend at all.**            |
+| `VITE_CONVEX_SITE`                    |                       ✓                        | `App.tsx`                    | `.convex.site` base for the `/auth/linkedin` sign‑in redirect. **Left as the placeholder ⇒ sign-in redirects to a dead host and OAuth cannot start.**                               |
+| `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`             | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                                                                                  |
+| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`             | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                              |
+| `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Starter checkout. Must match `STRIPE_STARTER_PRICE_ID` in Convex.                                                                                              |
+| `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Growth checkout. Must match `STRIPE_GROWTH_PRICE_ID` in Convex.                                                                                                |
+| `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                                          |
+| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                                        |
+| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                                                                                         |
+| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                               |
+| `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`    | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`. |
+| `VITE_POSTHOG_KEY`                    |      – (prod only; unset ⇒ analytics off)       | `observability/analytics.ts` | PostHog project key for product analytics. Unset ⇒ `initPostHog()` no‑ops. Capture is **also** gated on the user's `analytics` consent (opt‑out by default).                        |
+| `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts` | PostHog ingestion host. Defaults to EU Cloud; set `https://us.i.posthog.com` for US Cloud.                                                                                          |
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
@@ -2921,8 +2961,9 @@ The codebase follows a consistent, defensible security model:
   checkout/portal require auth and an allow‑listed price id; `toSubscriptionStatus`
   maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a half‑finished or
   lapsed subscription never grants access; `getTierFromPriceId` fails to `starter`.
-- **Rate limiting** (fixed window per `userId+action`): submitPost 10/h, comment 20/h, react 30/h, profile scrape 2/day
-  (shared by manual Refresh + auto‑scrape on identifier change). **Admins are exempt** from every rate limit.
+- **Rate limiting** (fixed window per `userId+action`, via the `@convex-dev/rate-limiter` component — atomic
+  check+consume, no race): submitPost 10/h, comment 20/h, react 30/h, profile scrape 2/day (shared by manual Refresh +
+  auto‑scrape on identifier change). **Admins are exempt** from every rate limit.
 - **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path (`upsertUser`, etc.).
   Admin endpoints re‑check `assertAdmin` on the server‑resolved user, never on a client‑supplied id. `banUser` cannot
   self‑ban (always leaves ≥ 1 admin).
@@ -2955,30 +2996,81 @@ The codebase follows a consistent, defensible security model:
 
 ### Observability & Error Monitoring
 
-**Minimal, no‑dependency posture (B05).** The originally‑planned Convex Sentinel component (`@convex-dev/sentinel`) is
-**not published to npm** (registry 404 — no `sentinel` package under the
-`convex-dev` org as of this writing), so it cannot be installed; adding a third‑party sink instead would introduce a new
-compliance sub‑processor. Until Sentinel (or an equivalent) ships, the sink is Convex's own built‑in logging:
+Three layers: a zero‑dependency dev log tail, prod error monitoring (Sentry), and consent‑gated product analytics
+(PostHog). **All three are inert in dev** — the SDKs no‑op unless their prod keys are set — and the backend log redactor
+(`scrubError`) runs everywhere regardless. (This supersedes the earlier "B05 minimal" posture: the
+`@convex-dev/sentinel` component is still **not published to npm** (registry 404), so instead of that component we use
+the Sentry + PostHog SDKs directly, wired to respect the existing consent model.)
 
-- **Frontend:** a top‑level React `ErrorBoundary` (`app/src/components/ErrorBoundary.tsx`) wraps `<App/>` in
-  `main.tsx` ([§14](#14-frontend--authenticated-app-app)) so a render crash shows a friendly fallback instead of a blank
-  page. `componentDidCatch` reports the error via `console.error` — the client‑side sink for now.
-- **Backend:** the existing `console.error` catch seams route their logged context through
+- **Dev — native log tail (no dependency):** `pnpm watch:errors` streams the **dev** deployment's function logs live
+  (`npx convex logs`); `pnpm watch:errors:prod` tails **prod** (`--prod`). Convex already surfaces every function
+  failure + `console.error` line (the `scrubError` output below), so this is the day‑to‑day "watch the backend" tool —
+  no service, no sub‑processor.
+- **Prod frontend errors — Sentry (`@sentry/react`):** `initSentry()` (`app/src/lib/observability/sentry.ts`), called
+  from `main.tsx`, is a **hard no‑op unless `import.meta.env.PROD` and `VITE_SENTRY_DSN` are both set**. It
+  auto‑captures
+  `window.onerror`/`unhandledrejection`, and one `captureException` line in the existing
+  `ErrorBoundary.componentDidCatch` ([§14](#14-frontend--authenticated-app-app)) reports React render crashes. Treated
+  as a **necessary security/reliability** function — runs regardless of analytics consent — so PII is stripped **before
+  send**: `sendDefaultPii:false`, plus a `beforeSend` that drops `request.cookies`/`request.headers` and any `user`
+  identity and runs the message + exception values through the same `scrubError` redactor. No performance tracing
+  (`tracesSampleRate:0`).
+- **Prod backend errors — Sentry via Convex (no code):** Convex functions can't host the Sentry SDK; the backend path is
+  Convex's native **Exception Reporting** integration (runbook below). `scrubError` remains the pre‑log redactor, so the
+  same redaction applies to what Convex forwards.
+- **Product analytics — PostHog (`posthog-js`), consent‑gated:** `initPostHog()`
+  (`app/src/lib/observability/analytics.ts`) is a **no‑op unless PROD and `VITE_POSTHOG_KEY` are set**, and initialises
+  **opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — **no session replay**).
+  `<AnalyticsConsentGate>` (mounted in the authenticated shell in `App.tsx`) reads the signed‑in user's live `analytics`
+  consent (`privacy.consent.getConsents`) and calls `syncAnalyticsConsent(userId, consents)`: `shouldCaptureAnalytics`
+  (pure, unit‑tested) opts capture **in + `identify(user._id)`** only when the user granted `analytics` consent, and
+  opts **out + `reset()`** on withdrawal or sign‑out. Users are identified by their **opaque Convex `_id` only** — no
+  name/email. EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`).
+- **Backend `console.error` redaction (`scrubError`):** the backend catch seams route their logged context through
   `convex/lib/scrubError.ts`, a pure, dependency‑free helper (no Convex function, no codegen). It **default‑denies**
-  any key name containing `token`/`access`/`refresh`/`secret`/`authorization`/`email`/`apikey` (case‑insensitive,
-  case‑folded substring match) anywhere in an object — including a string body that parses as JSON — replacing the value
-  with `[REDACTED]`, and **caps the logged string to 500 characters** so a chatty payload (e.g. an LLM response body
-  containing post/article text) can't blow up the logs. Wired at: the OAuth‑callback `catch` and the Stripe `onEvent`
-  log in `convex/http.ts`; the `!res.ok` response‑body log in `convex/ai/openrouter.ts`
-  ([§11A](#11a-ai-reaction--comment-assistance)); the token‑exchange/`refreshAccessToken` error paths in
-  `convex/linkedin/oauth.ts` ([§7](#7-authentication--identity)); and the Resend `!res.ok` send‑failure log in
-  `convex/lib/email.ts` ([§13B](#13b-privacy--compliance)). Routine 302 redirects and expected
-  "not signed in"/empty‑session paths are intentionally **not** logged — only real error paths. Errors still land in
-  Convex's built‑in function‑error logs (Convex Dashboard → Logs); there is **no external monitoring service and no new
-  sub‑processor**.
-- **Deferred:** a durable, queryable capture dashboard and cron/scheduled‑action failure capture (what Sentinel would
-  have added) are out of scope until the component is publishable —
-  see [§19](#19-known-discrepancies-dead-code--roadmap).
+  any key name containing `token`/`access`/`refresh`/`secret`/`authorization`/`email`/`apikey` (case‑insensitive
+  substring, including a string body that parses as JSON), replacing the value with `[REDACTED]`, and **caps the logged
+  string to 500 characters**. Wired at: the OAuth‑callback `catch` and the Stripe `onEvent` log in `convex/http.ts`; the
+  `!res.ok` body log in `convex/ai/openrouter.ts` ([§11A](#11a-ai-reaction--comment-assistance)); the token‑exchange/
+  `refreshAccessToken` paths in `convex/linkedin/oauth.ts` ([§7](#7-authentication--identity)); and the Resend
+  send‑failure log in `convex/lib/email.ts` ([§13B](#13b-privacy--compliance)). The **same redactor feeds Sentry's
+  `beforeSend`**, so both sinks share one redaction path.
+
+```mermaid
+flowchart TD
+  subgraph Dev["Dev — native, no sub-processor"]
+    D1["pnpm watch:errors / :prod"] --> D2["npx convex logs — live failure + console.error tail"]
+  end
+  subgraph App["app/ — prod only, SDKs inert without keys"]
+    A1["window.onerror / unhandledrejection"] --> S1["Sentry.init (beforeSend: scrubError, no PII)"]
+    A2["ErrorBoundary.componentDidCatch"] --> S1
+    A3["AnalyticsConsentGate reads analytics consent"] --> P1{"analytics consent?"}
+    P1 -- granted --> P2["PostHog opt_in + identify(user._id)"]
+    P1 -- withdrawn/none --> P3["PostHog opt_out + reset"]
+  end
+  subgraph Backend["convex/ — server"]
+    B1["console.error catch seams"] --> B2["scrubError redact + 500-char cap"]
+    B2 --> B3["Convex function logs"]
+    B3 --> B4["Convex Exception Reporting → Sentry (prod, dashboard-configured)"]
+  end
+  S1 --> SENTRY["Sentry (US or EU)"]
+  B4 --> SENTRY
+  P2 --> POSTHOG["PostHog (EU Cloud default)"]
+```
+
+**Enabling Sentry on the backend (runbook).** In the **Convex Dashboard**, select the deployment (prod first) →
+**Settings → Integrations → Exception Reporting** → add the Sentry **DSN** → save. Convex then forwards function
+exceptions to Sentry. Repeat for the dev deployment if you also want dev backend errors captured there.
+
+**Launch checklist (do at go‑live, not before — the SDKs stay inert until then):**
+
+1. Create the Sentry project (s) and the PostHog project (prefer EU region/cloud); execute both DPAs.
+2. Set `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` in the app's **Cloudflare** build env; redeploy.
+3. Wire the backend Sentry DSN via the Exception Reporting runbook above.
+4. In PostHog: enable IP discard/anonymization; confirm session replay is off.
+5. **Compliance:** bump `POLICY_VERSION` (`convex/lib/policy.ts`) to re‑prompt users (adding a sub‑processor is a
+   material change), and update the public **Privacy Policy** (§2/§4/§10) and **Cookie & Storage Policy** (en/pt/es) to
+   disclose Sentry (necessary/security) + PostHog (consent‑gated analytics). See `docs/compliance/SUBPROCESSORS.md`.
 
 > **Open security‑relevant gaps / hardening backlog:** the LinkedIn token‑refresh flow (`linkedin/tokenRefresh`,
 > §19) is dormant at the current Standard‑tier OAuth (no `refresh_token` is issued), so tokens still
@@ -2994,14 +3086,14 @@ compliance sub‑processor. Until Sentinel (or an equivalent) ships, the sink is
 The `docs/compliance/` folder contains six **DRAFT** documents (pending legal review) that accompany the technical
 controls described in [§13B](#13b-privacy--compliance):
 
-| File                                                    | Contents                                                                     |
-|---------------------------------------------------------|------------------------------------------------------------------------------|
-| [`DATA-INVENTORY.md`](compliance/DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — GDPR Art. 30                        |
-| [`SUBPROCESSORS.md`](compliance/SUBPROCESSORS.md)       | Sub-processor list (Convex, Stripe, LinkedIn, Resend; Apify hard-gate noted) |
-| [`RETENTION-POLICY.md`](compliance/RETENTION-POLICY.md) | Retention windows per data category and automated-enforcement references     |
-| [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md)     | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA)           |
-| [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook (72-hour notification)        |
-| [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37)             |
+| File                                                    | Contents                                                                                                  |
+|---------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| [`DATA-INVENTORY.md`](compliance/DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — GDPR Art. 30                                                     |
+| [`SUBPROCESSORS.md`](compliance/SUBPROCESSORS.md)       | Sub-processor list (Convex, Stripe, LinkedIn, Resend, OpenRouter, Sentry, PostHog; Apify hard-gate noted) |
+| [`RETENTION-POLICY.md`](compliance/RETENTION-POLICY.md) | Retention windows per data category and automated-enforcement references                                  |
+| [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md)     | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA)                                        |
+| [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook (72-hour notification)                                     |
+| [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37)                                          |
 
 See [`docs/compliance/README.md`](compliance/README.md) for the index and the consolidated human / legal to-do list
 (bracketed placeholders, lawyer sign-off, sub-processor DPA signing, DPO/rep assessment, and the Apify hard gate).
@@ -3156,12 +3248,86 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑08‑30. Updated to reflect the landing theme-flash (FOUC) refresh fix. Symptom: on refresh, when the
-OS scheme differed from the stored theme, the page painted the OS theme for ~0.5s before flipping to the stored one.
-Root cause: the inline no-flash `<head>` script read the theme from the **cookie only**, while `ThemeToggle`'s
-post-hydration effect resolves via `lib/theme.ts` `getStoredTheme` (**cookie → localStorage → system**). When the pref
-lived in the localStorage mirror but the cookie was absent (cleared or host-only in dev), the pre-paint script fell
-through to
+_Last updated: 2026‑08‑31. Migrated per‑user rate limiting to the **`@convex-dev/rate-limiter`** component. The former
+hand‑rolled `rateLimits` table (a read‑modify‑write that admitted a double‑spend under concurrent taps) is **removed
+from the schema**; counter state now lives in the component's own isolated tables. `convex.config.ts` mounts
+`app.use(rateLimiter)`; `lib/rateLimit.ts` was rewritten to delegate to it while keeping its three entry points
+identical (`checkRateLimit`, `tryConsumeRateLimit`, and the `checkAndIncrement` internal mutation), so **none of the
+eight call sites changed** — every call passes an inline `{ kind: 'fixed window', rate, period }` config, preserving
+each caller's window and limit (`submitPost` 10/h, `commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h,
+`profile_refresh` 2/day). Erasure: the counters live outside the schema, so the pure `cascadeDeleteUser` can't reach
+them — `processAccountDeletions` now calls the new `resetUserRateLimits` (loops the component's `reset` over
+`RATE_LIMIT_ACTIONS`) on the terminal deletion pass, keeping erasure complete. The `rateLimits` OWNED entry was dropped
+from the cascade and its fixtures/asserts removed from `deletion.test.ts`; `rateLimit.test.ts` was rewritten from
+table‑logic assertions to wiring assertions (inline config, throw‑message, boolean passthrough, per‑action reset). Docs
+updated: §11 rate‑limiting subsection, the schema section (table → component note), the ERD (dropped the
+`rateLimits` relation), the erasure list + §14, the workspace‑deps + file‑tree + security‑summary component mentions.
+All gates green (convex 349/349, typecheck + lint clean). Prior: Updated to reflect the Convex backend audit's five
+deferred hardening items, now **implemented** (all were previously deferred‑with‑reason). (1) **Fetch timeouts on every
+external seam** — a shared
+`convex/lib/fetchWithTimeout.ts` (AbortController + `setTimeout`, chosen over the unproven‑in‑runtime static
+`AbortSignal.timeout`) now wraps LinkedIn member‑API + OAuth (`linkedin/client.ts`, `linkedin/oauth.ts`), shortlink
+resolution (`linkedin/parsePostUrl.ts`, 10s), submit page/embed/article fetches (`posts.ts`), OpenRouter
+(`ai/openrouter.ts`, 60s for legitimate LLM latency), Apify (`lib/apify.ts`, 5min for synchronous run‑sync), and
+transactional email (`lib/email.ts`) — a hung upstream can no longer wedge an action to its platform ceiling. (2) **
+`res.ok` on the submit fetches** (`posts.ts`) — a non‑2xx from LinkedIn's anti‑bot (429/999/5xx) now throws a retryable
+"could not reach LinkedIn, try again" instead of a misleading "post not found / change your audience"; a **200 with wall
+HTML** (a genuinely restricted‑audience post) still routes to the existing audience message via
+`isEmbeddablePostHtml`, so working submits are unchanged. (3) **DSR export pagination** (`privacy/export.ts`) — the old
+`gatherUserData` internalQuery ran 7+ unbounded `.collect()`s in one transaction and would permanently fail the export
+(a missed GDPR access right) for a very active user; replaced by `getExportUser` + a per‑table `gatherUserTablePage`
+(cursor‑looped at 500 rows/page by the action) + `gatherFeedbackResponses`, so no single query approaches the 16384‑doc
+read limit. (4) **Bounded Apify fan‑out** (`jobs/syncPostsApify.ts`, `jobs/scrapeProfileApify.ts`) — the uncapped
+`Promise.allSettled(users.map(...))` is now `settledInBatches(users, APIFY_FANOUT_CONCURRENCY=5, …)`
+(`convex/lib/concurrency.ts`), so a large user base can't spawn hundreds of concurrent scrape sub‑actions in one tick.
+(5) **Cross‑user orphan cleanup on erasure** — new `by_post` indexes on `userInteractions` + `userPostState`
+(`schema.ts`); the erasure cascade (`privacy/deletion.ts`) now drains **other** users' interaction/state rows that
+reference a deleted user's posts (bounded `POST_ORPHAN_BATCH=10` posts/pass) **before** deleting each post, so no
+dangling rows point at a vanished post id. New helpers ship with unit tests (`fetchWithTimeout.test.ts`,
+`concurrency.test.ts`); all gates green (convex 351/351, typecheck + lint clean). Prior: Updated to reflect the
+observability & error‑monitoring wiring (§17 "Observability & Error Monitoring", §16 app env table). The
+`/convex-sentinel` skill's premise — the `@convex-dev/sentinel` Convex component — is **still not published to npm**
+(registry 404), so instead of that component the Sentry + PostHog SDKs are wired directly, respecting the existing
+consent model. Three layers: (1) **dev** — a zero‑dependency native log tail,
+`pnpm watch:errors` / `watch:errors:prod` (`npx convex logs [--prod]`), added to the root `package.json`; (2) **prod
+frontend errors — Sentry** (`@sentry/react`, `app/src/lib/observability/sentry.ts`): `initSentry()` (called from
+`main.tsx`) is a **hard no‑op unless `import.meta.env.PROD` and `VITE_SENTRY_DSN` are both set**, so it is inert in dev
+and in any keyless build; treated as a **necessary/security purpose** (not consent‑gated); PII is stripped in
+`beforeSend` before an event leaves the browser (`sendDefaultPii:false`, `tracesSampleRate:0`, request cookies/headers
+and user identity dropped, message + exception values run through the **same** `convex/lib/scrubError.ts` redactor the
+backend uses); `ErrorBoundary.componentDidCatch` now calls `captureException(error, info.componentStack)`; (3) **prod
+backend errors — Sentry via Convex** (no code): Convex Dashboard → Settings → Integrations → **Exception Reporting** →
+DSN (runbook in §17). Product analytics is the separate **consent‑gated** path — **PostHog** (`posthog-js`,
+`app/src/lib/observability/analytics.ts`): `initPostHog()` is a no‑op unless PROD + `VITE_POSTHOG_KEY`, initialises
+**opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — no replay), and a new null‑render
+`AnalyticsConsentGate` (mounted in `App.tsx`, queries `api.privacy.consent.getConsents`) syncs the user's `analytics`
+consent → `syncAnalyticsConsent` opt‑in + `identify(user._id)` (the **opaque Convex id only** — no name/email) when
+granted, opt‑out + `reset()` otherwise; EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`). Because
+both SDKs are **inert until their prod keys are set** in Cloudflare, the current public privacy/cookies copy ("optional
+analytics … off by default") is accurate today; the public‑copy update **and** the `POLICY_VERSION`
+(`convex/lib/policy.ts`) bump / re‑prompt are recorded as **launch‑time** steps (SUBPROCESSORS.md "Human action
+required") for when the keys go live — not done now, since doing so would misrepresent current processing. Three
+`VITE_*` rows added to the §16 app table; `SUBPROCESSORS.md` gained Sentry + PostHog rows; `DATA-INVENTORY.md` gained
+Activity 14 (Product Analytics & Error Monitoring; adds no schema fields). Prior: Updated to reflect the Convex backend
+audit's interaction‑cap consistency fix. The per‑post interaction cap (`interactionsPerPost`) now counts **total
+engagement** (LinkedIn‑seeded + in‑app) at **every**
+point a post's counts are written, not only on in‑app taps: seeded at insert by all three post writers
+(`jobs/syncPosts.upsertPost`, `jobs/processQueue`) so an already‑over‑cap Apify import never enters the feed;
+re‑evaluated on the 30‑min Apify engagement refresh (`jobs/syncPosts.applyEngagementCounts`) so a post that crosses the
+cap on external growth drops out; and rejected **up front at manual submit** (`posts.submitPost`) with a user‑facing
+message instead of silently creating a hidden post. Both in‑app increment mutations (`interactions.ts`) now guard on the
+flag before writing (`if (post.interactionLimitReached) return`) so a concurrent tap can't overshoot the count on the
+OCC retry. The flip stays one‑way. §9 (`interactionsPerPost` bullet), §10 (submit‑flow "Interaction‑cap gate"), §10
+(queue drain), and §11 (Interactions) updated. Same pass also hardened, without behavior change: `linkedin/oauth.ts` now
+guards its `LINKEDIN_*` env vars explicitly (clear error instead of a `"undefined"`‑poisoned request),
+`users.getActiveSubscribers`
+is bounded `.take(500)` with a non‑silent cap (mirrors `getUsersWithLinkedin`), and `feedback.listFeedback` batches its
+submitter/responder lookups instead of a per‑row/per‑response `get()` fan‑out. Prior: Updated to reflect the landing
+theme-flash (FOUC) refresh fix. Symptom: on refresh, when the OS scheme differed from the stored theme, the page painted
+the OS theme for ~0.5s before flipping to the stored one. Root cause: the inline no-flash `<head>` script read the theme
+from the **cookie only**, while `ThemeToggle`'s post-hydration effect resolves via `lib/theme.ts` `getStoredTheme`
+(**cookie → localStorage → system**). When the pref lived in the localStorage mirror but the cookie was absent (cleared
+or host-only in dev), the pre-paint script fell through to
 `system` (= OS) while hydration later applied the localStorage value — the two resolvers disagreed, producing the flash.
 Fix: the no-flash script now resolves with the **same** cookie → localStorage → system precedence, so pre-paint and
 post-hydration agree and no frame flips. This is a one-file change in `landing/app/[lang]/layout.tsx` (the `NO_FLASH`

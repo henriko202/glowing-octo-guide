@@ -27,17 +27,23 @@ export const getPublicAuthor = internalQuery({
   }
 })
 
-// Internal: returns all users with active subscriptions (excludes trialing).
-// Uses the by_subscription_status index so this reads only active subscribers
-// instead of scanning the whole users table. Returns the full set on purpose —
-// the Apify sync fans out one job per active subscriber.
+// Internal: returns users with active subscriptions (excludes trialing) for the Apify post-sync
+// fan-out. Uses the by_subscription_status index so it reads only active subscribers, not the whole
+// users table. Bounded take(500) with a non-silent cap (mirrors getUsersWithLinkedin): the fan-out
+// spawns one job per subscriber, so an unbounded .collect() here would be the first thing to blow the
+// query read limit as the base grows. Revisit (paginate the fan-out) if the active base nears 500.
 export const getActiveSubscribers = internalQuery({
   args: {},
   handler: async ctx => {
-    return ctx.db
+    const SCAN_CAP = 500
+    const users = await ctx.db
       .query('users')
       .withIndex('by_subscription_status', q => q.eq('subscriptionStatus', 'active'))
-      .collect()
+      .take(SCAN_CAP)
+    if (users.length === SCAN_CAP) {
+      console.warn(`[apify-sync] getActiveSubscribers hit the ${SCAN_CAP}-subscriber cap — some may be skipped`)
+    }
+    return users
   }
 })
 

@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 import i18n from '../i18n'
 import BrandMark from './BrandMark'
 import { Button } from './ui/button'
+import { captureException } from '../lib/observability/sentry'
 
 type Props = { children: ReactNode }
 type State = { hasError: boolean }
@@ -18,6 +19,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('Unhandled render error:', error, info.componentStack)
+    captureException(error, info.componentStack) // no-op unless Sentry is initialised (prod + DSN)
   }
 
   render() {

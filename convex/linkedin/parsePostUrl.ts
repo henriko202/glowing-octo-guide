@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '../lib/fetchWithTimeout'
+
 export interface ParsedPostUrl {
   /** LinkedIn activity ID — used to form urn:li:ugcPost:{activityId} */
   activityId: string
@@ -51,7 +53,7 @@ export async function resolveLinkedInShortlink(url: string): Promise<string | nu
     if (ALLOWED_LINKEDIN_HOST.test(host)) return current // reached the real post URL
     if (!ALLOWED_SHORTLINK_HOST.test(host)) return null // off-allowlist → reject before fetching
     // Shortener hop: read ONE redirect without auto-following it to an unvalidated host.
-    const res = await fetch(current, { redirect: 'manual' })
+    const res = await fetchWithTimeout(current, { redirect: 'manual' }, 10_000)
     const location = res.headers.get('location')
     if (!location) return null
     current = new URL(location, current).toString() // resolve a possibly-relative Location

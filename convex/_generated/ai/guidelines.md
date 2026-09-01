@@ -374,7 +374,7 @@ const results = await ctx.vectorSearch("documents", "by_embedding", {
   `convex/convex.config.ts`:
 
 ```ts
-import { defineApp } from "convex/server";
+import {defineApp} from "convex/server";
 import aggregate from "@convex-dev/aggregate/convex.config"; // no .js suffix
 
 const app = defineApp();

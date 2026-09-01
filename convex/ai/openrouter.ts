@@ -9,6 +9,7 @@
 // Content is either plain text or, for multimodal (vision) requests, an array of parts mixing
 // text with image_url parts (OpenAI-compatible). callOpenRouter just JSON-stringifies it.
 import { scrubError } from '../lib/scrubError'
+import { fetchWithTimeout } from '../lib/fetchWithTimeout'
 
 export type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
 export type ChatMessage = { role: 'system' | 'user'; content: string | ContentPart[] }
@@ -34,11 +35,17 @@ export async function callOpenRouter(messages: ChatMessage[], opts: { action: st
   if (process.env.OPENROUTER_SITE_URL) headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL
   if (process.env.OPENROUTER_SITE_NAME) headers['X-Title'] = process.env.OPENROUTER_SITE_NAME
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ model, messages, stream: false, provider: PROVIDER_ROUTING })
-  })
+  // 60s: LLM generation legitimately runs many seconds (prompts carry full article text), longer
+  // than the 15s default seams.
+  const res = await fetchWithTimeout(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model, messages, stream: false, provider: PROVIDER_ROUTING })
+    },
+    60_000
+  )
   if (!res.ok) {
     const body = await res.text()
     // The response body can carry the request's post/article content back — scrub + cap it before
