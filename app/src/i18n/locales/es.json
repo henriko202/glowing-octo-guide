@@ -1,10 +1,10 @@
 {
   "nav": {
     "feed": "Feed",
-    "myPosts": "Mis Publicaciones",
+    "myPosts": "Mis publicaciones",
     "settings": "Configuración",
     "billing": "Suscripción",
-    "privacy": "Privacidad y Datos",
+    "privacy": "Privacidad y datos",
     "signOut": "Cerrar sesión",
     "openMenu": "Abrir menú de usuario",
     "groups": { "main": "Principal", "manage": "Gestionar" },
@@ -39,11 +39,11 @@
     }
   },
   "feed": {
-    "title": "Tu Feed",
+    "title": "Tu feed",
     "loading": "Cargando feed...",
     "empty": "Aún no hay publicaciones. ¡Invita a colegas a unirse a Link Into The SSI!",
     "loadMore": "Cargar más",
-    "featured": "★ Destacado",
+    "featured": "★ Destacada",
     "like": "Me gusta",
     "comment": "Comentar",
     "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar.",
@@ -65,7 +65,7 @@
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mes",
     "featuredPillUnlimited": "{{used}} destacadas este mes · ilimitado",
-    "featuredPillHint": "Este mes (calendario)",
+    "featuredPillHint": "Este mes",
     "feature": "Destacar",
     "unfeature": "Quitar destacado",
     "featureLimitReached": "Límite mensual de destacados alcanzado",
@@ -98,8 +98,8 @@
   "reactions": {
     "react": "Reaccionar",
     "openHint": "Abriendo la publicación en LinkedIn — reacciona allí.",
-    "like": "Recomendar",
-    "celebrate": "Felicitar",
+    "like": "Me gusta",
+    "celebrate": "Celebrar",
     "love": "Me encanta",
     "insightful": "Interesante",
     "support": "Apoyo",
@@ -120,7 +120,7 @@
   },
   "settings": {
     "title": "Configuración",
-    "profile": "Tu Perfil",
+    "profile": "Tu perfil",
     "industry": "Sector",
     "country": "País",
     "headline": "Titular",
@@ -159,16 +159,16 @@
     "currentPlanLabel": "Plan actual",
     "contact": "Contáctanos",
     "enterprise": "¿Necesitas más? Contáctanos para planes empresariales personalizados.",
-    "subscriptionInfo": "Tu Suscripción",
+    "subscriptionInfo": "Tu suscripción",
     "status": "Estado",
-    "nextBilling": "Próxima Fecha de Facturación",
-    "cancelsOn": "Cancela El",
+    "nextBilling": "Próxima fecha de facturación",
+    "cancelsOn": "Se cancela el",
     "renewsOn": "Se renueva el {{date}}",
     "accessUntil": "Acceso hasta {{date}}",
     "cancelPending": "Tu suscripción no se renovará.",
     "renewal": "Renovación",
-    "manageSubscription": "Gestionar Suscripción",
-    "freeTrial": "Período de Prueba Gratuito",
+    "manageSubscription": "Gestionar suscripción",
+    "freeTrial": "Período de prueba gratuito",
     "daysRemaining_one": "{{count}} día restante",
     "daysRemaining_other": "{{count}} días restantes",
     "expiredBanner": "Tu suscripción ha finalizado. Elige un plan a continuación para continuar.",
@@ -275,10 +275,10 @@
     "reconnect": "Reconectar"
   },
   "privacy": {
-    "title": "Privacidad y Datos",
+    "title": "Privacidad y datos",
     "consentPrompt": {
       "title": "Configura tus preferencias",
-      "intro": "Antes de continuar, elige cómo podemos contactarte. Son opcionales y están desactivadas por defecto — puedes cambiarlas cuando quieras en Configuración → Privacidad y Datos.",
+      "intro": "Antes de continuar, elige cómo podemos contactarte. Son opcionales y están desactivadas por defecto — puedes cambiarlas cuando quieras en Configuración → Privacidad y datos.",
       "save": "Guardar y continuar",
       "note": "El procesamiento de servicio, seguridad y obligaciones legales ocurre independientemente de estas opciones."
     },
