@@ -14,8 +14,10 @@ vi.mock('convex/react', () => ({
 const mockSetSearchParams = vi.fn()
 const mockSearchParams = new URLSearchParams()
 
+const mockNavigate = vi.fn((_props: unknown) => null)
+
 vi.mock('react-router-dom', () => ({
-  useNavigate: vi.fn(() => vi.fn()),
+  Navigate: (props: unknown) => mockNavigate(props),
   useSearchParams: vi.fn(() => [mockSearchParams, mockSetSearchParams])
 }))
 
@@ -26,6 +28,7 @@ import AdminPage from './AdminPage'
 beforeEach(() => {
   mockSearchParams.delete('tab')
   mockSetSearchParams.mockClear()
+  mockNavigate.mockClear()
   vi.mocked(useQuery).mockImplementation((ref: unknown, ..._rest: unknown[]) => {
     const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
     if (name === 'admin:checkIsAdmin') return true as never
@@ -60,5 +63,21 @@ describe('AdminPage tabs', () => {
     render(<AdminPage />)
     expect(screen.getByText(/apify \(master\)/i)).toBeInTheDocument()
     expect(screen.getByText(/apify profile scrape/i)).toBeInTheDocument()
+  })
+})
+
+describe('AdminPage admin guard', () => {
+  // Non-admins must be redirected declaratively (<Navigate>), not via a navigate() side effect
+  // during render, and the admin JSX must never render for them — not even for one paint.
+  it('redirects to / and renders no admin content when the user is not an admin', () => {
+    vi.mocked(useQuery).mockImplementation((ref: unknown, ..._rest: unknown[]) => {
+      const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
+      if (name === 'admin:checkIsAdmin') return false as never
+      if (name === 'admin:getSettings') return undefined as never
+      return [] as never
+    })
+    render(<AdminPage />)
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/', replace: true })
+    expect(screen.queryByText(/apify post sync/i)).not.toBeInTheDocument()
   })
 })

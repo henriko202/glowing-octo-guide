@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../convex'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import LoadingSpinner from '../components/LoadingSpinner'
 import PlanLimitsTab from '../components/PlanLimitsTab'
 import UsersTab from '../components/UsersTab'
@@ -11,11 +11,11 @@ import { Flash, useFlash } from '../components/useFlash'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Button } from '../components/ui/button'
+import { friendlyError } from '@/lib/errors'
 
 type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd'
 
 export default function AdminPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = (searchParams.get('tab') ?? 'settings') as TabValue
 
@@ -39,7 +39,12 @@ export default function AdminPage() {
   }
 
   if (!isAdmin) {
-    navigate('/')
+    return (
+      <Navigate
+        to="/"
+        replace
+      />
+    )
   }
 
   async function handleToggle() {
@@ -79,7 +84,7 @@ export default function AdminPage() {
       await syncAllPostsM({ sessionToken })
       showFlash('success', 'Post sync started — running in the background.')
     } catch (err) {
-      showFlash('error', err instanceof Error ? err.message : 'Could not start post sync.')
+      showFlash('error', friendlyError(err, 'Could not start post sync.'))
     } finally {
       setSyncingPosts(false)
     }
@@ -92,7 +97,7 @@ export default function AdminPage() {
       await syncAllProfilesM({ sessionToken })
       showFlash('success', 'Profile sync started — running in the background.')
     } catch (err) {
-      showFlash('error', err instanceof Error ? err.message : 'Could not start profile sync.')
+      showFlash('error', friendlyError(err, 'Could not start profile sync.'))
     } finally {
       setSyncingProfiles(false)
     }

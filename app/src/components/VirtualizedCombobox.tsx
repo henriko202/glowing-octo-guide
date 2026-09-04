@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { Check, ChevronsUpDown, X } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { Button } from '@/components/ui/button'
@@ -160,6 +160,10 @@ interface VirtualizedComboboxProps {
   disabled?: boolean
   className?: string
   height?: string
+  /** Show an X on the trigger to clear the selection (fires onChange('')). */
+  clearable?: boolean
+  /** aria-label for the clear button (required when clearable). */
+  clearLabel?: string
 }
 
 export function VirtualizedCombobox({
@@ -172,7 +176,9 @@ export function VirtualizedCombobox({
   ariaLabel,
   disabled,
   className,
-  height = '300px'
+  height = '300px',
+  clearable,
+  clearLabel
 }: VirtualizedComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const triggerRef = React.useRef<HTMLButtonElement>(null)
@@ -185,48 +191,63 @@ export function VirtualizedCombobox({
   }, [open])
 
   const selected = options.find(o => o.value === value)
+  const showClear = clearable && !!selected && !disabled
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          ref={triggerRef}
-          variant="outline"
-          role="combobox"
-          aria-label={ariaLabel}
-          aria-expanded={open}
-          disabled={disabled}
-          className={cn(
-            'border-input h-auto w-full justify-between rounded-md px-[10px] py-[7px] text-[13px] font-normal',
-            !selected && 'text-muted-foreground',
-            className
-          )}
-        >
-          <span className="min-w-0 flex-1 truncate text-left">{selected ? selected.label : placeholder}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="p-0"
-        align="start"
-        style={{ width: contentWidth }}
+    <div className="relative">
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
       >
-        <VirtualizedCommand
-          height={height}
-          options={options}
-          placeholder={searchPlaceholder}
-          emptyText={emptyText}
-          selectedOption={value}
-          onSelectOption={currentValue => {
-            // Re-selecting the current value clears it (acts as "Not set").
-            onChange(currentValue === value ? '' : currentValue)
-            setOpen(false)
-          }}
-        />
-      </PopoverContent>
-    </Popover>
+        <PopoverTrigger asChild>
+          <Button
+            ref={triggerRef}
+            variant="outline"
+            role="combobox"
+            aria-label={ariaLabel}
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn(
+              'border-input h-auto w-full justify-between rounded-md px-[10px] py-[7px] text-[13px] font-normal',
+              !selected && 'text-muted-foreground',
+              className
+            )}
+          >
+            <span className={cn('min-w-0 flex-1 truncate text-left', showClear && 'pr-6')}>
+              {selected ? selected.label : placeholder}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="p-0"
+          align="start"
+          style={{ width: contentWidth }}
+        >
+          <VirtualizedCommand
+            height={height}
+            options={options}
+            placeholder={searchPlaceholder}
+            emptyText={emptyText}
+            selectedOption={value}
+            onSelectOption={currentValue => {
+              // Re-selecting the current value clears it (acts as "Not set").
+              onChange(currentValue === value ? '' : currentValue)
+              setOpen(false)
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+      {showClear && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label={clearLabel}
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute top-1/2 right-8 -translate-y-1/2 rounded-sm p-0.5 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
   )
 }

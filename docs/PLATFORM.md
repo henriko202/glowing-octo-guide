@@ -9,7 +9,7 @@
 > catalogued in [§19 Known Discrepancies & Dead Code](#19-known-discrepancies-dead-code--roadmap).
 >
 > **Keep this document up to date.** Per the rule in `CLAUDE.md`, whenever a feature is
-> added/changed or any code is pushed, update the relevant section(s) here in the same change.
+> added/changed or any code is pushed, update the relevant section (s) here in the same change.
 > See [§21 Maintaining This Document](#21-maintaining-this-document).
 
 ---
@@ -28,6 +28,7 @@
 10. [Posts & Content Pipeline](#10-posts--content-pipeline)
 11. [Feed & Engagement](#11-feed--engagement)
     11A. [AI Reaction & Comment Assistance](#11a-ai-reaction--comment-assistance)
+    11B. [Search & Command Palette](#11b-search--command-palette)
 12. [Admin & Moderation](#12-admin--moderation)
     12A. [Feedback](#12a-feedback)
     12B. [Message of the Day (MOTD)](#12b-message-of-the-day-motd)
@@ -51,135 +52,139 @@
 
 **Link Into The SSI** is a LinkedIn growth‑accelerator SaaS. The product premise:
 
-1. A user signs in with **LinkedIn OAuth**, authorizing the app to read their posts and to
-   publish comments/reactions on their behalf.
+1. A user signs in with **LinkedIn OAuth** (OpenID Connect), so the app can identify them and show their posts in the
+   shared feed.
 2. The user joins a **shared real‑time feed** of posts from all other subscribers.
-3. They **engage** (comment, react) on those posts directly from the app, using their **own
-   LinkedIn identity** — every interaction is a real LinkedIn action published under their name.
-4. Consistent, relevant engagement raises the user's **Social Selling Index (SSI)** — LinkedIn's
-   0–100 score across four 25‑point pillars (brand, find the right people, engage with insights,
-   build relationships).
+3. They **engage** (comment, react) on those posts — initiated in the app, completed on LinkedIn. LinkedIn exposes **no
+   member API** to react/comment on another member's post, so the app surfaces the post plus an AI‑drafted comment and
+   **hands off** to LinkedIn (opens the post, copies the draft to the clipboard); the user performs the action there
+   under their own identity. The app counts the engagement **optimistically on tap** — it cannot confirm the LinkedIn
+   action. See [§11](#11-feed--engagement).
+4. Consistent, relevant engagement raises the user's **Social Selling Index (SSI)** — LinkedIn's 0–100 score across four
+   25‑point pillars (brand, find the right people, engage with insights, build relationships).
 
 **Network effect:** more users → richer feed → more engagement → higher SSI → more users.
 
-**Monetization** is subscription‑based via Stripe across four tiers (Starter / Growth / Pro /
-Contact‑Enterprise). Higher tiers unlock feed targeting (by industry/country), post‑visibility
-controls, featured posts, and higher engagement/post‑volume limits. See
+**Monetization** is subscription‑based via Stripe across four tiers (Starter / Growth / Pro / Contact‑Enterprise).
+Higher tiers unlock feed targeting (by industry/country), post‑visibility controls, featured posts, and higher
+engagement/post‑volume limits. See
 [§8](#8-subscriptions--billing) and [§9](#9-plan-limits-system).
 
 ### Subscription tiers (business view)
 
-| Capability                          |  Starter   |               Growth               |     Pro     |     Contact (Enterprise)     |
-|-------------------------------------|:----------:|:----------------------------------:|:-----------:|:----------------------------:|
-| Price                               |   $5/mo    |               $15/mo               |   $50/mo    |            Custom            |
-| Access shared feed                  |     ✓      |                 ✓                  |      ✓      |              ✓               |
-| 7‑day trial (card required)         |     ✓      | ✓ (tier chosen on landing, see §8) |      ✓      |              —               |
-| Feed filtered by industry + country |     ✗      |       ✓ (auto from profile)        | ✓ (custom)  |          ✓ (custom)          |
-| Control who sees your posts         |     ✗      |                 ✗                  | ✓ (planned) |         ✓ (planned)          |
-| Interactions counted per post (cap) |     25     |                 50                 |     200     | 200 (per‑user override‑able) |
-| Posts admitted to feed / week       |     1      |                 2                  |      5      |  5 (per‑user override‑able)  |
-| Featured posts / month              |     0      |            1 (planned)             | 3 (planned) |       Custom (planned)       |
-| AI comment generator                | ✗ (future) |             ✓ (future)             | ✓ (future)  |          ✓ (future)          |
+| Capability                          | Starter |               Growth                |     Pro     |     Contact (Enterprise)     |
+|-------------------------------------|:-------:|:-----------------------------------:|:-----------:|:----------------------------:|
+| Price                               |  $5/mo  |               $15/mo                |   $50/mo    |            Custom            |
+| Access shared feed                  |   ✓    |                 ✓                  |     ✓      |              ✓              |
+| 7‑day trial (card required)         |   ✓    | ✓ (tier chosen on landing, see §8) |     ✓      |              —               |
+| Feed filtered by industry + country |   ✗    |       ✓ (auto from profile)        | ✓ (custom) |         ✓ (custom)          |
+| Control who sees your posts         |   ✗    |                 ✗                  |     ✓      |              ✓              |
+| Interactions counted per post (cap) |   25    |                 50                  |     200     | 200 (per‑user override‑able) |
+| Posts admitted to feed / week       |    1    |                  2                  |      5      |  5 (per‑user override‑able)  |
+| Featured posts / month              |    0    |                  1                  |      3      |   999 (unlimited sentinel)   |
+| AI comment generator                |   ✓    |                 ✓                  |     ✓      |              ✓              |
 
-The numeric limits (interactions/post, posts/week) are the **enforced** values from the
-`planLimits` table; the featured‑post and AI rows are **marketing‑level/planned** (the
-`featuredPostUsage` table exists but is not yet wired; AI is a UI placeholder). See
-[§19](#19-known-discrepancies-dead-code--roadmap).
+The numeric limits (interactions/post, posts/week, featured‑posts/month) are all **enforced**
+values read from the `planLimits` table via `getPlanLimitsHelper` (see
+[§9](#9-plan-limits-system)); the AI comment generator is **live** for every tier — gated on an active subscription (the
+same `assertCanEngage` card-on-file gate as engaging), rate-limited, but never tier-gated
+(see [§11A](#11a-ai-reaction--comment-assistance)). Contact tier's featured‑posts cap of 999 is a sentinel for
+"effectively unlimited". Unlike the other two caps, it is **not**
+exposed in the admin per‑user override UI — `setContactUserLimit` only edits `interactionsPerPost`/
+`postsPerWeek`, so a contact user's `featuredPerMonth` always coalesces to the 999 default; a custom featured cap for
+one enterprise account currently requires a direct DB edit to that user's
+`planLimits` row (no admin control yet). See [§19](#19-known-discrepancies-dead-code--roadmap).
 
-**Trial model (Plan 2B).** New users start at `subscriptionStatus: 'none'` with no app-side trial.
-The trial begins when they add a card via Stripe Checkout, which creates a real subscription in
-`trialing` status for the **tier they chose on the landing Pricing page** (`plan`/`interval` are
-carried through OAuth and stored in `sessionStorage`; `BillingPage` reads them to pre-select the
-right price ID for Checkout — see §14). If no plan was chosen, `BillingPage` falls back to
-**Growth**. Billing starts at **50 combined interactions (made + received) OR 7 days, whichever
-comes first**: the 7-day side is Stripe's own `trial_period_days`; the 50-interaction milestone
-fires `endTrialEarly` (server-side) to convert the trial immediately. Because the trial is a real
-Stripe subscription, trialing users get the **chosen tier's plan limits naturally** — no tier
-mapping shim is needed. **Engaging** (comment / react / submit a post) is **card-gated
-server-side** via `assertCanEngage` in `convex/lib/access.ts`, which requires `subscriptionStatus
-∈ {trialing, active}`; users at `none`, `canceled`, or `past_due` receive a `PAYMENT_REQUIRED`
-error. The app-facing UI for this gate (disabled buttons, X/50 progress bar, SSI link-out,
-downgrade prompt) is **Plan 2C, deferred to after the app/ UI revamp**.
+**Trial model (Plan 2B).** New users start at `subscriptionStatus: 'none'` with no app-side trial. The trial begins when
+they add a card via Stripe Checkout, which creates a real subscription in
+`trialing` status for the **tier they pick on the billing plan grid** — every plan card starts the same trial for that
+tier, with **Growth** recommended (`interval` is carried through OAuth via `sessionStorage` to pre-select the
+monthly/annual toggle — see §14). Billing starts at **50 combined interactions (made + received)
+OR 7 days, whichever comes first**: the 7-day side is Stripe's own `trial_period_days`; the 50-interaction milestone
+fires `endTrialEarly` (server-side) to convert the trial immediately. Because the trial is a real Stripe subscription,
+trialing users get the **chosen tier's plan limits naturally** — no tier mapping shim is needed. **Engaging** with
+others (comment / react) is **card-gated server-side** via `assertCanEngage` in `convex/lib/access.ts`, which requires
+an engage‑granting `subscriptionStatus ∈ {trialing, active, canceled}`; only `none` (never subscribed) and `past_due`
+(failed payment) receive a `PAYMENT_REQUIRED` error. **Cancellation never revokes access** — a canceled member keeps
+engaging; instead their own posts stop showing in the feed once their paid period ends (see §Feed). The app-facing UI
+for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C** — shipped; see
+[§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
 
 ---
 
 ## 2. System Architecture
 
-The repository is a **pnpm monorepo** with **three deployable packages sharing one Convex
-backend**:
+The repository is a **pnpm monorepo** with **three deployable packages sharing one Convex backend**:
 
-| Package    | Stack                                                            | Deploy target      | Domain (prod)                                |
-|------------|------------------------------------------------------------------|--------------------|----------------------------------------------|
-| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)        | **Vercel**         | `linkintothessi.com`                         |
-| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next         | **Railway**        | `app.linkintothessi.com`                     |
-| `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` | **Convex** managed | `<deployment>.convex.cloud` / `.convex.site` |
+| Package    | Stack                                                                                         | Deploy target                          | Domain (prod)                                |
+|------------|-----------------------------------------------------------------------------------------------|----------------------------------------|----------------------------------------------|
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)                                     | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
+| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next                                      | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
+| `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` + `@convex-dev/rate-limiter` | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
 
-Cloudflare sits in front of Vercel and Railway for DNS/CDN. External services: **LinkedIn**
+Cloudflare **hosts both frontends** (Workers) and provides DNS/CDN/TLS. External services: **LinkedIn**
 (OAuth + posting), **Stripe** (billing), **Apify** (LinkedIn post scraping).
 
 ### Deployment & integration topology
 
 ```mermaid
 flowchart LR
-  subgraph Client["User's Browser"]
-    Landing["Landing site<br/>(Next.js / Vercel)"]
-    App["SaaS App<br/>(React+Vite / Railway)"]
-  end
+    subgraph Client["User's Browser"]
+        Landing["Landing site<br/>(Next.js / Cloudflare OpenNext)"]
+        App["SaaS App<br/>(React+Vite / Cloudflare Static Assets)"]
+    end
 
-  subgraph Convex["Convex Backend (managed)"]
-    direction TB
-    Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
-    Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-    DB[("Convex DB<br/>16 tables")]
-    Crons["Cron scheduler"]
-    Cloud --- DB
-    Site --- DB
-    Crons --- DB
-  end
+    subgraph Convex["Convex Backend (managed)"]
+        direction TB
+        Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
+        Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
+        DB[("Convex DB<br/>16 tables")]
+        Crons["Cron scheduler"]
+        Cloud --- DB
+        Site --- DB
+        Crons --- DB
+    end
 
-  LinkedIn["LinkedIn<br/>OAuth + REST API"]
-  Stripe["Stripe<br/>Checkout + Webhooks"]
-  Apify["Apify<br/>post scraper"]
-
-  Landing -- "CTA links (NEXT_PUBLIC_APP_URL)" --> App
-  App -- "useQuery/useMutation/useAction<br/>(VITE_CONVEX_URL)" --> Cloud
-  App -- "sign-in redirect<br/>(VITE_CONVEX_SITE)/auth/linkedin" --> Site
-  Site <-- "3-legged OAuth + token exchange" --> LinkedIn
-  Cloud -- "comment/react as user" --> LinkedIn
-  App -- "Checkout redirect" --> Stripe
-  Stripe -- "webhook → /stripe/webhook" --> Site
-  Crons -- "scrape posts" --> Apify
-  Cloud -- "on subscribe: scrape posts" --> Apify
+    LinkedIn["LinkedIn<br/>OAuth + REST API"]
+    Stripe["Stripe<br/>Checkout + Webhooks"]
+    Apify["Apify<br/>post scraper"]
+    Landing -- " CTA links (NEXT_PUBLIC_APP_URL) " --> App
+    App -- " useQuery/useMutation/useAction<br/>(VITE_CONVEX_URL) " --> Cloud
+    App -- " sign-in redirect<br/>(VITE_CONVEX_SITE)/auth/linkedin " --> Site
+    Site <-- " 3-legged OAuth + token exchange " --> LinkedIn
+    App -- " engagement handoff: opens post on LinkedIn " --> LinkedIn
+    App -- " Checkout redirect " --> Stripe
+    Stripe -- " webhook → /stripe/webhook " --> Site
+    Crons -- " scrape posts " --> Apify
+    Cloud -- " on subscribe: scrape posts " --> Apify
 ```
 
 ### Why OAuth runs through `.convex.site` (key design decision)
 
-The LinkedIn `redirect_uri` points at **Convex** (`https://<deployment>.convex.site/auth/linkedin/callback`),
-**never** at the React app. LinkedIn returns the authorization `code` to Convex, which exchanges
-it for tokens **server‑side**, so the **client secret and the user's access/refresh tokens never
-touch the browser**. Convex then issues an opaque session token and redirects the browser back to
-the app. This is the backbone of the [security model](#17-security-posture).
+The LinkedIn `redirect_uri` points at **Convex** (`https://<deployment>.convex.site/auth/linkedin/callback`), **never**
+at the React app. LinkedIn returns the authorization `code` to Convex, which exchanges it for tokens **server‑side**, so
+the **client secret and the user's access/refresh tokens never touch the browser**. Convex then issues an opaque session
+token and redirects the browser back to the app. This is the backbone of the [security model](#17-security-posture).
 
 ---
 
 ## 3. Tech Stack
 
-- **Backend:** [Convex](https://convex.dev) `^1.33–1.34` — real‑time serverless TypeScript.
-  Queries (reactive reads), mutations (transactional writes), actions (side‑effects/external
-  fetch), HTTP actions, and cron jobs. Stripe via the official `@convex-dev/stripe` component.
+- **Backend:** [Convex](https://convex.dev) `^1.33–1.34` — real‑time serverless TypeScript. Queries (reactive reads),
+  mutations (transactional writes), actions (side‑effects/external fetch), HTTP actions, and cron jobs. Stripe via the
+  official `@convex-dev/stripe` component.
 - **App (`app/`):** React **19**, Vite **6**, TypeScript (strict), Tailwind CSS **4**,
   `react-router-dom` **7**, `convex/react` client, `i18next` **25** (en/pt/es), plus **shadcn/ui**
-  primitives (`cmdk`, `@radix-ui/react-popover`, `lucide-react`) + `@tanstack/react-virtual` for the
-  searchable industry/country comboboxes (`@/*` alias → `app/src`; theme tokens in `index.css`).
+  primitives (`cmdk`, `@radix-ui/react-popover`, `lucide-react`) + `@tanstack/react-virtual` for the searchable
+  industry/country comboboxes (`@/*` alias → `app/src`; theme tokens in `index.css`).
 - **Landing (`landing/`):** Next.js **15** (App Router), React **19**, Tailwind CSS **4** (CSS-first,
   `@tailwindcss/postcss`), TypeScript.
 - **Payments:** Stripe (Checkout + Customer Portal + webhooks).
-- **Post ingestion:** Apify REST API (`harvestapi~linkedin-profile-posts` actor) + manual
-  user‑pasted post URLs.
+- **Post ingestion:** Apify REST API (`harvestapi~linkedin-profile-posts` actor) + manual user‑pasted post URLs.
 - **Testing:** Vitest across all workspaces; React Testing Library + jsdom for the app; a custom
   `convex-mocks` shim for backend unit tests.
-- **Tooling:** ESLint 9 (flat config, `--max-warnings 0`), Prettier (no‑semicolons, single‑quotes,
-  120 cols), pnpm workspaces.
+- **Tooling:** ESLint 9 (flat config, `--max-warnings 0`), Prettier (no‑semicolons, single‑quotes, 120 cols), pnpm
+  workspaces.
 
 ---
 
@@ -187,24 +192,27 @@ the app. This is the backbone of the [security model](#17-security-posture).
 
 ```
 /
-├── landing/                     # Next.js marketing site → Vercel
+├── landing/                     # Next.js marketing site → Cloudflare Workers (OpenNext)
 │   ├── app/
-│   │   ├── layout.tsx           # root layout + SEO metadata + no-flash theme script
 │   │   ├── globals.css          # Tailwind v4 CSS-first: @theme inline, :root/:dark tokens
-│   │   ├── page.tsx             # home (composes 11 section components)
-│   │   ├── pricing/page.tsx
-│   │   ├── privacy/page.tsx     # LinkedIn app-review requirement
-│   │   └── terms/page.tsx       # LinkedIn app-review requirement
-│   ├── components/              # Nav, Hero, SSIExplainer, StatsBar, HowItWorks,
-│   │                            #   Features, Testimonials, Pricing, FAQ, FinalCTA, Footer
-│   │                            #   ThemeToggle (3-state light/dark/system)
+│   │   └── [lang]/              # lang ∈ {en,pt,es} (default en)
+│   │       ├── layout.tsx       # root <html>; inline no-flash script (cookie→localStorage→system)
+│   │       ├── page.tsx         # home (composes section components)
+│   │       ├── privacy/         # +content/{en,pt,es}.tsx — LinkedIn app-review requirement
+│   │       ├── terms/           # +content/{en,pt,es}.tsx — LinkedIn app-review requirement
+│   │       └── cookies/         # +content/{en,pt,es}.tsx — cookie & storage policy
+│   ├── middleware.ts            # bare / or unprefixed path → locale redirect (cookie→Accept-Language→en)
+│   ├── components/              # Nav, Hero, SSIExplainer, HowItWorks, Features,
+│   │                            #   Pricing, FAQ, FinalCTA, Footer, CookieNotice,
+│   │                            #   ThemeToggle (3-state light/dark/system), LanguageSelector
 │   ├── lib/
 │   │   ├── cookies.ts           # SSR-safe cookie read/write (Next/process.env)
 │   │   └── theme.ts             # resolveTheme / applyTheme / cookie get/set
 │   └── next.config.js
 │
-├── app/                         # React + Vite SaaS dashboard → Railway
-│   ├── index.html               # mount point + strict CSP meta
+├── app/                         # React + Vite SaaS dashboard → Cloudflare Workers (Static Assets)
+│   ├── index.html               # mount point + pre-hydration theme guard (CSP is generated into dist/_headers
+│   │                            #   by scripts/gen-headers.mjs, not an index.html meta tag)
 │   ├── vite.config.ts           # dev port 5174, inline Vitest config
 │   └── src/
 │       ├── main.tsx             # ConvexProvider + BrowserRouter bootstrap
@@ -219,13 +227,13 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │
 ├── convex/                      # Convex backend (shared by both apps)
 │   ├── schema.ts                # 16-table database schema
-│   ├── convex.config.ts         # registers @convex-dev/stripe component
+│   ├── convex.config.ts         # registers @convex-dev/stripe + @convex-dev/rate-limiter components
 │   ├── crons.ts                 # the ONLY file Convex reads for scheduled jobs
 │   ├── http.ts                  # LinkedIn OAuth + Stripe webhook HTTP routes
 │   ├── users.ts                 # getMe, subscription info, public identifier, logout
 │   ├── sessions.ts              # session tokens + OAuth-state CSRF storage
 │   ├── feed.ts                  # tier-gated feed query
-│   ├── interactions.ts          # comment + react actions (use user's LinkedIn token)
+│   ├── interactions.ts          # comment + react engagement counters (optimistic; client hands off to LinkedIn)
 │   ├── posts.ts                 # submitPost, getMyPosts, weekly usage
 │   ├── billing.ts               # Stripe Checkout + Customer Portal sessions
 │   ├── stripe.ts                # webhook-driven subscription sync mutations
@@ -233,12 +241,11 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │   ├── lib/
 │   │   ├── auth.ts              # requireAuth / requireAuthAction / resolveSession / assertNotBanned
 │   │   ├── planLimits.ts        # plan-limit lookup + tierToRank
-│   │   └── rateLimit.ts         # fixed-window rate limiter
+│   │   └── rateLimit.ts         # wraps @convex-dev/rate-limiter (fixed-window, per user+action)
 │   ├── linkedin/
 │   │   ├── oauth.ts             # auth URL builder + token exchange + userinfo
 │   │   ├── auth.ts              # upsertUser mutation
-│   │   ├── posts.ts             # LinkedIn post fetch/parse helpers
-│   │   ├── parsePostUrl.ts      # /posts/… and /feed/update/… URL parser
+│   │   ├── parsePostUrl.ts      # /posts/… + /feed/update/… parser & lnkd.in shortlink resolver
 │   │   ├── parsePostContent.ts  # HTML → text/media + shared-article link (extractArticleUrl) + article enrichment (parseArticle)
 │   │   ├── verifyPostOwnership.ts
 │   │   └── types.ts             # LinkedIn API response interfaces
@@ -247,11 +254,11 @@ the app. This is the backbone of the [security model](#17-security-posture).
 │   │   ├── syncPostsApify.ts    # Apify scrape (per-user + fan-out)
 │   │   └── processQueue.ts      # drains postQueue → posts when capacity opens
 │   └── migrations/
-│       └── seedPlanLimits.ts    # one-time seed of tier-default plan limits
+│       └── seedPlanLimits.ts    # explicit (re-)seed of tier-default plan limits — optional, updateTierDefault self-heals
 │
 ├── convex-mocks/                # Vitest mock for `convex/server` (backend unit tests)
 ├── docs/                        # planning/spec markdown + THIS document
-├── README.md                    # quickstart (partially stale — see §19)
+├── README.md                    # quickstart (reconciled to code 2026-08-30 — see §19)
 ├── CLAUDE.md / AGENTS.md        # agent instructions
 └── pnpm-workspace.yaml, tsconfig.base.json, eslint.config.js, .prettierrc
 ```
@@ -260,158 +267,162 @@ the app. This is the backbone of the [security model](#17-security-posture).
 
 ## 5. Data Model
 
-All state lives in **Convex** (`convex/schema.ts`). There are **16 tables**. Every document also
-carries Convex‑managed `_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
+All state lives in **Convex** (`convex/schema.ts`). There are **16 tables**. Every document also carries Convex‑managed
+`_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
 
-Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential
-integrity**; consistency is maintained in application code.
+Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential integrity**;
+consistency is maintained in application code.
 
 ### Entity relationships
 
 ```mermaid
 erDiagram
-  users ||--o{ posts : "authors"
-  users ||--o{ postQueue : "authors (overflow)"
-  users ||--o{ subscriptions : "has"
-  users ||--o{ sessions : "owns"
-  users ||--o{ rateLimits : "subject of"
-  users ||--o{ featuredPostUsage : "quota (unused)"
-  users ||--o| planLimits : "contact override"
-  users ||--o| users : "bannedBy (self-ref)"
-  users ||--o{ consentRecords : "consent log"
-  users ||--o{ dataExportRequests : "DSR exports"
-  users ||--o{ auditLogs : "audit target"
-  users ||--o{ feedback : "submits"
-  feedback ||--o{ feedbackResponses : "replies"
+    users ||--o{ posts: "authors"
+    users ||--o{ postQueue: "authors (overflow)"
+    users ||--o{ subscriptions: "has"
+    users ||--o{ sessions: "owns"
+    users ||--o{ featuredPostUsage: "quota"
+    users ||--o| planLimits: "contact override"
+    users ||--o| users: "bannedBy (self-ref)"
+    users ||--o{ consentRecords: "consent log"
+    users ||--o{ dataExportRequests: "DSR exports"
+    users ||--o{ auditLogs: "audit target"
+    users ||--o{ feedback: "submits"
+    feedback ||--o{ feedbackResponses: "replies"
 
-  users {
-    string linkedinId
-    string name
-    string tier "starter|growth|pro|contact (optional)"
-    string subscriptionStatus "trialing|active|canceled|past_due|none"
-    string linkedinAccessToken "secret - server only"
-    string linkedinRefreshToken "secret - server only"
-    string linkedinPublicIdentifier "vanity name"
-    boolean isAdmin "DB-edit only"
-    boolean isBanned
-    string email "OIDC email claim - privacy use only"
-    string deletionReason "user_request|dormancy"
-  }
-  posts {
-    string linkedinPostUrn "dedupe key"
-    id authorId FK
-    string content
-    number publishedAt
-    boolean hidden
-    boolean isFeatured
-    number authorTierRank "4=contact..1=starter"
-    boolean interactionLimitReached
-    string sourceUrl
-    number deletedAt "soft-delete; row kept for weekly count"
-  }
-  planLimits {
-    string tier
-    id userId "set only for contact override"
-    number interactionsPerPost
-    number postsPerWeek
-  }
-  postQueue {
-    string linkedinPostUrn
-    id authorId FK
-    number publishedAt
-    number queuedAt
-  }
+    users {
+        string linkedinId
+        string name
+        string tier "starter|growth|pro|contact (optional)"
+        string subscriptionStatus "trialing|active|canceled|past_due|none"
+        string linkedinAccessToken "secret - server only"
+        string linkedinRefreshToken "secret - server only"
+        string linkedinPublicIdentifier "vanity name (auto-derived)"
+        boolean isAdmin "DB-edit only"
+        boolean isBanned
+        string email "OIDC email claim - privacy use only"
+        string deletionReason "user_request|dormancy"
+    }
+    posts {
+        string linkedinPostUrn "dedupe key"
+        id authorId FK
+        string content
+        number publishedAt
+        boolean hidden
+        boolean isFeatured
+        number authorTierRank "4=contact..1=starter"
+        boolean interactionLimitReached
+        string sourceUrl
+        number deletedAt "soft-delete; row kept for weekly count"
+    }
+    planLimits {
+        string tier
+        id userId "set only for contact override"
+        number interactionsPerPost
+        number postsPerWeek
+        number featuredPerMonth "optional; coalesced to tier default"
+    }
+    postQueue {
+        string linkedinPostUrn
+        id authorId FK
+        number publishedAt
+        number queuedAt
+    }
 ```
 
 ### Table reference
 
 #### `users` — central identity / subscription / OAuth / admin record
 
-One row per authenticated LinkedIn member. Inserted on first login (`linkedin/auth.ts:upsertUser`),
-patched thereafter (profile, subscription, ban). Read almost everywhere.
+One row per authenticated LinkedIn member. Inserted on first login (`linkedin/auth.ts:upsertUser`), patched thereafter
+(profile, subscription, ban). Read almost everywhere.
 
-| Field                        | Type                                                   | Req | Meaning                                                                                                                                                                                                                                      |
-|------------------------------|--------------------------------------------------------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinId`                 | string                                                 |  ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                         |
-| `name`                       | string                                                 |  ✓  | Display name.                                                                                                                                                                                                                                |
-| `headline`                   | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                           |
-| `profilePictureUrl`          | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                  |
-| `industry`                   | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                          |
-| `country`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                          |
-| `location`                   | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                        |
-| `primaryLocale`              | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                     |
-| `commentLanguage`            | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).              |
-| `tier`                       | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                    |
-| `subscriptionStatus`         | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` |  ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. |
-| `trialEndsAt`                | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                           |
-| `stripeCustomerId`           | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                      |
-| `linkedinAccessToken`        | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                      |
-| `linkedinRefreshToken`       | string                                                 |  –  | **Secret.** (No refresh flow is implemented — see §19.)                                                                                                                                                                                      |
-| `tokenExpiresAt`             | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                    |
-| `linkedinPublicIdentifier`   | string                                                 |  –  | LinkedIn vanity name; captured via the first‑login `PublicIdentifierPromptScreen` or set in Settings, used for post‑ownership verification without Partner API.                                                                              |
-| `isAdmin`                    | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                        |
-| `isBanned`                   | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                              |
-| `bannedAt`                   | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                               |
-| `bannedBy`                   | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                           |
-| `bannedReason`               | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                    |
-| `email`                      | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                          |
-| `emailVerified`              | boolean                                                |  –  | Whether LinkedIn verified the email address.                                                                                                                                                                                                 |
-| `deletionRequestedAt`        | number                                                 |  –  | When the user requested account deletion (ms).                                                                                                                                                                                               |
-| `deletionScheduledAt`        | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                    |
-| `deletionReason`             | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                              |
-| `lastLoginAt`                | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                |
-| `acknowledgedPolicyVersion`  | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                         |
-| `consentPromptedAt`          | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                              |
-| `publicIdentifierPromptedAt` | number                                                 |  –  | When the user was shown the one-time "confirm your LinkedIn profile URL" prompt (ms). Unset **and** no `linkedinPublicIdentifier` ⇒ `PublicIdentifierPromptScreen` is shown on login.                                                        |
-| `createdAt`                  | number                                                 |  ✓  | Creation timestamp (ms).                                                                                                                                                                                                                     |
+| Field                         | Type                                                   | Req | Meaning                                                                                                                                                                                                                                                                                                                                                                                          |
+|-------------------------------|--------------------------------------------------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinId`                  | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                                                                                                                                                                             |
+| `name`                        | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                                                                                                                                                                    |
+| `headline`                    | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                                                                                                                                                                               |
+| `profilePictureUrl`           | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                                                                                                                      |
+| `industry`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                              |
+| `country`                     | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                              |
+| `location`                    | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                                                                                                                            |
+| `primaryLocale`               | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                                                                                                                         |
+| `commentLanguage`             | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                                                                                                                  |
+| `defaultVisibilityIndustries` | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist copied onto every post this user authors from now on (`posts.visibilityIndustries`, set at insert time — not retroactive). Absent/empty ⇒ new posts are visible to everyone. Set via `users.setPostVisibility` (tier-gated server-side); a downgrade does **not** clear it. See [§11](#11-feed--engagement).                                           |
+| `defaultVisibilityCountries`  | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist copied onto every post this user authors from now on (`posts.visibilityCountries`, set at insert time — not retroactive). Same semantics as `defaultVisibilityIndustries` above.                                                                                                                                                                        |
+| `feedFilterIndustries`        | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist that filters the viewer's **own** feed (`feed.getFeed` reads it off the viewer doc). Absent/empty ⇒ that dimension isn't filtered. Set via `users.setFeedFilter` (tier-gated server-side); a downgrade does **not** clear it. A "what I want to see" preference — distinct from the author-side `defaultVisibility*`. See [§11](#11-feed--engagement). |
+| `feedFilterCountries`         | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist filtering the viewer's own feed. ANDed with `feedFilterIndustries` (each list ORs internally). Same source/semantics as `feedFilterIndustries` above.                                                                                                                                                                                                   |
+| `tier`                        | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                                                                                                                        |
+| `subscriptionStatus`          | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. Engage access is granted for `{trialing, active, canceled}` — cancellation never revokes it (see `canEngage`).                                      |
+| `trialEndsAt`                 | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                                                                                                                                                                               |
+| `subscriptionEndsAt`          | number                                                 |  –  | Paid‑through instant (ms; Stripe `current_period_end`), mirrored on every sync + cancel. A **canceled** author's posts stay in the feed until `now ≥ subscriptionEndsAt`, then drop out (`isAuthorFeedEligible`). Does not affect engage access.                                                                                                                                                 |
+| `stripeCustomerId`            | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                                                                                                                                                                          |
+| `linkedinAccessToken`         | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                                                                                                                                                                          |
+| `linkedinRefreshToken`        | string                                                 |  –  | **Secret.** Refresh flow exists (dormant — Standard-tier OAuth issues no refresh_token; reconnect banner mitigates). See §7/§13.                                                                                                                                                                                                                                                                 |
+| `tokenExpiresAt`              | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                                                                                                                                                                        |
+| `linkedinPublicIdentifier`    | string                                                 |  –  | LinkedIn vanity name, **auto‑derived (set‑once)** from the `author.url` of a name‑verified submitted post (`users.setDerivedPublicIdentifier`); never user‑typed. Seeds the Apify profile/post scrape. NOT the ownership check (that matches the post's author name against the OIDC `name`).                                                                                                    |
+| `isAdmin`                     | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                                                                                                                                                                            |
+| `isBanned`                    | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                                                                                                                                                                                  |
+| `bannedAt`                    | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `bannedBy`                    | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                                                                                                                               |
+| `bannedReason`                | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                                                                                                                        |
+| `email`                       | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                                                                                                                              |
+| `deletionRequestedAt`         | number                                                 |  –  | When the user requested account deletion (ms). Erasure-audit-trail field — kept for compliance even though no query reads it back (`deletionScheduledAt` drives the actual cron/idempotency logic).                                                                                                                                                                                              |
+| `deletionScheduledAt`         | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                                                                                                                        |
+| `deletionReason`              | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                                                                                                                                  |
+| `lastLoginAt`                 | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                                                                                                                                                                    |
+| `acknowledgedPolicyVersion`   | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                                                                                                                                                                             |
+| `consentPromptedAt`           | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                                                                                                                                                                                  |
+| `firstPostPromptedAt`         | number                                                 |  –  | When the first‑post onboarding step was resolved (ms) — set once by submitting any post (`posts.submitPost` → `users.markFirstPostPrompted`) or skipping (`users.dismissFirstPostPrompt`). Unset ⇒ `FirstPostPromptScreen` is shown after the consent gate (to every new member; the onboarding post is created hidden for no-card members and funnels them to billing).                         |
+| `createdAt`                   | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                                                                                                                         |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
 `by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
 `by_token_expiry [tokenExpiresAt]` (retention cron targets expired tokens directly),
-`by_deletion_and_last_login [deletionScheduledAt, lastLoginAt]` (compound — serves both the
-hard-delete sweep, ranging the leading field, and the dormancy sweep, `eq(deletionScheduledAt,
+`by_deletion_and_last_login [deletionScheduledAt, lastLoginAt]` (compound — serves both the hard-delete sweep, ranging
+the leading field, and the dormancy sweep, `eq(deletionScheduledAt,
 undefined)` + range on `lastLoginAt`).
 
 #### `posts` — the shared feed
 
-Inserted by `jobs/syncPosts.upsertPost` (manual + Apify) and `jobs/processQueue` (queue promotion).
-Patched by `stripe.ts` **and** `admin.setUserTier` (re‑stamp `authorTierRank` + `feedRank` on tier
-change, via the shared `restampUserPostsTierRank` helper — which schedules a batched, self‑rescheduling
-re‑stamp so a high‑volume author never exceeds one mutation's write budget), `interactions.ts`
-(`interactionLimitReached`), and `posts.ts` (`setPostHidden` → `hidden`; `deletePost` → `deletedAt`).
-Every post writer keeps the denormalized `feedRank` / `inFeed` fields in sync through the single
+Inserted by `jobs/syncPosts.upsertPost` (manual + Apify) and `jobs/processQueue` (queue promotion). Patched by
+`stripe.ts` **and** `admin.setUserTier` (re‑stamp `authorTierRank` + `feedRank` on tier change, via the shared
+`restampUserPostsTierRank` helper — which schedules a batched, self‑rescheduling re‑stamp so a high‑volume author never
+exceeds one mutation's write budget), `interactions.ts`
+(`interactionLimitReached`), and `posts.ts` (`setPostHidden` → `hidden`; `deletePost` → `deletedAt`). Every post writer
+keeps the denormalized `feedRank` / `inFeed` fields in sync through the single
 `computeFeedFields` helper (`lib/feedRank.ts`).
 
-| Field                     | Type          | Req | Meaning                                                                                                                                                                                                                                                                                    |
-|---------------------------|---------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinPostUrn`         | string        |  ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                                                                                                                                                                       |
-| `authorId`                | `id('users')` |  ✓  | Post author.                                                                                                                                                                                                                                                                               |
-| `content`                 | string        |  ✓  | Post text (composed text + appended media links).                                                                                                                                                                                                                                          |
-| `publishedAt`             | number        |  ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                                                                                                                                                                        |
-| `likeCount`               | number        |  ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                                                                                                                                                                 |
-| `commentCount`            | number        |  ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                                                                                                                                                                   |
-| `mediaUrls`               | string[]      |  ✓  | Extracted media URLs (images, documents, and the shared‑article link when the post links a LinkedIn article).                                                                                                                                                                              |
-| `imageUrls`               | string[]      |  –  | Image‑typed media URLs only (subset of `mediaUrls`), captured at manual submit and sent to the AI as **vision input** (see [§11A](#11a-ai-reaction--comment-assistance)). Absent on synced/legacy posts.                                                                                   |
-| `isFeatured`              | boolean       |  ✓  | Pinned to top of feed.                                                                                                                                                                                                                                                                     |
-| `featuredAt`              | number        |  –  | When featured (secondary sort for featured).                                                                                                                                                                                                                                               |
-| `visibilityIndustries`    | string[]      |  ✓  | Author allowlist — only viewers in these industries see it.                                                                                                                                                                                                                                |
-| `visibilityCountries`     | string[]      |  ✓  | Author allowlist — only viewers in these countries see it.                                                                                                                                                                                                                                 |
-| `hidden`                  | boolean       |  ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                        |
-| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                      |
-| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                          |
-| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                             |
-| `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Feeds the AI reaction/comment prompts; not displayed. Absent when the post shares no article or enrichment failed. |
-| `suggestedReaction`       | enum          |  –  | AI‑predicted most‑likely reaction (`LIKE\|PRAISE\|EMPATHY\|INTEREST\|APPRECIATION\|ENTERTAINMENT`), set async after submit. Absent ⇒ the UI picker treats it as `LIKE`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                  |
-| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.                                                                                                                                                      |
-| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                          |
-| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                      |
+| Field                     | Type          | Req | Meaning                                                                                                                                                                                                                                                                                                                              |
+|---------------------------|---------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinPostUrn`         | string        | ✓  | LinkedIn URN; dedupe key (`by_urn`).                                                                                                                                                                                                                                                                                                 |
+| `authorId`                | `id('users')` | ✓  | Post author.                                                                                                                                                                                                                                                                                                                         |
+| `content`                 | string        | ✓  | Post text (composed text + appended media links).                                                                                                                                                                                                                                                                                    |
+| `publishedAt`             | number        | ✓  | Publish time (ms); primary sort + 7‑day window key.                                                                                                                                                                                                                                                                                  |
+| `likeCount`               | number        | ✓  | Reaction count. Seeded from LinkedIn on submit/sync (`parsePostEngagement` / Apify), then incremented on in‑app reactions.                                                                                                                                                                                                           |
+| `commentCount`            | number        | ✓  | Comment count. Seeded from LinkedIn on submit/sync, then incremented on in‑app comments.                                                                                                                                                                                                                                             |
+| `mediaUrls`               | string[]      | ✓  | Extracted media URLs (images, documents, and the shared‑article link when the post links a LinkedIn article).                                                                                                                                                                                                                        |
+| `imageUrls`               | string[]      |  –  | Image‑typed media URLs only (subset of `mediaUrls`), captured at manual submit and sent to the AI as **vision input** (see [§11A](#11a-ai-reaction--comment-assistance)). Absent on synced/legacy posts.                                                                                                                             |
+| `isFeatured`              | boolean       | ✓  | Pinned to top of feed.                                                                                                                                                                                                                                                                                                               |
+| `featuredAt`              | number        |  –  | When featured (display only; the feed orders featured posts by `publishedAt`, not this — see `computeFeedFields` in [§10](#10-posts--content-pipeline)).                                                                                                                                                                             |
+| `visibilityIndustries`    | string[]      | ✓  | Author allowlist — only viewers in these industries see it. Copied from `users.defaultVisibilityIndustries` at insert time (empty when the author has none set); never edited after write — see [§11](#11-feed--engagement).                                                                                                         |
+| `visibilityCountries`     | string[]      | ✓  | Author allowlist — only viewers in these countries see it. Copied from `users.defaultVisibilityCountries` at insert time (empty when the author has none set).                                                                                                                                                                       |
+| `hidden`                  | boolean       | ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                                                                  |
+| `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                                                                |
+| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                                                                    |
+| `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                                                                       |
+| `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Feeds the AI reaction/comment prompts; not displayed. Absent when the post shares no article or enrichment failed.                                           |
+| `suggestedReaction`       | enum          |  –  | AI‑predicted most‑likely reaction (`LIKE\|PRAISE\|EMPATHY\|INTEREST\|APPRECIATION\|ENTERTAINMENT`), set async after a **new** post is inserted (manual submit or Apify sync — a re‑synced/queued‑then‑promoted post does not get one). Absent ⇒ the UI picker treats it as `LIKE`. See [§11A](#11a-ai-reaction--comment-assistance). |
+| `deletedAt`               | number        |  –  | Soft‑delete marker (`deletePost`). Excluded from feed + My Posts, but the row is **kept** so it still counts toward the weekly limit.                                                                                                                                                                                                |
+| `feedRank`                | number        |  –  | Denormalized single feed sort key (featured→tier→recency); see `lib/feedRank.ts`. Backs the `by_feed_rank` cursor index. Optional during rollout.                                                                                                                                                                                    |
+| `inFeed`                  | boolean       |  –  | `true` iff visible **and** under its interaction limit **and** not soft‑deleted. The filter column of `by_feed_rank`.                                                                                                                                                                                                                |
 
 Indexes: `by_author [authorId]`, `by_urn [linkedinPostUrn]`,
-`by_author_and_publishedAt [authorId, publishedAt]`, and `by_feed_rank [inFeed, feedRank]` which backs
-the **live cursor‑paginated feed** — `getFeed` reads via this index (`eq(inFeed, true)`, `feedRank`
-desc). The older `by_featured`, `by_published`, and `by_feed` indexes were **removed** once the feed
-migrated to `by_feed_rank` (they had no remaining `withIndex` callers, and every index adds write
-amplification on this high‑write table). See
+`by_author_and_publishedAt [authorId, publishedAt]`, and `by_feed_rank [inFeed, feedRank]` which backs the **live
+cursor‑paginated feed** — `getFeed` reads via this index (`eq(inFeed, true)`, `feedRank`
+desc). The older `by_featured`, `by_published`, and `by_feed` indexes were **removed** once the feed migrated to
+`by_feed_rank` (they had no remaining `withIndex` callers, and every index adds write amplification on this high‑write
+table). See
 [feed-cursor-pagination-plan.md](feed-cursor-pagination-plan.md).
 
 #### `subscriptions` — Stripe subscription mirror
@@ -420,10 +431,10 @@ Written/read by `stripe.ts`; read by `users.getSubscriptionInfo`.
 
 | Field                  | Type                                    | Req | Meaning                                                         |
 |------------------------|-----------------------------------------|:---:|-----------------------------------------------------------------|
-| `userId`               | `id('users')`                           |  ✓  | Subscriber.                                                     |
-| `stripeSubscriptionId` | string                                  |  ✓  | Stripe sub id (`by_stripe_id`).                                 |
-| `tier`                 | `'starter'\|'growth'\|'pro'\|'contact'` |  ✓  | Subscribed tier.                                                |
-| `status`               | string                                  |  ✓  | **Free‑form** raw Stripe status (not a constrained union here). |
+| `userId`               | `id('users')`                           | ✓  | Subscriber.                                                     |
+| `stripeSubscriptionId` | string                                  | ✓  | Stripe sub id (`by_stripe_id`).                                 |
+| `tier`                 | `'starter'\|'growth'\|'pro'\|'contact'` | ✓  | Subscribed tier.                                                |
+| `status`               | string                                  | ✓  | **Free‑form** raw Stripe status (not a constrained union here). |
 | `currentPeriodEnd`     | number                                  |  –  | Period end (ms).                                                |
 
 Indexes: `by_user [userId]`, `by_stripe_id [stripeSubscriptionId]`.
@@ -433,12 +444,13 @@ Indexes: `by_user [userId]`, `by_stripe_id [stripeSubscriptionId]`.
 Tier‑default rows have **no `userId`**; override rows (contact tier only) set `userId`. Seeded by
 `migrations/seedPlanLimits.ts`; read by `lib/planLimits.ts`; CRUD‑managed by `admin.ts`.
 
-| Field                 | Type                                    | Req | Meaning                                             |
-|-----------------------|-----------------------------------------|:---:|-----------------------------------------------------|
-| `tier`                | `'starter'\|'growth'\|'pro'\|'contact'` |  ✓  | Tier this row applies to.                           |
-| `userId`              | `id('users')`                           |  –  | **Only** set for contact per‑user overrides.        |
-| `interactionsPerPost` | number                                  |  ✓  | Max likes+comments counted per post before lockout. |
-| `postsPerWeek`        | number                                  |  ✓  | Max posts admitted to feed per rolling 7 days.      |
+| Field                 | Type                                    | Req | Meaning                                                                                                                                                                                                                                                                          |
+|-----------------------|-----------------------------------------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `tier`                | `'starter'\|'growth'\|'pro'\|'contact'` | ✓  | Tier this row applies to.                                                                                                                                                                                                                                                        |
+| `userId`              | `id('users')`                           |  –  | **Only** set for contact per‑user overrides.                                                                                                                                                                                                                                     |
+| `interactionsPerPost` | number                                  | ✓  | Max likes+comments counted per post before lockout.                                                                                                                                                                                                                              |
+| `postsPerWeek`        | number                                  | ✓  | Max posts admitted to feed per rolling 7 days.                                                                                                                                                                                                                                   |
+| `featuredPerMonth`    | number                                  |  –  | Max `posts.featurePost` calls per UTC calendar month, enforced against `featuredPostUsage`. Optional — `getPlanLimitsHelper` coalesces a missing value to the tier's hardcoded default so unseeded/legacy rows keep working (widen‑then‑coalesce, no backfill migration needed). |
 
 Indexes: `by_tier [tier]` (matches default **and** override rows — callers filter `userId===undefined`
 in JS), `by_user [userId]`.
@@ -448,47 +460,49 @@ in JS), `by_user [userId]`.
 Posts that couldn't be inserted because the author hit their weekly limit. Drained by the
 `processQueue` cron when capacity reopens. Written by `syncPosts.upsertPost` (Apify path only).
 
-| Field                                                                                     | Type          | Req | Meaning                                          |
-|-------------------------------------------------------------------------------------------|---------------|:---:|--------------------------------------------------|
+| Field                                                                                     | Type          | Req  | Meaning                                          |
+|-------------------------------------------------------------------------------------------|---------------|:----:|--------------------------------------------------|
 | `linkedinPostUrn`                                                                         | string        |  ✓  | Dedupe key (`by_urn`).                           |
 | `authorId`                                                                                | `id('users')` |  ✓  | Author (`by_author`).                            |
 | `content`, `publishedAt`, `likeCount`, `commentCount`, `mediaUrls`, `hidden`, `sourceUrl` | —             | ✓/– | Snapshot carried so promotion needs no re‑fetch. |
 | `queuedAt`                                                                                | number        |  ✓  | Enqueue timestamp (ms).                          |
 
-On promotion, `authorTierRank` is recomputed and `interactionLimitReached` is set `false`.
+On promotion, `authorTierRank` is recomputed and `interactionLimitReached` is derived from the queued engagement counts
+against the author's cap (`hasReachedInteractionLimit`) — an already‑over‑cap queued post is promoted flagged (out of
+feed).
 
 #### `sessions` — app's own auth tokens
 
-Random UUID tokens issued by the OAuth callback. 30‑day TTL.
+Random UUID tokens issued by the OAuth callback. **15‑day sliding TTL** — the window is renewed on authenticated use
+once it passes the halfway mark, so active users stay logged in while an idle (or stolen‑but‑unused) token dies 15 days
+after its last use. `SESSION_TTL_MS` in `convex/sessions.ts` is the single source of truth; renewal lives in
+`resolveSession` (mutation ctx) / `requireAuthAction` (via
+`sessions.slide`).
 
 | Field       | Type          | Req | Meaning                                                                                                                 |
 |-------------|---------------|:---:|-------------------------------------------------------------------------------------------------------------------------|
-| `token`     | string        |  ✓  | Opaque session token (`by_token`).                                                                                      |
-| `userId`    | `id('users')` |  ✓  | Session owner (`by_userId`).                                                                                            |
-| `expiresAt` | number        |  ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-session cleanup cron (range scan, not a full-table `.filter()`). |
+| `token`     | string        | ✓  | Opaque session token (`by_token`).                                                                                      |
+| `userId`    | `id('users')` | ✓  | Session owner (`by_userId`).                                                                                            |
+| `expiresAt` | number        | ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-session cleanup cron (range scan, not a full-table `.filter()`). |
 
 #### `oauthStates` — CSRF nonces
 
-Single‑use OAuth `state` values; ~10‑minute TTL; deleted on validation. The row also carries the
-plan-selection the user made on the landing page, so it survives the OAuth redirect round-trip.
+Single‑use OAuth `state` values; ~10‑minute TTL; deleted on validation. The row also carries the plan-selection the user
+made on the landing page, so it survives the OAuth redirect round-trip.
 
 | Field       | Type                         | Req | Meaning                                                                                                                                        |
 |-------------|------------------------------|:---:|------------------------------------------------------------------------------------------------------------------------------------------------|
-| `state`     | string                       |  ✓  | Random nonce (`by_state`).                                                                                                                     |
-| `expiresAt` | number                       |  ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron.                                                                     |
+| `state`     | string                       | ✓  | Random nonce (`by_state`).                                                                                                                     |
+| `expiresAt` | number                       | ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron.                                                                     |
 | `plan`      | `'starter'\|'growth'\|'pro'` |  –  | Tier chosen on the landing Pricing page before starting OAuth. Absent when OAuth is initiated without a plan selection (e.g. direct app link). |
 | `interval`  | `'monthly'\|'annual'`        |  –  | Billing interval chosen alongside `plan`. Absent when `plan` is absent.                                                                        |
 
-#### `rateLimits` — fixed‑window counters
+#### Rate‑limit counters — the `@convex-dev/rate-limiter` component
 
-| Field         | Type          | Req | Meaning                                                                        |
-|---------------|---------------|:---:|--------------------------------------------------------------------------------|
-| `userId`      | `id('users')` |  ✓  | Subject.                                                                       |
-| `action`      | string        |  ✓  | Action name (`submitPost`, `commentOnPost`, `reactToPost`, `profile_refresh`). |
-| `windowStart` | number        |  ✓  | Window start (ms).                                                             |
-| `count`       | number        |  ✓  | Calls in window.                                                               |
-
-Index: `by_user_and_action [userId, action]`.
+There is **no app `rateLimits` table**. Per‑user, per‑action fixed‑window counters live in the **
+`@convex-dev/rate-limiter`** component's own isolated tables (mounted in `convex.config.ts`, consumed through
+`lib/rateLimit.ts`). Keys are `(action, userId)`; each caller's window is passed inline. See **§11 — Rate limiting**.
+Erasure clears a user's counters via `resetUserRateLimits` (see **§14 — Privacy & Compliance**).
 
 #### `appSettings` — singleton global settings
 
@@ -496,7 +510,7 @@ Accessed via `.first()` (treated as a singleton; no index).
 
 | Field                       | Type    | Req | Meaning                                                                                                   |
 |-----------------------------|---------|:---:|-----------------------------------------------------------------------------------------------------------|
-| `apifySyncEnabled`          | boolean |  ✓  | Master toggle for the Apify post‑sync cron.                                                               |
+| `apifySyncEnabled`          | boolean | ✓  | Master toggle for the Apify post‑sync cron.                                                               |
 | `apifyEnabled`              | boolean |  –  | **Master Apify kill-switch.** Absent ⇒ enabled. When false, all Apify (post sync + profile scrape) halts. |
 | `apifyProfileScrapeEnabled` | boolean |  –  | Gates the LinkedIn profile scrape. Absent ⇒ disabled (opt-in; paid actor).                                |
 | `lastApifySyncAt`           | number  |  –  | Last post‑sync timestamp (cron or manual "Sync all posts").                                               |
@@ -504,27 +518,35 @@ Accessed via `.first()` (treated as a singleton; no index).
 | `lastProfileScrapeAt`       | number  |  –  | Last profile‑scrape fan‑out timestamp (manual "Sync all users").                                          |
 | `lastProfileScrapeError`    | string  |  –  | Last profile‑scrape fan‑out error message.                                                                |
 
-#### `featuredPostUsage` — per‑user monthly featured quota **(defined but unused)**
+#### `featuredPostUsage` — per‑user monthly featured‑post quota
 
-`userId`, `month` (`"YYYY-MM"`), `usedCount`; index `by_user_month`. **No read/write call sites
-exist** — the featured‑post quota feature is not yet implemented.
+One row per `(userId, month)` that has featured at least one post. Read and written by `posts.featurePost` /
+`posts.getFeaturedUsage` (backend/B07); the deletion cascade (`privacy/deletion.ts`) also owns rows here. Featuring
+permanently consumes a slot for the month — `posts.unfeaturePost` never decrements `usedCount`.
+
+| Field       | Type          | Req | Meaning                                                                                                                                                                |
+|-------------|---------------|:---:|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `userId`    | `id('users')` | ✓  | Featuring user.                                                                                                                                                        |
+| `month`     | string        | ✓  | UTC calendar month key, `"YYYY-MM"` (`lib/postLimit.ts:currentUtcMonthKey`) — UTC so the quota resets at the same instant for every user regardless of local timezone. |
+| `usedCount` | number        | ✓  | Posts featured so far this month. Compared against `planLimits.featuredPerMonth` (`lib/postLimit.ts:isFeaturedLimitReached`).                                          |
+
+Index: `by_user_month [userId, month]` — read with `.unique()` since a user has at most one row per month.
 
 #### `consentRecords` — append-only consent/withdrawal log (GDPR)
 
 One row per consent event. Current effective consent for a given `(userId, purpose)` pair is the **most recent** row for
-that pair. Queried via `by_user_and_purpose` index. The `purpose` union is intentionally narrow at launch (
-`'marketing' | 'analytics'`); `'location_enrichment'` is reserved for a future Apify profile-scrape opt-in that is
-disabled at launch.
+that pair. Queried via `by_user`; latest-per-purpose is resolved in code (`latestConsentByPurpose`), not via an index.
+The `purpose` union is intentionally narrow at launch (`'marketing' | 'analytics'`).
 
 | Field           | Type                       | Req | Meaning                                                |
 |-----------------|----------------------------|:---:|--------------------------------------------------------|
-| `userId`        | `id('users')`              |  ✓  | User who granted or withdrew consent.                  |
-| `purpose`       | `'marketing'\|'analytics'` |  ✓  | Consent purpose.                                       |
-| `granted`       | boolean                    |  ✓  | `true` = consent granted; `false` = consent withdrawn. |
-| `policyVersion` | string                     |  ✓  | Policy version in effect at time of consent event.     |
-| `createdAt`     | number                     |  ✓  | Event timestamp (ms).                                  |
+| `userId`        | `id('users')`              | ✓  | User who granted or withdrew consent.                  |
+| `purpose`       | `'marketing'\|'analytics'` | ✓  | Consent purpose.                                       |
+| `granted`       | boolean                    | ✓  | `true` = consent granted; `false` = consent withdrawn. |
+| `policyVersion` | string                     | ✓  | Policy version in effect at time of consent event.     |
+| `createdAt`     | number                     | ✓  | Event timestamp (ms).                                  |
 
-Indexes: `by_user [userId]`, `by_user_and_purpose [userId, purpose]`.
+Index: `by_user [userId]`.
 
 #### `dataExportRequests` — asynchronous data-export (Subject Access Request)
 
@@ -534,49 +556,46 @@ objects.
 
 | Field           | Type                                      | Req | Meaning                                                                         |
 |-----------------|-------------------------------------------|:---:|---------------------------------------------------------------------------------|
-| `userId`        | `id('users')`                             |  ✓  | Requesting user (`by_user`).                                                    |
-| `status`        | `'pending'\|'ready'\|'failed'\|'expired'` |  ✓  | Job state.                                                                      |
-| `requestedAt`   | number                                    |  ✓  | When the request was received (ms).                                             |
+| `userId`        | `id('users')`                             | ✓  | Requesting user (`by_user`).                                                    |
+| `status`        | `'pending'\|'ready'\|'failed'\|'expired'` | ✓  | Job state.                                                                      |
+| `requestedAt`   | number                                    | ✓  | When the request was received (ms).                                             |
 | `fileStorageId` | `id('_storage')`                          |  –  | Convex storage id for the generated export bundle. Set when `status = 'ready'`. |
 | `expiresAt`     | number                                    |  –  | When the download link/bundle expires (ms).                                     |
 
 Indexes: `by_user [userId]`, `by_status [status]` — the latter lets the retention cron pull `'ready'`
 exports via index instead of a full‑table `.filter()` scan.
 
-#### `auditLogs` — accountability log (GDPR Art. 5(2))
+#### `auditLogs` — accountability log (GDPR Art. 5 (2))
 
 Append-only record of DSR actions, consent changes, and admin access to personal data. A pseudonymized subset is
 retained past account deletion (actorId and targetUserId nulled out, action/metadata preserved).
 
 | Field          | Type                        | Req | Meaning                                                                                                       |
 |----------------|-----------------------------|:---:|---------------------------------------------------------------------------------------------------------------|
-| `actor`        | `'user'\|'admin'\|'system'` |  ✓  | Who triggered the action.                                                                                     |
+| `actor`        | `'user'\|'admin'\|'system'` | ✓  | Who triggered the action.                                                                                     |
 | `actorId`      | `id('users')`               |  –  | Convex user id of the actor (absent for system-triggered events or after pseudonymization).                   |
-| `action`       | string                      |  ✓  | Structured action name (e.g. `'consent.granted'`, `'dsr.export_requested'`, `'admin.view_user'`).             |
+| `action`       | string                      | ✓  | Structured action name (e.g. `'consent.granted'`, `'dsr.export_requested'`, `'admin.view_user'`).             |
 | `targetUserId` | `id('users')`               |  –  | The user this action was performed on, if applicable.                                                         |
 | `metadata`     | string                      |  –  | JSON-encoded additional context (e.g. `purpose`, `policyVersion`). Stored as string to avoid schema coupling. |
-| `createdAt`    | number                      |  ✓  | Event timestamp (ms).                                                                                         |
+| `createdAt`    | number                      | ✓  | Event timestamp (ms).                                                                                         |
 
 Indexes: `by_target [targetUserId]`, `by_created [createdAt]`.
 
 #### `feedback` — user-submitted product feedback
 
-One row per feedback submission. `userId` is cleared on account deletion (anonymization, not deletion).
-Legacy single-reply fields (`responseText`, `respondedAt`, `respondedBy`) are kept as optional but
-**deprecated** — `feedbackResponses` is now the source of truth for replies.
+One row per feedback submission. `userId` is cleared on account deletion (anonymization, not deletion). Replies live
+entirely in the separate `feedbackResponses` table below (one row per admin reply) — the row itself never carries the
+reply text.
 
-| Field          | Type                                                                                            | Req | Meaning                                      |
-|----------------|-------------------------------------------------------------------------------------------------|:---:|----------------------------------------------|
-| `userId`       | `id('users')`                                                                                   |  –  | Submitter (cleared on account deletion).     |
-| `category`     | `'feature_request'\|'bug'\|'comment'\|'criticism'\|'praise'\|'question'\|'suggestion'\|'other'` |  ✓  | Feedback category.                           |
-| `message`      | string                                                                                          |  ✓  | Free-text feedback body (≤4000 chars).       |
-| `status`       | `'new'\|'responded'\|'archived'`                                                                |  ✓  | Triage state.                                |
-| `createdAt`    | number                                                                                          |  ✓  | Submission timestamp (ms).                   |
-| `responseText` | string                                                                                          |  –  | **Deprecated.** Legacy single-reply text.    |
-| `respondedAt`  | number                                                                                          |  –  | **Deprecated.** Legacy reply timestamp (ms). |
-| `respondedBy`  | `id('users')`                                                                                   |  –  | **Deprecated.** Legacy responding admin.     |
+| Field       | Type                                                                                            | Req | Meaning                                  |
+|-------------|-------------------------------------------------------------------------------------------------|:---:|------------------------------------------|
+| `userId`    | `id('users')`                                                                                   |  –  | Submitter (cleared on account deletion). |
+| `category`  | `'feature_request'\|'bug'\|'comment'\|'criticism'\|'praise'\|'question'\|'suggestion'\|'other'` | ✓  | Feedback category.                       |
+| `message`   | string                                                                                          | ✓  | Free-text feedback body (≤4000 chars).   |
+| `status`    | `'new'\|'responded'\|'archived'`                                                                | ✓  | Triage state.                            |
+| `createdAt` | number                                                                                          | ✓  | Submission timestamp (ms).               |
 
-Indexes: `by_user [userId]`, `by_status [status]`.
+Index: `by_user [userId]`.
 
 #### `feedbackResponses` — append-only admin reply thread
 
@@ -584,49 +603,64 @@ Each row is one admin reply to a feedback item. Multiple rows per feedback item 
 
 | Field         | Type             | Req | Meaning                     |
 |---------------|------------------|:---:|-----------------------------|
-| `feedbackId`  | `id('feedback')` |  ✓  | Parent feedback item.       |
-| `responderId` | `id('users')`    |  ✓  | Admin who wrote this reply. |
-| `text`        | string           |  ✓  | Reply text.                 |
-| `createdAt`   | number           |  ✓  | Reply timestamp (ms).       |
+| `feedbackId`  | `id('feedback')` | ✓  | Parent feedback item.       |
+| `responderId` | `id('users')`    | ✓  | Admin who wrote this reply. |
+| `text`        | string           | ✓  | Reply text.                 |
+| `createdAt`   | number           | ✓  | Reply timestamp (ms).       |
 
 Index: `by_feedback [feedbackId, createdAt]` (chronological per feedback item).
 
 #### `motds` — admin Message of the Day
 
 Admin-authored announcements. Exactly one is shown at a time: the newest `enabled` row whose
-`[startAt, expiresAt)` window covers "now" (`convex/motd/motd.ts:selectActiveMotd`). Hard-deleted
-on removal (admin content, not personal data).
+`[startAt, expiresAt)` window covers "now" (`convex/motd/motd.ts:selectActiveMotd`). Hard-deleted on removal (admin
+content, not personal data).
 
 | Field       | Type                     | Req | Meaning                                                                                          |
 |-------------|--------------------------|:---:|--------------------------------------------------------------------------------------------------|
-| `bodies`    | `record<string, string>` |  ✓  | Locale code → markdown body. `en` required (validation) and is the fallback for missing locales. |
-| `important` | boolean                  |  ✓  | `false` → dismissible top banner; `true` → blocking modal (closable only via OK).                |
-| `enabled`   | boolean                  |  ✓  | Admin on/off switch.                                                                             |
+| `bodies`    | `record<string, string>` | ✓  | Locale code → markdown body. `en` required (validation) and is the fallback for missing locales. |
+| `important` | boolean                  | ✓  | `false` → dismissible top banner; `true` → blocking modal (closable only via OK).                |
+| `enabled`   | boolean                  | ✓  | Admin on/off switch.                                                                             |
 | `startAt`   | number                   |  –  | Optional scheduled start (ms). Absent ⇒ active immediately.                                      |
 | `expiresAt` | number                   |  –  | Optional "limited date" (ms). Absent ⇒ never expires.                                            |
-| `createdBy` | `id('users')`            |  ✓  | Admin who created it.                                                                            |
-| `createdAt` | number                   |  ✓  | Creation timestamp (ms); also the tie-breaker for "newest active".                               |
-| `updatedAt` | number                   |  ✓  | Last-edit timestamp (ms).                                                                        |
+| `createdBy` | `id('users')`            | ✓  | Admin who created it.                                                                            |
+| `createdAt` | number                   | ✓  | Creation timestamp (ms); also the tie-breaker for "newest active".                               |
+| `updatedAt` | number                   | ✓  | Last-edit timestamp (ms).                                                                        |
 
 Index: `by_enabled_and_created [enabled, createdAt]` — the viewer query walks `enabled=true` newest-first.
 
 #### `userInteractions` — per-user engagement log
 
-One row per reaction or comment a user made on a post (written best-effort by `recordInteraction` after a
-successful `reactToPost` / `commentOnPost`). Distinct from the aggregate `posts.likeCount` / `commentCount`.
-Powers the **DSR export** (§13B — included in the user's data bundle, deleted in the erasure cascade) and a
-future admin dashboard.
+One row per reaction or comment a user made on a post (written best-effort by `recordInteraction` after a successful
+`reactToPost` / `commentOnPost`). Distinct from the aggregate `posts.likeCount` / `commentCount`. Powers the **DSR
+export** (§13B — included in the user's data bundle, deleted in the erasure cascade) and a future admin dashboard.
 
 | Field       | Type                      | Req | Meaning                                          |
 |-------------|---------------------------|:---:|--------------------------------------------------|
-| `userId`    | `id('users')`             |  ✓  | Who reacted / commented.                         |
-| `postId`    | `id('posts')`             |  ✓  | The target post.                                 |
-| `kind`      | `'reaction' \| 'comment'` |  ✓  | Which interaction this row records.              |
+| `userId`    | `id('users')`             | ✓  | Who reacted / commented.                         |
+| `postId`    | `id('posts')`             | ✓  | The target post.                                 |
+| `kind`      | `'reaction' \| 'comment'` | ✓  | Which interaction this row records.              |
 | `reaction`  | enum                      |  –  | Reaction value (set when `kind === 'reaction'`). |
 | `comment`   | string                    |  –  | Comment text (set when `kind === 'comment'`).    |
-| `createdAt` | number                    |  ✓  | Interaction timestamp (ms).                      |
+| `createdAt` | number                    | ✓  | Interaction timestamp (ms).                      |
 
-Indexes: `by_user [userId]` (DSR export + a user's activity), `by_post [postId]` (admin: who engaged with a post).
+Index: `by_user [userId]` (DSR export + a user's activity).
+
+#### `userPostState` — per- (user, post) engagement state
+
+One lazily-created row per (user, post), distinct from the append-only `userInteractions` log. Holds **current** state:
+`reactedAt` (set on the user's first reaction so a repeat doesn't double-count / double-bill — a member holds at most
+one reaction per post) and `commentDraft` (the last AI-generated comment for the post, reloaded into `CommentBox` for
+reuse/regeneration). Per-user data: included in the DSR export and deleted in the erasure cascade (§13B).
+
+| Field          | Type          | Req | Meaning                                                        |
+|----------------|---------------|:---:|----------------------------------------------------------------|
+| `userId`       | `id('users')` | ✓  | Owner of the state row.                                        |
+| `postId`       | `id('posts')` | ✓  | The target post.                                               |
+| `reactedAt`    | number        |  –  | Set on the first reaction; presence = already counted (dedup). |
+| `commentDraft` | string        |  –  | Last AI-generated comment for the post (reuse/regenerate).     |
+
+Index: `by_user_and_post [userId, postId]` — the dedup/draft lookups and the by-user DSR/erasure scan.
 
 ---
 
@@ -636,25 +670,27 @@ Indexes: `by_user [userId]` (DSR export + a user's activity), `by_post [postId]`
 
 | Kind         | Reactive? | DB access                           | External fetch | Used for                                                           |
 |--------------|-----------|-------------------------------------|----------------|--------------------------------------------------------------------|
-| `query`      | ✓ (live)  | `ctx.db` read                       | ✗              | reads (feed, getMe, usage)                                         |
-| `mutation`   | –         | `ctx.db` read/write (transactional) | ✗              | writes (upsert, ban, plan limits)                                  |
-| `action`     | –         | via `ctx.runQuery/runMutation`      | ✓              | LinkedIn/Stripe/Apify calls (submitPost, comment, react, checkout) |
+| `query`      | ✓ (live) | `ctx.db` read                       | ✗             | reads (feed, getMe, usage)                                         |
+| `mutation`   | –         | `ctx.db` read/write (transactional) | ✗             | writes (upsert, ban, plan limits)                                  |
+| `action`     | –         | via `ctx.runQuery/runMutation`      | ✓             | LinkedIn/Stripe/Apify calls (submitPost, comment, react, checkout) |
 | `internal*`  | –         | as above                            | as above       | server‑only; not callable from clients                             |
-| `httpAction` | –         | via `ctx.run*`                      | ✓              | OAuth routes + Stripe webhook (`http.ts`)                          |
+| `httpAction` | –         | via `ctx.run*`                      | ✓             | OAuth routes + Stripe webhook (`http.ts`)                          |
 | cron         | –         | mutation/action                     | as above       | scheduled jobs (`crons.ts`)                                        |
 
 ### Auth helper pattern (every protected function uses it)
 
-Clients **never** pass a `userId`. They pass a `sessionToken`; the server resolves it. All helpers
-live in `convex/lib/auth.ts`:
+Clients **never** pass a `userId`. They pass a `sessionToken`; the server resolves it. All helpers live in
+`convex/lib/auth.ts`:
 
-- `resolveSession(ctx, token)` → `Doc<'users'> | null` — resolves token → user **without** ban
-  enforcement. Used by `getMe` so a banned user gets an `isBanned` signal (not `null`).
-- `requireAuth(ctx, token)` → `Doc<'users'>` — for queries/mutations. Throws `'Unauthorized'` if
-  the token is missing/expired/invalid; throws `'Account suspended'` if banned.
+- `resolveSession(ctx, token)` → `Doc<'users'> | null` — resolves token → user **without** ban enforcement. Used by
+  `getMe` so a banned user gets an `isBanned` signal (not `null`). In a **mutation** ctx it also slides the session's
+  expiry forward once past the halfway mark (a query ctx is read‑only and skips the write).
+- `requireAuth(ctx, token)` → `Doc<'users'>` — for queries/mutations. Throws `'Unauthorized'` if the token is
+  missing/expired/invalid; throws `'Account suspended'` if banned.
 - `requireAuthAction(ctx, token)` → `Doc<'users'>` — same for actions (resolves via
-  `ctx.runQuery(internal.sessions.getByToken)` + `internal.users.getWithTokens`, returning the
-  token‑bearing record).
+  `ctx.runQuery(internal.sessions.getByToken)` + `internal.users.getWithTokens`, returning the token‑bearing record).
+  Slides the session forward (past halfway) via `ctx.runMutation(internal.sessions.slide)`, since actions can't write
+  directly.
 - `assertNotBanned(user)` — the single definition of "what a ban blocks"; called by both
   `requireAuth*`.
 
@@ -662,238 +698,305 @@ live in `convex/lib/auth.ts`:
 
 - **Reads soft‑fail:** `getMe`, `getFeed`, `getMyPosts`, `getWeeklyUsage`, `getSubscriptionInfo`,
   `checkIsAdmin` catch auth errors and return `null` / `[]` / `false` rather than throwing.
-- **Writes hard‑fail:** mutations/actions `throw new Error(message)`.
-- Backend throws **plain `Error`** (not `ConvexError`).
-- External‑call failures are **logged server‑side with the real error** and surfaced to clients as
-  **generic sanitized messages** (see [§17](#17-security-posture)).
+- **Writes hard‑fail:** mutations/actions throw on the unhappy path.
+- **User‑facing messages throw `ConvexError(message)`** — its payload is the one thing Convex delivers to the client
+  intact in **production** (plain `Error` messages are redacted there). Used for validation, ownership/authorization,
+  not‑found, and plan‑limit/gate messages across every function the app surfaces to a user or admin: `submitPost` and
+  the
+  `posts` mutations, `reactToPost`/`commentOnPost`, `generateComment`, `createCheckoutSession`/`createPortalSession`,
+  `updateProfile`/`setPostVisibility`/`setCommentLanguage`/`refreshProfileFromLinkedIn`, the admin mutations (sync,
+  `setContactUserLimit`, `setUserTier`, `setUserSubscriptionStatus`, ban/unban, `validateLimitArgs`), the
+  `feedback` mutations, and the `assertCanEngage`/`assertCanRefresh` gate helpers. The card‑gate sentinel
+  `assertCanEngage` throws `ConvexError('PAYMENT_REQUIRED: …')` so the feed can still detect it by prefix in production.
+- **Internal invariants and external‑call failures throw plain `Error`** (e.g. `Failed to upsert post`, missing
+  `STRIPE_SECRET_KEY`) — deliberately redacted in production and **logged server‑side with the real error**, surfaced to
+  clients as generic sanitized messages (see [§17](#17-security-posture)).
+- **Frontend display:** catch sites never render `err.message` directly — Convex frames it as
+  `[CONVEX …] Server Error Uncaught Error: <msg> at handler (…) Called by client` (and redacts `<msg>` in production).
+  All UI catch handlers pass the error through `friendlyError(err, fallback)`
+  (`app/src/lib/errors.ts`), which unwraps `ConvexError.data`, strips the frame off dev messages, and falls back to a
+  caller‑supplied string when nothing readable remains.
 
 ### LinkedIn member‑API calls
 
-All authenticated requests to `api.linkedin.com` (Bearer = the user's token) route through the
-single `linkedin/client.ts` `callMemberApi` seam, which owns the `Authorization` header, the
-`Content-Type` header (when a body is present), and the log-real-error → throw-sanitized error
-policy. Only the OAuth token exchange (`exchangeCodeForTokens`) calls LinkedIn directly — it targets
+All authenticated requests to `api.linkedin.com` (Bearer = the user's token) route through the single
+`linkedin/client.ts` `callMemberApi` seam, which owns the `Authorization` header, the
+`Content-Type` header (when a body is present), and the log-real-error → throw-sanitized error policy. Only the OAuth
+token exchange (`exchangeCodeForTokens`) calls LinkedIn directly — it targets
 `www.linkedin.com` with a `client_secret` form‑POST and is a different auth shape.
 
 ### Type‑shim landscape
 
-The former `convex/convexTypes.ts` hand‑mirror of `DataModel`/`ctx`/`db` shapes has been **removed**;
-all backend code now imports generated `Doc<>`/`Id<>`/`QueryCtx`/`MutationCtx`/`ActionCtx` from
+The former `convex/convexTypes.ts` hand‑mirror of `DataModel`/`ctx`/`db` shapes has been **removed**; all backend code
+now imports generated `Doc<>`/`Id<>`/`QueryCtx`/`MutationCtx`/`ActionCtx` from
 `convex/_generated/`. Two intentional patterns remain:
 
 1. **Test mock seam.** `convex/lib/audit.ts` and the two Apify jobs (`jobs/syncPostsApify.ts`,
    `jobs/scrapeProfileApify.ts`) import `internalActionGeneric` / `internalMutationGeneric` from
    `convex/server` (the registration generic the `convex-mocks` Vitest alias replaces) and cast
-   `ctx as unknown as ActionCtx` using the **generated** `ActionCtx`. Each fan‑out handler annotates
-   its return type (`Promise<void>`) to break the same‑file `internal.*` type cycle that the precise
-   generated ctx would otherwise introduce.
-2. `app/src/convex.ts` — re‑exports `{ api }` from `convex/_generated/api` for a stable app‑side
-   import path.
+   `ctx as unknown as ActionCtx` using the **generated** `ActionCtx`. Each fan‑out handler annotates its return type
+   (`Promise<void>`) to break the same‑file `internal.*` type cycle that the precise generated ctx would otherwise
+   introduce.
+2. `app/src/convex.ts` — re‑exports `{ api }` from `convex/_generated/api` for a stable app‑side import path.
 
 ---
 
 ## 7. Authentication & Identity
 
-LinkedIn **3‑legged OAuth 2.0 (OIDC)**, brokered entirely by Convex HTTP actions so secrets stay
-server‑side. After OAuth the app uses its **own opaque session tokens**.
+LinkedIn **3‑legged OAuth 2.0 (OIDC)**, brokered entirely by Convex HTTP actions so secrets stay server‑side. After
+OAuth the app uses its **own opaque session tokens**.
 
-- **Scopes requested** (`convex/linkedin/oauth.ts`):
-  `openid profile email r_basicprofile w_member_social_feed w_member_social`.
+- **Scopes requested** (`convex/linkedin/oauth.ts`): `openid profile email` — the only Standard‑tier product (Sign In
+  with LinkedIn / OIDC), so **every** LinkedIn member can authenticate. No
+  `w_member_social*` / `r_basicprofile`: the app makes **no LinkedIn API writes** (react/comment happen on LinkedIn via
+  the handoff, §11), and those scopes are Development‑tier/ungranted — requesting them throws
+  `unauthorized_scope_error` for anyone without a role on the app (i.e. breaks login for all non‑team users).
 - **OAuth endpoints:** authorize `https://www.linkedin.com/oauth/v2/authorization`, token
   `https://www.linkedin.com/oauth/v2/accessToken`, userinfo `https://api.linkedin.com/v2/userinfo`
   (OIDC; replaces the deprecated `/v2/me`).
-- **CSRF:** a random `state` is stored in `oauthStates` (10‑min TTL) before redirect and is
-  single‑use validated on callback (deleted before the expiry check → replay‑safe).
-- **Session token:** a random UUID stored in `sessions` (30‑day TTL); returned to the app in the
-  redirect URL `?session=…`. The app keeps it in **`sessionStorage`** (key `sessionToken`).
-- **Sign‑out:** the app auto‑starts OAuth for any unauthenticated visit (see `RequireAuth`, §14), and
-  LinkedIn keeps its own SSO session — so a naive sign‑out is silently re‑authenticated. Sign‑out
-  therefore sets a **persistent `signedOut` marker** (`localStorage`, `lib/session.ts`) _before_
-  calling `users.logout`, drops the local `sessionToken`, and redirects to the **marketing/landing
-  site** (`VITE_LANDING_URL` — the separate Next.js app at its own origin, see §15). The marker does
-  two jobs: **(1)** it wins the race against the **reactive** `getMe → null` that `users.logout`
-  triggers while the SPA is still mounted (which would otherwise trip `RequireAuth`'s auto‑OAuth and
-  silently re‑log the user in via LinkedIn SSO → `/auth/success` → `/feed`); and **(2)** it
-  **persists across the return visit**, so when a signed‑out user navigates back to the app
-  `RequireAuth` bounces them to the landing site instead of auto‑logging them in. It is cleared on the
-  next successful login (`AuthSuccessPage`), so "auto‑redirect for login" resumes for fresh/expired
-  sessions. To log back in, the landing site's CTAs point **straight at OAuth**
-  (`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, §15) — not the app root — so a signed‑out visitor
-  doesn't ping‑pong between the landing site and the app. All three sign‑out buttons (`UserMenu`,
+- **CSRF:** a random `state` is stored in `oauthStates` (10‑min TTL) before redirect and is single‑use validated on
+  callback (deleted before the expiry check → replay‑safe).
+- **Session token:** a random UUID stored in `sessions` (**15‑day sliding TTL** — renewed on authenticated use past the
+  halfway mark; `SESSION_TTL_MS` is the source of truth); returned to the app in the redirect URL **fragment**
+  `#session=…` (fragments never reach servers/proxies/access logs, unlike query strings). The app keeps it in **
+  `sessionStorage`** (key `sessionToken`).
+- **Sign‑out:** the app auto‑starts OAuth for any unauthenticated visit (see `RequireAuth`, §14), and LinkedIn keeps its
+  own SSO session — so a naive sign‑out is silently re‑authenticated. Sign‑out therefore sets a **persistent `signedOut`
+  marker** (`localStorage`, `lib/session.ts`) _before_
+  calling `users.logout`, drops the local `sessionToken`, and redirects to the **marketing/landing site**
+  (`VITE_LANDING_URL` — the separate Next.js app at its own origin, see §15). The marker does two jobs: **(1)** it wins
+  the race against the **reactive** `getMe → null` that `users.logout`
+  triggers while the SPA is still mounted (which would otherwise trip `RequireAuth`'s auto‑OAuth and silently re‑log the
+  user in via LinkedIn SSO → `/auth/success` → `/feed`); and **(2)** it **persists across the return visit**, so when a
+  signed‑out user navigates back to the app
+  `RequireAuth` bounces them to the landing site instead of auto‑logging them in. It is cleared on the next successful
+  login (`AuthSuccessPage`), so "auto‑redirect for login" resumes for fresh/expired sessions. To log back in, the
+  landing site's CTAs point **straight at OAuth**
+  (`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, §15) — not the app root — so a signed‑out visitor doesn't ping‑pong
+  between the landing site and the app. All three sign‑out buttons (`UserMenu`,
   `BannedScreen`, `CancelDeletionScreen`) route through the shared `performSignOut()` helper in
   `app/src/lib/session.ts`, which `await`s `users.logout` to invalidate the session server‑side.
 
 ### OAuth login flow
 
-The `/auth/linkedin` start handler reads optional `plan` and `interval` query parameters from the
-URL (appended by the landing Pricing page CTAs). The `plan` value is validated against the allowed
-tier list (`starter|growth|pro`) and, together with `interval`, is stored on the `oauthStates` row
-so it survives the LinkedIn redirect round-trip.
+The `/auth/linkedin` start handler reads optional `plan` and `interval` query parameters from the URL (appended by the
+landing Pricing page CTAs). The `plan` value is validated against the allowed tier list (`starter|growth|pro`) and,
+together with `interval`, is stored on the `oauthStates` row so it survives the LinkedIn redirect round-trip.
 
 ```mermaid
 sequenceDiagram
-  participant U as User (browser)
-  participant LP as Landing (Pricing CTA)
-  participant CV as Convex .site (http.ts)
-  participant LI as LinkedIn
-  participant DB as Convex DB
-  participant A as App (React)
-
-  LP->>CV: /auth/linkedin?plan=growth&interval=annual
-  Note over LP,CV: plan/interval optional — absent on direct app link
-  CV->>DB: createOAuthState(state, +10min, plan?, interval?)
-  CV-->>U: 302 → LinkedIn authorize?scope=…&state
-  U->>LI: authenticate & consent
-  LI-->>CV: 302 /auth/linkedin/callback?code&state
-  CV->>DB: validateAndConsumeOAuthState(state) → { valid, plan?, interval? }
-  alt invalid / expired state
-    CV-->>U: 302 → APP_URL/?error=oauth_failed
-  else valid
-    CV->>LI: exchangeCodeForTokens(code)
-    LI-->>CV: access_token, refresh_token, expires_in
-    CV->>LI: GET /v2/userinfo
-    LI-->>CV: sub, name, picture
-    CV->>DB: upsertUser(...) → userId  (tokens stored server-side)
-    CV->>DB: sessions.create(token=UUID, userId, +30d)
-    CV-->>U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual
-    Note over CV,U: plan/interval omitted from hash when absent
-    U->>A: /auth/success reads hash → stores token + plan/interval → navigate /feed
-  end
+    participant U as User (browser)
+    participant LP as Landing (Pricing CTA)
+    participant CV as Convex .site (http.ts)
+    participant LI as LinkedIn
+    participant DB as Convex DB
+    participant A as App (React)
+    LP ->> CV: /auth/linkedin?plan=growth&interval=annual
+    Note over LP, CV: plan/interval optional — absent on direct app link
+    CV ->> DB: createOAuthState(state, +10min, plan?, interval?)
+    CV -->> U: 302 → LinkedIn authorize?scope=…&state
+    U ->> LI: authenticate & consent
+    LI -->> CV: 302 /auth/linkedin/callback?code&state
+    CV ->> DB: validateAndConsumeOAuthState(state) → { valid, plan?, interval? }
+    alt invalid / expired state
+        CV -->> U: 302 → APP_URL/?error=oauth_failed
+    else valid
+        CV ->> LI: exchangeCodeForTokens(code)
+        LI -->> CV: access_token, refresh_token, expires_in
+        CV ->> LI: GET /v2/userinfo
+        LI -->> CV: sub, name, picture
+        CV ->> DB: upsertUser(...) → userId (tokens stored server-side)
+        CV ->> DB: sessions.create(token=UUID, userId, +15d sliding)
+        CV -->> U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual
+        Note over CV, U: plan/interval omitted from hash when absent
+        U ->> A: /auth/success reads hash → stores token + plan/interval → navigate /feed
+    end
 ```
 
 ### Session‑authenticated request flow
 
 ```mermaid
 flowchart TD
-  C["Client calls fn(sessionToken, …)"] --> R{"requireAuth / requireAuthAction"}
-  R -->|"token missing/expired/invalid"| E1["throw 'Unauthorized'<br/>(reads soft-fail → null/[])"]
-  R -->|"user.isBanned"| E2["throw 'Account suspended'"]
-  R -->|"ok"| OK["resolve Doc&lt;users&gt;<br/>(actions also load tokens)"]
-  OK --> H["function handler runs"]
+    C["Client calls fn(sessionToken, …)"] --> R{"requireAuth / requireAuthAction"}
+    R -->|" token missing/expired/invalid "| E1["throw 'Unauthorized'<br/>(reads soft-fail → null/[])"]
+    R -->|" user.isBanned "| E2["throw 'Account suspended'"]
+    R -->|" ok "| OK["resolve Doc&lt;users&gt;<br/>(actions also load tokens)"]
+    OK --> H["function handler runs"]
 ```
 
 ### Identity / user functions (`convex/users.ts`, `linkedin/auth.ts`, `sessions.ts`)
 
-| Function                                                      | Kind              | Purpose                                                                                                                                                                                                                                                                                                                    |
-|---------------------------------------------------------------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedin.auth.upsertUser`                                    | internalMutation  | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. Never writes `isAdmin`.                                                                                                                                                                                              |
-| `users.getMe`                                                 | query (public)    | Safe profile via `resolveSession` + `toSafeMe` (strips tokens + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`).                                                                                                                                                                  |
-| `users.getWithTokens`                                         | internalQuery     | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                |
-| `users.getActiveSubscribers`                                  | internalQuery     | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                              |
-| `users.getSubscriptionInfo`                                   | query (public)    | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                             |
-| `users.getTrialProgress`                                      | query (public)    | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern. |
-| `users.setPublicIdentifier`                                   | mutation (public) | Stores validated LinkedIn vanity name (`^[A-Za-z0-9\-_]{3,100}$`, lowercased).                                                                                                                                                                                                                                             |
-| `users.dismissPublicIdentifierPrompt`                         | mutation (public) | Stamps `publicIdentifierPromptedAt` so the first‑login `PublicIdentifierPromptScreen` shows only once (the "Skip for now" path).                                                                                                                                                                                           |
-| `users.updateProfile`                                         | mutation (public) | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at 220 chars; empty string clears any of them.                                                                                                                       |
-| `users.refreshProfileFromLinkedIn`                            | mutation (public) | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                           |
-| `users.isProfileRefreshEnabled`                               | query (public)    | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                         |
-| `users.applyScrapedProfile`                                   | internalMutation  | Writes scraped fields: `country` + `headline` **fill-when-empty**; `location`/`primaryLocale` always refresh.                                                                                                                                                                                                              |
-| `users.logout`                                                | mutation (public) | Deletes the current session token.                                                                                                                                                                                                                                                                                         |
-| `users.forceLogoutAll`                                        | mutation (public) | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                               |
-| `sessions.create` / `getByToken` / `deleteByToken`            | internal          | Session lifecycle.                                                                                                                                                                                                                                                                                                         |
-| `sessions.deleteAllForUser`                                   | internalMutation  | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                 |
-| `sessions.createOAuthState` / `validateAndConsumeOAuthState`  | internalMutation  | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                         |
-| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` | internalMutation  | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                             |
+| Function                                                                 | Kind                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                   |
+|--------------------------------------------------------------------------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedin.auth.upsertUser`                                               | internalMutation               | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. `headline` is patched **only when provided** — OIDC login carries none, so a manually-set/scraped headline survives every login instead of being unset. Never writes `isAdmin`.                                                                                                     |
+| `users.getMe`                                                            | query (public)                 | Safe profile via `resolveSession` + `toSafeMe` (strips token **values** + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`; **keeps `tokenExpiresAt`** — not a secret, drives the client's reconnect‑before‑expiry banner).                                                                                                                        |
+| `linkedin.oauth.refreshAccessToken`                                      | function (server‑only)         | `grant_type=refresh_token` call to the token endpoint. Same log‑real/throw‑sanitized discipline as `exchangeCodeForTokens`; never logs the token value. Called only by the refresh cron below.                                                                                                                                                                                            |
+| `linkedin.auth.updateTokens`                                             | internalMutation               | Patches `linkedinAccessToken`/`tokenExpiresAt` (always) + `linkedinRefreshToken` (only when LinkedIn returns a new one — a non‑rotating provider's omitted `refresh_token` leaves the stored value untouched instead of clearing it). Never writes `isAdmin`, mirroring `upsertUser`.                                                                                                     |
+| `linkedin.tokenRefresh.getUsersPendingRefresh` / `refreshExpiringTokens` | internalQuery / internalAction | Refresh-cron pair — see [§13](#13-scheduled-jobs-crons).                                                                                                                                                                                                                                                                                                                                  |
+| `users.getWithTokens`                                                    | internalQuery                  | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                                                                               |
+| `users.getActiveSubscribers`                                             | internalQuery                  | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                                                                                             |
+| `users.getSubscriptionInfo`                                              | query (public)                 | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                                                                                            |
+| `users.getTrialProgress`                                                 | query (public)                 | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern.                                                                |
+| `users.setDerivedPublicIdentifier`                                       | mutation (internal)            | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                                                                                |
+| `users.dismissFirstPostPrompt`                                           | mutation (public)              | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                                                                                    |
+| `users.markFirstPostPrompted`                                            | mutation (internal)            | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                                                                                              |
+| `users.updateProfile`                                                    | mutation (public)              | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at `MAX_HEADLINE_LENGTH` (65) chars — rejected if longer; empty string clears any of them.                                                                                                                                          |
+| `users.setPostVisibility`                                                | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets `defaultVisibilityIndustries`/`defaultVisibilityCountries`; each entry validated against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values), countries upper-cased. Empty arrays are valid (⇒ everyone). Applies to future posts only — see [§11](#11-feed--engagement).                       |
+| `users.setFeedFilter`                                                    | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets the viewer's own feed filter `feedFilterIndustries`/`feedFilterCountries`; same validation as `setPostVisibility` (canonical lists, countries upper-cased). Empty arrays clear the filter. `feed.getFeed` reads these off the viewer doc, so saving re-filters the feed reactively — see [§11](#11-feed--engagement). |
+| `users.refreshProfileFromLinkedIn`                                       | mutation (public)              | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                                                                                          |
+| `users.isProfileRefreshEnabled`                                          | query (public)                 | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                                                                                        |
+| `users.applyScrapedProfile`                                              | internalMutation               | Writes scraped fields: `country` + `headline` **fill-when-empty** (scraped headline trimmed + truncated to the `MAX_HEADLINE_LENGTH` cap, never rejected); `location`/`primaryLocale` always refresh.                                                                                                                                                                                     |
+| `users.logout`                                                           | mutation (public)              | Deletes the current session token.                                                                                                                                                                                                                                                                                                                                                        |
+| `users.forceLogoutAll`                                                   | mutation (public)              | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                                                                                              |
+| `sessions.create` / `getByToken` / `deleteByToken`                       | internal                       | Session lifecycle.                                                                                                                                                                                                                                                                                                                                                                        |
+| `sessions.deleteAllForUser`                                              | internalMutation               | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                                                                                |
+| `sessions.createOAuthState` / `validateAndConsumeOAuthState`             | internalMutation               | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                                                                                        |
+| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates`            | internalMutation               | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                                                                                            |
 
-> **No token‑refresh flow exists.** Despite README claims, nothing refreshes LinkedIn tokens near
-> expiry; `refreshToken`/`tokenExpiresAt` are stored but unused. See [§19](#19-known-discrepancies-dead-code--roadmap).
+### Token lifecycle: issue → refresh window → reconnect fallback
+
+1. **Issue.** Every login (`http.ts` OAuth callback → `linkedin.auth.upsertUser`) stores
+   `linkedinAccessToken` / `linkedinRefreshToken` / `tokenExpiresAt` (= `now + expires_in*1000`, LinkedIn's access
+   tokens run **~60 days**).
+2. **Refresh window (pre‑expiry, best‑effort).** The `refresh LinkedIn tokens` cron (every
+   6h, [§13](#13-scheduled-jobs-crons))
+   renews any token entering its **last 7 days** before expiry, via `linkedin.oauth.refreshAccessToken` +
+   `linkedin.auth.updateTokens`. **This is dormant for essentially every user in practice**: the app's OAuth scopes are
+   OIDC Standard‑tier (`openid profile email`, no `offline_access`), and LinkedIn does not issue a
+   `refresh_token` for that tier — so `linkedinRefreshToken` is `undefined` on nearly every account and the cron's
+   `by_token_expiry` + refresh‑token‑present query matches nothing. The path is kept correct (and unit‑tested) for the
+   rare account that does have one, or a future tier change, without being load‑bearing for the common case.
+3. **Post‑expiry (today).** If a token is never refreshed, the daily `enforce data retention` cron
+   ([§13](#13-scheduled-jobs-crons), [§13B](#13b-privacy--compliance)) **NULLs** it once `tokenExpiresAt` is in the
+   past. After that, every LinkedIn‑dependent action fails — e.g. `posts.submitPost` throws `'No LinkedIn access
+   token. Please sign in again.'`
+4. **Reconnect fallback (built, task B01b).** Because step 2 is dormant for most users, the real mitigation is
+   `app/src/components/ReconnectBanner.tsx` — a persistent top‑of‑app banner (mounted in `App.tsx` alongside `Motd`,
+   authenticated region only) driven by the `tokenExpiresAt` `users.getMe` returns. Pure gate
+   `shouldShowReconnect(me, now)`: `tokenExpiresAt == null` → "expired" copy; `tokenExpiresAt < now + 7d` (including
+   already past) → "expiring in N day (s)" copy; otherwise renders nothing. No dismiss — it stays up while the condition
+   holds. Its "Reconnect" button just re‑runs `/auth/linkedin` (`window.location.href = AUTH_URL`, the same URL
+   `RequireAuth`'s own auto‑OAuth redirect uses) — the existing OAuth entry point already re‑stores a fresh token via
+   `upsertUser`. An expired‑token user who still manages to submit sees the `submitPost` error above, but the banner
+   means that's no longer their first signal.
 
 ---
 
 ## 8. Subscriptions & Billing
 
 Stripe is integrated via the **`@convex-dev/stripe`** component, registered in
-`convex/convex.config.ts` (`app.use(stripe)`). The component auto‑syncs customers/subscriptions and
-serves the webhook; our code adds **Checkout/Portal session creation** and **webhook callbacks**
+`convex/convex.config.ts` (`app.use(stripe)`). The component auto‑syncs customers/subscriptions and serves the webhook;
+our code adds **Checkout/Portal session creation** and **webhook callbacks**
 (`http.ts` → `stripe.ts`) that keep our `users`/`subscriptions` tables in sync.
 
 ### Price‑ID → tier mapping
 
-`lib/stripePrices.ts` is the single source of truth for the price‑to‑tier mapping. It covers
-**both monthly and annual** price IDs (six env vars total — see §16). The pure helpers
+`lib/stripePrices.ts` is the single source of truth for the price‑to‑tier mapping. It covers **both monthly and annual**
+price IDs (six env vars total — see §16). The pure helpers
 `buildPriceMap(env)` and `resolveTier(map, priceId)` are unit‑tested; the module‑level
-`ALLOWED_PRICE_IDS` set and `getTierFromPriceId(priceId)` function read `process.env` once at
-load. Unknown or blank IDs default to `starter`. `contact` is admin‑assigned, not purchasable via
-Checkout.
+`ALLOWED_PRICE_IDS` set and `getTierFromPriceId(priceId)` function read `process.env` once at load. Unknown or blank IDs
+default to `starter`. `contact` is admin‑assigned, not purchasable via Checkout.
+
+> **Tier pin — admins only.** Stripe webhook tier writes route through the pure, unit‑tested
+> `resolveSyncedTier(currentTier, isAdmin, stripeTier)` in `stripe.ts`: an **admin's tier is never
+> changed** by Stripe; everyone else follows Stripe. `contact` is **not** pinned — `contact` is
+> admin‑assigned (not Stripe‑purchasable), but a contact member who subscribes to a paid plan moves to
+> that tier like anyone else. Applied in `syncUserSubscription` and `cancelUserSubscription`.
+>
+> **Access is never revoked by cancellation** — this is enforced in `lib/access.canEngage`, not in the
+> webhook: `canEngage` grants engagement for `subscriptionStatus ∈ {trialing, active, canceled}`, so a
+> canceled member keeps commenting / reacting / submitting. Only `none` (never subscribed) and
+> `past_due` (failed payment) are gated. What a cancellation *does* remove is **feed visibility of the
+> member's own posts**, and only after their paid period ends: `cancelUserSubscription` stamps
+> `subscriptionEndsAt = current_period_end`, and `feed.isAuthorFeedEligible(author, now)` drops a
+> canceled author's posts once `now ≥ subscriptionEndsAt`. (The `subscriptions` row still records the
+> real Stripe price/status verbatim.)
 
 ### Billing intervals
 
-The BillingPage exposes a **monthly / annual toggle** (default: annual). Annual pricing is 2 months
-free: Starter $50/yr · Growth $150/yr · Pro $500/yr.
+The BillingPage exposes a **monthly / annual toggle** (default: annual). Annual pricing is 2 months free:
+Starter $50/yr · Growth $150/yr · Pro $500/yr.
 
 ### Checkout (subscribe) flow
 
-Checkout runs through `billingNode.createCheckoutSession` (a `"use node"` Convex action that calls
-the Stripe Node SDK directly). The `@convex-dev/stripe` component handles **customer
-creation/lookup** (`getOrCreateCustomer`) and **webhook sync**; `billing.ts` retains only
+Checkout runs through `billingNode.createCheckoutSession` (a `"use node"` Convex action that calls the Stripe Node SDK
+directly). The `@convex-dev/stripe` component handles **customer creation/lookup** (`getOrCreateCustomer`) and **webhook
+sync**; `billing.ts` retains only
 `createPortalSession` and the `setStripeCustomerId` internal mutation.
 
 Key checkout parameters:
 
 - `trial_period_days: 7` — 7-day trial on every new subscription.
 - `payment_method_collection: 'always'` — card required even during the trial (no free-ride signups).
-- `allow_promotion_codes: true` — enables Henriko's manual free-month promotion-code campaign on
-  Stripe hosted checkout. No coupons are created or auto-applied in code.
+- `allow_promotion_codes: true` — enables Henriko's manual free-month promotion-code campaign on Stripe hosted checkout.
+  No coupons are created or auto-applied in code.
 
 ```mermaid
 sequenceDiagram
-  participant A as App (BillingPage)
-  participant B as billingNode.createCheckoutSession (node action)
-  participant SC as Stripe component
-  participant DB as Convex DB
-  participant S as Stripe Checkout
-
-  A->>B: createCheckoutSession(priceId, sessionToken)
-  B->>B: validate priceId ∈ ALLOWED_PRICE_IDS
-  B->>B: requireAuthAction(sessionToken)
-  B->>SC: getOrCreateCustomer(userId, email, name)
-  B->>S: stripe().checkout.sessions.create(trial=7d, card-required, promo-codes)
-  B->>DB: setStripeCustomerId(userId)  (if not already set)
-  B-->>A: { url }
-  A->>S: window.location = url
+    participant A as App (BillingPage)
+    participant B as billingNode.createCheckoutSession (node action)
+    participant SC as Stripe component
+    participant DB as Convex DB
+    participant S as Stripe Checkout
+    A ->> B: createCheckoutSession(priceId, sessionToken)
+    B ->> B: validate priceId ∈ ALLOWED_PRICE_IDS
+    B ->> B: requireAuthAction(sessionToken)
+    B ->> SC: getOrCreateCustomer(userId, email, name)
+    B ->> S: stripe().checkout.sessions.create(trial=7d, card-required, promo-codes)
+    B ->> DB: setStripeCustomerId(userId) (if not already set)
+    B -->> A: { url }
+    A ->> S: window.location = url
 ```
 
-`createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an
-existing `stripeCustomerId`).
+`createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an existing
+`stripeCustomerId`).
 
 **50-interaction milestone (Plan 2B).** `billingNode.endTrialEarly` (internalAction) sets
-`trial_end: 'now'` on a Stripe subscription, converting the trial to a paid subscription
-immediately. It is scheduled by the `bumpTrialInteraction` helper in `interactions.ts` whenever a
-trialing user's **combined** `trialInteractionsMade + trialInteractionsReceived` first reaches 50
-(the `TRIAL_INTERACTION_THRESHOLD` constant, enforced by the pure `crossesThreshold` helper in
+`trial_end: 'now'` on a Stripe subscription, converting the trial to a paid subscription immediately. It is scheduled by
+the `bumpTrialInteraction` helper in `interactions.ts` whenever a trialing user's **combined**
+`trialInteractionsMade + trialInteractionsReceived` first reaches 50 (the `TRIAL_INTERACTION_THRESHOLD` constant,
+enforced by the pure `crossesThreshold` helper in
 `convex/lib/trialMilestone.ts`). Counters are bumped in `incrementCommentCount` /
-`incrementLikeCount` (awaited, reliable mutations — not the best-effort `recordInteraction` path).
-The check fires **at most once** per user: the `subscriptionStatus !== 'trialing'` guard inside
+`incrementLikeCount` (awaited, reliable mutations — not the best-effort `recordInteraction` path). The check fires **at
+most once** per user: the `subscriptionStatus !== 'trialing'` guard inside
 `bumpTrialInteraction` skips any increment once the trial has already converted. The combined
 "50 interactions OR 7 days" rule is therefore split: the 7-day side is Stripe's
-`trial_period_days` (from Checkout); the 50-interaction side fires `endTrialEarly` to end it
-early.
+`trial_period_days` (from Checkout); the 50-interaction side fires `endTrialEarly` to end it early. Both sides converge
+on the same webhook sync path (below) — `endTrialEarly`'s `trial_end: 'now'` is just another
+`customer.subscription.updated` event.
+
+`users.trialEndsAt` (ms) is sourced **verbatim from Stripe's `trial_end`** (epoch seconds × 1000,
+`null` → `undefined`) by `syncUserSubscription` — it is not computed locally as `now + 7d`. This keeps it correct across
+both the 7-day elapse and the 50-interaction early-end (`trial_end: 'now'`
+reads back as a past/`now` timestamp on the next sync). The UI's `status === 'trialing'` gate (`BillingPage`) — not the
+value of `trialEndsAt` itself — decides when the countdown is shown, so a stale past `trialEndsAt` left over after
+conversion to `active` never misrenders.
 
 ### Webhook‑driven subscription sync
 
 `http.ts` registers handlers for these Stripe events, each delegating to an internal mutation in
 `stripe.ts`:
 
-| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                              |
-|---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` + `subscriptionStatus`, clear `trialEndsAt`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
-| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`, downgrade user to `starter` + `canceled`, re‑stamp posts to `starter` rank.                                                                                                                                                                                                  |
-| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged).                                                                                                                                                                                                                                                        |
+| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
+| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`; set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this). Downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                        |
+| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears.                                                                                                                                                                                                                                                                                                                                                                |
 
 ```mermaid
 flowchart TD
-  W["Stripe webhook → /stripe/webhook"] --> T{"event type"}
-  T -->|created/updated| SYNC["syncUserSubscription"]
-  SYNC --> P1["patch user: tier, status, clear trialEndsAt"]
-  SYNC --> P2["re-stamp authorTierRank on all posts"]
-  SYNC --> P3["upsert subscriptions row"]
-  SYNC --> ACT{"status == active?"}
-  ACT -->|yes| U1["un-hide author's hidden posts"]
-  ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
-  G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
-  G -->|no| NOOP["no-op (Apify dormant at launch)"]
-  T -->|deleted| CAN["cancelUserSubscription → downgrade to starter"]
-  T -->|payment_failed| PD["markPastDue (tier unchanged)"]
+    W["Stripe webhook → /stripe/webhook"] --> T{"event type"}
+    T -->|created/updated| SYNC["syncUserSubscription"]
+    SYNC --> P1["patch user: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
+    SYNC --> P2["re-stamp authorTierRank on all posts"]
+    SYNC --> P3["upsert subscriptions row"]
+    SYNC --> ACT{"status == active?"}
+    ACT -->|yes| U1["un-hide author's hidden posts"]
+    ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
+    G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
+    G -->|no| NOOP["no-op (Apify dormant at launch)"]
+    T -->|deleted| CAN["cancelUserSubscription → tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
+    T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement)"]
 ```
 
 > **Apify dormant guard:** `syncUserSubscription` reads `appSettings` and checks
@@ -903,8 +1006,17 @@ flowchart TD
 ### Status semantics
 
 `toSubscriptionStatus(raw)` maps the raw Stripe status onto the
-`trialing|active|canceled|past_due|none` union; **unknown values default to `active`** (with a
-console warning).
+`trialing|active|canceled|past_due|none` union; **unknown values default to `active`** (with a console warning).
+
+### Renewal / access-end date (B21)
+
+`subscriptions.currentPeriodEnd` (ms — written on every webhook sync from `sub.current_period_end`, see the table above)
+was persisted but never read back anywhere. `getSubscriptionInfo` (`convex/users.ts`) now also returns
+`currentPeriodEnd` (sourced from our own `subscriptions` row, not the user table) alongside `cancelAtPeriodEnd`, so
+`BillingPage` can render "Renews on {date}" / "Access until {date}" (see §14 BillingPage). It is `undefined` when
+there's no non-canceled Stripe subscription at all (never subscribed, or fully canceled) or, transiently, if our own
+`subscriptions` row hasn't yet caught up with a brand-new webhook sync — the UI renders nothing for this line in either
+case.
 
 ---
 
@@ -915,38 +1027,67 @@ console warning).
 > is added. Trial users therefore receive **the chosen tier's limits naturally** — no `effectiveTier`
 > shim or special-case lookup is needed.
 
-Two enforced limits per tier, stored in `planLimits` and looked up via
+Three enforced limits per tier, stored in `planLimits` and looked up via
 `lib/planLimits.getPlanLimitsHelper`:
 
-- **`interactionsPerPost`** — once a post's `likeCount + commentCount ≥ interactionsPerPost`, the
-  post is flagged `interactionLimitReached = true` and **filtered out of the feed** (its engagement
-  budget is spent). Set in `interactions.ts`.
+- **`interactionsPerPost`** — the cap counts **total engagement** (the LinkedIn‑seeded `likeCount + commentCount` at
+  import **plus** in‑app taps): once `likeCount + commentCount ≥ interactionsPerPost`, the post is flagged
+  `interactionLimitReached = true` and **filtered out of the feed** (its engagement budget is spent). The flag is a
+  **one‑way flip** — never un‑set — and is evaluated at every point a post's counts are written: **at insert** by all
+  three post writers (`jobs/syncPosts.upsertPost`, `jobs/processQueue`, so an already‑over‑cap import never enters the
+  feed), on the **30‑min Apify engagement refresh** (`jobs/syncPosts.applyEngagementCounts`, so a post that crosses the
+  cap on external LinkedIn growth drops out), and on each **in‑app increment** (`interactions.ts`). The manual submit
+  path (`posts.submitPost`) instead **rejects up front** with a user‑facing message when the pasted post's current
+  LinkedIn engagement already meets the cap, rather than silently creating a hidden post.
 - **`postsPerWeek`** — max posts admitted to `posts` within a **rolling 7‑day window** (counted via
   `by_author_and_publishedAt`). Overflow either **throws** (manual submit) or is **queued** to
   `postQueue` (Apify path).
+- **`featuredPerMonth`** — max `posts.featurePost` calls per **UTC calendar month**, tracked in
+  `featuredPostUsage` (keyed by `(userId, month)`, `month = currentUtcMonthKey()`). Overflow **throws** — there is no
+  queueing path for featuring (unlike `postsPerWeek`). See [§10](#10-posts--content-pipeline) for the mutation.
 
 ### Seed values (and hardcoded safety‑net defaults)
 
-| Tier    | interactionsPerPost | postsPerWeek | tierToRank |
-|---------|:-------------------:|:------------:|:----------:|
-| starter |         25          |      1       |     1      |
-| growth  |         50          |      2       |     2      |
-| pro     |         200         |      5       |     3      |
-| contact |         200         |      5       |     4      |
+| Tier    | interactionsPerPost | postsPerWeek | featuredPerMonth | tierToRank |
+|---------|:-------------------:|:------------:|:----------------:|:----------:|
+| starter |         25          |      1       |        0         |     1      |
+| growth  |         50          |      2       |        1         |     2      |
+| pro     |         200         |      5       |        3         |     3      |
+| contact |         200         |      5       |  999 (sentinel)  |     4      |
 
-These are defined identically in **two places that must stay in sync**: the hardcoded `DEFAULTS` in
-`lib/planLimits.ts` (used only if a DB row is missing) and the seed rows in
-`migrations/seedPlanLimits.ts` (idempotent; run once via
-`npx convex run migrations/seedPlanLimits:seedPlanLimits --prod`).
+`contact`'s 999 is a "Custom/effectively‑unlimited" sentinel, not a real cap. For `interactionsPerPost` and
+`postsPerWeek`, actual enterprise deals get a per‑user override row (below) with whatever number was negotiated.
+`featuredPerMonth` is **not** part of that admin‑editable override today — a contact per‑user row always coalesces to
+the 999 sentinel (see the lookup precedence note below); a bespoke featured cap needs a direct DB edit.
+
+These live in exactly **one place** (backlog/B27): the `DEFAULTS` const in `lib/planLimits.ts`. Everything that needs a
+full tier-default row — the read fallback (below), the explicit seed mutation, and the admin self-heal — builds it from
+`DEFAULTS` via the pure helper `lib/planLimits.ts:buildTierDefaultRow(tier)`
+(`{ tier, ...DEFAULTS[tier] }`), so the numbers can't drift apart the way two hand-maintained copies could.
+
+- **`migrations/seedPlanLimits.ts`** — idempotent `internalMutation`, kept for explicit (re-)seeding of a fresh
+  environment: `npx convex run migrations/seedPlanLimits:seedPlanLimits --prod` (repo root only). Skips any tier that
+  already has a default row (no `userId`).
+- **`admin.updateTierDefault`** — **auto-initializes** the same way (see [§12](#12-admin--moderation)): if the tier has
+  no default row yet when an admin edits it, it inserts one via `buildTierDefaultRow(tier)` and then patches it with the
+  admin's new values, instead of throwing. Running `seedPlanLimits` is therefore **no longer a hard prerequisite** for
+  the admin edit path — it remains available for pre-populating an environment (e.g. before any admin has touched the
+  screen) or for bulk re-seeding.
+- **`lib/planLimits.ts`'s `DEFAULTS`** — also the safety‑net fallback read‑side (below) when a DB row is missing.
 
 ### Lookup precedence (`getPlanLimitsHelper(ctx, userId, tier)`)
 
 - **`contact`:** (1) per‑user override row (`by_user` `.unique()`) → else (2) the contact **default**
-  row (`by_tier` `.take(20).find(r => r.userId === undefined)` — a JS‑side filter, _not_ `.unique()`,
-  because `by_tier` also matches override rows) → else (3) hardcoded `DEFAULTS.contact`.
+  row (`by_tier` `.take(20).find(r => r.userId === undefined)` — a JS‑side filter, _not_ `.unique()`, because `by_tier`
+  also matches override rows) → else (3) hardcoded `DEFAULTS.contact`.
 - **all other tiers:** the single `by_tier` `.unique()` row → else `DEFAULTS[tier]`.
 - `getPlanLimits` is an `internalQuery` wrapper so **actions** (no `ctx.db`) reach this via
   `ctx.runQuery`.
+- **`featuredPerMonth` specifically** is `v.optional(v.number())` on the schema (widen‑then‑coalesce, no backfill
+  migration): whichever DB row is selected above, the helper returns
+  `row.featuredPerMonth ?? DEFAULTS[tier].featuredPerMonth`, so pre‑existing rows written before this field existed
+  (including a contact override row auto‑seeded by `admin.setUserTier` on a tier promotion) keep working without needing
+  to be individually patched.
 
 `tierToRank(tier?)`: `contact→4, pro→3, growth→2, starter→1, undefined/unknown→1`. Used to stamp
 `posts.authorTierRank`.
@@ -960,65 +1101,73 @@ Posts enter the `posts` table through **three paths**, all funneling into the si
 
 1. **Manual submission** — user pastes a LinkedIn post URL (`posts.submitPost`).
 2. **Apify cron** — daily, **only when an admin enabled `apifySyncEnabled`**, for active subscribers.
-3. **On‑activation sync** — `scheduler.runAfter(0)` triggered by the Stripe webhook when a
-   subscription becomes `active`.
+3. **On‑activation sync** — `scheduler.runAfter(0)` triggered by the Stripe webhook when a subscription becomes
+   `active`.
 
 `upsertPost` is the gatekeeper: on an **existing** URN it only patches `likeCount/commentCount/hidden`
-(no limit re‑check); on **insert** it performs an **atomic weekly‑limit check** in the same
-transaction and either inserts, throws, or (Apify path) diverts to `postQueue`. The weekly‑limit
-decision is the pure helper `lib/postLimit.ts` `isWeeklyLimitReached(recentCount, postsPerWeek)`.
+(no limit re‑check); on **insert** it performs an **atomic weekly‑limit check** in the same transaction and either
+inserts, throws, or (Apify path) diverts to `postQueue`. The weekly‑limit decision is the pure helper `lib/postLimit.ts`
+`isWeeklyLimitReached(recentCount, postsPerWeek)`.
 
 ### Manual post submission (`posts.submitPost`, action)
 
 ```mermaid
 flowchart TD
-  S["submitPost(sessionToken, postUrl)"] --> P["parseLinkedInPostUrl(url)"]
-  P -->|unrecognized| X1["throw 'Unrecognized LinkedIn post URL'"]
-  P -->|ok| AU["requireAuthAction → user (+ token)"]
-  AU -->|no token| X2["throw 'No LinkedIn access token'"]
-  AU --> ADM{"admin override?<br/>(isAdmin AND ALLOW_ADMIN_SHARE_ANY_POST=true)"}
-  ADM -->|yes: skip throttles| F["fetch(postUrl) HTML → extract data-attributed-urn"]
-  ADM -->|no| RL["rateLimit submitPost: 10/hour"]
-  RL --> WL{"recent posts (7d) ≥ postsPerWeek?"}
-  WL -->|yes| X3["throw 'Weekly post limit reached'"]
-  WL -->|no| F
-  F -->|no urn| X4["throw 'Could not find urn'"]
-  F --> OWN{"admin override?"}
-  OWN -->|yes: share ANY post| PC["parsePostContent(html) → text + media; appendMediaLinks"]
-  OWN -->|no| V["verifyPostOwnership(token, urn, linkedinId, vanityName, publicIdentifier)"]
-  V --> PC
-  PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
-  ENG --> ART{"post links an article?<br/>(extractArticleUrl finds the /pulse/… anchor)"}
-  ART -->|no| UP
-  ART -->|yes| AF["fetch(articleUrl) → parseArticle → article<br/>(best‑effort, SSRF‑guarded, non‑fatal)"]
-  AF --> UP
-  UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = false, sourceUrl=postUrl, article?)"]
-  UP --> R["return { postId }"]
+    S["submitPost(sessionToken, postUrl)"] --> RS["resolveLinkedInShortlink(postUrl)<br/>lnkd.in → linkedin.com (manual redirect, per‑hop host check)"]
+    RS -->|off‑allowlist / not linkedin . com| X1
+    RS -->|resolvedUrl| P["parseLinkedInPostUrl(resolvedUrl)"]
+    P -->|unrecognized| X1["throw 'Unrecognized LinkedIn post URL'"]
+    P -->|ok| AU["requireAuthAction → user (+ token)"]
+    AU -->|no token| X2["throw 'No LinkedIn access token'"]
+    AU --> ADM{"admin override?<br/>(isAdmin AND ALLOW_ADMIN_SHARE_ANY_POST=true)"}
+    ADM -->|yes: skip throttles| F["fetch(resolvedUrl) HTML → extractPostUrn<br/>(namespace-preserving: data-attributed-urn, else -{ns}-{id}- slug of submitted/canonical URL)"]
+    ADM -->|no| RL["rateLimit submitPost: 10/hour"]
+    RL --> WL{"recent posts (7d) ≥ postsPerWeek?"}
+    WL -->|yes| X3["throw 'Weekly post limit reached'"]
+    WL -->|no| F
+    F -->|no urn| X4["throw 'Could not find urn'"]
+    F -->|urn| EMB["fetch(/embed/feed/update/{urn}) → isEmbeddablePostHtml?<br/>(main-feed-activity-embed-card__ marker — applies to admins too)"]
+    EMB -->|auth‑walled (non‑public )|X5["throw 'post not publicly visible'"]
+EMB -->|embeddable|OWN{"admin override?"}
+OWN -->|yes: skip ownership|PC["parsePostContent(html) → text + media; appendMediaLinks"]
+OWN -->|no|V["verifyPostOwnership(postAuthorName vs OIDC name; vanity fallback)"]
+V --> PC
+PC --> ENG["parsePostEngagement(html) → likeCount, commentCount"]
+ENG --> ART{"post links an article?<br/>(extractArticleUrl finds the /pulse/… anchor)"}
+ART -->|no| UP
+ART -->|yes|AF["fetch(articleUrl) → parseArticle → article<br/>(best‑effort, SSRF‑guarded, non‑fatal)"]
+AF --> UP
+UP["upsertPost(authorId = submitter, likeCount, commentCount,<br/>hidden = false, sourceUrl=resolvedUrl, article?)"]
+UP --> R["return { postId }"]
 ```
 
-**Ownership verification** (`linkedin/verifyPostOwnership.ts`) is a two‑step fallback: **Step A**
-the UGC API (works when `w_member_social`/`r_member_social` is approved); **Step B** a local
-comparison of the post's author against the user's stored `linkedinPublicIdentifier` / `vanityName`
-(no API call). This lets the product work **without LinkedIn Partner/MDP access**.
+**Ownership verification** (`linkedin/verifyPostOwnership.ts`) anchors on the member's LinkedIn **name**, not an
+editable field. **Primary:** the post page's JSON‑LD `author.name` (parsed by `parsePostAuthor`) must match the member's
+OIDC `name` (from login; case‑/accent‑insensitive) — both come from LinkedIn and neither is editable in‑app, so it
+cannot be spoofed via a settings field. **Fallback:** the older vanity heuristic (the URL's `vanityName` vs the stored
+`linkedinPublicIdentifier`) runs **only** when the post page carried no author block — not attacker‑triggerable, since a
+submitter can't make LinkedIn omit the author. On a name‑verified post, `submitPost` also auto‑fills the member's
+`linkedinPublicIdentifier` (**set‑once**) from the author's profile URL via `users.setDerivedPublicIdentifier` — a
+trustworthy, never‑typed seed for the Apify scrape. **No LinkedIn API call** is made.
 
-**Admin override (testing only, dev‑gated).** The override is active **only** when the submitter is an
-admin **and** the `ALLOW_ADMIN_SHARE_ANY_POST` env var is `'true'` — a flag set exclusively on the
-local / dev Convex deployment (`isAdminShareOverrideEnabled`). In production the var is absent, so
-admins submit posts under exactly the same rules as everyone else. When active, `submitPost` skips
-**both** the posting throttles (hourly rate limit + weekly per‑plan limit) **and** the ownership check,
-so a dev admin may share **any** post in any volume. The ownership step is replaced by a synthesized
-`OwnershipResult` with `strategy: 'admin-override'`, empty `content` (it falls back to the HTML‑parsed
-text), and `publishedAt = now`. The post is still attributed to the **admin** (`authorId = submitter`),
-because `posts.authorId` must reference a real `users` row; the original LinkedIn author — who
-typically has no account — cannot be the `authorId`.
+**Admin override (testing only, dev‑gated).** The override is active **only** when the submitter is an admin **and** the
+`ALLOW_ADMIN_SHARE_ANY_POST` env var is `'true'` — a flag set exclusively on the local / dev Convex deployment
+(`isAdminShareOverrideEnabled`). In production the var is absent, so admins submit posts under exactly the same rules as
+everyone else. When active, `submitPost` skips **both** the posting throttles (hourly rate limit + weekly per‑plan
+limit) **and** the ownership check, so a dev admin may share **any** post in any volume. The ownership step is replaced
+by a synthesized
+`OwnershipResult` with `strategy: 'admin-override'`, empty `content` (it falls back to the HTML‑parsed text), and
+`publishedAt = now`. The post is still attributed to the **admin** (`authorId = submitter`), because `posts.authorId`
+must reference a real `users` row; the original LinkedIn author — who typically has no account — cannot be the
+`authorId`.
 
 **Engagement counts.** Manual submissions seed `likeCount` / `commentCount` from
 `parsePostEngagement(html)`, which reads schema.org `interactionStatistic` (`InteractionCounter`)
-out of the same page HTML already fetched for content — no extra API call. Best‑effort: missing data
-degrades to `0`. This mirrors the Apify path, which reads `engagement.likes/comments`.
+out of the same page HTML already fetched for content — no extra API call. Best‑effort: missing data degrades to `0`.
+This mirrors the Apify path, which reads `engagement.likes/comments`.
 
-**Content extraction** (`linkedin/parsePostContent.ts`) is best‑effort and non‑fatal (unrecognized
-HTML yields `{ text: '', media: [] }`). From the already‑fetched page HTML it parses:
+**Content extraction** (`linkedin/parsePostContent.ts`) is best‑effort and non‑fatal (unrecognized HTML yields
+`{ text: '', media: [] }`). From the already‑fetched page HTML it parses:
 
 - **Text** — from JSON‑LD blocks (`articleBody` → `description` → `text`), falling back to the
   `og:description` meta tag.
@@ -1026,110 +1175,172 @@ HTML yields `{ text: '', media: [] }`). From the already‑fetched page HTML it 
   `og:image` meta tags and JSON‑LD `image` (→ image); the **shared‑article anchor in the post body**
   (`extractArticleUrl`) plus a JSON‑LD `@type=Article` `url` fallback (→ article); JSON‑LD
   `associatedMedia.contentUrl` and **direct `.pdf` links found in the page** (→ document).
-  `findPdfLinks` tests only the path segment (before `?`/`#`) for the `.pdf` extension but **returns
-  the full URL including its query string**, so signed/expiring document tokens are preserved (the
+  `findPdfLinks` tests only the path segment (before `?`/`#`) for the `.pdf` extension but **returns the full URL
+  including its query string**, so signed/expiring document tokens are preserved (the
   `4603f40` fix).
 
-**Shared‑article link** (`extractArticleUrl`). A LinkedIn post that links an article (e.g. a Pulse
-post) does **not** expose the article URL in its JSON‑LD — the post is typed `SocialMediaPosting`,
-whose only URLs are the post's own `@id`, the author profile, and the cover image. The article link
-lives only in the post body as an `<a data-test-id="article-content">` element (also carrying a
-`feed-article-content` class/tracking name). `extractArticleUrl` selects that anchor — ignoring the
-page's "more from this author" `/pulse/…` links, which lack those markers — strips tracking
-query/hash to a clean canonical URL, and re‑validates the LinkedIn host (it is fetched server‑side, so
-the SSRF guard applies). The earlier assumed `sharedContent.url` field does not exist in real LinkedIn
-HTML and was removed.
+**Post URN** (`extractPostUrn`). The submitted post's URN is read from the fetched page HTML, **preserving its
+namespace** (`ugcPost` / `share` / `activity`). Namespace matters: LinkedIn addresses one post under all three with
+**different ids**, and the embed endpoint auth‑walls a post addressed under the wrong one (see `buildEmbedUrl` — forcing
+`activity` broke share/ugcPost embeds). Priority: **(1)** the legacy `data-attributed-urn="…"` attribute (authoritative
+when present); **(2)** a `-{namespace}-{id}-` slug from a candidate URL — the submitted/redirected URL first (it carries
+the `ugcPost`/`share` id LinkedIn minted for sharing), then the page's `<link rel="canonical">`, then `og:url`; **(3)**
+last resort, a bare activity id (`/feed/update/urn:li:activity:{id}` or a plain slug) → `urn:li:activity:{id}`. Only
+https `linkedin.com` candidate URLs are trusted (the URN seeds the embed URL and the dedup key). LinkedIn's newer
+`/posts/…` markup **no longer emits** `data-attributed-urn`, which is why the URL‑slug path exists. A format‑validated
+URN (or a `'Could not find a valid LinkedIn post URN'` throw) is the result.
+
+**Embeddability gate** (`isEmbeddablePostHtml`). LinkedIn serves a post to the **logged‑out** embed iframe
+(`/embed/feed/update/{urn}/`) only when its audience is public ("Anyone"). A restricted‑audience post —
+Connections‑only, or some "new position" occasion posts — instead returns an auth‑wall stub ("This post is
+unavailable"), which every feed viewer would see as a dead embed. Since that stub is **server‑rendered**, `submitPost`
+detects it with a second plain
+`fetch` of the embed URL and requires the `main-feed-activity-embed-card__` CSS‑class marker (present on every rendered
+card — text, image, or video — and **locale‑independent**, unlike the wall copy). A miss throws *"This LinkedIn post is
+not publicly visible…"*, telling the member to set the post's audience to **Anyone** and resubmit — so the shared feed
+never carries a walling embed. The probe runs **after** URN extraction (it needs the URN) and **applies to everyone,
+including admins under the share-any-post override** — unlike ownership/throttles (curation conveniences), a walling
+embed is a dead card in the feed no matter who submits it, so the gate is deliberately *not* skipped for admins. Note:
+post **type** (`activity` vs `ugcPost`) and **author kind** (personal vs company page) do *not*
+decide this — public `activity` posts and public personal posts embed fine; only the audience setting does. Not wrapped
+in `try/catch` (matching the page fetch above): a transient LinkedIn error propagates to the client, who can retry.
+
+**Interaction‑cap gate** (`hasReachedInteractionLimit`). After parsing the post's current LinkedIn engagement,
+`submitPost`
+rejects a post whose `likeCount + commentCount` already meets the author's `interactionsPerPost` cap (total‑engagement
+semantics, §9) with a user‑facing *"…already has N reactions and comments, which meets your plan's limit…"* — such a
+post would insert as `interactionLimitReached` and never appear in the feed, so the submitter is told up front rather
+than silently getting a hidden post. **Skipped under the admin share‑override** (the cap is left unresolved there),
+consistent with the hourly/weekly throttles it shares that bypass.
+
+**Shared‑article link** (`extractArticleUrl`). A LinkedIn post that links an article (e.g. a Pulse post) does **not**
+expose the article URL in its JSON‑LD — the post is typed `SocialMediaPosting`, whose only URLs are the post's own
+`@id`, the author profile, and the cover image. The article link lives only in the post body as an
+`<a data-test-id="article-content">` element (also carrying a
+`feed-article-content` class/tracking name). `extractArticleUrl` selects that anchor — ignoring the page's "more from
+this author" `/pulse/…` links, which lack those markers — strips tracking query/hash to a clean canonical URL, and
+re‑validates the LinkedIn host (it is fetched server‑side, so the SSRF guard applies). The earlier assumed
+`sharedContent.url` field does not exist in real LinkedIn HTML and was removed.
 
 `appendMediaLinks(text, media)` composes the stored `content`: the trimmed body, then (if any media)
-a blank line, then one `[type] url` line per media item — self‑describing for future use. The
-structured `mediaUrls` array (the bare URLs) is **persisted but not currently displayed** anywhere;
-the feed/My Posts UI shows the post via the LinkedIn embed, not this stored text (see
+a blank line, then one `[type] url` line per media item — self‑describing for future use. The structured `mediaUrls`
+array (the bare URLs) is **persisted but not currently displayed** anywhere; the feed/My Posts UI shows the post via the
+LinkedIn embed, not this stored text (see
 [§11](#11-feed--engagement) / [§14](#14-frontend--authenticated-app-app)).
 
 **Article enrichment** (`parseArticle`). When `extractArticleUrl` finds a shared article, `submitPost`
-does one extra **best‑effort, SSRF‑guarded** `fetch` of that article page and runs `parseArticle` to
-capture `{ url, title?, summary?, text?, author?, imageUrls }` into the post's `article` field
-(`lib/articleValidator.ts`):
+does one extra **best‑effort, SSRF‑guarded** `fetch` of that article page and runs `parseArticle` to capture
+`{ url, title?, summary?, text?, author?, imageUrls }` into the post's `article` field (`lib/articleValidator.ts`):
 
-- **`text`** — the **full article body** as plain text. The guest SSR page renders the whole body
-  (despite the post JSON‑LD's `isAccessibleForFree:false` flag) inside `<div
+- **`text`** — the **full article body** as plain text. The guest SSR page renders the whole body (despite the post
+  JSON‑LD's `isAccessibleForFree:false` flag) inside `<div
 data-test-id="article-content-blocks">` as a flat list of `publishing-text-block` elements.
-  `extractArticleBody` isolates that container (up to `</article>`) — excluding the header, sign‑in
-  modal, comments, and "more articles" cards — and renders each `<p>` / `<h1‑6>` / `<pre>` / list in
-  document order: paragraphs (blank‑line separated), headings on their own line, `- ` bullets, and
+  `extractArticleBody` isolates that container (up to `</article>`) — excluding the header, sign‑in modal, comments, and
+  "more articles" cards — and renders each `<p>` / `<h1‑6>` / `<pre>` / list in document order: paragraphs (blank‑line
+  separated), headings on their own line, `- ` bullets, and
   ` ` ``‑fenced code blocks (internal whitespace preserved, entities decoded).
-- **`title` / `summary` / `author`** — from the article's `@type:Article` JSON‑LD (where LinkedIn
-  unusually maps `name`→title and `headline`→summary), with `og:` tag fallbacks.
+- **`title` / `summary` / `author`** — from the article's `@type:Article` JSON‑LD (where LinkedIn unusually maps `name`
+  →title and `headline`→summary), with `og:` tag fallbacks.
 - **`imageUrls`** — cover (`og:image` / JSON‑LD) plus inline body images (`media.licdn.com` URLs inside
   `article-content-blocks`), de‑duplicated.
 
-Non‑fatal: no article link, a network error, or a parse miss simply leaves `article` undefined. The
-data is **not displayed**; it seeds a future AI‑comment feature. The Apify cron path does not populate
+Non‑fatal: no article link, a network error, or a parse miss simply leaves `article` undefined. The data is **not
+displayed**; it seeds a future AI‑comment feature. The Apify cron path does not populate
 `article`.
 
 ### Hiding & deleting a post (`posts.setPostHidden` / `posts.deletePost`, mutations)
 
-Authors manage their own shared posts from My Posts; **admins may act on any post** (moderation). Both
-mutations authorize via the pure `canModifyPost(user, post)` helper (`post.authorId === user._id ||
+Authors manage their own shared posts from My Posts; **admins may act on any post** (moderation). Both mutations
+authorize via the pure `canModifyPost(user, post)` helper (`post.authorId === user._id ||
 user.isAdmin`).
 
-- **Hide / unhide** (`setPostHidden`) flips the `hidden` flag. Hidden posts leave the public feed
-  (`getFeed` keys on `hidden === false`) but stay in the author's My Posts (so they can unhide).
-  Un‑hiding a soft‑deleted post is rejected.
-- **Delete** (`deletePost`) is a **soft delete**: it stamps `deletedAt` and sets `hidden: true`. The
-  post disappears from the feed **and** from My Posts (`getMyPosts` filters `deletedAt === undefined`),
-  but the row is intentionally **kept**. Idempotent.
+- **Hide / unhide** (`setPostHidden`) flips the `hidden` flag. Hidden posts leave the public feed (`getFeed` keys on
+  `hidden === false`) but stay in the author's My Posts (so they can unhide). Un‑hiding a soft‑deleted post is rejected.
+- **Delete** (`deletePost`) is a **soft delete**: it stamps `deletedAt` and sets `hidden: true`. The post disappears
+  from the feed **and** from My Posts (`getMyPosts` filters `deletedAt === undefined`), but the row is intentionally
+  **kept**. Idempotent.
 
-**Invariant — neither operation changes the weekly post count.** The rolling 7‑day count
-(`countPostsSince`, and the atomic check in `upsertPost`) counts **every** `posts` row in the window
-regardless of `hidden`/`deletedAt`, so keeping the row means hiding or deleting a post never frees up
-a posting slot. A hard delete is the only thing that would break this, which is why delete is soft.
-On account deletion the privacy cascade still purges these rows by `authorId` (they are not exempt).
+**Invariant — neither operation changes the weekly post count.** The rolling 7‑day count (`countPostsSince`, and the
+atomic check in `upsertPost`) counts **every** `posts` row in the window regardless of `hidden`/`deletedAt`, so keeping
+the row means hiding or deleting a post never frees up a posting slot. A hard delete is the only thing that would break
+this, which is why delete is soft. On account deletion the privacy cascade still purges these rows by `authorId` (they
+are not exempt).
+
+### Featuring a post (`posts.featurePost` / `posts.unfeaturePost`, mutations)
+
+Authors feature/unfeature their own posts from **My Posts**; **admins may act on any post** (same `canModifyPost`
+authorization as hide/delete). Featuring pins a post to the top of the feed (`lib/feedRank.ts` —
+see [§11](#11-feed--engagement))
+and is gated by a per‑tier **monthly quota** (`planLimits.featuredPerMonth`, see [§9](#9-plan-limits-system)).
+
+- **Feature** (`featurePost`) rejects with a thrown error when the caller's `featuredPostUsage` row for the current UTC
+  month already has `usedCount ≥ featuredPerMonth` (`lib/postLimit.ts:isFeaturedLimitReached`), and rejects a
+  soft‑deleted post the same way `setPostHidden` does. On success it patches the post
+  (`isFeatured: true, featuredAt: Date.now()`, plus recomputed `feedRank`/`inFeed` via `computeFeedFields` — **never**
+  hand‑rolled) and **upserts/increments** the `featuredPostUsage` row for `(userId, currentUtcMonthKey())` — both writes
+  happen inside the same mutation.
+- **Unfeature** (`unfeaturePost`) patches `isFeatured: false, featuredAt: undefined` (+ recomputed feed fields) and
+  **does not** decrement `featuredPostUsage.usedCount` — featuring permanently consumes one monthly slot by design, so
+  unfeature‑then‑refeature cannot be used to bypass the cap.
+- **Idempotency / concurrency.** Both mutations short‑circuit as a no‑op when the post is already in the target state
+  (`if (post.isFeatured) return` / `if (!post.isFeatured) return`) **before** touching `featuredPostUsage`. This is the
+  actual fix for double‑incrementing under Convex's OCC retry: without the guard, a mutation retried against post‑commit
+  state after losing a write race would re‑run the whole feature flow — including the usage increment — a second time
+  even though the post was already featured by the call it raced against.
+- **Month key.** `featuredPostUsage.month` is a deterministic **UTC** `"YYYY-MM"` string
+  (`lib/postLimit.ts:currentUtcMonthKey`), not derived from any server-local clock — the quota resets at the same
+  instant worldwide regardless of where the Convex function executes.
 
 ### Apify sync + queue pipeline
 
-The daily cron calls `jobs/syncPosts.syncAllPosts`, which is **just a router**: it does nothing
-unless `appSettings.apifySyncEnabled` is true, in which case it delegates to
+The daily cron calls `jobs/syncPosts.syncAllPosts`, which is **just a router**: it does nothing unless
+`appSettings.apifySyncEnabled` is true, in which case it delegates to
 `syncPostsApify.syncAllPostsViaApify`.
 
 ```mermaid
 flowchart TD
-  CRON["cron: syncAllPosts (daily)"] --> EN{"apifySyncEnabled?"}
-  EN -->|no| STOP["return (no-op)"]
-  EN -->|yes| FAN["syncAllPostsViaApify"]
-  FAN --> SUBS["getActiveSubscribers (status=active)"]
-  SUBS --> EACH["per user: syncUserPostsViaApify"]
-  EACH --> PID{"has linkedinPublicIdentifier?"}
-  PID -->|no| SKIP["skip"]
-  PID -->|yes| API["Apify run-sync-get-dataset-items<br/>(maxPosts=3, postedLimit=month,<br/>targetUrls=/in/{vanity})"]
-  API --> UPS["per post: upsertPost(queueOnLimitReached=true)"]
-  UPS --> LIM{"weekly limit reached on insert?"}
-  LIM -->|no| INS["insert into posts"]
-  LIM -->|yes| Q["insert into postQueue (dedupe by URN)"]
-  FAN --> ST["updateSyncStatus(lastApifySyncAt, error?)"]
+    CRON["cron: syncAllPosts (daily)"] --> EN{"apifySyncEnabled?"}
+    EN -->|no| STOP["return (no-op)"]
+    EN -->|yes| FAN["syncAllPostsViaApify"]
+    FAN --> SUBS["getActiveSubscribers (status=active)"]
+    SUBS --> EACH["per user (batches of APIFY_FANOUT_CONCURRENCY): syncUserPostsViaApify"]
+    EACH --> PID{"has linkedinPublicIdentifier?"}
+    PID -->|no| SKIP["skip"]
+    PID -->|yes| API["Apify run-sync-get-dataset-items<br/>(maxPosts=3, postedLimit=month,<br/>targetUrls=/in/{vanity})"]
+    API --> UPS["per post: upsertPost(queueOnLimitReached=true)"]
+    UPS --> LIM{"weekly limit reached on insert?"}
+    LIM -->|no| INS["insert into posts"]
+    LIM -->|yes| Q["insert into postQueue (dedupe by URN)"]
+    FAN --> ST["updateSyncStatus(lastApifySyncAt, error?)"]
 ```
 
 > Because `getActiveSubscribers` returns only `active` users, the Apify path's `hidden` is
-> effectively always `false` on the cron. Since Plan 2B, `submitPost` also sets `hidden: false`
-> unconditionally (trialing users must have a card on file and their posts are visible in the feed).
+> effectively always `false` on the cron. `submitPost` sets `hidden` via `postCreatedHidden`: carded
+> members (trialing/active) post visibly (Plan 2B), while a no-card member (`none`/`past_due`) — e.g. a
+> new member’s onboarding first post — is created hidden and revealed when they add a card.
+
+> **Bounded fan-out:** both `syncAllPostsViaApify` and `scrapeAllProfilesViaApify` fan out through
+> `settledInBatches` (`lib/concurrency.ts`) at `APIFY_FANOUT_CONCURRENCY` (5) — capping how many paid,
+> rate-limited per-user Apify runs execute at once instead of an unbounded `users.map()`, while keeping
+> the previous `Promise.allSettled` "one failure can't sink the sweep" semantics.
 
 ### Queue drain (`jobs/processQueue.processPostQueue`, daily cron)
 
 ```mermaid
 flowchart TD
-  PQ["processPostQueue (daily)"] --> B["take up to BATCH_SIZE=100 queue rows"]
-  B --> AUTH["for each distinct author"]
-  AUTH --> EX{"author exists?"}
-  EX -->|no| PURGE["delete their orphaned queued rows"]
-  EX -->|yes| CAP["capacity = postsPerWeek − recentPosts(7d)"]
-  CAP --> C0{"capacity > 0?"}
-  C0 -->|no| NEXT["skip author"]
-  C0 -->|yes| PROMO["promote oldest queued posts (by publishedAt)"]
-  PROMO --> DUP{"URN already in posts?"}
-  DUP -->|yes| DEL["delete queued row (dedupe)"]
-  DUP -->|no| INS["insert into posts (recompute authorTierRank, interactionLimitReached=false) + delete queued row"]
-  PQ --> RES{"batch full (100)?"}
-  RES -->|yes| RE["scheduler.runAfter(0) reschedule itself"]
+    PQ["processPostQueue (daily)"] --> B["take up to BATCH_SIZE=100 queue rows"]
+    B --> AUTH["for each distinct author"]
+    AUTH --> EX{"author exists?"}
+    EX -->|no| PURGE["delete their orphaned queued rows"]
+    EX -->|yes| CAP["capacity = postsPerWeek − recentPosts(7d)"]
+    CAP --> C0{"capacity > 0?"}
+    C0 -->|no| NEXT["skip author"]
+    C0 -->|yes| PROMO["promote oldest queued posts (by publishedAt)"]
+    PROMO --> DUP{"URN already in posts?"}
+    DUP -->|yes| DEL["delete queued row (dedupe)"]
+    DUP -->|no| INS["insert into posts (recompute authorTierRank, interactionLimitReached from counts vs cap) + delete queued row"]
+    PQ --> RES{"batch full (100)?"}
+    RES -->|yes| RE["scheduler.runAfter(0) reschedule itself"]
 ```
 
 ### Post‑related functions
@@ -1140,7 +1351,10 @@ flowchart TD
 | `posts.getMyPosts`                          | query (public)    | Author's posts incl. hidden, **excl. soft‑deleted**, sorted by `publishedAt` desc (bounded to the 500 most‑recent). |
 | `posts.setPostHidden`                       | mutation (public) | Hide/unhide a post (author or admin via `canModifyPost`). Doesn't change the weekly count.                          |
 | `posts.deletePost`                          | mutation (public) | Soft‑delete a post (author or admin). Row kept → weekly count unchanged. Idempotent.                                |
+| `posts.featurePost`                         | mutation (public) | Feature a post (author or admin), quota‑gated by `featuredPerMonth`. Idempotent; recomputes feed fields.            |
+| `posts.unfeaturePost`                       | mutation (public) | Unfeature a post (author or admin). No quota refund. Idempotent; recomputes feed fields.                            |
 | `posts.getWeeklyUsage`                      | query (public)    | `{ postsThisWeek, postsPerWeek }` over the same rolling 7‑day window submitPost enforces.                           |
+| `posts.getFeaturedUsage`                    | query (public)    | `{ usedCount, featuredPerMonth }` for the current UTC month — backs the My Posts quota pill.                        |
 | `posts.countRecentPosts`                    | internalQuery     | Count posts since a timestamp (shared by enforcement + usage pill).                                                 |
 | `jobs/syncPosts.upsertPost`                 | internalMutation  | Insert/update gatekeeper with atomic weekly‑limit + optional queueing.                                              |
 | `jobs/syncPosts.syncAllPosts`               | internalAction    | Cron router → Apify (if enabled).                                                                                   |
@@ -1154,55 +1368,99 @@ flowchart TD
 
 ### Feed resolution (`feed.getFeed`, query)
 
-Args: `paginationOpts` (Convex cursor pagination), `sessionToken`, `filterIndustries?`,
-`filterCountries?`. Returns a `PaginationResult` — `{ page: enriched[], isDone, continueCursor }`
-(posts include a **token‑stripped** author projection). The client consumes it via
-`usePaginatedQuery` in `FeedPage.tsx`.
+Args: `paginationOpts` (Convex cursor pagination), `sessionToken`. Returns a `PaginationResult` —
+`{ page: enriched[], isDone, continueCursor }` (posts include a **token‑stripped** author projection). The client
+consumes it via `usePaginatedQuery` in `FeedPage.tsx`.
 
 The viewer's tier sets the filter via `buildFeedFilter`:
 
 - **starter:** no filters.
 - **growth:** auto‑filter to the viewer's **own** `industry` + `country`.
-- **pro / contact:** filter by the **caller‑supplied** `filterIndustries` / `filterCountries`
-  (applied only when non‑empty).
+- **pro / contact:** filter by the viewer's **saved preference** —
+  `users.feedFilterIndustries` / `feedFilterCountries`, read straight off the viewer doc (no client‑supplied args). Each
+  dimension ORs over its list; the two dimensions are **ANDed**; an empty/absent list means that dimension isn't
+  filtered. Set via `users.setFeedFilter` (see below); because `getFeed` reads these fields, saving re‑runs the query
+  reactively and the feed re‑filters live. Two surfaces write the same fields (kept in sync automatically): the
+  `FeedPage` **"Filter feed"** panel (apply‑on‑change) and a **"What you see in your feed"** card in **Settings**
+  (dirty‑flag + Save, mirroring the "Who can see your posts" card) — both Pro/Contact only.
+
+The viewer-side filter above (`feedFilterIndustries`/`feedFilterCountries`) is separate from the **author-side**
+allowlist enforced at step `F2` in the diagram below (`posts.visibilityIndustries` /
+`visibilityCountries`, checked against the viewer's own `industry`/`country`) — one is "what I want to see", the other
+is "who I allow to see me". The author-side allowlist is a **Pro/Contact** feature:
+`users.setPostVisibility` (tier-gated server-side, validated against `INDUSTRIES`/`COUNTRY_CODES`)
+sets `users.defaultVisibilityIndustries`/`defaultVisibilityCountries`, which every post writer (`posts.submitPost`,
+`jobs/processQueue.ts`, `jobs/syncPostsApify.ts`) copies onto the new post at **insert time** — editing the Settings
+default does not retroactively change posts already written. Absent/empty on either field ⇒ visible to everyone (same
+invariant `F2` already relied on before this was wired up to a UI).
 
 ```mermaid
 flowchart TD
-  G["getFeed(paginationOpts, sessionToken, filters)"] --> AU{"valid session?"}
-  AU -->|no| EMPTY["return empty page { page: [], isDone: true, continueCursor: '' }"]
-  AU -->|yes| BASE["paginate posts by_feed_rank(inFeed=true) desc — one page"]
-  BASE --> AUTHF["fetch this page's authors (≤ numItems)"]
-  AUTHF --> F2["post visibility: visibilityIndustries/Countries must include viewer's"]
-  F2 --> F3["viewer industry filter (growth/pro)"]
-  F3 --> F4["viewer country filter (pro)"]
-  F4 --> F5["drop posts whose author is pending deletion"]
-  F5 --> ENR["enrich page with author (strip tokens)"]
-  ENR --> RET["return { ...result, page: enriched } — cursor preserved"]
+    G["getFeed(paginationOpts, sessionToken)"] --> AU{"valid session?"}
+    AU -->|no| EMPTY["return empty page { page: [], isDone: true, continueCursor: '' }"]
+    AU -->|yes| BASE["paginate posts by_feed_rank(inFeed=true) desc — one page"]
+    BASE --> F1["drop the viewer's OWN posts (authorId === viewer._id)"]
+    F1 --> AUTHF["fetch this page's authors (≤ numItems)"]
+    AUTHF --> F2["post visibility: visibilityIndustries/Countries must include viewer's"]
+    F2 --> F3["viewer industry filter (growth/pro)"]
+    F3 --> F4["viewer country filter (pro)"]
+    F4 --> F5["drop posts whose author is pending deletion"]
+    F5 --> ENR["enrich page with author (strip tokens)"]
+    ENR --> RET["return { ...result, page: enriched } — cursor preserved"]
 ```
 
 > `getFeed` walks the `by_feed_rank` index with `.paginate()`: `inFeed === true` pre-encodes the
 > hidden / interaction-limit / soft-delete filters, and descending `feedRank` (featured → author
 > tier → recency, see [`lib/feedRank.ts`](../convex/lib/feedRank.ts)) **is** the sort — so each call
-> reads only one page and applies just the viewer-/author-dependent filters in memory. The denormalized
+> reads only one page and applies just the viewer-/author-dependent filters in memory — including dropping
+> the viewer's **own** posts (`authorId === viewer._id`), since the feed is for others' content. The denormalized
 > fields are kept in sync by every post writer (`computeFeedFields`). Heavy viewer filters can yield
 > short pages; the client's **Load more** (`usePaginatedQuery`) requests the next page. Design + rollout:
 > [feed-cursor-pagination-plan.md](./feed-cursor-pagination-plan.md).
+>
+> Because `feedRank`/`inFeed` are `v.optional` (widen→backfill), `by_feed_rank`'s `eq(inFeed, true)` can
+> never match a row where the field is still `undefined`. `convex/migrations/backfillFeedFields.ts` is
+> the batched, self-rescheduling backfill that stamps both fields on every `posts` row via the same
+> `computeFeedFields` — it must run (or be re-run) before trusting the index against any posts written
+> by a path that bypasses the live writers (e.g. a future bulk import). Pre-launch there is no prod data,
+> so today it's a no-op; see the `ponytail:` comment in the migration.
 
-**Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible` helper (`feed.ts`)
-now excludes only authors with `deletionScheduledAt` set — **trialing authors are no longer
-excluded**. Because trialing users must have a card on file (the trial is a real Stripe subscription for the
-chosen tier — see §8), their posts belong in the feed as a reciprocity incentive. `submitPost` sets
-`hidden: false` for all card-backed submitters (the previous `hidden: subscriptionStatus ===
-'trialing'` flag has been removed). Existing hidden posts from before Plan 2B are not backfilled
-(pre-launch, no prod data). The `syncUserSubscription` webhook still un-hides the author's posts on
-`active` transition, which remains correct.
+**Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible(author, now)` helper (`feed.ts`)
+excludes **banned** authors (`isBanned` — moderation; their posts leave the feed and search on ban and return on unban,
+with no post mutation) and authors with `deletionScheduledAt` set, and drops a **canceled** author once their paid
+period ends:
+`subscriptionStatus === 'canceled'` stays eligible only while `now < subscriptionEndsAt` (the paid‑through instant
+stamped by `cancelUserSubscription`); a missing/elapsed `subscriptionEndsAt` → not eligible. This is the sole feed
+effect of a cancellation — the member keeps full engage access (see Card gate below). Everyone else (trialing / active)
+is eligible. Trialing authors are **not** excluded: because trialing users must have a card on file (the trial is a real
+Stripe subscription for the chosen tier — see §8), their posts belong in the feed as a reciprocity incentive. The gate
+is applied at query time in both `getFeed` and `search` (which already load the page's authors), so no cron or post
+mutation is needed. `submitPost` sets `hidden` via
+`postCreatedHidden(user)` — visible for carded members, hidden for no-card members (`none`/`past_due`, e.g. a new
+member's onboarding first post). Existing hidden posts from before Plan 2B are not backfilled (pre-launch, no prod
+data). The `syncUserSubscription` webhook un-hides the author's posts when they **gain a card**
+(`unhideHidden: canEngage(status)`) — so a trial start (subscribe), not just an `active` transition, reveals it.
 
-**Card gate on engagement.** `commentOnPost`, `reactToPost`, and `submitPost` all call
-`assertCanEngage(user)` (from `convex/lib/access.ts`) immediately after resolving the caller.
-Users at `subscriptionStatus ∈ {none, canceled, past_due}` receive a `PAYMENT_REQUIRED` error;
-only `trialing` and `active` users may engage; admins (`isAdmin`) always bypass the gate. The in-app UI for this gate (
-disabled buttons,
-progress bar, CTA) is **Plan 2C, deferred to after the app/ UI revamp**.
+**Card gate on engagement.** `commentOnPost` and `reactToPost` call `assertCanEngage(user)` (from
+`convex/lib/access.ts`) immediately after resolving the caller — `submitPost` does NOT: a no-card member may submit (the
+post is created hidden via `postCreatedHidden`), only reactions/comments are card-gated. Engagement is granted for
+`subscriptionStatus ∈ {trialing, active, canceled}` — **cancellation never revokes access**; only `none` (never
+subscribed) and `past_due` (failed payment) receive a `PAYMENT_REQUIRED` error. Admins (`isAdmin`) always bypass the
+gate. The frontend mirror `useCardGate()` (`app/src/hooks/useCardGate.ts`) uses the same status set and must stay in
+sync. The in-app UI for this gate (disabled buttons, progress bar, CTA) is **Plan 2C** — shipped; see
+[§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
+
+**Per-post engageability gate.** The card gate answers *"may this member engage at all?"*; a second gate answers *"is
+**this post** engageable?"*. All three engagement entry points — `commentOnPost`, `reactToPost` (below) and
+`generateComment` ([§11A](#11a-ai-reaction--comment-assistance)) — resolve the target post through one shared internal
+query, `internal.interactions.getEngageablePost({ postId, viewerId })`, which loads the post + viewer + author and runs
+the pure `feed.assertPostEngageable(post, viewer, author, now)`. That helper throws on a spent budget
+(`interactionLimitReached` → *"reached its interaction limit"*), and otherwise mirrors the feed's own access rule
+(`isPostVisibleToViewer`): a `hidden`/soft-deleted post, one outside the viewer's `visibilityIndustries` /
+`visibilityCountries` allow-lists, or one from an ineligible author is rejected as *"not available."* A raw
+`ctx.db.get(postId)` bypasses the `inFeed` search index, so these actions **must** re-check — sharing one gate is what
+keeps the three from diverging (a post the feed hides can never be engaged, or AI-drafted against, through any of them).
+The three are Convex **actions** with no `ctx.db`, so they reach the gate via `ctx.runQuery`.
 
 ### Sort priority (effective order)
 
@@ -1212,194 +1470,298 @@ progress bar, CTA) is **Plan 2C, deferred to after the app/ UI revamp**.
 
 ### Interactions (comment / react)
 
-Both are **actions** that call LinkedIn with the **acting user's own token**, then increment the
-local count (which may flip `interactionLimitReached`). Counts propagate to all viewers in real time
-via Convex reactivity. On success each action also appends a per‑user row to **`userInteractions`**
-(`internal.interactions.recordInteraction`, best‑effort — a logging failure never fails the action) —
-the reaction type or comment text keyed by `userId`/`postId` — for the DSR export (§13B) and a future
-admin dashboard. The interaction‑limit flip decision is the pure helper
-`lib/interactionLimit.ts` `shouldFlipInteractionLimit(likeCount, commentCount, interactionsPerPost, alreadyReached)`.
+Both are **actions**, but they **no longer call LinkedIn** — LinkedIn exposes no member API to react/comment on another
+member's post. Engagement is a **client‑side handoff**: the client opens the post on LinkedIn. For comments it first
+writes the AI draft to the clipboard, confirming with a toast (`ui/toast.tsx`) **only once the copy succeeds**; the
+button **spinner** + toast then stay on screen for a ~1.5s beat (`HANDOFF_DELAY_MS`) — the app keeps focus so they're
+visible — **after which**
+`openLinkedIn` (`lib/handoff.ts`) opens the post (`buildPostUrl` → stored `sourceUrl`, else a reconstructed
+`/feed/update/<urn>/` permalink) in a new tab, falling back to same-tab if the browser blocks the deferred popup. The
+user performs the real action there. The action then **counts it optimistically** (per the product decision to count on
+tap): gate, rate‑limit, increment the local count (which may flip `interactionLimitReached`), and append a per‑user row
+to **`userInteractions`** (best‑effort — a logging failure never fails the action) for the DSR export (§13B).
+**Reactions are deduped**: `incrementLikeCount` sets `userPostState.reactedAt` on the first reaction and no-ops on
+repeats (no count, billing, or log) — a member holds at most one reaction per post. The AI **comment draft** is saved to
+`userPostState.commentDraft` on generate and reloaded into `CommentBox` on open (reuse or regenerate). Counts propagate
+to all viewers in real time via Convex reactivity. The interaction‑limit flip decision is the pure helper
+`lib/interactionLimit.ts`
+`shouldFlipInteractionLimit(likeCount, commentCount, interactionsPerPost, alreadyReached)`; both increment mutations
+first **guard on the flag** (`if (post.interactionLimitReached) return`) so a concurrent tap that already tripped the
+cap can't overshoot the count on the OCC retry. The same cap counts LinkedIn‑seeded engagement too — it is seeded at
+import and re‑evaluated on the Apify refresh, and blocks an already‑over‑cap post at submit — see the
+`interactionsPerPost`
+bullet under [§9](#9-plan-limits-system).
 
-| Action                                             | Validation                                                                 | Rate limit | LinkedIn endpoint                                                           |
-|----------------------------------------------------|----------------------------------------------------------------------------|------------|-----------------------------------------------------------------------------|
-| `commentOnPost(postId, commentText, sessionToken)` | text ≤ 3000 chars                                                          | 20/hour    | `POST /v2/socialActions/{urn}/comments`, actor `urn:li:person:{linkedinId}` |
-| `reactToPost(postId, reactionType, sessionToken)`  | `reactionType ∈ {LIKE,PRAISE,EMPATHY,INTEREST,APPRECIATION,ENTERTAINMENT}` | 30/hour    | `POST /rest/reactions?actor=…`, header `Linkedin-Version: 202603`           |
+| Action                                             | Validation                                                                 | Rate limit | Effect (no LinkedIn call)                      |
+|----------------------------------------------------|----------------------------------------------------------------------------|------------|------------------------------------------------|
+| `commentOnPost(postId, commentText, sessionToken)` | text ≤ 3000 chars                                                          | 20/hour    | count comment + append `userInteractions` row  |
+| `reactToPost(postId, reactionType, sessionToken)`  | `reactionType ∈ {LIKE,PRAISE,EMPATHY,INTEREST,APPRECIATION,ENTERTAINMENT}` | 30/hour    | count reaction + append `userInteractions` row |
 
-> Endpoint **asymmetry**: comments use the legacy `/v2/socialActions` API; reactions use the
-> versioned `/rest/reactions` API. `reactionType` uses the **real `/rest/reactions` enum values**
-> (the UI shows friendly labels Like/Celebrate/Love/Insightful/Support/Funny). The feed's reaction
-> control is a **picker pre‑selected to the AI‑suggested reaction** (`posts.suggestedReaction`,
-> default `LIKE`) — see [§11A](#11a-ai-reaction--comment-assistance).
+> The feed's reaction control is a **single button** that *displays* the AI‑suggested reaction
+> (`posts.suggestedReaction`, default `LIKE`) + count as a visual cue (reaction name in its tooltip)
+> — see [§11A](#11a-ai-reaction--comment-assistance). There is **no in‑app reaction picker**: the deep
+> link can't carry a chosen reaction type, so clicking just opens the post on LinkedIn and records the
+> suggested type as a best guess. `reactionType` still uses LinkedIn's enum values (Like/Celebrate/
+> Love/Insightful/Support/Funny), so a future API integration needs no remap.
 
 ```mermaid
 sequenceDiagram
-  participant A as App (PostCard/CommentBox)
-  participant I as interactions.* (action)
-  participant RL as rateLimit
-  participant LI as LinkedIn API
-  participant DB as Convex DB
-
-  A->>I: commentOnPost / reactToPost (postId, …, sessionToken)
-  I->>I: validate + requireAuthAction (must have LinkedIn token)
-  I->>RL: checkAndIncrement(userId, action, maxPerHour)
-  RL-->>I: ok (or throw 'Rate limit exceeded')
-  I->>DB: getPost(postId)
-  I->>LI: POST comment / reaction (Bearer user's token)
-  alt LinkedIn !ok
-    LI-->>I: error → log + throw generic message
-  else ok
-    I->>DB: increment count → maybe set interactionLimitReached
-    I-->>A: { success: true }  (reactive feed updates everywhere)
-  end
+    participant A as App (PostCard/CommentBox)
+    participant LI as LinkedIn (new tab)
+    participant I as interactions.* (action)
+    participant RL as rateLimit
+    participant DB as Convex DB
+    A ->> LI: window.open(post permalink) + copy draft to clipboard (comment)
+    A ->> I: commentOnPost / reactToPost (postId, …, sessionToken)
+    I ->> I: requireAuthAction + assertCanEngage (card gate)
+    I ->> RL: checkAndIncrement(userId, action, maxPerHour)
+    RL -->> I: ok (or throw 'Rate limit exceeded')
+    I ->> DB: getEngageablePost (assertPostEngageable) + increment count → maybe set interactionLimitReached
+    I ->> DB: recordInteraction (best-effort)
+    I -->> A: { success: true } (reactive feed updates everywhere)
+    Note over A, LI: user performs the real reaction/comment on LinkedIn
 ```
 
-### Rate limiting (`lib/rateLimit.ts`)
+### Rate limiting (`lib/rateLimit.ts` + `@convex-dev/rate-limiter`)
 
-A **fixed window** keyed on `(userId, action)`: `WINDOW_MS = 3,600,000` (1h). On each call it reads
-the current window row; if `windowStart` is older than the window it resets, otherwise it increments
-and throws once `count` reaches the limit (`maxPerWindow`). (The header comment says "sliding window" but the
-implementation is fixed‑window.) `checkRateLimit` now accepts an optional `windowMs` + `windowLabel`
-(defaults to 1h / "hour") so callers can specify non-hourly windows. Limits: `submitPost` 10/h,
+A **fixed window** keyed on `(userId, action)`, enforced by the **`@convex-dev/rate-limiter`** component (mounted in
+`convex.config.ts`; its counter state lives in the component's own isolated tables, not an app table).
+`lib/rateLimit.ts`
+wraps it behind three unchanged entry points — `checkRateLimit` (throws), `tryConsumeRateLimit` (returns a boolean), and
+the `checkAndIncrement` internal mutation that actions call via `ctx.runMutation`. No named limits are pre‑registered:
+every call passes an **inline config** (`kind: 'fixed window'`, `rate = maxPerWindow`, `period = windowMs`), so each
+caller keeps its own window; `WINDOW_MS` defaults to 1h. The component performs the check **and** consume atomically in
+one transaction, closing the read‑modify‑write race the former hand‑rolled `rateLimits` table admitted (two concurrent
+taps could both read `count = N-1` and both write `N`). `checkRateLimit` accepts an optional `windowMs` + `windowLabel`
+(defaults to 1h / "hour") for non‑hourly windows. Limits: `submitPost` 10/h,
 `commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget
-is
-**shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the
-non-throwing `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier.
-**Admins (`user.isAdmin`) bypass the rate limit on `commentOnPost`, `reactToPost`, `generateComment`,
-and `profile_refresh`** — those call sites unconditionally skip the check for admins. **`submitPost` is the
-exception:** its rate‑limit, weekly‑limit, and ownership bypass apply **only under the dev‑gated admin
-override** (`ALLOW_ADMIN_SHARE_ANY_POST` — see
-[§10 — Manual post submission](#manual-post-submission-postssubmitpost-action)). In production that
-var is unset, so an admin submits posts under exactly the same limits as everyone else.
+is **shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the non-throwing
+`tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier. **Admins (`user.isAdmin`) bypass the
+rate limit on `commentOnPost`, `reactToPost`, `generateComment`, and `profile_refresh`** — those call sites
+unconditionally skip the check for admins. **`submitPost` is the exception:** its rate‑limit, weekly‑limit, and
+ownership bypass apply **only under the dev‑gated admin override** (`ALLOW_ADMIN_SHARE_ANY_POST` — see
+[§10 — Manual post submission](#manual-post-submission-postssubmitpost-action)). In production that var is unset, so an
+admin submits posts under exactly the same limits as everyone else.
 
 ---
 
 ## 11A. AI Reaction & Comment Assistance
 
-OpenRouter (OpenAI-compatible) powers two assists: (1) predicting each submitted post's most-likely
-reaction, and (2) drafting comments on demand. The model is Google's open **Gemma**
+OpenRouter (OpenAI-compatible) powers two assists: (1) predicting each submitted post's most-likely reaction, and (2)
+drafting comments on demand. The model is Google's open **Gemma**
 (`google/gemma-4-26b-a4b-it`), served via OpenRouter's privacy-constrained provider routing. All calls go through one
 seam —
 `convex/ai/openrouter.ts` `callOpenRouter(messages, { action })` — which mirrors `linkedin/client.ts`
-(auth + log-real-error→throw-sanitized). The prompts are **multimodal**: the post's images
-(`posts.imageUrls`, the image-typed media captured at submit) + the linked article's images are attached as
-vision input, and the **full article body** (`posts.article.text`) is sent as text — so the model must be
-**vision-capable** (`OPENROUTER_MODEL` must point at a multimodal model). Non-image media (documents/links)
+(auth + log-real-error→throw-sanitized). The prompts are **multimodal**: the post's images (`posts.imageUrls`, the
+image-typed media captured at submit) + the linked article's images are attached as vision input, and the **full article
+body** (`posts.article.text`) is sent as text — so the model must be **vision-capable** (`OPENROUTER_MODEL` must point
+at a multimodal model). Non-image media (documents/links)
 are listed as text context, not attached.
 
 > **Compliance — AI inference runs via OpenRouter with zero data retention (dynamic provider routing).**
 > `OPENROUTER_API_KEY` enables the AI features (unset ⇒ reactions no-op to `LIKE`, Generate reports "AI
 > unavailable"). The seam (`convex/ai/openrouter.ts`) constrains routing **in code** to providers that honour
 > **zero data retention** (`zdr: true`) and **no data collection / no training** (`data_collection: "deny"`) —
-> not env-overridable — and OpenRouter picks the cheapest qualifying provider (`:floor`). The model is Google's
-> open **Gemma** (`google/gemma-4-26b-a4b-it`). **OpenRouter** (US) is the named sub-processor; the **downstream
+> not env-overridable — and OpenRouter selects among the qualifying providers (no `:floor` price-routing
+> suffix on the model slug; the `data_collection`/`zdr` pin is what governs provider selection). The model is
+> Google's open **Gemma** (`google/gemma-4-26b-a4b-it`), verified against OpenRouter's live catalog and served
+> by **DeepInfra** at fp8. **OpenRouter** (US) is the named sub-processor; the **downstream
 > inference provider (e.g. DeepInfra) and its region are selected per request, not pinned** — so region is not
 > guaranteed and the controller relies on OpenRouter's DPA flowing down to its providers. Documented in
 > `docs/compliance/`: ROPA **Activity 13** (`DATA-INVENTORY.md`), the **OpenRouter** rows in `SUBPROCESSORS.md`,
 > **item 10** in `GAP-ASSESSMENT.md`, and the public `/privacy` disclosure. **Human/legal before go-live:**
 > execute OpenRouter's DPA, confirm ZDR/no-training flows down to its providers, and assess the transfer
-> position given the non-pinned region (add region constraints if needed).
+> position given the non-pinned region (add region constraints if needed). **Flagged for legal review:**
+> DeepInfra's zero-retention posture has a documented exception for Google-family models — Google logs
+> prompts/responses for abuse-monitoring purposes independent of DeepInfra's ZDR commitment.
 
 ### Reaction prediction (async, best-effort)
 
-`posts.submitPost`, after the upsert, schedules `internal.ai.reactions.predictReaction` — submit returns
-immediately; OpenRouter latency/cost/failure never touch it. The prediction reads the post, builds the
-reaction prompt (content + article), calls OpenRouter, coerces the reply with `parseReaction` (whole-word
-match against the 6-enum allow-list, **default `LIKE`**), and patches `posts.suggestedReaction`. Any
-failure is swallowed (logged) — the post keeps the default `LIKE`. Only manual submits predict (that's
-where `article` context exists); synced/legacy posts default to `LIKE`.
+Both post-creation paths schedule `internal.ai.reactions.predictReaction` immediately after the upsert, so OpenRouter
+latency/cost/failure never touch either caller: `posts.submitPost` (manual submit) and
+`jobs/syncPostsApify.syncUserPostsViaApify` — the single Apify sync function shared by all three §10 triggers (daily
+cron fan-out, Stripe on-activation, admin manual sync). Both call the shared gatekeeper
+`jobs/syncPosts.upsertPost`, which now returns `{ postId, created }` — `created` is `true` **only** on a genuine insert,
+never on the update branch (an already-known URN being re-synced) or the queue branch (over the weekly limit, routed to
+`postQueue`). `submitPost` always schedules (its insert is always new); the Apify caller gates on
+`created === true` via the pure, unit-tested `shouldPredictReaction` helper — so a daily cron re-run over already-synced
+posts never re-schedules a prediction (no duplicate OpenRouter spend). Apify predicts for **all**
+newly-inserted posts, including trial-`hidden` ones — no special-case; a few wasted predictions for a never-converting
+trial user is an accepted ceiling.
+
+The prediction reads the post, builds the reaction prompt (content + article), calls OpenRouter, coerces the reply with
+`parseReaction` (whole-word match against the 6-enum allow-list, **default `LIKE`**), and patches
+`posts.suggestedReaction`. Any failure — including a missing `OPENROUTER_API_KEY` — is swallowed (logged); the post
+keeps the default `LIKE`, and the sync itself never fails because of it. Apify-synced posts carry no `article`/
+`imageUrls` context (that enrichment is manual-submit-only — see above), so their prompt is text-only.
+
+**Known gap — queued posts:** a post that overflows the weekly limit is routed to `postQueue` instead of `posts`
+(`created: false`, no prediction). When `jobs/processQueue.processPostQueue` later promotes it into `posts`, that insert
+does **not** go through `upsertPost` and is not wired to `predictReaction` — a promoted post keeps the default `LIKE`
+unless a later Apify re-sync happens to touch it (which also doesn't predict, by design — that would be the update
+branch). See `backlog/B09-ai-reaction-apify-posts.md`.
+
+No proactive throttle guards the resulting OpenRouter burst (`convex/ai/openrouter.ts`'s `callOpenRouter` has no rate
+limiting of its own): the daily cron, ≤3 new posts/user, and the `created`-only gate above already bound a single run to
+at most a few predictions per newly-active user, and any OpenRouter failure/429 is swallowed by the same best-effort
+handling. The `@convex-dev/rate-limiter` component is now mounted (it backs the per‑user limits above), so it can be
+applied to this OpenRouter prediction burst too if usage growth ever makes that bound too loose.
 
 ```mermaid
 sequenceDiagram
-  participant U as User
-  participant SP as posts.submitPost (action)
-  participant DB as Convex DB
-  participant PR as ai.reactions.predictReaction (scheduled)
-  participant DS as OpenRouter
-  U->>SP: submit URL
-  SP->>DB: upsertPost → postId (suggestedReaction absent ⇒ LIKE)
-  SP->>PR: scheduler.runAfter(0, { postId })
-  SP-->>U: { postId } (returns immediately)
-  PR->>DB: getPost
-  PR->>DS: buildReactionPrompt → keyword
-  DS-->>PR: e.g. "PRAISE"
-  PR->>DB: patch suggestedReaction (parseReaction, default LIKE)
-  Note over DB,U: PostCard picker pre-selects it live via Convex reactivity
+    participant U as User
+    participant SP as posts.submitPost (action)
+    participant CRON as syncPostsApify (daily cron)
+    participant UP as jobs.syncPosts.upsertPost
+    participant DB as Convex DB
+    participant PR as ai.reactions.predictReaction (scheduled)
+    participant DS as OpenRouter
+    U ->> SP: submit URL
+    SP ->> UP: upsertPost(...)
+    CRON ->> UP: upsertPost(..., queueOnLimitReached: true)
+    UP ->> DB: insert (new) or patch (re-sync)
+    UP -->> SP: { postId, created } (always true here)
+    UP -->> CRON: { postId, created }
+    SP ->> PR: scheduler.runAfter(0, { postId }) — unconditional
+    CRON ->> PR: scheduler.runAfter(0, { postId }) — only if created
+    PR ->> DB: getPost
+    PR ->> DS: buildReactionPrompt → keyword
+    DS -->> PR: e.g. "PRAISE"
+    PR ->> DB: patch suggestedReaction (parseReaction, default LIKE)
+    Note over DB, U: PostCard picker pre-selects it live via Convex reactivity
 ```
 
-The feed's reaction control (`PostCard`) is a **picker** pre-selecting `suggestedReaction ?? 'LIKE'`; the
-viewer confirms or changes before `reactToPost` sends the chosen reaction (§11).
+The feed's reaction control (`PostCard`) is a **picker** pre-selecting `suggestedReaction ?? 'LIKE'`; the viewer
+confirms or changes before `reactToPost` sends the chosen reaction (§11).
 
 ### Comment drafting (on-demand)
 
-`api.ai.comments.generateComment({ sessionToken, postId, language? })` → `{ comment }`. It auth-checks,
-rate-limits (30/h, admins exempt), loads the post + the author's public name/headline
-(`internal.users.getPublicAuthor`), resolves the language, builds the comment prompt (≤2 paragraphs,
-concise, no hashtags/@-mentions; article + media URLs included), calls OpenRouter, and returns the draft.
-**Nothing is persisted** — comments are generated fresh per user per click (identical reused text would
-trip LinkedIn spam detection). `CommentBox` prefills the textarea (Generate / Regenerate) for the user to
-edit, then posts via the unchanged `commentOnPost`.
+`api.ai.comments.generateComment({ sessionToken, postId, language? })` → `{ comment }`. It auth-checks, then **
+`assertCanEngage`** — AI drafting requires an active subscription (the same card-on-file gate as `commentOnPost`:
+`none`/`past_due` are blocked, all tiers otherwise pass, admins bypass), so the OpenRouter spend is never reachable
+without a subscription. It then rate-limits (30/h, admins exempt), loads the post through the shared
+`internal.interactions.getEngageablePost` gate (so a hidden / limit-reached / not-visible post is rejected exactly as in
+`commentOnPost` / `reactToPost` — see the per-post engageability gate in §11) plus the author's public name/headline
+(`internal.users.getPublicAuthor`), resolves the language, builds the comment prompt (≤2 paragraphs, concise, no
+hashtags/@-mentions; article + media URLs included), calls OpenRouter, and returns the draft. The draft is **persisted
+per (user, post)** on `userPostState` (`internal.interactions.saveCommentDraft`) so `CommentBox` can reload it on reopen
+for reuse/regeneration — per-post scope avoids the cross-post text reuse that would trip LinkedIn spam detection.
+`CommentBox` prefills the textarea (Generate / Regenerate) for the user to edit, then posts via the unchanged
+`commentOnPost`.
 
 ### Comment language
 
 All **ISO 639-1** codes (`convex/lib/languages.ts`, codes-only + `Intl.DisplayNames`, mirroring
 `profileOptions.ts`) plus an **`auto`** sentinel ("match the post"). Stored as `users.commentLanguage`
-(`v.string()`, validated in the handler — same pattern as `country`/`industry`). The default chain is
-**per-comment select → saved `commentLanguage` → `auto`**, all via the pure `resolveCommentLanguage`
-(shared by the action and both selects). Settings has a default picker (`setCommentLanguage`); the comment
-box picker overrides per-comment without writing back.
+(`v.string()`, validated in the handler — same pattern as `country`/`industry`). The default chain is **per-comment
+select → saved `commentLanguage` → `auto`**, all via the pure `resolveCommentLanguage`
+(shared by the action and both selects). Settings has a default picker (`setCommentLanguage`); the comment box picker
+overrides per-comment without writing back.
 
 ### Files
 
 `convex/ai/{openrouter,prompts,reactions,comments}.ts`, `convex/lib/{reactions,languages}.ts`,
-`posts.submitPost` (schedule hook), `interactions.reactToPost` (enum fix), `users.{setCommentLanguage,
-getPublicAuthor}`, `getMe` (exposes `commentLanguage` via `toSafeMe`); frontend `PostCard` (picker),
-`CommentBox` (draft + language), `SettingsPage` ("AI Comments"), i18n `reactions.*` / `comment.*`.
+`posts.submitPost` (schedule hook), `jobs/syncPosts.ts` (`upsertPost`'s `{ postId, created }` signal),
+`jobs/syncPostsApify.ts` (schedule hook + `shouldPredictReaction` gate), `interactions.reactToPost` (enum fix),
+`users.{setCommentLanguage, getPublicAuthor}`, `getMe` (exposes `commentLanguage` via `toSafeMe`); frontend
+`PostCard` (picker), `CommentBox` (draft + language), `SettingsPage` ("AI Comments"), i18n `reactions.*` /
+`comment.*`.
+
+---
+
+## 11B. Search & Command Palette
+
+A ⌘K / Ctrl-K **command palette** searches posts and people and offers quick navigation actions. It replaces the former
+non-functional top-bar search placeholder.
+
+### Backend (`convex/search.ts`, `search` query)
+
+- Two full-text **search indexes** on `convex/schema.ts`: `posts.search_content` (`searchField: 'content'`,
+  `filterFields: ['inFeed']`) and `users.search_name` (`searchField: 'name'`).
+- The `search` query takes `{ sessionToken, queryText }` and returns `{ posts, people }`. It **requires a valid
+  session** (returns empty on missing/invalid token or a query under 2 chars).
+- **Feed-parity visibility (security-critical):** post results reuse the exact same rules as `feed.getFeed` through the
+  single shared gate `feed.isPostVisibleToViewer(post, viewer, author, now)` — the `search_content` index is pinned to
+  `inFeed === true`, then that gate drops the **viewer's own posts**, applies the per-viewer `visibilityIndustries` /
+  `visibilityCountries` allow-lists, and enforces `isAuthorFeedEligible(author)`. Because feed and search call the same
+  predicate, search can never surface a post the feed would hide (and never the searcher's own posts). Search does
+  **not**
+  apply the feed's tier-based industry/country _preference_ filter — that is a "what I want to see" layer, not an access
+  rule. People results are **not** viewer-filtered (searching for yourself is fine), but they **are
+  eligibility-filtered**:
+  the same `isAuthorFeedEligible(person, now)` predicate the post results apply drops **banned, pending-deletion, and
+  canceled-and-lapsed** members — so a moderated (or gone) person is hidden from people-search exactly as their posts
+  are hidden from post-search. Note this also hides a canceled member once they lapse (`now ≥ subscriptionEndsAt`),
+  matching the feed's own author eligibility. Both searches **over-fetch** (`take(MAX × 3)`) then filter and slice to
+  the cap, so the eligibility/visibility drops don't starve the result count.
+- **Safe projections:** posts expose only `{ _id, content, sourceUrl, author }` (author via `toFeedAuthor`); people via
+  the pure allow-list `toSearchPerson` → `{ _id, name, headline, profilePictureUrl, linkedinPublicIdentifier }` — never
+  tokens, email, admin/ban state, or other PII. The filtering runs in the extracted `searchPostsAndPeople(ctx, viewer,
+  …)` helper (thin `search` wrapper owns auth), unit-tested over a 10-post fixture with a mock `ctx` in
+  `convex/search.test.ts` (including a people-eligibility case); `feed.getFeed`'s `fetchFeedPage` is tested the same way
+  in `convex/feed.test.ts`.
+
+### Frontend (`app/src/components/shell/CommandPalette.tsx`)
+
+- Reuses the `cmdk` wrapper in `app/src/components/ui/command.tsx` (`CommandDialog` + `Command` root). `AppShell` owns
+  the open state and a global ⌘K/Ctrl-K keydown listener (`preventDefault` so it doesn't collide with browser find); the
+  `TopBar` search button opens it via `onOpenSearch`. The top-bar shortcut hint is OS-aware — `getModifierKey`
+  (`TopBar.tsx`, from `navigator.platform`) shows **⌘** on macOS/iOS and **Ctrl** elsewhere.
+- Input is debounced ~180ms; the Convex query runs reactively via `useQuery(..., 'skip')` and only fires at ≥2 chars.
+  Idle (no query) shows **Quick actions** (nav items + toggle theme + sign out); typing shows **People** / **Posts**
+  groups, or a localized "No results". `shouldFilter={false}` — results are already filtered server-side, so cmdk's
+  substring filter must not re-hide full-text matches. Selecting a person/post opens their LinkedIn permalink in a new
+  tab (the compliant embed → permalink handoff).
+- Palette strings live under `shell.*` in `app/src/i18n/locales/{en,pt,es}.json`.
+
+> Search indexes cannot be exercised under the project's no-`convex-test` convention — the `search` query is verified by
+> a manual runtime smoke test; only the pure `toSearchPerson` projection is unit-tested.
 
 ---
 
 ## 12. Admin & Moderation
 
-Admin is gated by the **`users.isAdmin`** boolean, which is **only settable by direct database
-edit** — no application code writes it. Every admin function calls `assertAdmin(user)` after
+Admin is gated by the **`users.isAdmin`** boolean, which is **only settable by direct database edit** — no application
+code writes it. Every admin function calls `assertAdmin(user)` after
 `requireAuth`, throwing `'Forbidden: admin access required'` otherwise.
 
 ### Admin functions (`convex/admin.ts`)
 
-| Function                                                                 | Kind     | Purpose                                                                                                                                                                 |
-|--------------------------------------------------------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                   |
-| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                              |
-| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                             |
-| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                               |
-| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                     |
-| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).   |
-| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                             |
-| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                 |
-| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                        |
-| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions. |
-| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                |
-| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                     |
-| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                      |
-| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                        |
-| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Backend‑only (no UI).                                                                                   |
-| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                             |
-| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                     |
-| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                             |
-| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                   |
-| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                |
+| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                             |
+|--------------------------------------------------------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                               |
+| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                                          |
+| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                                         |
+| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                           |
+| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                                 |
+| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                               |
+| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                         |
+| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                             |
+| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                    |
+| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                             |
+| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                            |
+| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                                                                 |
+| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                                  |
+| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                                    |
+| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Self‑heals (backlog/B27): inserts the row from `buildTierDefaultRow` first if the tier was never seeded, instead of throwing. Backend‑only (no UI). |
+| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                                         |
+| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                                 |
+| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                                         |
+| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                               |
+| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                            |
 
 `validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`. `effectiveContactLimits`
 (pure, unit‑tested) resolves a contact user's display limits as `override ?? contact default ?? hardcoded`.
 
 ### Manual Apify sync triggers
 
-Four admin‑only mutations let an admin run a sync on demand instead of waiting for the daily cron.
-Each **respects the same toggles the crons honor**: it schedules the (slow, paid) job and returns
-immediately, but only when its feature flag (+ the master kill‑switch) is on — otherwise it throws
-`"<feature> is disabled — enable it in Settings first."` The UI also gates each control, but the
-**server check is authoritative** (a stale client or a direct API call still can't run a disabled
-integration). All four triggers share a single `assertApifyTriggerEnabled` precondition (auth + admin
-assertion + flag check) so the server gate is defined once in `admin.ts`.
+Four admin‑only mutations let an admin run a sync on demand instead of waiting for the daily cron. Each **respects the
+same toggles the crons honor**: it schedules the (slow, paid) job and returns immediately, but only when its feature
+flag (+ the master kill‑switch) is on — otherwise it throws
+`"<feature> is disabled — enable it in Settings first."` The UI also gates each control, but the **server check is
+authoritative** (a stale client or a direct API call still can't run a disabled integration). All four triggers share a
+single `assertApifyTriggerEnabled` precondition (auth + admin assertion + flag check) so the server gate is defined once
+in `admin.ts`.
 
 | Trigger                   | Schedules                                           | Surface (admin panel)                               |
 |---------------------------|-----------------------------------------------------|-----------------------------------------------------|
@@ -1410,10 +1772,9 @@ assertion + flag check) so the server gate is defined once in `admin.ts`.
 
 The per‑user triggers additionally require the target to have a `linkedinPublicIdentifier`
 (otherwise the menu item is disabled and the server throws). Outcome is observable via each card's
-`Last sync` / `Last profile sync` line (and the user's data updating reactively) — there is no
-per‑item progress view. Because these are flag‑gated, they do **not** by themselves "switch Apify
-on" — only the toggles do, and doing so in production triggers the compliance hard gate
-(see [§13B](#13b-privacy--compliance)).
+`Last sync` / `Last profile sync` line (and the user's data updating reactively) — there is no per‑item progress view.
+Because these are flag‑gated, they do **not** by themselves "switch Apify on" — only the toggles do, and doing so in
+production triggers the compliance hard gate (see [§13B](#13b-privacy--compliance)).
 
 ### Ban model — **reactive, not a forced logout**
 
@@ -1422,215 +1783,218 @@ delete sessions. Enforcement is:
 
 1. **Server:** the next `requireAuth`/`requireAuthAction` calls `assertNotBanned` → throws
    `'Account suspended'` (blocks all protected mutations/actions).
-2. **Client:** Convex's reactive `getMe` query (which uses `resolveSession`, not `requireAuth`, so
-   it still returns the user with `isBanned: true`) pushes the flag to any open tab → `RequireAuth`
+2. **Client:** Convex's reactive `getMe` query (which uses `resolveSession`, not `requireAuth`, so it still returns the
+   user with `isBanned: true`) pushes the flag to any open tab → `RequireAuth`
    swaps the whole shell for `<BannedScreen>`.
+3. **Content:** the banned author's posts are dropped from every other member's feed and search at read time via
+   `isAuthorFeedEligible` (see §11) — no post mutation, so an **unban** restores them automatically.
 
 An **unban** restores access on the **same** session token — no re‑login required.
 
 ```mermaid
 flowchart TD
-  ADM["admin: banUser(userId, reason?)"] --> CHK["assertAdmin + assertNotSelfBan"]
-  CHK --> PATCH["patch user: isBanned=true, bannedAt, bannedBy, bannedReason"]
-  PATCH --> SRV["next requireAuth* → assertNotBanned throws 'Account suspended'"]
-  PATCH --> CLI["reactive getMe pushes isBanned → BannedScreen (session still valid)"]
+    ADM["admin: banUser(userId, reason?)"] --> CHK["assertAdmin + assertNotSelfBan"]
+    CHK --> PATCH["patch user: isBanned=true, bannedAt, bannedBy, bannedReason"]
+    PATCH --> SRV["next requireAuth* → assertNotBanned throws 'Account suspended'"]
+    PATCH --> CLI["reactive getMe pushes isBanned → BannedScreen (session still valid)"]
 ```
 
 ---
 
 ## 12A. Feedback
 
-Authenticated users submit free-text feedback (≤4000 chars) tagged with a single category
-via a floating button (bottom-right of every authenticated page). Admins read and reply by
-email from the **Feedback** tab in the admin panel. Each feedback item can receive **multiple
-admin replies** stored as a thread in the `feedbackResponses` table.
+Authenticated users submit free-text feedback (≤4000 chars) tagged with a single category via a floating button
+(bottom-right of every authenticated page). Admins read and reply by email from the **Feedback** tab in the admin panel.
+Each feedback item can receive **multiple admin replies** stored as a thread in the `feedbackResponses` table.
 
 **Data:**
 
 - `feedback` table — `userId?` (submitter; cleared on account deletion), `category` (one of
   `feature_request | bug | comment | criticism | praise | question | suggestion | other`),
-  `message`, `status` (`new | responded | archived`), `createdAt`. The legacy single-reply
-  fields `responseText`, `respondedAt`, `respondedBy` are retained as **optional/deprecated**
-  (no longer written; superseded by `feedbackResponses`). Indexes: `by_user`, `by_status`.
+  `message`, `status` (`new | responded | archived`), `createdAt`. Index: `by_user`.
 
 - `feedbackResponses` table — append-only reply log; each row is one admin reply.
   `feedbackId` (FK → `feedback`), `responderId` (FK → `users`, the admin who replied),
   `text` (reply text), `createdAt` (ms). Index: `by_feedback [feedbackId, createdAt]`
-  (chronological per item). A `backfillFeedbackResponses` internal mutation migrates any
-  existing single-reply rows from the legacy fields — run once from the Convex dashboard
-  after deploying.
+  (chronological per item).
 
 **Backend** (`convex/feedback/`):
 
 - `feedback.ts` — `submitFeedback` (user; validates, throttles **10/hour**, admins exempt),
-  `listFeedback` (admin; newest-first, enriched with submitter name/email and full reply
-  thread from `feedbackResponses`), `respondToFeedback` (admin; inserts a new
-  `feedbackResponses` row, patches `status=responded`, writes a `feedback.responded` audit
-  log, schedules the email if `sendEmail=true`), `archiveFeedback` / `reopenFeedback`, and
-  the internal `getReplyData` + `sendFeedbackReply` action (keyed by `responseId`).
-  `backfillFeedbackResponses` (internalMutation — one-time operator migration).
+  `listFeedback` (admin; newest-first, enriched with submitter name/email and full reply thread from
+  `feedbackResponses`), `respondToFeedback` (admin; inserts a new
+  `feedbackResponses` row, patches `status=responded`, writes a `feedback.responded` audit log, schedules the email if
+  `sendEmail=true`), `archiveFeedback` / `reopenFeedback`, and the internal `getReplyData` + `sendFeedbackReply` action
+  (keyed by `responseId`).
 - `emails.ts` — `feedbackReplyEmail` builder (HTML-escapes user/admin text).
-- Replies use `lib/email.ts:sendEmail` with `Reply-To` = `FEEDBACK_REPLY_TO` so users reply
-  to a human inbox. The admin chooses **per reply** whether to send an email (`sendEmail`
+- Replies use `lib/email.ts:sendEmail` with `Reply-To` = `FEEDBACK_REPLY_TO` so users reply to a human inbox. The admin
+  chooses **per reply** whether to send an email (`sendEmail`
   boolean arg to `respondToFeedback`).
 
-**Frontend** (`app/src/components/`): `FeedbackButton` + `FeedbackModal` (user, i18n
-en/pt/es); `FeedbackTab` + `RespondFeedbackModal` (admin, English). Respond is disabled when
-the submitter has no email on file.
+**Frontend** (`app/src/components/`): `FeedbackButton` + `FeedbackModal` (user, i18n en/pt/es); `FeedbackTab` +
+`RespondFeedbackModal` (admin, English). Respond is disabled when the submitter has no email on file.
 
-**Privacy:** `feedback` rows are **anonymized, not deleted**, on account erasure
-(`cascadeDeleteUser` clears `userId`; content retained). `feedbackResponses` rows are
-retained attached to the anonymized feedback after account deletion. Both are included in the
-DSR export bundle (`gatherUserData` collects `feedbackResponses` for each of the user's
+**Privacy:** `feedback` rows are **anonymized, not deleted**, on account erasure (`cascadeDeleteUser` clears `userId`;
+content retained). `feedbackResponses` rows are retained attached to the anonymized feedback after account deletion.
+Both are included in the DSR export bundle (`gatherFeedbackResponses` collects `feedbackResponses` for the user's
 feedback items).
 
 ```mermaid
 flowchart TD
-  U[User clicks floating Feedback button] --> M[FeedbackModal: pick category + message ≤4000]
-  M -->|submitFeedback| V{Valid & under 10/hour?}
-  V -->|no| E[Error shown in modal]
-  V -->|yes| DB[(feedback row · status=new)]
-  A[Admin opens Feedback tab] --> L[listFeedback]
-  L --> R[RespondFeedbackModal]
-  R -->|respondToFeedback| P[insert feedbackResponses row · patch status=responded · audit log]
-  P -->|sendEmail=true| S[schedule sendFeedbackReply by responseId]
-  S -->|sendEmail · Reply-To=FEEDBACK_REPLY_TO| MAIL[(User receives email)]
-  DEL[Account deletion cascade] -.anonymize.-> DB2[feedback.userId = undefined · content kept]
-  DB2 -.responses retained.-> FR[(feedbackResponses rows kept)]
+    U[User clicks floating Feedback button] --> M[FeedbackModal: pick category + message ≤4000]
+M -->|submitFeedback|V{Valid & under 10/hour?}
+V -->|no|E[Error shown in modal]
+V -->|yes|DB[(feedback row · status=new)]
+A[Admin opens Feedback tab] --> L[listFeedback]
+L --> R[RespondFeedbackModal]
+R -->|respondToFeedback|P[insert feedbackResponses row · patch status=responded · audit log]
+P -->|sendEmail = true|S[schedule sendFeedbackReply by responseId]
+S -->|sendEmail · Reply - To = FEEDBACK_REPLY_TO|MAIL[(User receives email)]
+DEL[Account deletion cascade] -.anonymize .-> DB2[feedback.userId = undefined · content kept]
+DB2 -. responses retained .-> FR[(feedbackResponses rows kept)]
 ```
 
 ---
 
 ## 12B. Message of the Day (MOTD)
 
-Admins author markdown announcements shown to authenticated users at the very top of the app.
-Default presentation is a **dismissible top banner**; flagging a MOTD **important** escalates it to a
-**blocking modal** that closes only via an OK button. Bodies are **per-locale markdown** (`en`
-required as the fallback; others optional and extensible with no schema migration), with optional
-**start/expiry scheduling**. Dismissal is **session-scoped** and re-shows on the next login.
+Admins author markdown announcements shown to authenticated users at the very top of the app. Default presentation is a
+**dismissible top banner**; flagging a MOTD **important** escalates it to a **blocking modal** that closes only via an
+OK button. Bodies are **per-locale markdown** (`en`
+required as the fallback; others optional and extensible with no schema migration), with optional **start/expiry
+scheduling**. Dismissal is **session-scoped** and re-shows on the next login.
 
 **Data:** `motds` table (see [§5](#5-data-model)). The active MOTD is the newest `enabled` row whose
 `[startAt, expiresAt)` window covers "now" — `selectActiveMotd` (pure, unit-tested).
 
 **Backend** (`convex/motd/motd.ts`):
 
-- `getActiveMotd` (viewer query) — `resolveSession`; returns `{ _id, bodies, important }` for the
-  active MOTD or `null` (non-throwing). Reads `enabled=true` newest-first via `by_enabled_and_created`,
-  then `selectActiveMotd`.
+- `getActiveMotd` (viewer query) — `resolveSession`; returns `{ _id, bodies, important }` for the active MOTD or `null`
+  (non-throwing). Reads `enabled=true` newest-first via `by_enabled_and_created`, then `selectActiveMotd`.
 - `listMotds` (admin) — all MOTDs newest-first, bounded `take(200)`.
 - `createMotd` / `updateMotd` / `deleteMotd` / `toggleMotdEnabled` (admin) — `requireAuth` +
-  `assertAdmin`. Writes go through the pure `validateMotdInput` (trims bodies, drops empty locales,
-  requires `en`, caps each body at 5000 chars, requires `expiresAt > startAt`). No audit log — admin
-  content, not a personal-data action.
+  `assertAdmin`. Writes go through the pure `validateMotdInput` (trims bodies, drops empty locales, requires `en`, caps
+  each body at 5000 chars, requires `expiresAt > startAt`). No audit log — admin content, not a personal-data action.
 
 **Frontend** (`app/src/components/`):
 
-- `MarkdownView` — shared safe renderer (`react-markdown` + `remark-gfm`, no raw HTML; links open in
-  a new tab; dangerous URL protocols stripped).
-- `Motd` — subscribes to `getActiveMotd`, resolves the body for the active language
-  (`bodies[lang] ?? bodies.en`), renders the banner or (when `important`) the blocking `Modal`
+- `MarkdownView` — shared safe renderer (`react-markdown` + `remark-gfm`, no raw HTML; links open in a new tab;
+  dangerous URL protocols stripped).
+- `Motd` — subscribes to `getActiveMotd`, resolves the body for the active language (`bodies[lang] ?? bodies.en`),
+  renders the banner or (when `important`) the blocking `Modal`
   (`dismissOnBackdrop={false}`, `dismissOnEscape={false}`, OK button). Mounted in `RequireAuth`
   above `AppShell`. New i18n keys: `motd.dismiss`, `motd.ok` (en/pt/es).
-- `MotdTab` — admin authoring (list + create/edit form with per-locale textareas, important/enabled
-  toggles, optional `datetime-local` start/expiry, live `MarkdownView` preview). Added as the
-  **MOTD** tab in `AdminPage` (admin chrome is English-only, like the other admin tabs).
+- `MotdTab` — admin authoring (list + create/edit form with per-locale textareas, important/enabled toggles, optional
+  `datetime-local` start/expiry, live `MarkdownView` preview). Added as the **MOTD** tab in `AdminPage` (admin chrome is
+  English-only, like the other admin tabs).
 
 **Dismissal & re-login mechanic:** dismissal is stored in `sessionStorage` under `motdDismissed` as
 `{ token, motdId }`. The MOTD is hidden only when both the stored token equals the current
-`sessionToken` **and** the stored `motdId` equals the active MOTD's id. A page reload keeps the same
-token (stays dismissed); a re-login rotates the token via `AuthSuccessPage` (stored token no longer
-matches → re-shows); a newly published MOTD has a new id → re-shows even mid-session.
+`sessionToken` **and** the stored `motdId` equals the active MOTD's id. A page reload keeps the same token (stays
+dismissed); a re-login rotates the token via `AuthSuccessPage` (stored token no longer matches → re-shows); a newly
+published MOTD has a new id → re-shows even mid-session.
 
 ```mermaid
 flowchart TD
-  A[Admin: MOTD tab] -->|createMotd / updateMotd / toggleMotdEnabled| DB[(motds table)]
-  V[Authenticated user loads app] --> Q[getActiveMotd]
-  Q --> SEL{selectActiveMotd: newest enabled in date window?}
-  SEL -->|none| NONE[Render nothing]
-  SEL -->|found| D{sessionStorage motdDismissed matches token + motdId?}
-  D -->|yes| NONE
-  D -->|no| I{important?}
-  I -->|no| BANNER[Top banner · ✕ dismiss]
-  I -->|yes| MODAL[Blocking modal · OK dismiss]
-  BANNER -->|dismiss| W[Write motdDismissed = token + motdId]
-  MODAL -->|dismiss| W
-  RELOGIN[Re-login rotates sessionToken] -.stored token no longer matches.-> SEL
+    A[Admin: MOTD tab] -->|createMotd / updateMotd / toggleMotdEnabled| DB[(motds table)]
+    V[Authenticated user loads app] --> Q[getActiveMotd]
+    Q --> SEL{selectActiveMotd: newest enabled in date window?}
+    SEL -->|none| NONE[Render nothing]
+    SEL -->|found| D{sessionStorage motdDismissed matches token + motdId?}
+    D -->|yes| NONE
+    D -->|no| I{important?}
+    I -->|no| BANNER[Top banner · ✕ dismiss]
+I -->|yes|MODAL[Blocking modal · OK dismiss]
+BANNER -->|dismiss|W[Write motdDismissed = token + motdId]
+MODAL -->|dismiss|W
+RELOGIN[Re-login rotates sessionToken] -. stored token no longer matches .-> SEL
 ```
 
 ---
 
 ## 13. Scheduled Jobs (Crons)
 
-`convex/crons.ts` is the **only** file Convex reads for scheduled work. The two post‑sync jobs run at
-fixed wall‑clock times in UTC (`crons.cron`); the session/OAuth cleanup, account‑deletion, and
-retention jobs run on fixed intervals from deploy time (`crons.interval`).
+`convex/crons.ts` is the **only** file Convex reads for scheduled work. The two post‑ingest jobs run at fixed wall‑clock
+times in UTC (`crons.cron`); the feed‑engagement refresh, session/OAuth cleanup, account‑deletion, and retention jobs
+run on fixed intervals from deploy time (`crons.interval`).
 
-| Cron name                      | Schedule            | Target                                     | Effect                                                                                                                                                                                                                                                                     |
-|--------------------------------|---------------------|--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sync LinkedIn posts`          | daily **03:00 UTC** | `jobs/syncPosts.syncAllPosts`              | Apify sync **iff** `apifySyncEnabled` (else no‑op).                                                                                                                                                                                                                        |
-| `process post queue`           | daily **04:00 UTC** | `jobs/processQueue.processPostQueue`       | Promote queued posts when authors regain weekly capacity.                                                                                                                                                                                                                  |
-| `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`           | Purge expired sessions (≤ 200/run).                                                                                                                                                                                                                                        |
-| `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`        | Purge expired CSRF nonces (≤ 200/run).                                                                                                                                                                                                                                     |
-| `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions` | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty. |
-| `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`   | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps.                                                         |
+| Cron name                      | Schedule            | Target                                             | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|--------------------------------|---------------------|----------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sync LinkedIn posts`          | daily **03:00 UTC** | `jobs/syncPosts.syncAllPosts`                      | Apify sync **iff** `apifySyncEnabled` (else no‑op). Ingests each active subscriber's latest posts (profile scrape) and inserts new rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `refresh feed engagement`      | every **30 min**    | `jobs/refreshFeedEngagement.refreshFeedEngagement` | Refresh `likeCount`/`commentCount` on **all feed‑eligible posts** (`inFeed=true`, `.take(500)`) via **one batched Apify run** — `targetUrls` = each post's URL (`sourceUrl` or a `/feed/update/{urn}/` reconstruction). Same `isApifyPostSyncEnabled` gate as the daily sync, so it is **dev/local‑only** (Apify dormant in prod). Counts‑only (`scrapeComments`/`scrapeReactions` off); matches results back by `shareUrn` and, like `upsertPost`'s update branch, does **not** re‑evaluate `interactionLimitReached` from external engagement. Items with no `engagement` object are skipped (never overwrites real counts with 0). ponytail: `run‑sync` blocks per tick — chunk `targetUrls` if a feed ever exceeds a few hundred posts.                                                                                                                                                  |
+| `process post queue`           | daily **04:00 UTC** | `jobs/processQueue.processPostQueue`               | Promote queued posts when authors regain weekly capacity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`                   | Purge expired sessions (≤ 200/run).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`                | Purge expired CSRF nonces (≤ 200/run).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions`         | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `refresh LinkedIn tokens`      | every **6h**        | `linkedin/tokenRefresh.refreshExpiringTokens`      | Renews tokens entering their pre-expiry window (`tokenExpiresAt` in `[now, now+7d)` **and** a refresh token on file) via `linkedin.oauth.refreshAccessToken` + `linkedin.auth.updateTokens`. Reads via `by_token_expiry`, **cursor-paginated** (≤100/page, mirrors `migrations/backfillFeedFields.ts`'s pattern) rather than a single `.take(100)` snapshot — the cursor is captured before any refresh attempt and advances every run regardless of per-user outcome, so a full 6h tick pages through the **entire** pre-expiry window even if rows near the front keep failing. Each user's refresh is try/caught independently (one `invalid_grant` skips that user, never aborts the batch or stalls the cursor). **Runs more often than `enforce data retention` below on purpose** — see ordering note. Best-effort/mostly dormant in practice: see [§7](#7-authentication--identity). |
+| `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`           | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+
+> **Ordering: refresh before retention.** `refresh LinkedIn tokens` only acts on tokens that are **not yet** expired
+> (the pre-expiry window); `enforce data retention` only nulls tokens that **already are** expired. Because the
+> refresh cron's cursor pages through the **whole** pre-expiry window on every 6h tick (not just the first 100 rows
+> — see the cron table row above), every refreshable token gets at least one refresh attempt within that same tick,
+> well inside retention's 24h cadence — so a refreshable token cannot be nulled by retention before the refresh
+> cron has had a chance at it. Retention itself never attempts a refresh; it stays a pure minimization/cleanup job
+> (see [§13B](#13b-privacy--compliance)).
 
 ---
 
 ## 13A. Profile Enrichment (LinkedIn Profile Scrape)
 
 A dedicated Apify actor (`APIFY_TASK_ID_PROFILE_SCRAPE`) enriches a user with `country` **and
-`headline`** (fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent
-from the payload) — it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
+`headline`** (fill-when-empty), `location`, and `primaryLocale`. Industry is **not** scraped (absent from the payload) —
+it's user-edited in Settings. The scrape is **triggered**, not cron-scheduled:
 
-- on `users.setPublicIdentifier`, but only when the identifier **changes**, the scrape is
-  **enabled**, and the shared 2/day budget allows it (charged on the same `profile_refresh` counter
-  as the button — and the flag is checked _before_ the budget, so a disabled scrape never charges it), and
+- on `users.setDerivedPublicIdentifier` — when a name‑verified post's author URL first **auto‑derives** the vanity
+  (set‑once), the scrape fires if it is **enabled** and the shared 2/day budget allows it (charged on the same
+  `profile_refresh` counter as the button — and the flag is checked _before_ the budget, so a disabled scrape never
+  charges it), and
 - on the user-pressed **"Refresh from LinkedIn"** button (`refreshProfileFromLinkedIn`, ≤ 2/day), and
-- on the **post sync** (`syncUserPostsViaApify` — subscription activation + hourly cron) **when the
-  user has no `country` yet**, which bounds the (paid) scrape to ~once per user even though posts
-  sync repeatedly.
+- on the **post sync** (`syncUserPostsViaApify` — subscription activation + hourly cron) **when the user has no
+  `country` yet**, which bounds the (paid) scrape to ~once per user even though posts sync repeatedly.
 - on an **admin manual trigger** — `admin.syncUserProfile(userId)` for one user, or
   `admin.syncAllProfiles`, which fans out via `jobs/scrapeProfileApify.scrapeAllProfilesViaApify`
   over every user with a `linkedinPublicIdentifier`. Both are flag‑gated; see
   [§12](#12-admin--moderation).
 
-These triggers all schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails if the
-Apify env vars (`APIFY_API_TOKEN`/`APIFY_TASK_ID_PROFILE_SCRAPE`) are unset, or unless
-`apifyEnabled && apifyProfileScrapeEnabled` (gate helpers in `lib/apify.ts`). It calls the Apify
-actor, parses `location.countryCode` → `country`, `location.linkedinText` → `location`,
+These triggers all schedule the internal action `jobs/scrapeProfileApify.scrapeUserProfile`, which bails if the Apify
+env vars (`APIFY_API_TOKEN`/`APIFY_TASK_ID_PROFILE_SCRAPE`) are unset, or unless
+`apifyEnabled && apifyProfileScrapeEnabled` (gate helpers in `lib/apify.ts`). It calls the Apify actor, parses
+`location.countryCode` → `country`, `location.linkedinText` → `location`,
 `primaryLocale.language` → `primaryLocale`, and the dataset `headline` → `headline`
-(fill-when-empty), and writes via `users.applyScrapedProfile` (country and headline only if the user
-has none; location/locale always refresh). Results propagate to Settings via the reactive `getMe`,
-which also seeds the UI language once.
+(fill-when-empty), and writes via `users.applyScrapedProfile` (country and headline only if the user has none;
+location/locale always refresh). Results propagate to Settings via the reactive `getMe`, which also seeds the UI
+language once.
 
-The **headline** has two sources: the **dev-only** Apify scrape (fill-when-empty) and the
-**user-editable Settings field** (`users.updateProfile`, always wins). In production the Settings
-field is the only live source — the Apify scrape is a local-dev testing tool (the
+The **headline** has two sources: the **dev-only** Apify scrape (fill-when-empty, truncated to the
+`MAX_HEADLINE_LENGTH` cap) and the **user-editable Settings field** (`users.updateProfile`, always wins, rejected if
+over the cap; the Settings input mirrors the cap via `maxLength`). In production the Settings field is the only live
+source — the Apify scrape is a local-dev testing tool (the
 `appSettings.apifyProfileScrapeEnabled` flag is a dev/prod switch). The UI shows `headline ??
 industry`.
 
 ```mermaid
 flowchart TD
-  T1["setPublicIdentifier (vanity saved)"] --> CHG{"changed & scrape enabled & within 2/day budget?"}
-  CHG -->|no| SKIP["skip auto-scrape (no budget charged)"]
-  CHG -->|yes| SCH["scheduler.runAfter(0)"]
-  T2["Settings: Refresh from LinkedIn"] --> RF["refreshProfileFromLinkedIn"]
-  RF --> G0{"public identifier set?"}
-  G0 -->|no| ERRP["throw: set your LinkedIn URL first"]
-  G0 -->|yes| GF{"apifyEnabled && profileScrapeEnabled?"}
-  GF -->|no| ERR["throw: refresh unavailable"]
-  GF -->|yes| RL{"<= 2 refreshes today?"}
-  RL -->|no| ERRL["throw: rate limit"]
-  RL -->|yes| SCH
-  SCH --> ACT["scrapeUserProfile (internal action)"]
-  ACT --> GATE{"apifyEnabled && profileScrapeEnabled?"}
-  GATE -->|no| STOP["return (no-op)"]
-  GATE -->|yes| PID{"has linkedinPublicIdentifier?"}
-  PID -->|no| STOP
-  PID -->|yes| API["Apify run-sync-get-dataset-items (queries=[vanity])"]
-  API --> PARSE["parseProfileScrapeResult -> {country?, location?, primaryLocale?, headline?}"]
-  PARSE --> APPLY["applyScrapedProfile: country + headline fill-when-empty; location/locale refresh"]
-  APPLY --> REACT["reactive getMe -> Settings updates + i18n seed"]
+    T1["setDerivedPublicIdentifier (vanity auto-derived from verified post)"] --> CHG{"changed & scrape enabled & within 2/day budget?"}
+    CHG -->|no| SKIP["skip auto-scrape (no budget charged)"]
+    CHG -->|yes| SCH["scheduler.runAfter(0)"]
+    T2["Settings: Refresh from LinkedIn"] --> RF["refreshProfileFromLinkedIn"]
+    RF --> G0{"public identifier set?"}
+    G0 -->|no| ERRP["throw: set your LinkedIn URL first"]
+    G0 -->|yes| GF{"apifyEnabled && profileScrapeEnabled?"}
+    GF -->|no| ERR["throw: refresh unavailable"]
+    GF -->|yes| RL{"<= 2 refreshes today?"}
+    RL -->|no| ERRL["throw: rate limit"]
+    RL -->|yes| SCH
+    SCH --> ACT["scrapeUserProfile (internal action)"]
+    ACT --> GATE{"apifyEnabled && profileScrapeEnabled?"}
+    GATE -->|no| STOP["return (no-op)"]
+    GATE -->|yes| PID{"has linkedinPublicIdentifier?"}
+    PID -->|no| STOP
+    PID -->|yes| API["Apify run-sync-get-dataset-items (queries=[vanity])"]
+    API --> PARSE["parseProfileScrapeResult -> {country?, location?, primaryLocale?, headline?}"]
+    PARSE --> APPLY["applyScrapedProfile: country + headline fill-when-empty; location/locale refresh"]
+    APPLY --> REACT["reactive getMe -> Settings updates + i18n seed"]
 ```
 
 ---
@@ -1643,25 +2007,23 @@ flowchart TD
 
 ### Foundations (Phase 1)
 
-- **Email capture.** `linkedin/auth.upsertUser` now stores `email`/`emailVerified` from the OIDC
-  userinfo (previously fetched and discarded) and forwards the address to Stripe (`billing.ts`
-  `getOrCreateCustomer`). Email is stored under legitimate interest / legal obligation — a contact
-  channel for data‑subject rights and breach notification — **not** marketing consent.
-- **Login + policy stamping.** `upsertUser` sets `lastLoginAt` on every login and stamps new users
-  with the current `POLICY_VERSION` (`lib/policy.ts`) in `acknowledgedPolicyVersion`, so newly
-  created accounts are never immediately re‑prompted to re‑accept the policy.
+- **Email capture.** `linkedin/auth.upsertUser` now stores `email` from the OIDC userinfo (previously fetched and
+  discarded) and forwards the address to Stripe (`billing.ts`
+  `getOrCreateCustomer`). Email is stored under legitimate interest / legal obligation — a contact channel for
+  data‑subject rights and breach notification — **not** marketing consent.
+- **Login + policy stamping.** `upsertUser` sets `lastLoginAt` on every login and stamps new users with the current
+  `POLICY_VERSION` (`lib/policy.ts`) in `acknowledgedPolicyVersion`, so newly created accounts are never immediately
+  re‑prompted to re‑accept the policy.
 - **New tables** (see [§5](#5-data-model)): `consentRecords` (append‑only consent log),
   `dataExportRequests` (asynchronous Subject‑Access‑Request jobs), `auditLogs` (accountability —
-  `lib/audit.ts` exposes `writeAuditLog` for in‑mutation use and the `logAudit` internal mutation
-  for actions).
+  `lib/audit.ts` exposes `writeAuditLog` for in‑mutation use and the `logAudit` internal mutation for actions).
 - **Transactional email.** `lib/email.ts` wraps Resend via `sendEmail` and **no‑ops when
-  `RESEND_API_KEY`/`EMAIL_FROM` are unset**, so privacy flows never fail merely because email is not
-  configured. See [§16](#16-environment-variables).
-- **Apify stays disabled at launch.** The LinkedIn scrape (post sync + profile enrichment) remains
-  **off in production** (kill‑switches in `appSettings`; `APIFY_*` env vars unset). It is therefore
-  **not** disclosed as a processing activity. **Hard gate:** the day Apify is switched on in
-  production, the privacy‑policy disclosure, the legal basis, and a sub‑processor entry must be added
-  in the same change.
+  `RESEND_API_KEY`/`EMAIL_FROM` are unset**, so privacy flows never fail merely because email is not configured.
+  See [§16](#16-environment-variables).
+- **Apify stays disabled at launch.** The LinkedIn scrape (post sync + profile enrichment) remains **off in production**
+  (kill‑switches in `appSettings`; `APIFY_*` env vars unset). It is therefore **not** disclosed as a processing
+  activity. **Hard gate:** the day Apify is switched on in production, the privacy‑policy disclosure, the legal basis,
+  and a sub‑processor entry must be added in the same change.
 
 ### Data-Subject Rights (Phase 2a)
 
@@ -1672,97 +2034,103 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
 
 - `requestDataExport` (mutation, rate-limited 1/day) inserts a `dataExportRequests` row and schedules
   `generateExport`.
-- `generateExport` (action) gathers the user's own rows (`gatherUserData`), assembles a JSON bundle
-  via the pure `buildExportBundle` — which **strips token secrets** and **redacts other actors** from
-  audit entries — stores it in Convex file storage, marks the row `ready` with a **7-day** `expiresAt`,
-  and emails the user (`exportReadyEmail`).
-- `getExportStatus` / `getExportDownloadUrl` return the status and a short-lived **owner-only** download
-  URL (`ctx.storage.getUrl`); expired links return null.
+- `generateExport` (action) gathers the user's own rows **table-by-table with pagination**
+  (`gatherUserTablePage`, 500/page, looped on the cursor until `isDone`) so a very active user's posts/interactions/
+  post-state can't exceed a single query's read limit and permanently fail the export; the user doc comes from
+  `getExportUser` and feedback replies from `gatherFeedbackResponses` (keyed by feedbackId). It then assembles a JSON
+  bundle via the pure `buildExportBundle` — which **strips token secrets** and **redacts other actors** from audit
+  entries — stores it in Convex file storage, marks the row `ready` with a **7-day** `expiresAt`, and emails the user
+  (`exportReadyEmail`).
+- `getExportStatus` / `getExportDownloadUrl` return the status and a short-lived **owner-only** download URL
+  (`ctx.storage.getUrl`); expired links return null.
 
 **Account deletion (right to erasure)** — `convex/privacy/deletion.ts`:
 
 - `requestAccountDeletion` (mutation, idempotent) sets `deletionRequestedAt` + `deletionScheduledAt`
   (+30 days) + `deletionReason='user_request'`, **revokes all sessions**, audits, and schedules
-  `onDeletionRequested` (cancels the user's Stripe subscriptions immediately via the Stripe SDK —
-  stop billing during grace — and sends `deletionScheduledEmail`).
-- The shared feed **excludes pending-deletion authors** via the pure `isAuthorFeedEligible` helper
-  (`feed.ts`) — their posts disappear immediately and **reappear automatically on cancel**, with no
-  post mutation.
+  `onDeletionRequested` (cancels the user's Stripe subscriptions immediately via the Stripe SDK — stop billing during
+  grace — and sends `deletionScheduledEmail`).
+- The shared feed **excludes pending-deletion authors** via the pure `isAuthorFeedEligible` helper (`feed.ts`) — their
+  posts disappear immediately and **reappear automatically on cancel**, with no post mutation.
 - `cancelAccountDeletion` clears the deletion fields (the user must re-subscribe for paid features).
-- `processAccountDeletions` (daily cron) erases accounts past their grace window, **one account per
-  invocation**. The pure `cascadeDeleteUser` deletes up to a bounded batch of rows **per table per
-  pass** — every owned row (posts, postQueue, subscriptions, sessions, rateLimits, featuredPostUsage,
-  planLimits, consentRecords, dataExportRequests + their storage files) — and **pseudonymizes
-  `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata). The `users` row is deleted
-  **last**, so a half-drained account stays "due" and the cron re-selects it until every table is
-  clear — keeping each pass within one transaction's budget even for an author with an unbounded
-  number of posts. On the final pass it writes an `account.deleted` system audit entry, then emails
+- `processAccountDeletions` (daily cron) erases accounts past their grace window, **one account per invocation**. The
+  pure `cascadeDeleteUser` deletes up to a bounded batch of rows **per table per pass** — every owned row (posts,
+  postQueue, subscriptions, sessions, featuredPostUsage, planLimits, consentRecords, dataExportRequests + their storage
+  files) — and **pseudonymizes
+  `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata). **Posts are handled specially**: before a post
+  is deleted, the cross-user rows referencing it (`userInteractions`/`userPostState` from OTHER users who reacted or
+  commented — located via each table's `by_post` index) are drained first, and the post is only deleted once none
+  remain, so erasure never leaves those rows dangling at a deleted post. **Rate‑limit counters** live in the
+  `@convex-dev/rate-limiter` component's isolated tables (not reachable by the by‑index db drains), so on the terminal
+  pass `processAccountDeletions` calls `resetUserRateLimits` to clear every per‑action counter for the key. The `users`
+  row is deleted **last**, so a half-drained account stays "due" and the cron re-selects it until every table is clear —
+  keeping each pass within one transaction's budget even for an author with an unbounded number of posts. On the final
+  pass it writes an
+  `account.deleted` system audit entry, then emails
   `deletionCompletedEmail`. **Billing invoices are retained inside Stripe** for tax/accounting law.
-- A schema-derived completeness test asserts the cascade covers every user-referencing table, so a
-  future table cannot silently orphan personal data.
+- A schema-derived completeness test asserts the cascade covers every user-referencing table, so a future table cannot
+  silently orphan personal data.
 
 ```mermaid
 flowchart TD
-  R["User: Delete my account"] --> REQ["requestAccountDeletion (resolveSession — banned OK)"]
-  REQ --> S1["set deletionRequestedAt, deletionScheduledAt=+30d, reason=user_request"]
-  REQ --> S2["revoke ALL sessions"]
-  REQ --> SCH["schedule onDeletionRequested"]
-  SCH --> ST["cancel Stripe subs (SDK) + deletion-scheduled email"]
-  S1 --> FEED["feed excludes author via isAuthorFeedEligible (no post mutation)"]
-  S1 --> GRACE{"within 30 days?"}
-  GRACE -->|"re-auth (Phase 2b screen)"| CANCELSCR["cancelAccountDeletion"]
-  CANCELSCR --> RESTORE["clear fields → feed auto-restores"]
-  GRACE -->|"elapsed"| CRON["processAccountDeletions cron"]
-  CRON --> CASCADE["cascadeDeleteUser (bounded passes, re-run until drained): delete owned rows + export files; pseudonymize auditLogs; delete user last"]
-  CASCADE --> DONE["deletion-completed email; Stripe retains invoices"]
+    R["User: Delete my account"] --> REQ["requestAccountDeletion (resolveSession — banned OK)"]
+    REQ --> S1["set deletionRequestedAt, deletionScheduledAt=+30d, reason=user_request"]
+    REQ --> S2["revoke ALL sessions"]
+    REQ --> SCH["schedule onDeletionRequested"]
+    SCH --> ST["cancel Stripe subs (SDK) + deletion-scheduled email"]
+    S1 --> FEED["feed excludes author via isAuthorFeedEligible (no post mutation)"]
+    S1 --> GRACE{"within 30 days?"}
+    GRACE -->|" re-auth (Phase 2b screen) "| CANCELSCR["cancelAccountDeletion"]
+    CANCELSCR --> RESTORE["clear fields → feed auto-restores"]
+    GRACE -->|" elapsed "| CRON["processAccountDeletions cron"]
+    CRON --> CASCADE["cascadeDeleteUser (bounded passes, re-run until drained): delete owned rows + export files; drain cross-user interaction/state rows on each post before deleting it (by_post); pseudonymize auditLogs; delete user last"]
+    CASCADE --> DONE["deletion-completed email; Stripe retains invoices"]
 ```
 
 ### Consent & Retention (Phase 3a)
 
-Backend for **granular consent** recording, **re-consent** prompting, and automated **data
-retention/dormancy** enforcement. The Phase 3b frontend — `ConsentToggles`, `PolicyUpdateScreen`,
+Backend for **granular consent** recording, **re-consent** prompting, and automated **data retention/dormancy**
+enforcement. The Phase 3b frontend — `ConsentToggles`, `PolicyUpdateScreen`,
 `CookieNotice`, and the `/cookies` landing page — is documented in [§14](#14-frontend--authenticated-app-app)
 and [§15](#15-frontend--landing-site-landing).
 
 **Consent recording** — `convex/privacy/consent.ts`:
 
-- `consentRecords` is **append-only** — individual purpose changes are each a new row, never an
-  update, preserving a full audit trail.
+- `consentRecords` is **append-only** — individual purpose changes are each a new row, never an update, preserving a
+  full audit trail.
 - `recordConsent` (mutation, `resolveSession`) inserts a new `consentRecords` row for a given
   `purpose` + `granted` value, then writes an audit log entry.
-- `getConsents` (query, `resolveSession`) returns the **latest record per purpose** for the
-  current user via the pure helper `latestConsentByPurpose` (groups by purpose, keeps the most
-  recent `_creationTime`).
-- Purposes at launch: `marketing` and `analytics` — both **off by default** (no row = no
-  consent; the pure helper returns `false` for absent purposes).
+- `getConsents` (query, `resolveSession`) returns the **latest record per purpose** for the current user via the pure
+  helper `latestConsentByPurpose` (groups by purpose, keeps the most recent `_creationTime`).
+- Purposes at launch: `marketing` and `analytics` — both **off by default** (no row = no consent; the pure helper
+  returns `false` for absent purposes).
 
 **One-time new-user consent prompt** — `convex/privacy/consent.ts`:
 
-- `completeConsentPrompt` (mutation, `resolveSession`) is called once when a new user completes
-  the first-login `ConsentPromptScreen`. It records both `marketing` and `analytics` consent
-  choices (each as an append-only `consentRecords` row), stamps `users.consentPromptedAt` with the
-  current timestamp, and writes a `consent.prompt_completed` audit log entry. An unset
+- `completeConsentPrompt` (mutation, `resolveSession`) is called once when a new user completes the first-login
+  `ConsentPromptScreen`. It records both `marketing` and `analytics` consent choices (each as an append-only
+  `consentRecords` row), stamps `users.consentPromptedAt` with the current timestamp, and writes a
+  `consent.prompt_completed` audit log entry. An unset
   `consentPromptedAt` field is the signal that causes `RequireAuth` to show `ConsentPromptScreen`
   on the next login — see [§14](#14-frontend--authenticated-app-app).
 
 **Re-consent / policy acknowledgement**:
 
-- `acknowledgePolicy` (mutation, `resolveSession`) stamps `users.acknowledgedPolicyVersion` with
-  the current `POLICY_VERSION` constant (from `lib/policy.ts`) and writes an audit log entry.
-  This allows the backend to detect users who have not yet acknowledged an updated policy.
-- `getMe` already exposes `acknowledgedPolicyVersion` (and `consentPromptedAt`) so the Phase 3b
-  frontend can prompt re-acceptance or the one-time consent prompt without a separate query.
+- `acknowledgePolicy` (mutation, `resolveSession`) stamps `users.acknowledgedPolicyVersion` with the current
+  `POLICY_VERSION` constant (from `lib/policy.ts`) and writes an audit log entry. This allows the backend to detect
+  users who have not yet acknowledged an updated policy.
+- `getMe` already exposes `acknowledgedPolicyVersion` (and `consentPromptedAt`) so the Phase 3b frontend can prompt
+  re-acceptance or the one-time consent prompt without a separate query.
 
 **Data retention & dormancy** — `convex/privacy/retention.ts`:
 
-The `enforceDataRetention` cron (daily — see [§13](#13-scheduled-jobs-crons)) runs four
-sequential batched sweeps using pure predicate helpers for testability. The token-expiry and
-dormancy sweeps read through indexes (`by_token_expiry`, `by_deletion_and_last_login`) rather
-than scanning the whole `users` table, and each processed row leaves its index range (token
-fields incl. `tokenExpiresAt` cleared; dormant rows gain `deletionScheduledAt`). The cron
-**self-reschedules** (`runAfter(0)`) whenever the token or audit sweep fills its batch, so a
-large backlog drains across runs; rescheduling keys only off those two strictly-draining sweeps
-to guarantee termination (the export and dormancy sweeps make bounded progress per run):
+The `enforceDataRetention` cron (daily — see [§13](#13-scheduled-jobs-crons)) runs four sequential batched sweeps using
+pure predicate helpers for testability. The token-expiry and dormancy sweeps read through indexes (`by_token_expiry`,
+`by_deletion_and_last_login`) rather than scanning the whole `users` table, and each processed row leaves its index
+range (token fields incl. `tokenExpiresAt` cleared; dormant rows gain `deletionScheduledAt`). The cron
+**self-reschedules** (`runAfter(0)`) whenever the token or audit sweep fills its batch, so a large backlog drains across
+runs; rescheduling keys only off those two strictly-draining sweeps to guarantee termination (the export and dormancy
+sweeps make bounded progress per run):
 
 | Sweep                 | Predicate                                                                                                     | Action                                                                                                           |
 |-----------------------|---------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
@@ -1772,63 +2140,59 @@ to guarantee termination (the export and dormancy sweeps make bounded progress p
 | Dormancy              | `isDormant(user)` — `lastLoginAt` (or `_creationTime`) >24 months ago **and** no active/trialing subscription | Sets `deletionScheduledAt` (+30 days from now) + `deletionReason='dormancy'` and sends a dormancy-warning email. |
 
 The dormancy path **reuses the Phase 2a deletion cascade**: once `deletionScheduledAt` is set,
-`processAccountDeletions` (the existing daily cron) handles the hard delete after the 30-day
-grace window. A dormant user who re-logs in sees `CancelDeletionScreen` (same interstitial as a
-voluntary deletion request) and can cancel via `cancelAccountDeletion` — no new UI needed.
+`processAccountDeletions` (the existing daily cron) handles the hard delete after the 30-day grace window. A dormant
+user who re-logs in sees `CancelDeletionScreen` (same interstitial as a voluntary deletion request) and can cancel via
+`cancelAccountDeletion` — no new UI needed.
 
 ```mermaid
 flowchart TD
-  CRON["enforceDataRetention (daily cron)"] --> TOK["Sweep 1: isTokenExpired?"]
-  TOK -->|yes| NULLTOK["null LinkedIn token fields"]
-  TOK -->|no| EXP
-  NULLTOK --> EXP["Sweep 2: isExportExpired?"]
-  EXP -->|yes| DELFILE["storage.delete + status=expired"]
-  EXP -->|no| AUD
-  DELFILE --> AUD["Sweep 3: isAuditExpired? (>24mo)"]
-  AUD -->|yes| DELLOG["delete auditLogs row"]
-  AUD -->|no| DORM
-  DELLOG --> DORM["Sweep 4: isDormant? (>24mo inactive, no sub)"]
-  DORM -->|yes| FLAG["set deletionScheduledAt=+30d, reason=dormancy + warning email"]
-  DORM -->|no| END["done"]
-  FLAG --> GRACE{"within 30d grace?"}
-  GRACE -->|"re-login → CancelDeletionScreen"| CANCEL["cancelAccountDeletion → clear fields"]
-  GRACE -->|"elapsed"| PDA["processAccountDeletions cron → cascadeDeleteUser"]
+    CRON["enforceDataRetention (daily cron)"] --> TOK["Sweep 1: isTokenExpired?"]
+    TOK -->|yes| NULLTOK["null LinkedIn token fields"]
+    TOK -->|no| EXP
+    NULLTOK --> EXP["Sweep 2: isExportExpired?"]
+    EXP -->|yes| DELFILE["storage.delete + status=expired"]
+    EXP -->|no| AUD
+    DELFILE --> AUD["Sweep 3: isAuditExpired? (>24mo)"]
+    AUD -->|yes| DELLOG["delete auditLogs row"]
+    AUD -->|no| DORM
+    DELLOG --> DORM["Sweep 4: isDormant? (>24mo inactive, no sub)"]
+    DORM -->|yes| FLAG["set deletionScheduledAt=+30d, reason=dormancy + warning email"]
+    DORM -->|no| END["done"]
+    FLAG --> GRACE{"within 30d grace?"}
+    GRACE -->|" re-login → CancelDeletionScreen "| CANCEL["cancelAccountDeletion → clear fields"]
+    GRACE -->|" elapsed "| PDA["processAccountDeletions cron → cascadeDeleteUser"]
 ```
 
 ---
 
 ## 14A. Design System
 
-The app (`app/`) uses a "warm premium" branded theme — the landing site's identity
-(gold, cream, ink-navy) expressed as a calm working surface, in light (default) and dark.
+The app (`app/`) uses a "warm premium" branded theme — the landing site's identity (gold, cream, ink-navy) expressed as
+a calm working surface, in light (default) and dark.
 
-- **Tokens:** semantic CSS variables in `app/src/index.css` (`:root` = light, `.dark` = dark),
-  mapped to shadcn names via `@theme inline`. Components consume tokens only — no hardcoded
-  palette colors.
+- **Tokens:** semantic CSS variables in `app/src/index.css` (`:root` = light, `.dark` = dark), mapped to shadcn names
+  via `@theme inline`. Components consume tokens only — no hardcoded palette colors.
 - **Two-gold rule:** `--primary` (bright gold `#c9963e`) for fills/borders/focus/underlines;
-  `--gold-text` (`#8a6418` light / `#e8c474` dark) for text, links, and small icons (bright gold
-  fails WCAG on white). Note: gold used as text *on* the gold tint (active nav, Featured pill)
+  `--gold-text` (`#8a6418` light / `#e8c474` dark) for text, links, and small icons (bright gold fails WCAG on white).
+  Note: gold used as text *on* the gold tint (active nav, Featured pill)
   uses the slightly darker `#7a5816` in light mode to pass WCAG AA.
-- **Typography:** DM Sans (`--font-sans`, body/UI) + Cormorant Garamond (`--font-display`,
-  page titles), both self-hosted via `@fontsource` (no Google CDN; `font-display: swap`).
-  Numeric data uses `tabular-nums`.
-- **Theme:** `app/src/lib/theme.ts` + `app/src/components/ThemeProvider.tsx` resolve
-  light/dark/system. The choice is persisted to the cross-site `theme` cookie (source of truth)
+- **Typography:** DM Sans (`--font-sans`, body/UI) + Cormorant Garamond (`--font-display`, page titles), both
+  self-hosted via `@fontsource` (no Google CDN; `font-display: swap`). Numeric data uses `tabular-nums`.
+- **Theme:** `app/src/lib/theme.ts` + `app/src/components/ThemeProvider.tsx` resolve light/dark/system. The choice is
+  persisted to the cross-site `theme` cookie (source of truth)
   **and** mirrored in `localStorage` for speed/back-compat. Cookie read/write is handled by
-  `app/src/lib/cookies.ts`. See [§14B](#14b-cross-site-theme--language-persistence) for the
-  cross-site persistence architecture.
-- **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar, Table) are shadcn-style
-  (cva + `cn`); `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline
-  used by every screen.
+  `app/src/lib/cookies.ts`. See [§14B](#14b-cross-site-theme--language-persistence) for the cross-site persistence
+  architecture.
+- **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar, Table) are shadcn-style (cva + `cn`);
+  `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline used by every screen.
 
 ---
 
 ## 14B. Cross-site Theme & Language Persistence
 
-The authenticated app (`app/`) and the landing site (`landing/`) share user preferences via
-**cookies scoped to the registrable parent domain** (`.linkintothessi.com` in production). This
-allows a user who toggled dark mode on the landing to arrive in the app already in dark mode —
-and vice versa — without any server round-trip.
+The authenticated app (`app/`) and the landing site (`landing/`) share user preferences via **cookies scoped to the
+registrable parent domain** (`.linkintothessi.com` in production). This allows a user who toggled dark mode on the
+landing to arrive in the app already in dark mode — and vice versa — without any server round-trip.
 
 ### Cookie specification
 
@@ -1838,45 +2202,44 @@ and vice versa — without any server round-trip.
 | `lang`  | `en` \| `pt` \| `es`          | same                                                                                                      | `/`  | `Lax`    | ~1 year |
 
 **Dev behaviour:** when the domain env var is unset, the cookie is written without a `Domain`
-attribute (host-only). Because dev runs `localhost:3000` (landing) vs `localhost:5174` (app),
-cookies are **not** shared across origins in dev — cross-site sync is prod-only. Each site
-honours its own cookie in isolation.
+attribute (host-only). Because dev runs `localhost:3000` (landing) vs `localhost:5174` (app), cookies are **not** shared
+across origins in dev — cross-site sync is prod-only. Each site honours its own cookie in isolation.
 
 ### Source files
 
-| Site    | File                                 | Responsibility                                                                                                                                                                        |
-|---------|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| App     | `app/src/lib/cookies.ts`             | SSR-safe cookie read (`document.cookie` parse) + `serializeCookie` + `getCookie`/`setCookie`. Reads `VITE_COOKIE_DOMAIN`.                                                             |
-| App     | `app/src/lib/theme.ts`               | `getStoredTheme`/`setStoredTheme` — reads cookie first, falls back to `localStorage` mirror; `applyTheme` sets `.dark` on `<html>`, `color-scheme` meta, `<meta name="theme-color">`. |
-| App     | `app/src/i18n/index.ts`              | `cookie` detector added to i18next-browser-languagedetector detection order (before `localStorage`).                                                                                  |
-| Landing | `landing/lib/cookies.ts`             | Same SSR-safe cookie I/O for Next.js. Reads `NEXT_PUBLIC_COOKIE_DOMAIN`.                                                                                                              |
-| Landing | `landing/lib/theme.ts`               | `resolveTheme` / `applyTheme` + cookie get/set.                                                                                                                                       |
-| Landing | `landing/app/layout.tsx`             | Inline no-flash `<script>` reads the `theme` cookie and applies `.dark` before React hydrates; sets `suppressHydrationWarning` on `<html>`.                                           |
-| Landing | `landing/components/ThemeToggle.tsx` | `'use client'` 3-state toggle (system → light → dark → system); updates cookie + DOM immediately.                                                                                     |
-| Landing | `landing/components/Nav.tsx`         | Mounts `<ThemeToggle>` in the nav bar.                                                                                                                                                |
+| Site    | File                                 | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+|---------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| App     | `app/src/lib/cookies.ts`             | SSR-safe cookie read (`document.cookie` parse) + `serializeCookie` + `getCookie`/`setCookie`. Reads `VITE_COOKIE_DOMAIN`.                                                                                                                                                                                                                                                                                                                                 |
+| App     | `app/src/lib/theme.ts`               | `getStoredTheme`/`setStoredTheme` — reads cookie first, falls back to `localStorage` mirror; `applyTheme` sets `.dark` on `<html>`, `color-scheme` meta, `<meta name="theme-color">`.                                                                                                                                                                                                                                                                     |
+| App     | `app/src/i18n/index.ts`              | `cookie` detector added to i18next-browser-languagedetector detection order (before `localStorage`).                                                                                                                                                                                                                                                                                                                                                      |
+| Landing | `landing/lib/cookies.ts`             | Same SSR-safe cookie I/O for Next.js. Reads `NEXT_PUBLIC_COOKIE_DOMAIN`.                                                                                                                                                                                                                                                                                                                                                                                  |
+| Landing | `landing/lib/theme.ts`               | `resolveTheme` / `applyTheme` + cookie get/set.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Landing | `landing/app/[lang]/layout.tsx`      | Carries the inline no-flash `<script>` in `<head>` that applies the theme **before first paint**, resolving with the **same** precedence as `lib/theme.ts` `getStoredTheme` (**cookie → localStorage → system**) so the pre-paint theme matches what `ThemeToggle`'s post-hydration effect applies (a mismatch — e.g. pref in the localStorage mirror but cookie absent — is what caused the refresh flash). Sets `suppressHydrationWarning` on `<html>`. |
+| Landing | `landing/components/ThemeToggle.tsx` | `'use client'` 3-state toggle (system → light → dark → system); updates cookie + DOM immediately.                                                                                                                                                                                                                                                                                                                                                         |
+| Landing | `landing/components/Nav.tsx`         | Mounts `<ThemeToggle>` in the nav bar.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### Theme resolution flow
 
 ```mermaid
 flowchart TD
-  A["Page load / toggle"] --> B{"theme cookie\npresent?"}
-  B -->|yes| C["use cookie value\n(light | dark | system)"]
-  B -->|no| D["check localStorage mirror\n(key 'theme')"]
-  D -->|found| C
-  D -->|not found| E["system default\n(prefers-color-scheme)"]
-  C --> F{"resolved =\nsystem?"}
-  E --> F
-  F -->|yes| G["read prefers-color-scheme\nmedia query"]
-  F -->|no| H["use resolved value\n(light or dark)"]
-  G --> H
-  H --> I["applyTheme:\ntoggle .dark on html\nset color-scheme\nset meta[theme-color]"]
-  I --> J["write cookie + localStorage mirror"]
+    A["Page load / toggle"] --> B{"theme cookie\npresent?"}
+    B -->|yes| C["use cookie value\n(light | dark | system)"]
+    B -->|no| D["check localStorage mirror\n(key 'theme')"]
+    D -->|found| C
+    D -->|not found| E["system default\n(prefers-color-scheme)"]
+    C --> F{"resolved =\nsystem?"}
+    E --> F
+    F -->|yes| G["read prefers-color-scheme\nmedia query"]
+    F -->|no| H["use resolved value\n(light or dark)"]
+    G --> H
+    H --> I["applyTheme:\ntoggle .dark on html\nset color-scheme\nset meta[theme-color]"]
+    I --> J["write cookie + localStorage mirror"]
 ```
 
 ### Palette unification (landing → app)
 
-The landing's Tailwind v4 migration (Plan 1 Phase B) replaced the previous dark-navy-only palette
-with a full light/dark split that mirrors the app's design-system tokens:
+The landing's Tailwind v4 migration (Plan 1 Phase B) replaced the previous dark-navy-only palette with a full light/dark
+split that mirrors the app's design-system tokens:
 
 | Landing token                   | Light     | Dark                         |
 |---------------------------------|-----------|------------------------------|
@@ -1900,24 +2263,30 @@ React 19 + Vite 6 SPA. Dev server runs on **port 5174**. Convex reactivity via `
 ### Bootstrap (`main.tsx`)
 
 Imports `./i18n` (side‑effect init) → `./index.css` → mounts
-`<StrictMode><ConvexProvider client={new ConvexReactClient(VITE_CONVEX_URL)}><BrowserRouter><App/>`.
-`index.html` ships a strict **CSP** meta tag allowing `frame-src https://www.linkedin.com` (post
-embeds) and `connect-src` to `*.convex.cloud` (wss) + `*.stripe.com`.
+`<StrictMode><ThemeProvider><ConvexProvider client={new ConvexReactClient(VITE_CONVEX_URL)}><BrowserRouter><ErrorBoundary><App/>`.
+`ErrorBoundary` (`components/ErrorBoundary.tsx`) is a top‑level render‑crash guard — without it a render error in
+`App` blanks the whole page; the boundary shows a friendly, i18n'd fallback (reload button) and reports the error via
+`console.error` (see [§17](#17-security-posture) Observability).
+`index.html` ships a strict **CSP** meta tag allowing `frame-src https://www.linkedin.com` (post embeds) and
+`connect-src` to `*.convex.cloud` (wss) + `*.stripe.com`.
 
 ### Routing & session handling (`App.tsx`)
 
 Declarative `react-router-dom` routes. The session token lives in **`sessionStorage`** (key
-`sessionToken`) — there's no React context/store; each page reads it directly.
+`sessionToken`) — there's no React context/store; each page reads it directly. A `<ScrollToTop/>`
+sibling of `<Routes>` resets `window.scrollTo(0, 0)` on every pathname change (skipped when the URL carries an in-page
+`#anchor`) — the declarative router doesn't restore scroll on its own, and the app uses a page-scroll model (the window
+is the scroller; see AppShell), so without it a scrolled feed would carry its scroll into the next page.
 
 | Path            | Page              |                               Guarded                               |
 |-----------------|-------------------|:-------------------------------------------------------------------:|
 | `/auth/success` | `AuthSuccessPage` | – (reads `#session=` hash → stores token + plan/interval → `/feed`) |
-| `/feed`         | `FeedPage`        |                                  ✓                                  |
-| `/my-posts`     | `MyPostsPage`     |                                  ✓                                  |
-| `/settings`     | `SettingsPage`    |                                  ✓                                  |
-| `/billing`      | `BillingPage`     |                                  ✓                                  |
-| `/admin`        | `AdminPage`       |       ✓ (server‑gated via `checkIsAdmin`; not linked in nav)        |
-| `/privacy-data` | `PrivacyDataPage` |                                  ✓                                  |
+| `/feed`         | `FeedPage`        |                                 ✓                                  |
+| `/my-posts`     | `MyPostsPage`     |                                 ✓                                  |
+| `/settings`     | `SettingsPage`    |                                 ✓                                  |
+| `/billing`      | `BillingPage`     |                                 ✓                                  |
+| `/admin`        | `AdminPage`       |       ✓ (server‑gated via `checkIsAdmin`; not linked in nav)       |
+| `/privacy-data` | `PrivacyDataPage` |                                 ✓                                  |
 | `*`             | → `/feed`         |                                  –                                  |
 
 `RequireAuth` calls `getMe`; the interception order is:
@@ -1931,97 +2300,139 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
 6. **`!me.consentPromptedAt`** (new user who has not yet completed the one-time consent prompt) →
    `<ConsentPromptScreen>`
-7. **`!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt`** (first login, LinkedIn profile URL not yet
-   captured) → `<PublicIdentifierPromptScreen>`
-8. **user ok** → `<AppShell>` (sidebar + top bar) + the requested page
+7. **`!me.firstPostPromptedAt`** (every new member, before billing — the submitted first post is created hidden for a
+   no-card member and the screen funnels them to `/billing`; the post is revealed when they add a card) →
+   `<FirstPostPromptScreen>`
+8. **user ok** → `<AppShell>` (sidebar + top bar) + `<Motd/>` + **`<ReconnectBanner/>`** (persistent top‑of‑app banner,
+   shown when `me.tokenExpiresAt` is null or within 7 days — the user‑facing counterpart to B01a's refresh cron;
+   see [§7](#7-authentication--identity)) + the requested page
 
 ```mermaid
 flowchart TD
-  L["index.html → main.tsx"] --> I["i18n init + ConvexProvider + Router"]
-  I --> RT{"route guarded?"}
-  RT -->|no e.g. /auth/success| LAND["read #session + plan + interval → store → /feed"]
-  RT -->|yes| RA["RequireAuth: getMe(sessionToken)"]
-  RA -->|undefined loading| SP["LoadingSpinner"]
-  RA -->|null| OAUTH["window.location = VITE_CONVEX_SITE/auth/linkedin"]
-  RA -->|isBanned| BAN["BannedScreen"]
-  RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
-  RA -->|"acknowledgedPolicyVersion ≠ POLICY_VERSION"| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
-  RA -->|"!consentPromptedAt"| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
-  RA -->|"no public identifier & not prompted"| PID["PublicIdentifierPromptScreen → setPublicIdentifier / dismiss → reload"]
-  RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + page → page issues Convex queries"]
+    L["index.html → main.tsx"] --> I["i18n init + ConvexProvider + Router"]
+    I --> RT{"route guarded?"}
+    RT -->|no e . g . /auth/success| LAND["read #session + plan + interval → store → /feed"]
+    RT -->|yes| RA["RequireAuth: getMe(sessionToken)"]
+    RA -->|undefined loading| SP["LoadingSpinner"]
+    RA -->|null| OAUTH["window.location = VITE_CONVEX_SITE/auth/linkedin"]
+    RA -->|isBanned| BAN["BannedScreen"]
+    RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
+    RA -->|" acknowledgedPolicyVersion ≠ POLICY_VERSION "| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
+    RA -->|" !consentPromptedAt "| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
+    RA -->|" !firstPostPromptedAt "| FIRSTPOST["FirstPostPromptScreen → submitPost (hidden if no card) → /billing · or dismiss → reload"]
+    RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + Motd + ReconnectBanner + page → page issues Convex queries"]
 ```
+
+### Gate screens & support contact
+
+Gate screens (currently `BannedScreen`) and `BillingPage` surface the monitored support address via a shared constant
+`SUPPORT_EMAIL` defined in `app/src/lib/support.ts`. `BannedScreen` links to it in a "Contact support" button;
+`BillingPage` links to it from the Enterprise card CTA and the "Need more?" footer line. This constant must be kept in
+sync with the compliance docs and live support inbox.
 
 ### Pages
 
-- **AuthSuccessPage** — reads `#session`, `plan`, and `interval` from the URL hash (the OAuth
-  callback appends them as hash parameters, e.g. `#session=UUID&plan=growth&interval=annual`);
-  stores the session token in `sessionStorage` (key `sessionToken`); stores `plan` and `interval`
+- **AuthSuccessPage** — reads `#session`, `plan`, and `interval` from the URL hash (the OAuth callback appends them as
+  hash parameters, e.g. `#session=UUID&plan=growth&interval=annual`); stores the session token in `sessionStorage` (key
+  `sessionToken`); stores `plan` and `interval`
   in `sessionStorage` (keys `chosenPlan` / `chosenInterval`) when present; clears the persistent
   `signedOut` marker (§7); and navigates to `/feed`. No Convex calls.
-- **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); a list of `PostCard`s, each
-  rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
-  shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card.
-  Uses `useCardGate()` and passes the resulting `gated` boolean to every `<PostCard>`. The
-  `react()` call is wrapped in try/catch: a `PAYMENT_REQUIRED` error surfaces an inline gate hint
-  (previously the call failed silently).
-- **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getMyPosts` + `submitPost`. Usage pill ("N of M
-  posts this week") turns **amber** at the cap and disables the composer (`atLimit`). Renders each
-  post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
-- **SettingsPage** — `getMe` + `setPublicIdentifier` + `updateProfile` + `refreshProfileFromLinkedIn`.
-  Industry and country are **searchable, virtualized comboboxes** (`VirtualizedCombobox`, built on the
-  shadcn `command`/`popover` primitives + `@tanstack/react-virtual`; country names via `Intl.DisplayNames`);
-  a read-only **Location** row appears when `me.location` is present (populated by the profile scrape);
-  a **"Refresh from LinkedIn"** button re-scrapes the profile (disabled without a public identifier;
-  shows the server error inline when the scrape flag is off). Pro/contact see a **stubbed** "who can
-  see your posts" card ("Coming in next task").
+- **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); for **Pro/Contact** viewers (gated on `getMe.tier`)
+  a collapsible **`FeedFilterPanel`** — two `ChipMultiSelect` pickers (industries / countries) whose add/remove/clear
+  each call `setFeedFilter`; the saved arrays come from `getMe`, so the feed re-filters reactively (no local state).
+  When a filter hides everything, the empty state shows `feed.emptyFiltered` instead of `feed.empty`. Then a list of
+  `PostCard`s, each rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
+  shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card. Uses `useCardGate()`
+  and passes the resulting `gated` boolean to every `<PostCard>`. The
+  `react()` call is wrapped in try/catch: a `PAYMENT_REQUIRED` error surfaces an inline gate hint (previously the call
+  failed silently).
+- **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getFeaturedUsage` + `getMyPosts` + `submitPost` + `setPostHidden` +
+  `deletePost` + `featurePost` + `unfeaturePost`. Two usage pills next to the profile header — weekly ("N of M posts
+  this week") and monthly featured ("N of M featured this month") — both fully localized via the `myPosts` i18n
+  namespace — each turns **amber** at its cap; the weekly one also disables the composer (`atLimit`). Each post's owner
+  action bar gets a **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the monthly cap is
+  reached) alongside the existing Hide/Unhide + Delete; a featured post also shows the shared `feed.featured` ("★
+  Featured") badge. **Delete** opens a themed `Modal` confirmation (`myPosts.deleteConfirm`, ghost Cancel + destructive
+  Confirm) instead of a native `window.confirm` ([[B18]]). Renders each post via the shared `LinkedInEmbed` with an app
+  footer (stats, relative time, "View on LinkedIn").
+- **SettingsPage** — `getMe` + `updateProfile` + `refreshProfileFromLinkedIn` + `setCommentLanguage` +
+  `setPostVisibility` (the standalone LinkedIn‑identity section was **removed** — the auto‑derived vanity is
+  internal‑only now, seeding Apify; the "Refresh from LinkedIn" button remains gated on it). Industry and country are
+  **searchable, virtualized comboboxes**
+  (`VirtualizedCombobox`, built on the shadcn `command`/`popover`
+  primitives + `@tanstack/react-virtual`; country names via `Intl.DisplayNames`); a read-only **Location** row appears
+  when `me.location` is present (populated by the profile scrape); a **"Refresh from LinkedIn"** button re-scrapes the
+  profile (disabled without a public identifier; shows the server error inline when the scrape flag is off). Pro/contact
+  see a **"who can see your posts"** card: two multi-select **chip pickers** (industries, countries), each the shared **
+  `ChipMultiSelect`** component (a `VirtualizedCombobox` with already-picked options excluded, plus removable `Badge`
+  chips — the same component the Feed filter reuses) — same dirty-flag-gated Save pattern as the other Settings fields
+  (see [§11](#11-feed--engagement) for the underlying `defaultVisibilityIndustries`/`defaultVisibilityCountries`
+  model). Starter/growth see the existing upgrade prompt. Below it, Pro/contact also see a mirror **"What you see in
+  your feed"** card — same two chip pickers + Save, writing `feedFilterIndustries`/`feedFilterCountries` via
+  `setFeedFilter` (the same fields the Feed-page `FeedFilterPanel` writes, so the two stay in sync).
 - **BillingPage** — `getMe` + `getSubscriptionInfo` + `createCheckoutSession` + `createPortalSession`
     + `api.users.getTrialProgress` (see §11 — query returns `{ made, received, combined, threshold,
   reached, status, trialEndsAt }`). Layout varies by subscription state:
 
-    - **No-card** (`none`/`canceled`/`past_due`): the three-tier plan cards are hidden; instead a
-      single prominent "Start your free 7-day trial" CTA is shown. It resolves the price ID from
-      `sessionStorage` keys `chosenPlan` / `chosenInterval` (written by `AuthSuccessPage` from the
-      plan the user selected on the landing Pricing page before starting OAuth), falling back to
-      **Growth** when neither is present. The monthly/annual toggle still applies as a UI override
-      of the interval.
-    - **Trialing** (`trialing`): the trial banner shows an **X / 50 interactions** progress meter
-      (`progress.combined` / `progress.threshold`, with a simple bar), the "or 7 days" secondary
-      count-down (`trialEndsAt`), and a **"View your SSI on LinkedIn" ↗** link-out
-      (`https://linkedin.com/sales/ssi`, new tab). The three-tier cards are visible; when the user
-      acts on the **Starter** card, an inline "what you'll miss" block lists Growth advantages
-      (industry-filtered feed, 50 vs 25 interactions/post, 2 vs 1 posts/week).
-    - **Active**: standard plan cards + "Manage Subscription" → Stripe portal.
-      Enterprise → `mailto:`.
-- **AdminPage** — `checkIsAdmin` (redirects non‑admins; server is the real gate). Four tabs:
-  **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync
-  status), **Plan Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's
-  effective limits, with an "override" tag), **Users** (`UsersTab` — per‑user row actions:
-  **Change tier**, **Change status**, **Edit limits** (contact tier only), and **Ban/Unban**),
-  **Feedback** (`FeedbackTab` — newest-first list of all user-submitted feedback; status filter
-  pills New/Responded/Archived/All; per‑row actions **Respond…** (opens `RespondFeedbackModal` —
-  sends an email reply via `api.feedback.feedback.respondToFeedback`; Respond button and textarea
-  are disabled with a warning when the submitter has no email on file), **Archive**
+  The **three-tier plan grid + Enterprise card is shown in every state** — no-card users are pushed toward Growth, not
+  limited to it. Every plan card's CTA routes through `createCheckoutSession`, which applies the same card-required
+  7-day trial to any valid price (the trial is plan-agnostic at the backend), so there is no separate
+  "start trial" gate. Each plan card lists that tier's `features` as a ✓ bullet list (copy mirrored from the landing
+  Pricing section's i18n, `billing.plans.<id>.features` in `app/src/i18n/locales/*`). The monthly/annual toggle applies
+  in all states. Checkout/portal-session failures surface via the app's `toast()` helper (`billing.checkoutFailed` /
+  `billing.portalFailed`) rather than a native `alert()` ([[B18]]).
+
+    - **No-card** (`none`/`canceled`/`past_due`): the plan grid is shown under a lead — **"Select a plan below — Growth
+      is the best bang for your buck."** + a "every plan starts with a free 7-day trial · cancel anytime" note. The
+      **Growth** card carries a **"Recommended"** badge and a highlighted border. No card is marked "current". The red
+      **"Your subscription has ended"** banner is shown only for genuinely ended subscriptions (`canceled` or a trial
+      that ran out) — brand-new users (`none`) never see it.
+    - **Trialing** (`trialing`): the trial banner shows an **X / 50 interactions** progress meter (`progress.combined` /
+      `progress.threshold`, with a simple bar), the "or 7 days" secondary count-down (`trialEndsAt`), and a **"View your
+      SSI on LinkedIn" ↗** link-out (`https://linkedin.com/sales/ssi`, new tab). When the user acts on the **Starter**
+      card, an inline "what you'll miss" block lists Growth advantages (industry-filtered feed, 50 vs 25
+      interactions/post, 2 vs 1 posts/week).
+    - **Active**: the current tier's card shows a "Current plan" badge; "Manage Subscription" → Stripe portal. When
+      `getSubscriptionInfo.currentPeriodEnd` is present, a date line renders alongside — "Renews on {date}"
+      normally, or "Access until {date}" (in the destructive color) when `cancelAtPeriodEnd` is set ([[B21]]; see §8
+      "Renewal / access-end date").
+        - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
+          `SUPPORT_EMAIL` constant).
+- **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
+  `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
+  directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
+  admin JSX rendered before the redirect took effect). This is a **UX nicety only**: `checkIsAdmin` soft‑fails to
+  `false` and every `api.admin.*` function independently enforces `assertAdmin` server‑side (§12), so a stale or
+  bypassed client redirect can't grant access. `/admin` is **intentionally URL‑only** (see routing table above) — a
+  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Four tabs:
+  **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync status), **Plan
+  Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's effective limits, with an "override"
+  tag), **Users** (`UsersTab` — per‑user row actions:
+  **Change tier**, **Change status**, **Edit limits** (contact tier only), and **Ban/Unban**), **Feedback**
+  (`FeedbackTab` — newest-first list of all user-submitted feedback; status filter pills New/Responded/Archived/All;
+  per‑row actions **Respond…** (opens `RespondFeedbackModal` — sends an email reply via
+  `api.feedback.feedback.respondToFeedback`; Respond button and textarea are disabled with a warning when the submitter
+  has no email on file), **Archive**
   (`archiveFeedback`), **Reopen** (`reopenFeedback`)).
 - **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b
-    - 3b). Three sections: (1) **Consent preferences** (`ConsentToggles` — see below) — marketing and
-      analytics toggles, OFF by default, reading `api.privacy.consent.getConsents` and writing
-      `api.privacy.consent.recordConsent` on toggle change. (2) **Data export**: "Request export" button
-      calls `api.privacy.export.requestDataExport`; polls status via
+    - 3b). Three sections: (1) **Consent preferences** (`ConsentToggles` — see below) — marketing and analytics toggles,
+      OFF by default, reading `api.privacy.consent.getConsents` and writing
+      `api.privacy.consent.recordConsent` on toggle change. (2) **Data export**: "Request export" button calls
+      `api.privacy.export.requestDataExport`; polls status via
       `api.privacy.export.getExportStatus`; shows a download link via
       `api.privacy.export.getExportDownloadUrl` once ready. (3) **Delete account**: a type‑`DELETE`
-      confirm `Modal` wrapping `api.privacy.deletion.requestAccountDeletion`; on success replaces the
-      section with a "scheduled for {date}" info panel. Cross‑reference: §13B (backend
-      mutations/actions these calls hit).
+      confirm `Modal` wrapping `api.privacy.deletion.requestAccountDeletion`; on success replaces the section with a
+      "scheduled for {date}" info panel. Cross‑reference: §13B (backend mutations/actions these calls hit).
 
 ### Reusable components
 
 `AppShell` (authenticated shell: persistent sidebar on desktop, modal drawer on mobile) composed of:
-`Sidebar` (feed/my‑posts/settings/billing/**privacy** links; **no admin link**), `TopBar` (search,
-theme toggle, language menu, user menu trigger), `UserMenu` (profile & settings + sign‑out via
+`Sidebar` (feed/my‑posts/settings/billing/ **privacy** links; **no admin link**), `TopBar` (search, theme toggle,
+language menu, user menu trigger), `UserMenu` (profile & settings + sign‑out via
 `performSignOut`), `LanguageMenu` (Radix dropdown replacing the old native `<select>`),
 `PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`; accepts
-`gated?: boolean` — disables submit/generate when gated; replaces a raw `PAYMENT_REQUIRED` error
-with a friendly message + a `<Link to="/billing">` prompt), `Modal`,
+`gated?: boolean` — disables submit/generate when gated; replaces a raw `PAYMENT_REQUIRED` error with a friendly
+message + a `<Link to="/billing">` prompt), `Modal`,
 `BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + per‑row modals + `banUser`/`unbanUser`),
 `FeedbackTab` (status filter pills + per‑row `RowActionsMenu` + `RespondFeedbackModal`),
 `RespondFeedbackModal` (shows original message read-only + reply textarea; Respond disabled when submitter has no email
@@ -2032,53 +2443,58 @@ on file; calls `respondToFeedback`),
 `listContactUsersWithLimits`), `RowActionsMenu`, `LoadingSpinner`,
 `CancelDeletionScreen` (grace‑window full‑screen interstitial shown by `RequireAuth` when
 `me.deletionScheduledAt` is set; "Keep my account" button calls
-`api.privacy.deletion.cancelAccountDeletion` then `window.location.reload()`; also offers a Sign
-out link — mirrors the `BannedScreen` layout),
+`api.privacy.deletion.cancelAccountDeletion` then `window.location.reload()`; also offers a Sign out link — mirrors the
+`BannedScreen` layout),
 `ConsentToggles` (Phase 3b — rendered inside `PrivacyDataPage`; a pair of labelled toggles for
 `marketing` and `analytics` consent purposes, both **OFF by default**; reads
-`api.privacy.consent.getConsents` on mount, calls `api.privacy.consent.recordConsent` on each
-toggle change; cross-reference: §13B for the append-only backend),
+`api.privacy.consent.getConsents` on mount, calls `api.privacy.consent.recordConsent` on each toggle change;
+cross-reference: §13B for the append-only backend),
 `PolicyUpdateScreen` (Phase 3b — full‑screen interstitial injected by `RequireAuth` when
 `me.acknowledgedPolicyVersion !== POLICY_VERSION`; "I acknowledge" button calls
-`api.privacy.consent.acknowledgePolicy` then `window.location.reload()`; ensures every existing
-user re-accepts after a policy update before reaching the app — see the `RequireAuth` interception
-order above and §13B),
+`api.privacy.consent.acknowledgePolicy` then `window.location.reload()`; ensures every existing user re-accepts after a
+policy update before reaching the app — see the `RequireAuth` interception order above and §13B),
 `ConsentPromptScreen` (first-login full-screen prompt shown by `RequireAuth` when
-`me.consentPromptedAt` is unset; presents **Communication & analytics preferences** — marketing
-and analytics toggles, both **OFF by default** — and a "Save & continue" button that calls
+`me.consentPromptedAt` is unset; presents **Communication & analytics preferences** — marketing and analytics toggles,
+both **OFF by default** — and a "Save & continue" button that calls
 `api.privacy.consent.completeConsentPrompt({ sessionToken, marketing, analytics })` then
-`window.location.reload()`; new users whose `acknowledgedPolicyVersion` is pre-stamped at signup
-but `consentPromptedAt` is unset hit this prompt on first login — see the `RequireAuth`
+`window.location.reload()`; new users whose `acknowledgedPolicyVersion` is pre-stamped at signup but `consentPromptedAt`
+is unset hit this prompt on first login — see the `RequireAuth`
 interception order above and §13B),
-`PublicIdentifierPromptScreen` (first-login full-screen prompt shown by `RequireAuth` when the user
-has no `linkedinPublicIdentifier` **and** `publicIdentifierPromptedAt` is unset; asks for the LinkedIn
-profile URL — reusing `extractVanityName` from `app/src/lib/linkedinProfile.ts` — and either saves it
-via `api.users.setPublicIdentifier` or stamps `publicIdentifierPromptedAt` via
-`api.users.dismissPublicIdentifierPrompt` ("Skip for now"), then `window.location.reload()`. LinkedIn's
-OIDC login does **not** expose the vanityName, so this prompt is how it's captured at login — see §7
-and the `RequireAuth` interception order above),
-plus the two LinkedIn‑embed components:
+`FirstPostPromptScreen` (first-login full-screen **skippable** onboarding step shown by `RequireAuth` when
+`me.firstPostPromptedAt` is unset — shown to every new member immediately after the consent gate; presents the shared
+`PostComposer` under a
+"Share your best recent post" heading, plus an "I'll do this later" link. Submitting a post calls
+`api.posts.submitPost` — which stamps `firstPostPromptedAt` server-side via `users.markFirstPostPrompted` and creates
+the post hidden for a no-card member (`postCreatedHidden`). A card-less member is then funneled to `/billing` (their
+post is revealed once they add a card); everyone else reloads to the feed. The skip link calls
+`api.users.dismissFirstPostPrompt` then reloads. Never blocks entry: a member without a post URL handy can skip. See the
+`RequireAuth` interception order above), plus the two LinkedIn‑embed components:
 
 - **`LinkedInEmbed`** — the **single shared** embed component used by **both** the Feed (`PostCard`)
-  and **My Posts**. Renders a LinkedIn post in an iframe that is intentionally taller
-  (`iframeHeight` 480) than its `overflow:hidden` container (`containerHeight` 420) so LinkedIn's
-  native action bar is clipped, then overlays an optional opaque `footer` (the app's own controls)
-  over that strip. `iframe` is sandboxed (`allow-scripts allow-same-origin`) and lazy‑loaded. Its
-  exported `buildEmbedUrl(urn)` **preserves the stored URN namespace** (`urn:li:activity|share|ugcPost`)
+  and **My Posts**. Renders a LinkedIn post in an `iframe` (`height:100%`) inside an `overflow:hidden`
+  container of fixed `containerHeight` (default **400**), then overlays an optional opaque `footer` (the app's own
+  controls) at the bottom to cover LinkedIn's native action bar. The height is a **heuristic**, not a precise clip: the
+  embed is cross‑origin and emits **no resize message**, so a post's real height is unknowable. `containerHeight` is
+  tuned a bit **below** the typical post height so the common (media) post **overflows** and its native bar falls below
+  the fold (hidden); only unusually short posts can end above the footer and let their native bar peek. Making the
+  iframe taller than the container does **not** help — `overflow:hidden` already clips everything below
+  `containerHeight`
+  regardless of iframe height (there is no `iframeHeight` prop). `iframe` is sandboxed
+  (`allow-scripts allow-same-origin`) and lazy‑loaded. Its exported
+  `buildEmbedUrl(urn)` **preserves the stored URN namespace** (`urn:li:activity|share|ugcPost`)
   with raw (un‑encoded) colons as LinkedIn requires; only bare/legacy ids fall back to wrapping as
   `activity`.
-- **`PostCard`** — the Feed's post renderer (**Option B layout**): an app‑owned header (Featured
-  badge via `feed.featured` + author avatar/name/headline) **above** a `LinkedInEmbed`, whose
+- **`PostCard`** — the Feed's post renderer (**Option B layout**): an app‑owned header (Featured badge via
+  `feed.featured` + author avatar/name/headline) **above** a `LinkedInEmbed`, whose
   `footer` is the app's in‑app **Like/Comment bar** (`type="button"` actions calling `onReact` /
-  `onComment`) overlaying the clipped native bar, plus a **View on LinkedIn ↗** link. That link is
-  rendered **only when `post.sourceUrl` is present** and points **directly at `sourceUrl`** (the exact
-  URL the user submitted) — there is no URN reconstruction, because LinkedIn's `ugcPost`/`activity`/
-  `share` IDs differ for the same post and a reconstructed `/feed/update/<urn>/` link can resolve
-  wrongly. (`MyPostsPage` keeps a `buildLinkedInUrl` with a reconstruction fallback for cron‑synced
-  posts.) **`PostCard` does not render `post.content` or `mediaUrls`** — the post body comes entirely
-  from the embed. Accepts a `gated?: boolean` prop (from `FeedPage` via `useCardGate()`): when
-  gated, the Like and Comment buttons are `disabled` with a `title` tooltip pointing to the Billing
-  page; "View on LinkedIn ↗" is rendered as a disabled `<button>` rather than an `<a>` (anchors
+  `onComment`) overlaying the clipped native bar, plus a **View on LinkedIn ↗** link. That link is rendered **only when
+  `post.sourceUrl` is present** and points **directly at `sourceUrl`** (the exact URL the user submitted) — there is no
+  URN reconstruction, because LinkedIn's `ugcPost`/`activity`/
+  `share` IDs differ for the same post and a reconstructed `/feed/update/<urn>/` link can resolve wrongly.
+  (`MyPostsPage` keeps a `buildLinkedInUrl` with a reconstruction fallback for cron‑synced posts.) **`PostCard` does not
+  render `post.content` or `mediaUrls`** — the post body comes entirely from the embed. Accepts a `gated?: boolean` prop
+  (from `FeedPage` via `useCardGate()`): when gated, the Like and Comment buttons are `disabled` with a `title` tooltip
+  pointing to the Billing page; "View on LinkedIn ↗" is rendered as a disabled `<button>` rather than an `<a>` (anchors
   cannot be disabled).
 
 > As of `1fcc123`, `MyPostsPage` uses this shared `LinkedInEmbed` directly (its old local
@@ -2088,8 +2504,8 @@ plus the two LinkedIn‑embed components:
 
 ### Trial UI (Plan 2C)
 
-The trial UI layer sits on top of the authenticated app and enforces a soft **card-gate** — it does
-not replace backend enforcement (`assertCanEngage`), it mirrors it in the UI.
+The trial UI layer sits on top of the authenticated app and enforces a soft **card-gate** — it does not replace backend
+enforcement (`assertCanEngage`), it mirrors it in the UI.
 
 #### `useCardGate()` hook (`app/src/hooks/useCardGate.ts`)
 
@@ -2106,109 +2522,156 @@ Admins are never gated. Returns `{ gated, isTrialing, status, isAdmin, me }`.
 
 `FeedPage` calls `useCardGate()` and passes `gated` to every `<PostCard>`. When `gated`:
 
-- The **Like** and **Comment** buttons in `PostCard` are `disabled` with a tooltip pointing to the
-  Billing page (`feed.cardGate` i18n key: "Add a payment method on the Billing page to start
-  engaging.").
+- The **Like** and **Comment** buttons in `PostCard` are `disabled` with a tooltip pointing to the Billing page
+  (`feed.cardGate` i18n key: "Add a payment method on the Billing page to start engaging.").
 - The **View on LinkedIn ↗** control is rendered as a `disabled` `<button>` instead of an `<a>`
   (anchors cannot carry the `disabled` attribute).
-- `CommentBox` disables its submit and generate buttons; a `PAYMENT_REQUIRED` response from the
-  backend replaces the raw error text with the gate message + a `<Link to="/billing">`.
+- `CommentBox` disables its submit and generate buttons; a `PAYMENT_REQUIRED` response from the backend replaces the raw
+  error text with the gate message + a `<Link to="/billing">`.
 - The `react()` call in `FeedPage` (previously un-caught) is wrapped in try/catch; a
   `PAYMENT_REQUIRED` error now surfaces an inline gate hint rather than failing silently.
 
 #### Pulsing Billing nav + SSI link-out (`Sidebar`)
 
 `Sidebar` calls `useCardGate()`. When `gated`, the **Billing** nav item receives `animate-pulse
-text-primary` (gold pulse via Tailwind v4 tokens) to draw attention. A persistent
-**"View your SSI on LinkedIn ↗"** link (`https://linkedin.com/sales/ssi`, new tab) is rendered in
-the sidebar footer above `<UserMenu>` using `text-gold-text` styling; it is always visible
-regardless of gate state. SSI is a link-out only — no score is fetched or displayed.
+text-primary` (gold pulse via Tailwind v4 tokens) to draw attention. A persistent **"View your SSI on LinkedIn ↗"** link
+(`https://linkedin.com/sales/ssi`, new tab) is rendered in the sidebar footer above `<UserMenu>` using `text-gold-text`
+styling; it is always visible regardless of gate state. SSI is a link-out only — no score is fetched or displayed.
 
 #### BillingPage — trial progress, chosen-tier CTA, downgrade prompt
 
-See the **BillingPage** bullet in the Pages section above for the full state-dependent layout.
-Backend query: `api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s
-session-resolution pattern; returns `{ made, received, combined, threshold, reached, status,
+See the **BillingPage** bullet in the Pages section above for the full state-dependent layout. Backend query:
+`api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s session-resolution pattern; returns `{ made, received, combined, threshold, reached, status,
 trialEndsAt }`). Cross-reference: §8 (subscription state machine) and §9 (plan limits).
+
+The date-countdown half of the trial UI is now **live**: `trialEndsAt` is populated from Stripe (see §8), so
+`getTrialDaysRemaining(trialEndsAt)` and `isTrialExpired` on `BillingPage` render real values instead of always `0`/
+`false`. Previously only the X/50 interaction meter worked; both halves of the "50 interactions OR 7 days" rule now
+render correctly.
 
 ---
 
 ### i18n (`i18n/index.ts`)
 
-`i18next` + `react-i18next` + browser language detector. Resources `en`/`pt`/`es`, fallback `en`.
-**Detection order:** `cookie` (`lang`) → `localStorage` → `?lang=` querystring → `navigator`. The
+`i18next` + `react-i18next` + browser language detector. Resources `en`/`pt`/`es`, fallback `en`. **Detection order:**
+`cookie` (`lang`) → `localStorage` → `?lang=` querystring → `navigator`. The
 `lang` cookie is the cross-site source of truth (see [§14B](#14b-cross-site-theme--language-persistence));
-`localStorage` is a same-origin mirror. The `LanguageMenu` (Radix dropdown in `TopBar`) persists
-the choice to both cookie and `localStorage`. On the first authenticated load, if neither the
-cookie nor `localStorage` `i18nextLng` key is present, the UI language is seeded once from
-`me.primaryLocale` (the scraped LinkedIn language); the `LanguageMenu` switcher still overrides it
-thereafter.
+`localStorage` is a same-origin mirror. The `LanguageMenu` (Radix dropdown in `TopBar`) persists the choice to both
+cookie and `localStorage`. On the first authenticated load, if neither the cookie nor `localStorage` `i18nextLng` key is
+present, the UI language is seeded once from
+`me.primaryLocale` (the scraped LinkedIn language); the `LanguageMenu` switcher still overrides it thereafter.
 
-**Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and
-confirmation copy used by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
+**Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and confirmation copy used
+by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
 `es` translation files.
 
 **Keys added in Phase 3b:** `privacy.consent.*` (toggle labels, descriptions, and status copy for
 `ConsentToggles`) and `privacy.policyUpdate.*` (heading, body, and button copy for
 `PolicyUpdateScreen`); all three locales (`en`/`pt`/`es`).
 
-**Keys added with new-user consent prompt:** `privacy.consentPrompt.*` (heading, body, toggle
-labels, and "Save & continue" button copy for `ConsentPromptScreen`); all three locales
-(`en`/`pt`/`es`).
+**Keys added with new-user consent prompt:** `privacy.consentPrompt.*` (heading, body, toggle labels, and "Save &
+continue" button copy for `ConsentPromptScreen`); all three locales (`en`/`pt`/`es`).
 
 **Keys added with Plan 2C trial UI:** `nav.viewSsi` (sidebar SSI link-out label);
 `feed.cardGate` (gate tooltip and CommentBox billing prompt); `billing.trialProgress`
 (X / N interactions meter, uses `{{combined}}` and `{{threshold}}` interpolation),
-`billing.ssiLink` (SSI link-out label in the trial banner), `billing.whatYouLlMiss` (inline
-loss-framing block shown on the Starter card while trialing), `billing.trialBanner` (updated to
-mention the 50-interaction milestone alongside the 7-day window); all three locales
-(`en`/`pt`/`es`).
+`billing.ssiLink` (SSI link-out label in the trial banner), `billing.whatYouLlMiss` (inline loss-framing block shown on
+the Starter card while trialing), `billing.trialBanner` (updated to mention the 50-interaction milestone alongside the
+7-day window); all three locales (`en`/`pt`/`es`).
+
+**Keys added with B16 (hardcoded-English cleanup):** extracted the remaining inline English strings so every user-facing
+surface now routes through `t()`. `MyPostsPage` — `timeAgo()` now uses i18next plurals (`myPosts.daysAgo_one`/`_other`
+via `t(key, { count })` for "N day (s) ago", plus `myPosts.today` for the zero-day case) instead of string
+concatenation; new `myPosts.tierPlan`, `weeklyUsageHint`, `weeklyUsage`,
+`weeklyLimitReached`, `heading`, `emptyState`, `hiddenFromFeed`, `visibleInFeed`, `hide`, `unhide`, `delete`,
+`deleteConfirm` (the `window.confirm` text — the confirm mechanism itself was later replaced with a themed `Modal`,
+see [[B18]]), `updateError`, `deleteError`. `PostComposer` — new `composer.*` namespace (`shareLabel`, `placeholder`,
+`hint`, `submitting`, `submit`, `submitError`); shared by `FeedPage`, `MyPostsPage`, and `FirstPostPromptScreen`, all of
+which now render this copy localized. Gate screens — new `bannedScreen.*` (badge, heading, body, `reasonLabel`,
+`contactSupport`; the support *address* stays the `SUPPORT_EMAIL` constant per the Gate screens subsection above) and
+new `cancelDeletion.*` (badge, heading, `bodyWithDate`/`bodyNoDate` with `{{date}}` interpolation, `cancelling`,
+`keepAccount`); both screens' "Sign out" button now reuses `nav.signOut` instead of a duplicate key. `PostCard` and
+`MyPostsPage`'s "View on LinkedIn ↗" label is now the single shared `feed.viewOnLinkedIn` key. `BillingPage` — the
+checkout/portal-session `alert()` error text now uses `billing.checkoutFailed`/`billing.portalFailed` (with
+`{{error}}` interpolation), and the Enterprise card's price now reads `billing.customPrice`. `LinkedInEmbed`'s iframe
+`title` (accessibility label, not just decorative) now reads `linkedInEmbed.title` — preserved as a real, non-empty
+translated string in all three locales. A duplicated defensive guard — `throw new Error('Not signed in')`, copy-pasted
+across `FeedPage`, `MyPostsPage`, `BillingPage`, and `FirstPostPromptScreen`'s post-submit/checkout handlers, surfaced
+verbatim in `PostComposer`'s or `BillingPage`'s error UI on the rare session-expiry race — was found while sweeping
+these same files and fixed at all four call sites with one shared `auth.notSignedIn` key (this string wasn't in B16's
+original inventory, which predates the sweep). Every new key has a genuine `pt`/`es`
+translation (not an English copy); language-neutral glyphs (`↗`, `→`, `↑`) and the LinkedIn URL placeholder are kept
+as-is in the values. Admin UI strings remain out of scope — see [[B17]] below.
+
+**[[B17]] — dead `admin.*` namespace removed:** the locale files carried an `admin` namespace (`title`, `forbidden`,
+`apifySync`, `apifySyncDescription`, `enable`, `disable`, `lastSync`) that no code ever read — a repo-wide grep for
+`t('admin.…')` matched nothing; `AdminPage` and its tabs (`UsersTab`, `PlanLimitsTab`, `FeedbackTab`, …) hardcode
+English throughout. Decision: the admin console is intentionally English-only internal tooling, not worth localizing, so
+the dead namespace was **deleted** from `en.json`/`pt.json`/`es.json` rather than wiring the UI to it. All three locale
+files remain structurally identical (241 keys each, verified by a recursive key-diff).
 
 ---
 
 ## 15. Frontend — Landing Site (`landing/`)
 
-Standalone **Next.js 15 (App Router)**, React 19, **Tailwind CSS 4** (CSS-first, migrated from v3
-in Plan 1 Phase B). Pure marketing — **no API/Convex calls**; all content (pricing, FAQ, stats) is
-hard‑coded in module constants.
+Standalone **Next.js 15 (App Router)**, React 19, **Tailwind CSS 4** (CSS-first, migrated from v3 in Plan 1 Phase B).
+Pure marketing — **no API/Convex calls**; all content (pricing, FAQ, stats) is hard‑coded in module constants.
 
 ### Locale routing (Plan 2 — i18n)
 
-All pages are **locale-routed** under `app/[lang]/` where `lang ∈ { en, pt, es }` (default `en`).
+All pages live under `app/[lang]/` where `lang ∈ { en, pt, es }` (default `en`).
 `pt` is **Brazilian Portuguese**; `es` is **neutral Latin-American Spanish**.
 
 #### Middleware (`landing/middleware.ts`)
 
-`middleware.ts` intercepts every request whose pathname does not start with a known locale prefix
-(plus static/API exclusions). It selects the target locale in priority order:
+`middleware.ts` handles locale routing only (static/API paths are excluded via the matcher config):
+
+- **Locale redirect** — a request with no known locale prefix is 307-redirected to `/<lang>/original-path`, choosing
+  `<lang>` in priority order below. A request that already carries a locale prefix passes through untouched.
 
 ```mermaid
 flowchart TD
-  REQ["Incoming request\n(no /en|pt|es prefix)"] --> CK{"lang cookie\npresent?"}
-  CK -->|yes| USE["use cookie value"]
-  CK -->|no| AL{"Accept-Language\nmatches en/pt/es?"}
-  AL -->|yes| USE
-  AL -->|no| DEF["default: en"]
-  USE --> REDIR["307 redirect to\n/<lang>/original-path"]
-  DEF --> REDIR
+    REQ["Incoming request"] --> HAS{"has /en|pt|es\nprefix?"}
+    HAS -->|yes| PASS["pass through\n(serve as-is)"]
+    HAS -->|no| CK{"lang cookie\npresent?"}
+    CK -->|yes| USE["use cookie value"]
+    CK -->|no| AL{"Accept-Language\nmatches en/pt/es?"}
+    AL -->|yes| USE
+    AL -->|no| DEF["default: en"]
+    USE --> REDIR["307 redirect to\n/<lang>/original-path"]
+    DEF --> REDIR
 ```
 
 The `Accept-Language` matcher is hand-rolled (no `negotiator`/`@formatjs/intl-localematcher` deps)
-— it checks the first token of each `Accept-Language` entry against the three supported locales,
-in header priority order. Paths starting with `/api/`, `/_next/`, and static file extensions are
-excluded from interception (Next's built-in exclusion list is replicated in the matcher config).
+— it checks the first token of each `Accept-Language` entry against the three supported locales, in header priority
+order. Paths starting with `/api/`, `/_next/`, and static file extensions are excluded from interception (Next's
+built-in exclusion list is replicated in the matcher config).
+
+##### Flash-free refresh (no-flash script)
+
+The theme is applied **before first paint** by the inline `<head>` script in the root layout, not by a per-theme
+prerender. The script resolves the theme with the **same** precedence as `lib/theme.ts` `getStoredTheme` (**cookie →
+localStorage → system**) and toggles `.dark` + `color-scheme` on `<html>`. Matching that precedence is the whole fix:
+`ThemeToggle`'s post-hydration effect also resolves via `getStoredTheme`, so when the pre-paint script uses the same
+order they always agree and no frame flips. The earlier bug was an asymmetry — the script read the **cookie only** and
+fell through to `system` (= OS) whenever the pref lived in the localStorage mirror with no cookie (cleared, or host-only
+in dev), while hydration later applied the localStorage value; the two disagreeing produced the ~0.5s refresh flash. (A
+render-blocking stylesheet does **not** out-race the inline script — rendering is blocked too, so the script always runs
+before first paint — which is why no server-side per-theme prerender is needed and the pages stay statically cacheable
+at `/<lang>`.)
 
 #### Root layout (`app/[lang]/layout.tsx`)
 
 `app/[lang]/layout.tsx` is the **single** root layout — there is no `app/layout.tsx`. It:
 
 - Awaits `params` (`const { lang } = await params` — Next 15 `params` is a `Promise`).
-- Renders `<html lang={lang}>` with `suppressHydrationWarning` (theme no-flash script).
-- Applies the dark/light theme no-flash inline `<script>` (reads the `theme` cookie before React
-  hydrates — identical to the Plan 1 pattern; see §14B).
+- Renders `<html lang={lang}>` (theme-less) with `suppressHydrationWarning` and the self-hosted font `variable`
+  classes; the no-flash inline `<head>` script sets the `.dark` class + `color-scheme` before paint (see above).
+- Sets a static `<meta name="theme-color">` (`ThemeToggle`'s post-hydration `applyTheme` updates it for the resolved
+  theme).
 - Renders `<CookieNotice>` (banner).
-- Calls `generateStaticParams` exporting `[{ lang: 'en' }, { lang: 'pt' }, { lang: 'es' }]` so
-  all three locales are **statically pre-rendered** at build time.
+- Calls `generateStaticParams` returning the three locales (`{en,pt,es}`) so every locale is **statically pre-rendered**
+  at build time.
 
 #### Dictionary (`landing/i18n/`)
 
@@ -2218,7 +2681,7 @@ UI strings live in `i18n/dictionaries/{en,pt,es}.json` (~208 keys in groups: `me
 `i18n/getDictionary.ts` imports the correct JSON at request time and returns a typed `Dictionary`
 (type derived from `en.json`). `i18n/config.ts` exports the `locales` array and `Locale` type.
 
-Server components (`app/[lang]/page.tsx`, `app/[lang]/pricing/page.tsx`, legal pages) call
+Server components (`app/[lang]/page.tsx`, legal pages) call
 `getDictionary(lang)` and pass the relevant dict slice as props to child components.
 
 #### Client components and `LanguageSelector`
@@ -2227,61 +2690,55 @@ The six client components — `Nav`, `Pricing`, `FAQ`, `CookieNotice`, `ThemeTog
 `LanguageSelector` — receive their dict slice (and `lang`) as props; they do not call
 `getDictionary` directly (server-only utility).
 
-`LanguageSelector` (`landing/components/LanguageSelector.tsx`) is mounted in `Nav`. When the user
-picks a locale it:
+`LanguageSelector` (`landing/components/LanguageSelector.tsx`) is mounted in `Nav`. When the user picks a locale it:
 
-1. Writes the **shared `lang` cookie** (same cookie name, domain, and SameSite attributes as the
-   app's i18n cookie detector — see §14B) via `landing/lib/cookies.ts`.
+1. Writes the **shared `lang` cookie** (same cookie name, domain, and SameSite attributes as the app's i18n cookie
+   detector — see §14B) via `landing/lib/cookies.ts`.
 2. Navigates to the same path under the chosen locale prefix (e.g. `/en/pricing` →
    `/pt/pricing`) using `router.push`.
 
-Because the cookie domain is `.linkintothessi.com` in production, the chosen language immediately
-carries over to the authenticated app on next load (the app reads the `lang` cookie via its
-i18next cookie detector — §14B). In dev the cookie is host-only so sync is prod-only.
+Because the cookie domain is `.linkintothessi.com` in production, the chosen language immediately carries over to the
+authenticated app on next load (the app reads the `lang` cookie via its i18next cookie detector — §14B). In dev the
+cookie is host-only so sync is prod-only.
 
 #### SEO: `hreflang` + per-locale metadata
 
-Each `page.tsx` exports `generateMetadata(params)` returning per-locale `title`, `description`,
-and OpenGraph fields sourced from `dict.meta`. It also injects `alternates.languages` with the
-three `hreflang` alternate URLs (`/en/…`, `/pt/…`, `/es/…`) plus `x-default` pointing to `/en/…`.
+Each `page.tsx` exports `generateMetadata(params)` returning per-locale `title`, `description`, and OpenGraph fields
+sourced from `dict.meta`. It also injects `alternates.languages` with the three `hreflang` alternate URLs (`/en/…`,
+`/pt/…`, `/es/…`) plus `x-default` pointing to `/en/…`.
 
 ### Routes
 
-All routes now include the locale prefix. The canonical forms are:
+Every URL carries a locale prefix. The canonical forms are:
 
 | Route             | Purpose                                                                                                                     |
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------|
 | `/<lang>`         | Home — composes `Nav → Hero → PainBeat → HowItWorks → SSIExplainer → Proof → Features → Pricing → FAQ → FinalCTA → Footer`. |
-| `/<lang>/pricing` | Standalone pricing (`Nav` + `Pricing`).                                                                                     |
 | `/<lang>/privacy` | Privacy Policy — **required for LinkedIn app review**.                                                                      |
 | `/<lang>/terms`   | Terms of Service — **required for LinkedIn app review**.                                                                    |
 | `/<lang>/cookies` | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`.     |
 
-A bare `/` (or any path without a locale prefix) is 307-redirected by middleware to the detected
-locale (see middleware section above). Static generation covers all 5 route types × 3 locales =
-15 pages, plus `ƒ Middleware`.
+A bare `/` (or any path without a locale prefix) is 307-redirected by middleware to the detected locale (see middleware
+section above). Static generation covers all 4 route types × 3 locales = **12 pages**, plus `ƒ Middleware`. Pricing is a
+section of the Home page (`Pricing` component), not a standalone route.
 
-`app/[lang]/layout.tsx` renders `<CookieNotice>` (see below) and contains the no-flash theme script.
-**Notable section content** (encodes the business rules):
-`PainBeat` frames the core problem (algorithm invisibility). `HowItWorks` describes the three-step
-engagement flow (connect → engage → get found) plus the network-effect line. `SSIExplainer` covers the four 25-point
-pillars
-with real LinkedIn-attributed statistics (45% more opportunities, 5× profile views, +51% recruiter
-contact for SSI > 70). `Proof` is an honest pre-launch block: a founder note, a link to check the
-user's own SSI on `linkedin.com/sales/ssi`, and an early-access line (no fabricated
-counts or testimonials). `Features` markets exactly three
-shipped capabilities (industry feed, AI-assisted comment/reaction, post targeting), outcome-framed
-and tier-labelled, with no "coming soon" items. `Pricing` is a `'use client'` component with an
-annual/monthly toggle (annual default, annual = monthly × 10 giving 2 months free); three tiers —
-Starter $5/$50, Growth $15/$150 (Recommended, elevated), Pro $50/$500 — plus an Enterprise
-contact-us line; trial copy reads "no charge until 50 interactions or 7 days, whichever comes
-first; card required, cancel anytime" (the card-capture and milestone-gate mechanics are
-implemented in Plan 2). Each tier's **"Start free" CTA** links directly to OAuth and appends
-`?plan=<starter|growth|pro>&interval=<monthly|annual>` so the chosen tier is carried through the
-OAuth flow and pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with
-honest trial-scope and SSI
-answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to
-`/<lang>/privacy`, `/<lang>/terms`, `/<lang>/cookies`, and `mailto:hello@linkintothessi.com`.
+`app/[lang]/layout.tsx` renders `<CookieNotice>` (see below) and contains the no-flash theme script. **Notable section
+content** (encodes the business rules):
+`PainBeat` frames the core problem (algorithm invisibility). `HowItWorks` describes the three-step engagement flow
+(connect → engage → get found) plus the network-effect line. `SSIExplainer` covers the four 25-point pillars with real
+LinkedIn-attributed statistics (45% more opportunities, 5× profile views, +51% recruiter contact for SSI > 70). `Proof`
+is an honest pre-launch block: a founder note, a link to check the user's own SSI on `linkedin.com/sales/ssi`, and an
+early-access line (no fabricated counts or testimonials). `Features` markets exactly three shipped capabilities
+(industry feed, AI-assisted comment/reaction, post targeting), outcome-framed and tier-labelled, with no "coming soon"
+items. `Pricing` is a `'use client'` component with an annual/monthly toggle (annual default, annual = monthly × 10
+giving 2 months free); three tiers — Starter $5/$50, Growth $15/$150 (Recommended, elevated), Pro $50/$500 — plus an
+Enterprise contact-us line; trial copy reads "no charge until 50 interactions or 7 days, whichever comes first; card
+required, cancel anytime" (the card-capture and milestone-gate mechanics are implemented in Plan 2). Each tier's **"
+Start free" CTA** links directly to OAuth and appends
+`?plan=<starter|growth|pro>&interval=<monthly|annual>` so the chosen tier is carried through the OAuth flow and
+pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with honest
+trial-scope and SSI answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to
+`/<lang>/privacy`, `/<lang>/terms`, `/<lang>/cookies`, and `mailto:contact@linkintothessi.com`.
 
 ### Legal pages — pt/es drafts
 
@@ -2293,59 +2750,62 @@ app/[lang]/terms/content/{en,pt,es}.tsx
 app/[lang]/cookies/content/{en,pt,es}.tsx
 ```
 
-Each `page.tsx` imports the content module matching `lang` and renders it. The pt and es modules
-are **Brazilian Portuguese / Latin-American Spanish translations** of the English source — they
-preserve the hand-styled JSX markup and all `[PLACEHOLDER]` tokens (`[LEGAL_ENTITY_NAME]`,
-`[BUSINESS_ADDRESS]`, `[PRIVACY_CONTACT_EMAIL]`, `[DPO_OR_REP_CONTACT]`,
-`[GOVERNING_LAW_JURISDICTION]`, policy version strings) **verbatim**. A draft banner
-(translated) is shown in all locales. All three locales remain **drafts pending legal review** —
-translation does not constitute legal sign-off.
+Each `page.tsx` imports the content module matching `lang` and renders it. The pt and es modules are **Brazilian
+Portuguese / Latin-American Spanish translations** of the English source — they preserve the hand-styled JSX markup and
+all `[PLACEHOLDER]` tokens (`NEANDERTECH SERVICOS DE TECNOLOGIA LTDA`,
+`AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`, `contact@linkintothessi.com`,
+`Henriko Alberton`,
+`Brazil`, policy version strings) **verbatim**. The legal pages render **no** literal draft/DRAFT banner element in any
+locale — the only related copy is an inline "drafted and inserted by qualified legal counsel" note in the Terms
+liability section (not a rendered banner; cross-ref [[B29]]). All three locales remain **drafts pending legal review**
+as an internal status — translation does not constitute legal sign-off.
 
 ### CookieNotice (Phase 3b)
 
-`CookieNotice` is a **client component** rendered in `landing/app/layout.tsx`. It displays a
-dismissible first-visit banner informing visitors that the site uses only essential storage (no
-tracking). Dismissal is persisted in **`localStorage`** (key `cookieNoticeDismissed`). The
-component uses **`useSyncExternalStore`** with a no-op server snapshot so it hydrates safely
-without an SSR/client mismatch — the notice is invisible on the server render and appears only
-after hydration confirms the key is absent. The banner is **not** shown to returning visitors (key
-already set) and disappears without page reload on dismiss.
+`CookieNotice` is a **client component** rendered in `landing/app/[lang]/layout.tsx`. It displays a dismissible
+first-visit banner informing visitors that the site uses only essential storage (no tracking). Dismissal is persisted
+in **
+`localStorage`** (key `cookieNoticeDismissed`). The component uses **`useSyncExternalStore`** with a no-op server
+snapshot so it hydrates safely without an SSR/client mismatch — the notice is invisible on the server render and appears
+only after hydration confirms the key is absent. The banner is **not** shown to returning visitors (key already set) and
+disappears without page reload on dismiss.
 
 ### Why the legal pages exist
 
-LinkedIn requires a publicly reachable **privacy policy** and **terms of service** before approving
-an app that reads a user's posts and publishes comments/reactions on their behalf. `/privacy` states
-tokens are stored securely server‑side and never exposed; `/terms` records the user's grant of
-permission to act on their behalf and the monthly‑billing/cancellation policy.
+LinkedIn requires a publicly reachable **privacy policy** and **terms of service** before approving an app that reads a
+user's posts and publishes comments/reactions on their behalf. `/privacy` states tokens are stored securely server‑side
+and never exposed; `/terms` records the user's grant of permission to act on their behalf and the
+monthly‑billing/cancellation policy.
 
 As of Phase 4, `/privacy` and `/terms` have been rewritten as full **GDPR / LGPD / US-state**
-drafts (covering lawful basis, data-subject rights, international transfers, and CCPA/CPRA
-disclosures). Both pages are **DRAFTs pending legal review** — bracketed placeholders
-(`[LEGAL_ENTITY_NAME]`, `[BUSINESS_ADDRESS]`, etc.) must be filled and a lawyer must sign off
-before they are regulator-ready. `/cookies` documents the essential-storage-only cookie policy
-(Phase 3b). See [`docs/compliance/README.md`](compliance/README.md) for the consolidated legal
-to-do list.
+drafts (covering lawful basis, data-subject rights, international transfers, and CCPA/CPRA disclosures). Both pages are
+**DRAFTs pending legal review** — bracketed placeholders (`NEANDERTECH SERVICOS DE TECNOLOGIA LTDA`,
+`AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`, etc.) must be filled and a lawyer must
+sign off before they are regulator-ready. `/cookies` documents the essential-storage-only cookie policy (Phase 3b).
+See [`docs/compliance/README.md`](compliance/README.md) for the consolidated legal to-do list.
 
 ### CTAs → app
 
-Every conversion CTA (Nav "Start free", Hero, Pricing, FinalCTA) is a plain `<a>` whose `href` is
-the shared **`SIGN_IN_URL`** (`landing/lib/links.ts`) — i.e.
-`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, sending visitors **straight into LinkedIn OAuth** (it
-falls back to `NEXT_PUBLIC_APP_URL` if the Convex site URL is unset). Going directly to OAuth (rather
-than the app root) is what lets a previously‑signed‑out visitor — whom the app bounces back to this
-site (§7) — actually log in instead of ping‑ponging. Internal nav (logo, footer, section anchors,
+Every conversion CTA (Nav "Start free", Hero, Pricing, FinalCTA) is a plain `<a>` whose `href` is the shared **
+`SIGN_IN_URL`** (`landing/lib/links.ts`) — i.e.
+`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, sending visitors **straight into LinkedIn OAuth** (it falls back to
+`NEXT_PUBLIC_APP_URL` if the Convex site URL is unset). Going directly to OAuth (rather than the app root) is what lets
+a previously‑signed‑out visitor — whom the app bounces back to this site (§7) — actually log in instead of ping‑ponging.
+Internal nav (logo, footer, section anchors,
 `/pricing`) uses Next `<Link>`.
 
 ### Styling
 
 **Tailwind v4 CSS-first** — `landing/app/globals.css` uses `@tailwindcss/postcss`, `@theme inline`,
-`:root` (light) and `.dark` (dark) token blocks, plus `@custom-variant dark (.dark)`. The palette
-(`--ink`, `--cream`, `--gold`, `--gold-text`, `--lnblue`, `--on-gold`, `--on-lnblue`, decorative
-`--ring-line`, `--ring-gold`, `--glow-*`) is unified with the app's design system (see §14A/§14B).
-No `tailwind.config.ts` remains (deleted in the v3→v4 migration). Cormorant Garamond (display) +
-DM Sans (body), glassmorphic scrolled nav, radial glows, decorative `circle-ring` elements. The
-hero is a headline + CTA over the decorative rings (no SSI gauge, no slot-machine animation). No
-mobile hamburger menu. `ThemeToggle` (3-state system/light/dark) is mounted in `Nav`.
+`:root` (light) and `.dark` (dark) token blocks, plus `@custom-variant dark (.dark)`. The palette (`--ink`, `--cream`,
+`--gold`, `--gold-text`, `--lnblue`, `--on-gold`, `--on-lnblue`, decorative
+`--ring-line`, `--ring-gold`, `--glow-*`) is unified with the app's design system (see §14A/§14B). No
+`tailwind.config.ts` remains (deleted in the v3→v4 migration). Cormorant Garamond (display) + DM Sans (body) are
+**self-hosted via `next/font/google`** in `app/[lang]/layout.tsx` (exposed as `--font-cormorant`/`--font-dm-sans`, wired
+into `--font-display`/`--font-body`) — no runtime `@import` from Google, keeping the CSP free of external font hosts;
+glassmorphic scrolled nav, radial glows, decorative `circle-ring` elements. The hero is a headline + CTA over the
+decorative rings (no SSI gauge, no slot-machine animation). No mobile hamburger menu. `ThemeToggle` (3-state
+system/light/dark) is mounted in `Nav`.
 
 ---
 
@@ -2356,54 +2816,101 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 ### Convex backend — set in the **Convex dashboard** (Settings → Environment Variables)
 
-| Variable                         |                Required                 | Consumed in                                         | Purpose                                                                                                                                                                                               |
-|----------------------------------|:---------------------------------------:|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `LINKEDIN_CLIENT_ID`             |                    ✓                    | `linkedin/oauth.ts`                                 | OAuth client id (authorize URL + token exchange).                                                                                                                                                     |
-| `LINKEDIN_CLIENT_SECRET`         |                    ✓                    | `linkedin/oauth.ts`                                 | OAuth client secret (server‑side token exchange).                                                                                                                                                     |
-| `LINKEDIN_REDIRECT_URI`          |                    ✓                    | `linkedin/oauth.ts`                                 | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                          |
-| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`, `billingNode.ts`           | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                       |
-| `STRIPE_STARTER_PRICE_ID`        |               ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                               |
-| `STRIPE_GROWTH_PRICE_ID`         |               ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `growth` tier.                                                                                                                                                                     |
-| `STRIPE_PRO_PRICE_ID`            |               ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `pro` tier.                                                                                                                                                                        |
-| `STRIPE_STARTER_ANNUAL_PRICE_ID` |               ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `starter` tier ($50/yr). Create in Stripe Dashboard alongside the monthly price.                                                                                                    |
-| `STRIPE_GROWTH_ANNUAL_PRICE_ID`  |               ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `growth` tier ($150/yr).                                                                                                                                                            |
-| `STRIPE_PRO_ANNUAL_PRICE_ID`     |               ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `pro` tier ($500/yr).                                                                                                                                                               |
-| `STRIPE_SECRET_KEY`              |               ✓ (billing)               | `billingNode.ts` + _(read by `@convex-dev/stripe`)_ | Stripe API secret — used directly in `billingNode.ts` for checkout + trial-end; also consumed by the Stripe component for customer/webhook ops.                                                       |
-| `STRIPE_WEBHOOK_SECRET`          |               ✓ (billing)               | _(read by `@convex-dev/stripe`)_                    | Verifies webhook signatures at `/stripe/webhook`.                                                                                                                                                     |
-| `APIFY_API_TOKEN`                |                ✓ (sync)                 | `jobs/syncPostsApify.ts`                            | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                   |
-| `APIFY_TASK_ID`                  |                ✓ (sync)                 | `jobs/syncPostsApify.ts`                            | Apify actor (`harvestapi~linkedin-profile-posts`).                                                                                                                                                    |
-| `APIFY_TASK_ID_PROFILE_SCRAPE`   |           ✓ (profile scrape)            | `jobs/scrapeProfileApify.ts`                        | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment).                                                                                                                      |
-| `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                                      | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                          |
-| `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                                      | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                             |
-| `CONVEX_DEPLOYMENT`              |                 ✓ (CLI)                 | Convex CLI                                          | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                     |
-| `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)                           | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`). |
-| `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`                       | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                     |
-| `OPENROUTER_API_KEY`             |   ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`                           | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                |
-| `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                           | Optional model slug override. Provider routing (ZDR + no-data-collection, cheapest qualifying provider) is enforced in code, not via env.                                                             |
-| `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                           | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                     |
+| Variable                         |                Required                 | Consumed in                                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|----------------------------------|:---------------------------------------:|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `LINKEDIN_CLIENT_ID`             |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client id (authorize URL + token exchange **and** the token-refresh call — no separate var).                                                                                                                                                                                                                                                                                                                                        |
+| `LINKEDIN_CLIENT_SECRET`         |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client secret (server‑side token exchange **and** refresh — `refreshAccessToken` reuses the same env pair, nothing new was added for the refresh cron).                                                                                                                                                                                                                                                                             |
+| `LINKEDIN_REDIRECT_URI`          |                   ✓                    | `linkedin/oauth.ts`                                 | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                                                                                                                                                                                                                                                              |
+| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`, `billingNode.ts`           | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                                                                                                                                                                                                                                                           |
+| `STRIPE_STARTER_PRICE_ID`        |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                                                                                                                                                                                                                                                   |
+| `STRIPE_GROWTH_PRICE_ID`         |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `growth` tier.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `STRIPE_PRO_PRICE_ID`            |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `pro` tier.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `STRIPE_STARTER_ANNUAL_PRICE_ID` |              ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `starter` tier ($50/yr). Create in Stripe Dashboard alongside the monthly price.                                                                                                                                                                                                                                                                                                                                        |
+| `STRIPE_GROWTH_ANNUAL_PRICE_ID`  |              ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `growth` tier ($150/yr).                                                                                                                                                                                                                                                                                                                                                                                                |
+| `STRIPE_PRO_ANNUAL_PRICE_ID`     |              ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `pro` tier ($500/yr).                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `STRIPE_SECRET_KEY`              |              ✓ (billing)               | `billingNode.ts` + _(read by `@convex-dev/stripe`)_ | Stripe API secret — used directly in `billingNode.ts` for checkout + trial-end; also consumed by the Stripe component for customer/webhook ops. **Unset ⇒ `billingNode.ts:14` throws `'STRIPE_SECRET_KEY is not configured'`** on any checkout/portal/trial-end call.                                                                                                                                                                     |
+| `STRIPE_WEBHOOK_SECRET`          |              ✓ (billing)               | _(read by `@convex-dev/stripe`)_                    | Verifies webhook signatures at `/stripe/webhook`. **Unset/mismatched ⇒ the signature check fails, the event is rejected, and subscriptions silently stop syncing** (Stripe retries/alerts on repeated 4xxs, but nothing in-app surfaces this to a user).                                                                                                                                                                                  |
+| `APIFY_API_TOKEN`                |                ✓ (sync)                | `jobs/syncPostsApify.ts`                            | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                                                                                                                                                                                                                                                       |
+| `APIFY_TASK_ID`                  |                ✓ (sync)                | `jobs/syncPostsApify.ts`                            | Apify actor (`harvestapi~linkedin-profile-posts`) — **already a real value in the `.example`, not a placeholder; no change needed.**                                                                                                                                                                                                                                                                                                      |
+| `APIFY_TASK_ID_PROFILE_SCRAPE`   |           ✓ (profile scrape)           | `jobs/scrapeProfileApify.ts`                        | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment). **Already a real value in the `.example`; no change needed.**                                                                                                                                                                                                                                                                                            |
+| `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                                      | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                                                                                                                                                                                                                                                              |
+| `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                                      | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                                                                                                                                                                                                                                                                 |
+| `CONVEX_DEPLOYMENT`              |                ✓ (CLI)                 | Convex CLI                                          | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                                                                                                                                                                                                                                                         |
+| `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)                           | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`).                                                                                                                                                                                                                                     |
+| `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`                       | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                                                                                                                                                                                                                                                         |
+| `OPENROUTER_API_KEY`             |  ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`                           | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                                                                                                                                                                                                                                                    |
+| `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                           | Optional model slug override. Provider routing (ZDR + no-data-collection pin governs selection, no price-floor suffix) is enforced in code, not via env. Blank ⇒ falls back to this valid, verified-live default (not broken — see [§11A](#11a-ai-reaction--comment-assistance) for the DeepInfra/Google zero-data-retention caveat: Google logs Gemma prompts/responses for abuse-monitoring independent of DeepInfra's ZDR commitment). |
+| `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                           | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                                                                                                                                                                                                                                                         |
+
+> **Danger — silent mis-billing on an unmapped price id.** `resolveTier` (`convex/lib/stripePrices.ts:22-28`)
+> **silently returns `starter`** (a `console.error` line only — no throw) for any price id that is blank or
+> missing from the map `buildPriceMap` builds once at module load from the six `STRIPE_*_PRICE_ID` vars
+> (`stripePrices.ts:30-31`; if none are set, the map — and `ALLOWED_PRICE_IDS` — is an empty `Set`). The
+> Stripe webhook handlers (`convex/http.ts`, `customer.subscription.created`/`.updated`) feed the live
+> Stripe price id from the event straight into this via `getTierFromPriceId`, so **a missing or mistyped env
+> var for one tier doesn't fail the webhook — it quietly syncs that subscriber's tier as `starter`**, with
+> no thrown error and no admin-visible signal beyond the log line. This is the one variable-misconfiguration
+> failure mode on this page that is **not** loud. (Checkout itself *does* fail loud — `billingNode.ts:26`
+> throws `'Invalid price ID'` if the id the client sends isn't in `ALLOWED_PRICE_IDS` — but that only guards
+> the checkout path, not the webhook-sync path above.) This defaulting is a known, accepted behavior today
+> (see [§8](#8-subscriptions--billing)); hardening it to throw/alert instead is a deliberate behavior change,
+> out of scope for this doc — flagged here for a future decision.
+>
+> **Price-id parity, app ↔ backend.** Every `VITE_STRIPE_*_PRICE_ID` below (the app build) must hold the
+> **exact same** Stripe price id as its corresponding `STRIPE_*_PRICE_ID` above (Convex) — the app only
+> *sends* the id, the backend is what validates/maps it. A mismatch either breaks checkout outright
+> (`'Invalid price ID'`) or, worse, checks a user out on a price whose id the backend's map resolves to a
+> *different* tier than the one they paid for. The three `_ANNUAL_` pairs also require the annual price to
+> be **created in Stripe first** (Dashboard → Product → Add price → Annual) — they don't exist until then.
+
+### Frontend build-time env — set in **Cloudflare** (each Worker's build settings)
+
+Both frontends inline these at **build time** (Vite/Next bake them into the output), so they live in the Cloudflare
+Workers Builds env, not at runtime. `<prod>` = the production Convex deployment slug.
+
+**Landing Worker (`NEXT_PUBLIC_*`):**
+
+| Var                         | Value                            |
+|-----------------------------|----------------------------------|
+| `NEXT_PUBLIC_APP_URL`       | `https://app.linkintothessi.com` |
+| `NEXT_PUBLIC_CONVEX_SITE`   | `https://<prod>.convex.site`     |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | `.linkintothessi.com`            |
+
+**App Worker (`VITE_*`):**
+
+| Var                                             | Value                                                                                                          |
+|-------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `VITE_CONVEX_URL`                               | `https://<prod>.convex.cloud`                                                                                  |
+| `VITE_CONVEX_SITE`                              | `https://<prod>.convex.site`                                                                                   |
+| `VITE_LANDING_URL`                              | `https://linkintothessi.com`                                                                                   |
+| `VITE_COOKIE_DOMAIN`                            | `.linkintothessi.com`                                                                                          |
+| `VITE_STRIPE_*_PRICE_ID` (+ `_ANNUAL_PRICE_ID`) | the 6 Stripe price ids — **must equal the matching Convex `STRIPE_*_PRICE_ID`** (see danger/parity note above) |
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
-| Variable                              |                    Required                     | Consumed in       | Purpose                                                                                                                |
-|---------------------------------------|:-----------------------------------------------:|-------------------|------------------------------------------------------------------------------------------------------------------------|
-| `VITE_CONVEX_URL`                     |                        ✓                        | `main.tsx`        | `.convex.cloud` URL for `ConvexReactClient` (data transport).                                                          |
-| `VITE_CONVEX_SITE`                    |                        ✓                        | `App.tsx`         | `.convex.site` base for the `/auth/linkedin` sign‑in redirect.                                                         |
-| `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`  | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                     |
-| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`  | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev). |
-| `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                  | `BillingPage.tsx` | Monthly price id for Starter checkout.                                                                                 |
-| `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                  | `BillingPage.tsx` | Monthly price id for Growth checkout.                                                                                  |
-| `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                  | `BillingPage.tsx` | Monthly price id for Pro checkout (missing → button disabled).                                                         |
-| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                  | `BillingPage.tsx` | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                           |
-| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                  | `BillingPage.tsx` | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                            |
-| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                  | `BillingPage.tsx` | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                  |
+| Variable                              |                    Required                     | Consumed in                  | Purpose                                                                                                                                                                             |
+|---------------------------------------|:-----------------------------------------------:|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `VITE_CONVEX_URL`                     |                       ✓                        | `main.tsx`                   | `.convex.cloud` URL for `ConvexReactClient` (data transport). **Left as the placeholder ⇒ every query/mutation/action fails — the app cannot reach the backend at all.**            |
+| `VITE_CONVEX_SITE`                    |                       ✓                        | `App.tsx`                    | `.convex.site` base for the `/auth/linkedin` sign‑in redirect. **Left as the placeholder ⇒ sign-in redirects to a dead host and OAuth cannot start.**                               |
+| `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`             | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                                                                                  |
+| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`             | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                              |
+| `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Starter checkout. Must match `STRIPE_STARTER_PRICE_ID` in Convex.                                                                                              |
+| `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Growth checkout. Must match `STRIPE_GROWTH_PRICE_ID` in Convex.                                                                                                |
+| `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                                          |
+| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                                        |
+| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                                                                                         |
+| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                               |
+| `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`    | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`. |
+| `VITE_POSTHOG_KEY`                    |      – (prod only; unset ⇒ analytics off)       | `observability/analytics.ts` | PostHog project key for product analytics. Unset ⇒ `initPostHog()` no‑ops. Capture is **also** gated on the user's `analytics` consent (opt‑out by default).                        |
+| `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts` | PostHog ingestion host. Defaults to EU Cloud; set `https://us.i.posthog.com` for US Cloud.                                                                                          |
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
-| Variable                    |                       Required                       | Consumed in      | Purpose                                                                                                                |
-|-----------------------------|:----------------------------------------------------:|------------------|------------------------------------------------------------------------------------------------------------------------|
-| `NEXT_PUBLIC_APP_URL`       |         – (default `http://localhost:5173`)          | `lib/links.ts`   | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset.                                      |
-| `NEXT_PUBLIC_CONVEX_SITE`   | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts`   | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly.                  |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` |   – (unset in dev; `.linkintothessi.com` in prod)    | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev). |
+| Variable                    |                       Required                       | Consumed in      | Purpose                                                                                                                                                                                     |
+|-----------------------------|:----------------------------------------------------:|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NEXT_PUBLIC_APP_URL`       |         – (default `http://localhost:5173`)          | `lib/links.ts`   | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset. The `.example` already ships the real prod URL (`https://app.linkintothessi.com`) — **no change needed.** |
+| `NEXT_PUBLIC_CONVEX_SITE`   | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts`   | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly.                                                                                       |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` |   – (unset in dev; `.linkintothessi.com` in prod)    | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                      |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
 > default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the
@@ -2415,76 +2922,181 @@ files are git‑ignored; the `.env*.example` files document the required set.
 
 The codebase follows a consistent, defensible security model:
 
-- **Secrets & internal fields never reach clients.** `toSafeMe` (`users.getMe`) strips tokens **and**
-  `stripeCustomerId`/`bannedBy`/`bannedAt`/raw `isAdmin`. The feed sends authors through an
-  **allow‑list** projection (`toFeedAuthor` — only `_id`/name/headline/picture/industry/country/tier),
-  so other users' `isAdmin`, Stripe id, `linkedinId`, ban state, etc. are never exposed.
-  `users.getWithTokens` is an `internalQuery` (server‑only). The OAuth client secret lives only in
-  Convex env and is used only in server‑side token exchange.
-- **Clients never pass a `userId`.** Identity is always resolved server‑side from an **opaque UUID
-  session token** via `lib/auth.ts`. The only thing a client can do is present a valid token.
-- **CSRF protection** on OAuth: a single‑use `state` nonce (10‑min TTL) stored before redirect and
-  **deleted before** the expiry check on callback (replay‑safe).
-- **Sessions:** random UUID, 30‑day TTL, stored in **`sessionStorage`** (cleared on tab close).
-  The token is delivered to the SPA in the OAuth redirect's **URL fragment** (`#session=…`, never a
-  query string), and `AuthSuccessPage` scrubs it from history after reading — so it can't leak via
-  server/proxy access logs or the `Referer` header. `logout` invalidates one session,
+- **Secrets & internal fields never reach clients.** `toSafeMe` (`users.getMe`) strips token **values** (access +
+  refresh) **and** `stripeCustomerId`/`bannedBy`/`bannedAt`/raw `isAdmin` — but intentionally **keeps
+  `tokenExpiresAt`** (an expiry timestamp, not a secret) so the client can drive a reconnect‑before‑expiry banner
+  ([§7](#7-authentication--identity)). The feed sends authors through an **allow‑list** projection (`toFeedAuthor` —
+  only `_id`/name/headline/picture/industry/country/tier), so other users' `isAdmin`, Stripe id,
+  `linkedinId`, ban state, etc. are never exposed.
+  `users.getWithTokens` is an `internalQuery` (server‑only). The OAuth client secret lives only in Convex env and is
+  used only in server‑side token exchange.
+- **Clients never pass a `userId`.** Identity is always resolved server‑side from an **opaque UUID session token** via
+  `lib/auth.ts`. The only thing a client can do is present a valid token.
+- **CSRF protection** on OAuth: a single‑use `state` nonce (10‑min TTL) stored before redirect and **deleted before**
+  the expiry check on callback (replay‑safe).
+- **Sessions:** random UUID, 30‑day TTL, stored in **`sessionStorage`** (cleared on tab close). The token is delivered
+  to the SPA in the OAuth redirect's **URL fragment** (`#session=…`, never a query string), and `AuthSuccessPage` scrubs
+  it from history after reading — so it can't leak via server/proxy access logs or the `Referer` header. `logout`
+  invalidates one session,
   `forceLogoutAll` invalidates all; expired sessions are purged by cron.
-- **Generic client‑facing errors.** Every LinkedIn/OAuth/Stripe/Apify failure logs the real error
-  server‑side (`console.error`) and returns a sanitized message — no stack traces or upstream bodies
-  leak to clients.
+- **Generic client‑facing errors.** Every LinkedIn/OAuth/Stripe/Apify failure logs the real error server‑side
+  (`console.error`) and returns a sanitized message — no stack traces or upstream bodies leak to clients.
 - **SSRF guard on outbound fetches.** `submitPost` fetches a user‑supplied URL, so
-  `parseLinkedInPostUrl` rejects any non‑`https` scheme or non‑`linkedin.com` host **before** the
-  fetch, and the URN scraped from the returned page is format‑validated before any downstream use.
-  The follow‑up **article‑enrichment fetch** runs the URL extracted from the page HTML through the
-  same host allowlist (`isAllowedLinkedInUrl`, which shares `ALLOWED_LINKEDIN_HOST` with
-  `parseLinkedInPostUrl`) **before** fetching, so a malicious/derived link cannot redirect the
-  server‑side fetch off‑LinkedIn.
-- **Payments fail safe.** The Stripe webhook signature is verified by `@convex-dev/stripe` before any
-  handler runs; checkout/portal require auth and an allow‑listed price id; `toSubscriptionStatus`
-  maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a
-  half‑finished or lapsed subscription never grants access; `getTierFromPriceId` fails to `starter`.
-- **Rate limiting** (fixed window per `userId+action`): submitPost 10/h, comment 20/h, react 30/h,
-  profile scrape 2/day (shared by manual Refresh + auto‑scrape on identifier change). **Admins are
-  exempt** from every rate limit.
-- **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path
-  (`upsertUser`, `setPublicIdentifier`, etc.). Admin endpoints re‑check `assertAdmin` on the
-  server‑resolved user, never on a client‑supplied id. `banUser` cannot self‑ban (always leaves ≥ 1
-  admin).
-- **Input validation:** `setPublicIdentifier` validates the vanity‑name format; `commentOnPost`
-  caps text at 3000 chars; `reactToPost` constrains the reaction enum; `commentOnPost`/`reactToPost`
-  reject `hidden`/interaction‑limit‑reached posts; `banUser` caps the reason at 500 chars; checkout
-  validates the price id against an allowlist before any work.
-- **CSP** (`app/index.html`) restricts script/style/frame/connect sources and adds
-  `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`. `script-src`/`style-src` keep
-  `'unsafe-inline'` because the Vite dev server injects inline scripts/styles — tightening that needs
-  a **prod‑only nonce/hash CSP served as an HTTP header** at the hosting layer (which is also where
-  `frame-ancestors`/HSTS belong, since a `<meta>` CSP ignores `frame-ancestors`).
+  `parseLinkedInPostUrl` rejects any non‑`https` scheme or non‑`linkedin.com` host **before** the fetch, and the URN
+  scraped from the returned page is format‑validated before any downstream use. **`lnkd.in` shortlinks** are accepted
+  via `resolveLinkedInShortlink`, which follows the shortener redirect **manually** (`redirect: 'manual'`) and
+  re‑validates **every hop** against the host allowlist (`lnkd.in` + `linkedin.com` only, https only, 5‑hop budget)
+  before requesting it — the redirect **target** is never fetched until it is proven to be a `linkedin.com` URL, so a
+  shortlink cannot steer the server‑side fetch off‑LinkedIn. The follow‑up **article‑enrichment fetch** runs the URL
+  extracted from the page HTML through the same host allowlist (`isAllowedLinkedInUrl`, which shares
+  `ALLOWED_LINKEDIN_HOST` with `parseLinkedInPostUrl`) **before** fetching, so a malicious/derived link cannot redirect
+  the server‑side fetch off‑LinkedIn. The **Apify sync path** applies the same discipline to untrusted scraper output
+  (`jobs/syncPostsApify.ts`): a scraped post `sourceUrl` is stored only when it passes `isAllowedLinkedInUrl` (else
+  dropped to `undefined`), and stored `mediaUrls`/`imageUrls` are filtered to **https‑only** (`isHttpsUrl`, which is
+  host‑agnostic because LinkedIn media is served from `licdn.com`, not `linkedin.com`). This closes two sinks:
+  `sourceUrl`
+  reaches client navigation (`PostCard` href, `CommandPalette` `window.open`, `handoff` `window.location.href`) where a
+  `javascript:`/`data:` URL would be click‑to‑execute, and `imageUrls` are fetched by the AI vision provider.
+- **Payments fail safe.** The Stripe webhook signature is verified by `@convex-dev/stripe` before any handler runs;
+  checkout/portal require auth and an allow‑listed price id; `toSubscriptionStatus`
+  maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a half‑finished or
+  lapsed subscription never grants access; `getTierFromPriceId` fails to `starter`.
+- **Rate limiting** (fixed window per `userId+action`, via the `@convex-dev/rate-limiter` component — atomic
+  check+consume, no race): submitPost 10/h, comment 20/h, react 30/h, profile scrape 2/day (shared by manual Refresh +
+  auto‑scrape on identifier change). **Admins are exempt** from every rate limit.
+- **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path (`upsertUser`, etc.).
+  Admin endpoints re‑check `assertAdmin` on the server‑resolved user, never on a client‑supplied id. `banUser` cannot
+  self‑ban (always leaves ≥ 1 admin).
+- **Input validation:** the LinkedIn vanity is **auto‑derived** (LinkedIn‑authoritative, never user‑typed) — post
+  ownership is verified by matching the post's author name to the member's OIDC `name` (§11), not a user‑set field;
+  `commentOnPost`
+  caps text at 3000 chars; `reactToPost` constrains the reaction enum; `commentOnPost`, `reactToPost`, **and**
+  `generateComment` reject `hidden` / soft‑deleted / interaction‑limit‑reached / not‑visible posts through the single
+  shared `assertPostEngageable` gate (§11), so the three engagement paths can't diverge; `banUser` caps the reason at
+  500 chars; checkout validates the price id against an allowlist before any work; the ⌘K `search` query ignores inputs
+  over 200 chars (resource guard); MOTD authoring rejects body keys outside the supported `en`/`pt`/`es` locales.
+- **CSP + security headers (served at the Cloudflare HTTP layer).** The **app** generates `dist/_headers`
+  at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the **SHA-256 hash** of the one pre-paint inline
+  theme script (no `'unsafe-inline'`), plus `frame-src https://www.linkedin.com` and a
+  `connect-src` allowlist (Convex `.cloud`/`.site` + Stripe). The **landing** sets its CSP via
+  `next.config.js` `headers()` with `script-src 'self' 'unsafe-inline'` (it renders only static copy, so the pages stay
+  prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data). In **dev only**
+  (`NODE_ENV !== 'production'`) the landing adds `'unsafe-eval'` to `script-src` because `next dev` evals every module
+  (eval-source-map devtool + Fast Refresh) — without it the client bundle throws and nothing hydrates; the deployed
+  Worker (built with `NODE_ENV=production`) never gets this relaxation. Landing fonts are **self-hosted** via
+  `next/font/google` (served from `'self'`), so no external font/style host is whitelisted. Both retain
+  `style-src 'unsafe-inline'` (Radix + inline styles), and both add
+  `frame-ancestors 'none'`, `Strict-Transport-Security` (HSTS, 2y + preload), `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`. The old `<meta>` CSP was removed from
+  `app/index.html` (a `<meta>` CSP cannot set `frame-ancestors`/HSTS — that needs HTTP headers).
+- **Referer minimization on remote images.** The shared `Avatar` (`app/src/components/ui/avatar.tsx`) — the single
+  `<img>` that renders LinkedIn/Apify‑hosted `profilePictureUrl` everywhere in the app — sets
+  `referrerPolicy="no-referrer"`, so a member's browser never leaks the app URL (which can identify the profile being
+  viewed) to the third‑party image host. Defense‑in‑depth on top of the page‑level `Referrer-Policy` header.
 
-> **Open security‑relevant gaps / hardening backlog:** no LinkedIn token‑refresh flow (tokens
-> silently expire ~60 days); the ban is reactive (a banned user's in‑flight reads still resolve until
-> the next protected call / reactive push); `linkedinPublicIdentifier` is
-> **self‑attributed** (format‑validated only — LinkedIn actions still use the user's own token, so it
-> can't be used to act as someone else); and prod CSP / `frame-ancestors` / HSTS headers should be
-> set at the hosting layer. See [§19](#19-known-discrepancies-dead-code--roadmap).
+### Observability & Error Monitoring
+
+Three layers: a zero‑dependency dev log tail, prod error monitoring (Sentry), and consent‑gated product analytics
+(PostHog). **All three are inert in dev** — the SDKs no‑op unless their prod keys are set — and the backend log redactor
+(`scrubError`) runs everywhere regardless. (This supersedes the earlier "B05 minimal" posture: the
+`@convex-dev/sentinel` component is still **not published to npm** (registry 404), so instead of that component we use
+the Sentry + PostHog SDKs directly, wired to respect the existing consent model.)
+
+- **Dev — native log tail (no dependency):** `pnpm watch:errors` streams the **dev** deployment's function logs live
+  (`npx convex logs`); `pnpm watch:errors:prod` tails **prod** (`--prod`). Convex already surfaces every function
+  failure + `console.error` line (the `scrubError` output below), so this is the day‑to‑day "watch the backend" tool —
+  no service, no sub‑processor.
+- **Prod frontend errors — Sentry (`@sentry/react`):** `initSentry()` (`app/src/lib/observability/sentry.ts`), called
+  from `main.tsx`, is a **hard no‑op unless `import.meta.env.PROD` and `VITE_SENTRY_DSN` are both set**. It
+  auto‑captures
+  `window.onerror`/`unhandledrejection`, and one `captureException` line in the existing
+  `ErrorBoundary.componentDidCatch` ([§14](#14-frontend--authenticated-app-app)) reports React render crashes. Treated
+  as a **necessary security/reliability** function — runs regardless of analytics consent — so PII is stripped **before
+  send**: `sendDefaultPii:false`, plus a `beforeSend` that drops `request.cookies`/`request.headers` and any `user`
+  identity and runs the message + exception values through the same `scrubError` redactor. No performance tracing
+  (`tracesSampleRate:0`).
+- **Prod backend errors — Sentry via Convex (no code):** Convex functions can't host the Sentry SDK; the backend path is
+  Convex's native **Exception Reporting** integration (runbook below). `scrubError` remains the pre‑log redactor, so the
+  same redaction applies to what Convex forwards.
+- **Product analytics — PostHog (`posthog-js`), consent‑gated:** `initPostHog()`
+  (`app/src/lib/observability/analytics.ts`) is a **no‑op unless PROD and `VITE_POSTHOG_KEY` are set**, and initialises
+  **opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — **no session replay**).
+  `<AnalyticsConsentGate>` (mounted in the authenticated shell in `App.tsx`) reads the signed‑in user's live `analytics`
+  consent (`privacy.consent.getConsents`) and calls `syncAnalyticsConsent(userId, consents)`: `shouldCaptureAnalytics`
+  (pure, unit‑tested) opts capture **in + `identify(user._id)`** only when the user granted `analytics` consent, and
+  opts **out + `reset()`** on withdrawal or sign‑out. Users are identified by their **opaque Convex `_id` only** — no
+  name/email. EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`).
+- **Backend `console.error` redaction (`scrubError`):** the backend catch seams route their logged context through
+  `convex/lib/scrubError.ts`, a pure, dependency‑free helper (no Convex function, no codegen). It **default‑denies**
+  any key name containing `token`/`access`/`refresh`/`secret`/`authorization`/`email`/`apikey` (case‑insensitive
+  substring, including a string body that parses as JSON), replacing the value with `[REDACTED]`, and **caps the logged
+  string to 500 characters**. Wired at: the OAuth‑callback `catch` and the Stripe `onEvent` log in `convex/http.ts`; the
+  `!res.ok` body log in `convex/ai/openrouter.ts` ([§11A](#11a-ai-reaction--comment-assistance)); the token‑exchange/
+  `refreshAccessToken` paths in `convex/linkedin/oauth.ts` ([§7](#7-authentication--identity)); and the Resend
+  send‑failure log in `convex/lib/email.ts` ([§13B](#13b-privacy--compliance)). The **same redactor feeds Sentry's
+  `beforeSend`**, so both sinks share one redaction path.
+
+```mermaid
+flowchart TD
+  subgraph Dev["Dev — native, no sub-processor"]
+    D1["pnpm watch:errors / :prod"] --> D2["npx convex logs — live failure + console.error tail"]
+  end
+  subgraph App["app/ — prod only, SDKs inert without keys"]
+    A1["window.onerror / unhandledrejection"] --> S1["Sentry.init (beforeSend: scrubError, no PII)"]
+    A2["ErrorBoundary.componentDidCatch"] --> S1
+    A3["AnalyticsConsentGate reads analytics consent"] --> P1{"analytics consent?"}
+    P1 -- granted --> P2["PostHog opt_in + identify(user._id)"]
+    P1 -- withdrawn/none --> P3["PostHog opt_out + reset"]
+  end
+  subgraph Backend["convex/ — server"]
+    B1["console.error catch seams"] --> B2["scrubError redact + 500-char cap"]
+    B2 --> B3["Convex function logs"]
+    B3 --> B4["Convex Exception Reporting → Sentry (prod, dashboard-configured)"]
+  end
+  S1 --> SENTRY["Sentry (US or EU)"]
+  B4 --> SENTRY
+  P2 --> POSTHOG["PostHog (EU Cloud default)"]
+```
+
+**Enabling Sentry on the backend (runbook).** In the **Convex Dashboard**, select the deployment (prod first) →
+**Settings → Integrations → Exception Reporting** → add the Sentry **DSN** → save. Convex then forwards function
+exceptions to Sentry. Repeat for the dev deployment if you also want dev backend errors captured there.
+
+**Launch checklist (do at go‑live, not before — the SDKs stay inert until then):**
+
+1. Create the Sentry project (s) and the PostHog project (prefer EU region/cloud); execute both DPAs.
+2. Set `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` in the app's **Cloudflare** build env; redeploy.
+3. Wire the backend Sentry DSN via the Exception Reporting runbook above.
+4. In PostHog: enable IP discard/anonymization; confirm session replay is off.
+5. **Compliance:** bump `POLICY_VERSION` (`convex/lib/policy.ts`) to re‑prompt users (adding a sub‑processor is a
+   material change), and update the public **Privacy Policy** (§2/§4/§10) and **Cookie & Storage Policy** (en/pt/es) to
+   disclose Sentry (necessary/security) + PostHog (consent‑gated analytics). See `docs/compliance/SUBPROCESSORS.md`.
+
+> **Open security‑relevant gaps / hardening backlog:** the LinkedIn token‑refresh flow (`linkedin/tokenRefresh`,
+> §19) is dormant at the current Standard‑tier OAuth (no `refresh_token` is issued), so tokens still
+> silently expire ~60 days — the proactive reconnect banner (§7/§14) is the mitigation; the ban is reactive (a banned
+> user's in‑flight reads still resolve until
+> the next protected call / reactive push); `linkedinPublicIdentifier` is now
+> **auto‑derived** (set‑once) from a name‑verified post's author URL — LinkedIn‑authoritative, never
+> user‑typed, so it can't be spoofed via a settings field; LinkedIn actions still use the user's own
+> token. See [§19](#19-known-discrepancies-dead-code--roadmap).
 
 ### Compliance Documentation
 
-The `docs/compliance/` folder contains six **DRAFT** documents (pending legal review) that
-accompany the technical controls described in [§13B](#13b-privacy--compliance):
+The `docs/compliance/` folder contains six **DRAFT** documents (pending legal review) that accompany the technical
+controls described in [§13B](#13b-privacy--compliance):
 
-| File                                                    | Contents                                                                     |
-|---------------------------------------------------------|------------------------------------------------------------------------------|
-| [`DATA-INVENTORY.md`](compliance/DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — GDPR Art. 30                        |
-| [`SUBPROCESSORS.md`](compliance/SUBPROCESSORS.md)       | Sub-processor list (Convex, Stripe, LinkedIn, Resend; Apify hard-gate noted) |
-| [`RETENTION-POLICY.md`](compliance/RETENTION-POLICY.md) | Retention windows per data category and automated-enforcement references     |
-| [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md)     | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA)           |
-| [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook (72-hour notification)        |
-| [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37)             |
+| File                                                    | Contents                                                                                                  |
+|---------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| [`DATA-INVENTORY.md`](compliance/DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — GDPR Art. 30                                                     |
+| [`SUBPROCESSORS.md`](compliance/SUBPROCESSORS.md)       | Sub-processor list (Convex, Stripe, LinkedIn, Resend, OpenRouter, Sentry, PostHog; Apify hard-gate noted) |
+| [`RETENTION-POLICY.md`](compliance/RETENTION-POLICY.md) | Retention windows per data category and automated-enforcement references                                  |
+| [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md)     | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA)                                        |
+| [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook (72-hour notification)                                     |
+| [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37)                                          |
 
-See [`docs/compliance/README.md`](compliance/README.md) for the index and the consolidated human /
-legal to-do list (bracketed placeholders, lawyer sign-off, sub-processor DPA signing, DPO/rep
-assessment, and the Apify hard gate).
+See [`docs/compliance/README.md`](compliance/README.md) for the index and the consolidated human / legal to-do list
+(bracketed placeholders, lawyer sign-off, sub-processor DPA signing, DPO/rep assessment, and the Apify hard gate).
 
 ---
 
@@ -2509,23 +3121,25 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   `no-console` off in `convex/`. Ignores `_generated`, `convex-mocks`, config files, agent dirs.
 - **Prettier:** no semicolons, single quotes, `arrowParens: avoid`, no trailing commas, 120 cols,
   `singleAttributePerLine`, `prettier-plugin-tailwindcss`.
-- **TS base** (`tsconfig.base.json`): `strict`, `ES2020`, `moduleResolution: bundler`. App builds
-  gate on `tsc`; Vite runs an in‑dev type‑check overlay (`vite-plugin-checker`).
+- **TS base** (`tsconfig.base.json`): `strict`, `ES2020`, `moduleResolution: bundler`. App builds gate on `tsc`; Vite
+  runs an in‑dev type‑check overlay (`vite-plugin-checker`).
 
 ### Testing (Vitest everywhere)
 
 - **Convex:** `convex/vitest.config.ts` aliases `convex/server` →
-  `convex-mocks/_test/__mocks__/convex_server_generics.ts`, so backend handlers are testable as
-  **plain functions** (the mock returns function definitions unchanged; `cronJobs`/`httpRouter` are
-  no‑ops; a `components` Proxy yields `undefined`). Run: `pnpm --filter convex test`. Coverage spans
-  schema, auth, oauth, feed, posts, processQueue, admin, parsePostUrl/Content, verifyPostOwnership.
+  `convex-mocks/_test/__mocks__/convex_server_generics.ts`, so backend handlers are testable as **plain functions** (the
+  mock returns function definitions unchanged; `cronJobs`/`httpRouter` are no‑ops; a `components` Proxy yields
+  `undefined`). Run: `pnpm --filter convex test`. Coverage spans schema, auth, oauth, feed, posts, processQueue, admin,
+  parsePostUrl/Content, verifyPostOwnership.
 - **App:** Vitest config inline in `vite.config.ts` (`jsdom`, `setupFiles` import
-  `@testing-library/jest-dom` + `../i18n`). Component tests for PostCard, PostComposer,
-  LinkedInEmbed, Modal, BannedScreen, BanUserDialog, UsersTab, PlanLimitsTab, AdminPage, MyPostsPage,
-  SettingsPage, i18n. Run: `pnpm --filter app test`.
+  `@testing-library/jest-dom` + `../i18n`). Component tests for PostCard, PostComposer, LinkedInEmbed, Modal,
+  BannedScreen, BanUserDialog, UsersTab, PlanLimitsTab, AdminPage, MyPostsPage, SettingsPage, i18n. Run:
+  `pnpm --filter app test`.
 - **All:** `pnpm -r test`.
-- **No CI config** (`.github/` doesn't exist) — lint/format/tests are run manually or by deploy
-  platforms.
+- **CI/deploy:** no `.github/` workflows — deploys run via **Cloudflare Workers Builds** (Git push-to-`master`:
+  landing = `opennextjs-cloudflare build`/`deploy`, app = `vite build` + `wrangler deploy`); Convex via
+  `npx convex deploy`. New deploy config: `app/wrangler.jsonc`, `landing/wrangler.jsonc`, `landing/open-next.config.ts`,
+  `app/scripts/gen-headers.mjs`; root scripts `deploy:app`/`deploy:landing`/`preview:landing`.
 
 ---
 
@@ -2533,157 +3147,330 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 
 ### README ↔ code mismatches (trust the code)
 
-- **Tables:** README says 5; there are **10**.
-- **Post sync:** README says "hourly LinkedIn‑API cron"; reality is **daily, Apify‑only, admin‑gated**
-  (no direct LinkedIn‑API ingestion path).
-- **OAuth scopes:** README lists `r_liteprofile`/`r_member_social`/`r_network`; code uses
-  `openid profile email r_basicprofile w_member_social_feed w_member_social`.
-- **OAuth redirect:** README shows `?userId=…`; code uses `?session=…` (a session token).
-- **Token refresh:** README claims a 60‑day refresh flow "implemented"/"attempted within 7 days of
-  expiry"; **no refresh logic exists**.
-- **Next.js:** README says 14; `landing/` is **15**.
-- **Deploy artifacts:** README says `app/` includes a `Dockerfile` + `nginx.conf` for Railway;
-  **neither file exists** in the repo (no `railway.*`, `Procfile`, `vercel.json`, etc. either).
-- **Dev port:** README/`.env.example` assume 5173; Vite is configured for **5174**.
-- README's project tree references files that don't exist (`jobs/syncConnections.ts`,
-  `pages/LoginPage.tsx`).
+The root `README.md` was **reconciled to the code on 2026‑08‑30** (Cloudflare hosting, Apify ingestion, handoff
+engagement, live all‑tier AI, 7‑day trial, 16 tables, session‑token OAuth redirect, Next.js 15, dev port 5174). The
+former mismatch list (5 tables, hourly LinkedIn‑API sync, `?userId=` redirect, Next.js 14, port 5173, phantom
+`syncConnections.ts`/`LoginPage.tsx` in the project tree) is resolved. Two code facts the README intentionally omits,
+for the record:
+
+- **Token refresh** is dormant for essentially every user: the app's OIDC Standard‑tier scopes mean LinkedIn never
+  issues a `refresh_token` (see [§7](#7-authentication--identity)); the reconnect banner (`ReconnectBanner.tsx`, task
+  B01b) is the real mitigation.
 
 ### Dead / vestigial code
 
-- **`featuredPostUsage`** table — defined and tested but has **no read/write call sites**.
 - `linkedin/types.ts` legacy `LinkedInProfile`/`LinkedInConnectionElement`/`LinkedInConnectionsResponse`
   are unused remnants of the abandoned `r_network` connections feature.
-- `landing/tailwind.config.ts` was **deleted** in the Tailwind v3→v4 migration (Plan 1 Phase B);
-  its `slotRoll` keyframe and the `fadeUp`/`shimmer` keyframes had zero usages and were not ported.
+- `landing/tailwind.config.ts` was **deleted** in the Tailwind v3→v4 migration (Plan 1 Phase B); its `slotRoll` keyframe
+  and the `fadeUp`/`shimmer` keyframes had zero usages and were not ported.
 
 ### Stubs / planned
 
-- **Post‑visibility controls** (who sees your posts) — Settings card is a "Coming soon" placeholder
-  (the underlying `visibilityIndustries`/`visibilityCountries` fields **are** enforced in the feed,
-  but there's no UI to set them).
-- **AI comment generator** — `CommentBox` advertises "AI suggestions coming soon"; no integration.
-- **Featured posts quota** — `featuredPostUsage` table exists but is unwired.
-- **LinkedIn token refresh** — needed before tokens hit their ~60‑day expiry.
-- **Placeholder constants** — `BannedScreen.SUPPORT_EMAIL = 'contact@email.com'` (TODO);
-  `STRIPE_WEBHOOK_SECRET=whsec_your_secret` in the committed `.env.local`.
+- ~~Post‑visibility controls~~ — **resolved** (task B06): `users.setPostVisibility` (Pro/Contact-gated, validated
+  against `INDUSTRIES`/`COUNTRY_CODES`) sets `users.defaultVisibilityIndustries`/`defaultVisibilityCountries`; every
+  post writer copies them onto `posts.visibilityIndustries`/`visibilityCountries` at insert time, which `feed.getFeed`
+  already enforced (see [§11](#11-feed--engagement)). Settings UI is chip pickers built on `VirtualizedCombobox` +
+  `Badge`.
+- ~~AI comment generator~~ — **resolved**: `CommentBox` calls `api.ai.comments.generateComment` (live OpenRouter
+  integration, gated on an active subscription via `assertCanEngage`, rate-limited, not tier-gated); see
+  [§11A](#11a-ai-reaction--comment-assistance).
+- ~~Featured posts quota~~ — **resolved** (task B07): `posts.featurePost`/`unfeaturePost` are wired to
+  `planLimits.featuredPerMonth` and `featuredPostUsage`
+  (see [§9](#9-plan-limits-system)/[§10](#10-posts--content-pipeline)); My Posts exposes a Feature/Unfeature toggle +
+  quota pill.
+- ~~LinkedIn token refresh~~ — **resolved**: the refresh action/cron/mutation (backend half, task B01a) are built and
+  documented in [§7](#7-authentication--identity)/[§13](#13-scheduled-jobs-crons), though the path is dormant for
+  essentially every user (no `refresh_token` at this OAuth tier). The reconnect banner (frontend half, task B01b,
+  `app/src/components/ReconnectBanner.tsx`) — the actual user‑facing mitigation for expiry — is now built too.
+- ~~Feed backfill migration missing~~ — **resolved**: `convex/migrations/backfillFeedFields.ts` now stamps
+  `feedRank`/`inFeed` on every `posts` row (see §11). Pre-launch there is no prod data so it's a no-op today; narrowing
+  the schema's `feedRank`/`inFeed` from `v.optional` to required is a separate future item.
+- ~~`BannedScreen.SUPPORT_EMAIL` placeholder~~ — **resolved** (task B14): the real support address
+  `contact@linkintothessi.com` now lives in `app/src/lib/support.ts` (`SUPPORT_EMAIL`), consumed by `BannedScreen`
+  and `BillingPage` (see [§14 "Gate screens & support contact"](#gate-screens--support-contact)).
+- **Placeholder constant** — `STRIPE_WEBHOOK_SECRET=whsec_your_secret` is a placeholder value in the **tracked**
+  `convex/.env.local.example`; real `.env.local` files are gitignored (see `.gitignore`) and are never committed.
 
 ### Roadmap (from README + specs in `docs/`)
 
-AI comment generator (Pro+), LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs),
-SSI‑trend analytics dashboard, proactive token‑refresh cron.
+LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs), SSI‑trend analytics dashboard.
 
 ---
 
 ## 20. Glossary
 
-- **SSI** — LinkedIn Social Selling Index, 0–100, four 25‑point pillars. The product's north‑star
-  metric.
+- **SSI** — LinkedIn Social Selling Index, 0–100, four 25‑point pillars. The product's north‑star metric.
 - **URN** — LinkedIn's resource identifier (e.g. `urn:li:activity:…`, `urn:li:ugcPost:…`,
-  `urn:li:share:…`). Used as the post dedupe key; namespaces are **not interchangeable**, which is
-  why `sourceUrl` is preserved.
-- **Public identifier / vanity name** — the `linkedin.com/in/<name>` slug; used for ownership
-  verification without Partner API access.
-- **Apify** — third‑party scraping platform; the `harvestapi~linkedin-profile-posts` actor fetches a
-  user's recent posts.
-- **MDP / Partner access** — LinkedIn Marketing/Member Data Partner program; required for the
-  connections and home‑feed APIs the product does **not** currently use.
-- **Tier rank** — denormalized numeric tier on a post (4 contact … 1 starter) for feed sorting
-  without a join.
-- **Member API call** — an authenticated request to `api.linkedin.com` made as the user (Bearer =
-  the user's token). All member‑API calls route through the single `linkedin/client.ts`
+  `urn:li:share:…`). Used as the post dedupe key; namespaces are **not interchangeable**, which is why `sourceUrl` is
+  preserved.
+- **Public identifier / vanity name** — the `linkedin.com/in/<name>` slug; **auto‑derived (set‑once)** from a
+  name‑verified post's `author.url` and used to seed the Apify profile/post scrape. Post‑ownership verification is
+  **name‑based** (the post's JSON‑LD author name vs the member's OIDC `name`), not vanity‑based.
+- **Apify** — third‑party scraping platform; the `harvestapi~linkedin-profile-posts` actor fetches a user's recent
+  posts.
+- **MDP / Partner access** — LinkedIn Marketing/Member Data Partner program; required for the connections and home‑feed
+  APIs the product does **not** currently use.
+- **Tier rank** — denormalized numeric tier on a post (4 contact … 1 starter) for feed sorting without a join.
+- **Member API call** — an authenticated request to `api.linkedin.com` made as the user (Bearer = the user's token). All
+  member‑API calls route through the single `linkedin/client.ts`
   `callMemberApi` seam; the OAuth token exchange (client‑secret flow) is separate.
 
 ---
 
 ## 21. Maintaining This Document
 
-This document is **canonical** and must not be allowed to drift. The rule in `CLAUDE.md` requires
-that **any code change or push updates the relevant section(s) here in the same change**. Practical
-checklist when you touch the codebase:
+This document is **canonical** and must not be allowed to drift. The rule in `CLAUDE.md` requires that **any code change
+or push updates the relevant section (s) here in the same change**. Practical checklist when you touch the codebase:
 
-| If you change…                                                                                                                                                                                                              | Update section(s)                                                                           |
-|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                               |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                  |
-| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)   |
-| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                 |
-| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)               |
-| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                       |
-| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                |
-| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                            | [§12A](#12a-feedback)                                                                       |
-| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                        |
-| App UI (`app/src/**`)                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                  |
-| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                     | [§14A Design System](#14a-design-system)                                                    |
-| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/layout.tsx`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence) |
-| Landing (`landing/**`)                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                   |
-| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                      |
-| Tooling/tests/deploy                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                   |
-| Resolving a stale item / removing dead code                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                           |
+| If you change…                                                                                                                                                                                                                                              | Update section(s)                                                                                        |
+|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                                            |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                               |
+| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
+| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                              |
+| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                            |
+| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                    |
+| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                                            |
+| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                             |
+| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                            | [§12A](#12a-feedback)                                                                                    |
+| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                                     |
+| App UI (`app/src/**`)                                                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                               |
+| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                                                     | [§14A Design System](#14a-design-system)                                                                 |
+| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/[lang]/layout.tsx`, `landing/middleware.ts`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)              |
+| Landing (`landing/**`)                                                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                                |
+| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                                   |
+| Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                                                            | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app) |
+| Tooling/tests/deploy                                                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                                |
+| Resolving a stale item / removing dead code                                                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                                        |
 
-When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add
-a flow chart (Mermaid) if it introduces a multi‑step flow.
+When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add a flow chart
+(Mermaid) if it introduces a multi‑step flow.
 
 ---
 
-_Last updated: 2026‑06‑21. Updated to reflect locale-routed i18n + pt/es legal drafts (Plan 2):
+_Last updated: 2026‑08‑31. Migrated per‑user rate limiting to the **`@convex-dev/rate-limiter`** component. The former
+hand‑rolled `rateLimits` table (a read‑modify‑write that admitted a double‑spend under concurrent taps) is **removed
+from the schema**; counter state now lives in the component's own isolated tables. `convex.config.ts` mounts
+`app.use(rateLimiter)`; `lib/rateLimit.ts` was rewritten to delegate to it while keeping its three entry points
+identical (`checkRateLimit`, `tryConsumeRateLimit`, and the `checkAndIncrement` internal mutation), so **none of the
+eight call sites changed** — every call passes an inline `{ kind: 'fixed window', rate, period }` config, preserving
+each caller's window and limit (`submitPost` 10/h, `commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h,
+`profile_refresh` 2/day). Erasure: the counters live outside the schema, so the pure `cascadeDeleteUser` can't reach
+them — `processAccountDeletions` now calls the new `resetUserRateLimits` (loops the component's `reset` over
+`RATE_LIMIT_ACTIONS`) on the terminal deletion pass, keeping erasure complete. The `rateLimits` OWNED entry was dropped
+from the cascade and its fixtures/asserts removed from `deletion.test.ts`; `rateLimit.test.ts` was rewritten from
+table‑logic assertions to wiring assertions (inline config, throw‑message, boolean passthrough, per‑action reset). Docs
+updated: §11 rate‑limiting subsection, the schema section (table → component note), the ERD (dropped the
+`rateLimits` relation), the erasure list + §14, the workspace‑deps + file‑tree + security‑summary component mentions.
+All gates green (convex 349/349, typecheck + lint clean). Prior: Updated to reflect the Convex backend audit's five
+deferred hardening items, now **implemented** (all were previously deferred‑with‑reason). (1) **Fetch timeouts on every
+external seam** — a shared
+`convex/lib/fetchWithTimeout.ts` (AbortController + `setTimeout`, chosen over the unproven‑in‑runtime static
+`AbortSignal.timeout`) now wraps LinkedIn member‑API + OAuth (`linkedin/client.ts`, `linkedin/oauth.ts`), shortlink
+resolution (`linkedin/parsePostUrl.ts`, 10s), submit page/embed/article fetches (`posts.ts`), OpenRouter
+(`ai/openrouter.ts`, 60s for legitimate LLM latency), Apify (`lib/apify.ts`, 5min for synchronous run‑sync), and
+transactional email (`lib/email.ts`) — a hung upstream can no longer wedge an action to its platform ceiling. (2) **
+`res.ok` on the submit fetches** (`posts.ts`) — a non‑2xx from LinkedIn's anti‑bot (429/999/5xx) now throws a retryable
+"could not reach LinkedIn, try again" instead of a misleading "post not found / change your audience"; a **200 with wall
+HTML** (a genuinely restricted‑audience post) still routes to the existing audience message via
+`isEmbeddablePostHtml`, so working submits are unchanged. (3) **DSR export pagination** (`privacy/export.ts`) — the old
+`gatherUserData` internalQuery ran 7+ unbounded `.collect()`s in one transaction and would permanently fail the export
+(a missed GDPR access right) for a very active user; replaced by `getExportUser` + a per‑table `gatherUserTablePage`
+(cursor‑looped at 500 rows/page by the action) + `gatherFeedbackResponses`, so no single query approaches the 16384‑doc
+read limit. (4) **Bounded Apify fan‑out** (`jobs/syncPostsApify.ts`, `jobs/scrapeProfileApify.ts`) — the uncapped
+`Promise.allSettled(users.map(...))` is now `settledInBatches(users, APIFY_FANOUT_CONCURRENCY=5, …)`
+(`convex/lib/concurrency.ts`), so a large user base can't spawn hundreds of concurrent scrape sub‑actions in one tick.
+(5) **Cross‑user orphan cleanup on erasure** — new `by_post` indexes on `userInteractions` + `userPostState`
+(`schema.ts`); the erasure cascade (`privacy/deletion.ts`) now drains **other** users' interaction/state rows that
+reference a deleted user's posts (bounded `POST_ORPHAN_BATCH=10` posts/pass) **before** deleting each post, so no
+dangling rows point at a vanished post id. New helpers ship with unit tests (`fetchWithTimeout.test.ts`,
+`concurrency.test.ts`); all gates green (convex 351/351, typecheck + lint clean). Prior: Updated to reflect the
+observability & error‑monitoring wiring (§17 "Observability & Error Monitoring", §16 app env table). The
+`/convex-sentinel` skill's premise — the `@convex-dev/sentinel` Convex component — is **still not published to npm**
+(registry 404), so instead of that component the Sentry + PostHog SDKs are wired directly, respecting the existing
+consent model. Three layers: (1) **dev** — a zero‑dependency native log tail,
+`pnpm watch:errors` / `watch:errors:prod` (`npx convex logs [--prod]`), added to the root `package.json`; (2) **prod
+frontend errors — Sentry** (`@sentry/react`, `app/src/lib/observability/sentry.ts`): `initSentry()` (called from
+`main.tsx`) is a **hard no‑op unless `import.meta.env.PROD` and `VITE_SENTRY_DSN` are both set**, so it is inert in dev
+and in any keyless build; treated as a **necessary/security purpose** (not consent‑gated); PII is stripped in
+`beforeSend` before an event leaves the browser (`sendDefaultPii:false`, `tracesSampleRate:0`, request cookies/headers
+and user identity dropped, message + exception values run through the **same** `convex/lib/scrubError.ts` redactor the
+backend uses); `ErrorBoundary.componentDidCatch` now calls `captureException(error, info.componentStack)`; (3) **prod
+backend errors — Sentry via Convex** (no code): Convex Dashboard → Settings → Integrations → **Exception Reporting** →
+DSN (runbook in §17). Product analytics is the separate **consent‑gated** path — **PostHog** (`posthog-js`,
+`app/src/lib/observability/analytics.ts`): `initPostHog()` is a no‑op unless PROD + `VITE_POSTHOG_KEY`, initialises
+**opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — no replay), and a new null‑render
+`AnalyticsConsentGate` (mounted in `App.tsx`, queries `api.privacy.consent.getConsents`) syncs the user's `analytics`
+consent → `syncAnalyticsConsent` opt‑in + `identify(user._id)` (the **opaque Convex id only** — no name/email) when
+granted, opt‑out + `reset()` otherwise; EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`). Because
+both SDKs are **inert until their prod keys are set** in Cloudflare, the current public privacy/cookies copy ("optional
+analytics … off by default") is accurate today; the public‑copy update **and** the `POLICY_VERSION`
+(`convex/lib/policy.ts`) bump / re‑prompt are recorded as **launch‑time** steps (SUBPROCESSORS.md "Human action
+required") for when the keys go live — not done now, since doing so would misrepresent current processing. Three
+`VITE_*` rows added to the §16 app table; `SUBPROCESSORS.md` gained Sentry + PostHog rows; `DATA-INVENTORY.md` gained
+Activity 14 (Product Analytics & Error Monitoring; adds no schema fields). Prior: Updated to reflect the Convex backend
+audit's interaction‑cap consistency fix. The per‑post interaction cap (`interactionsPerPost`) now counts **total
+engagement** (LinkedIn‑seeded + in‑app) at **every**
+point a post's counts are written, not only on in‑app taps: seeded at insert by all three post writers
+(`jobs/syncPosts.upsertPost`, `jobs/processQueue`) so an already‑over‑cap Apify import never enters the feed;
+re‑evaluated on the 30‑min Apify engagement refresh (`jobs/syncPosts.applyEngagementCounts`) so a post that crosses the
+cap on external growth drops out; and rejected **up front at manual submit** (`posts.submitPost`) with a user‑facing
+message instead of silently creating a hidden post. Both in‑app increment mutations (`interactions.ts`) now guard on the
+flag before writing (`if (post.interactionLimitReached) return`) so a concurrent tap can't overshoot the count on the
+OCC retry. The flip stays one‑way. §9 (`interactionsPerPost` bullet), §10 (submit‑flow "Interaction‑cap gate"), §10
+(queue drain), and §11 (Interactions) updated. Same pass also hardened, without behavior change: `linkedin/oauth.ts` now
+guards its `LINKEDIN_*` env vars explicitly (clear error instead of a `"undefined"`‑poisoned request),
+`users.getActiveSubscribers`
+is bounded `.take(500)` with a non‑silent cap (mirrors `getUsersWithLinkedin`), and `feedback.listFeedback` batches its
+submitter/responder lookups instead of a per‑row/per‑response `get()` fan‑out. Prior: Updated to reflect the landing
+theme-flash (FOUC) refresh fix. Symptom: on refresh, when the OS scheme differed from the stored theme, the page painted
+the OS theme for ~0.5s before flipping to the stored one. Root cause: the inline no-flash `<head>` script read the theme
+from the **cookie only**, while `ThemeToggle`'s post-hydration effect resolves via `lib/theme.ts` `getStoredTheme`
+(**cookie → localStorage → system**). When the pref lived in the localStorage mirror but the cookie was absent (cleared
+or host-only in dev), the pre-paint script fell through to
+`system` (= OS) while hydration later applied the localStorage value — the two resolvers disagreed, producing the flash.
+Fix: the no-flash script now resolves with the **same** cookie → localStorage → system precedence, so pre-paint and
+post-hydration agree and no frame flips. This is a one-file change in `landing/app/[lang]/layout.tsx` (the `NO_FLASH`
+string). An earlier `app/[theme]/[lang]/` server-prerender refactor was tried and **reverted** — it was unnecessary: a
+render-blocking stylesheet does not out-race an inline `<head>` script (rendering is blocked too, so the script always
+runs before first paint), so no per-theme prerender is needed and routes stay `app/[lang]/` with a locale-only
+`middleware.ts`. §4 tree and §15 describe `app/[lang]/`; the stale standalone `/pricing` route (now a Home section) was
+dropped from the route table. Prior: Updated to reflect the plan‑limits self‑heal fix (task B27,
+backlog/B27-seed-plan-limits.md, approach B): `admin.updateTierDefault` threw `No default row found for tier —
+run seedPlanLimits first` in any environment where the one‑time `migrations/seedPlanLimits.ts` mutation had never been
+run, blocking the admin edit path entirely. It now self‑heals — inserts the missing tier‑default row before patching it,
+the same idempotent `userId === undefined` check `seedPlanLimits` already used, so it still can't duplicate a row or
+touch a contact per‑user override. The seed values and the read‑side safety‑net (`DEFAULTS` in
+`lib/planLimits.ts`) were already two hand‑maintained copies of the same numbers (matched, but only by discipline — the
+backlog doc flagged the drift risk); the new self‑heal insert would have been a third. They're now **one**:
+`DEFAULTS` plus a new pure helper, `buildTierDefaultRow(tier)`
+(`{ tier, ...DEFAULTS[tier] }`), that both `seedPlanLimits` and `updateTierDefault` call. New
+`lib/planLimits.test.ts` unit‑tests the helper (every field present per tier, values match `DEFAULTS`, `userId`
+never set). `seedPlanLimits` is unchanged in behavior and kept for explicit/bulk re‑seeding — it's just no longer a hard
+prerequisite for the admin edit path. §9's seed‑values subsection and §12's `updateTierDefault` table row are updated;
+approach A (adding the seed run to the [[B24]] deploy checklist) was **not** taken. Prior: Updated to reflect the
+featured‑posts feature (task B07, backlog/B07-featured-posts-feature.md): the feed already boosted featured posts
+(`lib/feedRank.ts`) and `PostCard`
+already rendered the "★ Featured" badge, but nothing ever set `isFeatured: true` and the `featuredPostUsage` quota table
+was unwired — this closes that gap. `planLimits` schema gained `featuredPerMonth: v.optional(v.number())`
+(widen‑then‑coalesce, no backfill migration); `lib/planLimits.ts`'s `DEFAULTS` and every return path in
+`getPlanLimitsHelper` now populate it (`row.featuredPerMonth ?? DEFAULTS[tier].featuredPerMonth`), seed values
+`starter:0, growth:1, pro:3, contact:999` (999 = Custom/enterprise sentinel; unlike `interactionsPerPost`/
+`postsPerWeek`, this field is **not** exposed in the admin per‑user override UI — a contact row always coalesces to 999,
+and a bespoke featured cap needs a direct DB edit today, see §1/§9); `migrations/seedPlanLimits.ts` seeds the same
+values. New pure helpers
+`lib/postLimit.ts:isFeaturedLimitReached` (boundary `usedCount >= featuredPerMonth`) and `currentUtcMonthKey` (UTC
+`"YYYY-MM"`, so the quota resets at the same instant worldwide, not at each user's local midnight) — both unit‑tested
+including the UTC month/year rollover boundary. New `posts.featurePost`/`unfeaturePost` mutations (author or admin via
+the existing `canModifyPost`) and `posts.getFeaturedUsage` query: featuring is quota‑gated against
+`featuredPostUsage` (keyed by `(userId, month)`), patches `isFeatured`/`featuredAt` **and** recomputes
+`feedRank`/`inFeed` via the existing `computeFeedFields` helper (never hand‑rolled — see §10/§11), and
+upserts/increments the usage row in the same mutation; unfeaturing does **not** refund the quota (product decision —
+featuring permanently consumes a monthly slot). Both mutations short‑circuit as a no‑op when the post is already in the
+target state — the actual fix for double‑incrementing usage under Convex's OCC retry semantics, not just an optimization
+(see §10). `jobs/syncPosts.upsertPost` is unchanged (still inserts `isFeatured: false`; the mutation is now the sole
+writer of `true`). MyPostsPage gained a second usage pill ("N of M featured this month", or "N featured this month ·
+unlimited" when `featuredPerMonth >= 999` — the raw 999 sentinel is never shown to the user) next to the existing weekly
+pill, and each post's action bar gained a Feature/Unfeature toggle (`aria-pressed`, disabled + `title`
+reason at the cap, reusing the existing `feed.featured` badge when a post is featured) — new `myPosts.*` i18n keys
+(en/pt/es). `admin.ts`'s plan‑limits UI was deliberately left untouched: it uses its own inline type shapes rather than
+`lib/planLimits.ts`'s module‑private `PlanLimits` type, so the optional field needed no changes there — an unseeded
+contact‑override row (e.g. one `admin.setUserTier` auto‑creates on promotion) is exactly the "missing field" case the
+coalesce already handles. §1's tier table, §9's seed table + lookup precedence, §5's `featuredPostUsage`/`planLimits`
+table docs, §10's new "Featuring a post" subsection + mutation reference table, §14's MyPostsPage description, and §19's
+dead‑code/stub entries are all updated. Prior: Updated to reflect post‑visibility controls (task B06,
+backlog/B06-post-visibility-controls-ui.md): `users` schema gained `defaultVisibilityIndustries`/
+`defaultVisibilityCountries` (Pro/Contact‑only **user‑default** model — not per‑post; see §5); new
+`users.setPostVisibility` mutation patches them, gated server‑side to `tier === 'pro' \| 'contact'` and validating each
+entry against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values, upper‑cases country codes — see
+§11). All three post writers (`posts.submitPost`, `jobs/processQueue.ts`, `jobs/syncPostsApify.ts`) now copy the
+author's stored defaults onto `posts.visibilityIndustries`/`visibilityCountries` at insert time instead of hardcoding
+`[]`; `feed.getFeed`'s enforcement of those fields was already built and is unchanged. SettingsPage's
+"Coming soon" placeholder is replaced with two chip‑picker fields — `VirtualizedCombobox` (already‑selected options
+excluded from the list) plus removable `Badge` chips, no new dependency — sharing the same dirty‑flag/Save pattern as
+the page's other fields (see §14). A downgrade does **not** clear stored defaults or retroactively touch posts already
+written — only the setter is tier‑gated (see §1, §19). New i18n keys `settings.visibilityIndustries` /
+`visibilityCountries` / `visibilityAddIndustry` / `visibilityAddCountry` / `visibilityRemove` (en/pt/es);
+`settings.visibilityComingSoon` removed. Prior: Updated to reflect the LinkedIn reconnect banner (task B01b,
+backlog/B01-linkedin-token-refresh.md, steps 6-7 — the frontend half; B01a below is the backend half):
+new `app/src/components/ReconnectBanner.tsx` — a pure, exported `shouldShowReconnect(me, now)` gate
+(`tokenExpiresAt == null` → "expired"; `tokenExpiresAt < now + 7d`, including already past, → "expiring"
+with a day count; otherwise renders nothing; no `me` → nothing) plus the presentational banner, mounted in `App.tsx`'s
+`RequireAuth` alongside `Motd`, authenticated region only. "Reconnect" re‑runs
+`/auth/linkedin` via the same `AUTH_URL` (`app/src/lib/session.ts`) `RequireAuth`'s own auto‑OAuth redirect uses. No
+dismiss (`// ponytail:` noted in the component). New i18n keys:
+`reconnectBanner.expiredMessage`, `reconnectBanner.expiringMessage` (`_one`/`_other`),
+`reconnectBanner.reconnect` (en/pt/es). §7 and §19's "not built yet" notes for B01b are now resolved. Prior: Updated to
+reflect the LinkedIn token-refresh backend (task B01a, backlog/B01-linkedin-token-refresh.md): `linkedin/oauth.ts`
+gained `refreshAccessToken`
+(`grant_type=refresh_token`, same log‑real/throw‑sanitized + no‑new‑env discipline as
+`exchangeCodeForTokens`); `linkedin/auth.ts` gained `updateTokens`/`updateTokensHandler` (patches only the three token
+fields, preserves the existing refresh token when LinkedIn's response omits one); new `linkedin/tokenRefresh.ts` (pure
+`isInRefreshWindow` predicate + `getUsersPendingRefresh`
+internalQuery + `refreshExpiringTokens` internalAction, cursor-paginated — mirrors
+`migrations/backfillFeedFields.ts` — so a full sweep of the pre-expiry window never stalls behind rows stuck at the
+front, with per-user failure isolation); `crons.ts` gained the `refresh LinkedIn
+tokens` cron (every 6h, ahead of the 24h `enforce data retention` cron); `users.toSafeMe`/`getMe` now keep
+`tokenExpiresAt` (not a secret) instead of stripping it, for the still-unbuilt reconnect banner (task B01b) to consume.
+Ground truth reconfirmed: the app's OIDC Standard-tier scopes mean LinkedIn essentially never issues a `refresh_token`,
+so this backend is correct but dormant for nearly every user — the real mitigation is the reconnect banner, out of scope
+for this change. See §7, §13, §16, §17, §19. Prior: Updated to reflect locale-routed i18n + pt/es legal drafts (Plan 2):
 §15 restructured — added "Locale routing" subsection (middleware flow, root layout, dictionary pattern,
-LanguageSelector, hreflang/per-locale metadata, updated route table with locale prefix, legal
-content modules with pt/es drafts); also updated route table and footer link paths.
-Prior: Updated to reflect cross-site theme + lang persistence (Plan 1 Phase A+B):
-§14B added (cross-site cookie persistence, Mermaid flow, palette unification); §14A updated (cookie-primary theme);
-§15 updated (Tailwind v4, light/dark, ThemeToggle); §16 updated (VITE\_COOKIE\_DOMAIN, NEXT\_PUBLIC\_COOKIE\_DOMAIN);
-§2/§3/§4 updated (landing now Tailwind 4); §19 updated (tailwind.config.ts deleted); i18n cookie detector noted.
-Prior history: Generated from a full read of the codebase at branch
-`feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature
-(commits `d1b40a2` → `1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
-(Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`,
-and `buildEmbedUrl` preserves the URN namespace. Also reflects the Profile Enrichment feature
-(Task 14): Apify-driven LinkedIn profile scrape populating `location`, `primaryLocale`, and
-`country` on the `users` table; user-editable `industry`/`country` dropdowns in Settings;
-admin toggles for the master Apify kill-switch and profile scrape; and i18n seeding from
-`me.primaryLocale` on first authenticated load. Also reflects **Privacy & Compliance Phase 1
-(Foundations)**: email capture from LinkedIn OIDC (stored + forwarded to Stripe), `lastLoginAt` and
+LanguageSelector, hreflang/per-locale metadata, updated route table with locale prefix, legal content modules with pt/es
+drafts); also updated route table and footer link paths. Prior: Updated to reflect cross-site theme + lang persistence
+(Plan 1 Phase A+B):
+§14B added (cross-site cookie persistence, Mermaid flow, palette unification); §14A updated (cookie-primary theme); §15
+updated (Tailwind v4, light/dark, ThemeToggle); §16 updated (VITE\_COOKIE\_DOMAIN, NEXT\_PUBLIC\_COOKIE\_DOMAIN);
+§2/§3/§4 updated (landing now Tailwind 4); §19 updated (tailwind.config.ts deleted); i18n cookie detector noted. Prior
+history: Generated from a full read of the codebase at branch
+`feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature (commits `d1b40a2` →
+`1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
+(Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`, and `buildEmbedUrl`
+preserves the URN namespace. Also reflects the Profile Enrichment feature (Task 14): Apify-driven LinkedIn profile
+scrape populating `location`, `primaryLocale`, and
+`country` on the `users` table; user-editable `industry`/`country` dropdowns in Settings; admin toggles for the master
+Apify kill-switch and profile scrape; and i18n seeding from
+`me.primaryLocale` on first authenticated load. Also reflects **Privacy & Compliance Phase 1 (Foundations)**: email
+capture from LinkedIn OIDC (stored + forwarded to Stripe), `lastLoginAt` and
 `acknowledgedPolicyVersion` on `users`, the new `consentRecords`/`dataExportRequests`/`auditLogs`
 tables, the `lib/policy.ts`/`lib/audit.ts`/`lib/email.ts` modules, and the `RESEND_API_KEY`/
-`EMAIL_FROM` env vars — see [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance
-Phase 2a (Backend DSR)**: self-service data export (`convex/privacy/export.ts` — rate-limited
-`requestDataExport` mutation + `generateExport` action, 7-day signed download URL) and the 30-day
-account-deletion lifecycle (`convex/privacy/deletion.ts` — `requestAccountDeletion` / `cancelAccountDeletion` /
+`EMAIL_FROM` env vars — see [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance Phase 2a (Backend
+DSR)**: self-service data export (`convex/privacy/export.ts` — rate-limited
+`requestDataExport` mutation + `generateExport` action, 7-day signed download URL) and the 30-day account-deletion
+lifecycle (`convex/privacy/deletion.ts` — `requestAccountDeletion` / `cancelAccountDeletion` /
 `processAccountDeletions` daily cron; feed exclusion via `isAuthorFeedEligible`; `cascadeDeleteUser`
 with auditLog pseudonymization; Stripe subscription cancellation during grace period). The
-`process account deletions` cron is documented in [§13](#13-scheduled-jobs-crons). Also reflects
-**Privacy & Compliance Phase 2b (Frontend DSR)**: the new guarded `/privacy-data` route
-(`PrivacyDataPage` — export request/status/download + delete-with-confirm modal calling
-`api.privacy._`), `CancelDeletionScreen`(grace-window interstitial wired into`RequireAuth`),
-the updated `RequireAuth`interception order (loading → null → isBanned → deletionScheduledAt →
-app), the **"Privacy"** link added to`Sidebar`, and the new `privacy._`i18n namespace (en/pt/es)
-— see [§14](#14-frontend--authenticated-app-app). Also reflects **Privacy & Compliance Phase 3a
-(Consent + Retention/Dormancy + Re-consent Backend)**: append-only`consentRecords`table with`recordConsent`/
+`process account deletions` cron is documented in [§13](#13-scheduled-jobs-crons). Also reflects **Privacy & Compliance
+Phase 2b (Frontend DSR)**: the new guarded `/privacy-data` route (`PrivacyDataPage` — export request/status/download +
+delete-with-confirm modal calling
+`api.privacy._`), `CancelDeletionScreen`(grace-window interstitial wired into`RequireAuth`), the updated `RequireAuth`
+interception order (loading → null → isBanned → deletionScheduledAt → app), the **"Privacy"** link added to`Sidebar`,
+and the new `privacy._`i18n namespace (en/pt/es)
+— see [§14](#14-frontend--authenticated-app-app). Also reflects **Privacy & Compliance Phase 3a (Consent +
+Retention/Dormancy + Re-consent Backend)**: append-only`consentRecords`table with`recordConsent`/
 `getConsents`(latest-per-purpose via`latestConsentByPurpose`); `marketing`and`analytics`purposes off by default;
 `acknowledgePolicy`stamping`users.acknowledgedPolicyVersion`
 for Phase 3b re-consent prompts (`getMe`exposes the field); and the new`enforce data retention`
-daily cron (`convex/privacy/retention.ts`) sweeping expired LinkedIn tokens, expiring/purging old
-export files, purging audit logs >24 months, and flagging dormant accounts (24 months inactive,
-non-subscriber) with `deletionScheduledAt='dormancy'`+ warning email — reusing the Phase 2a`processAccountDeletions`
+daily cron (`convex/privacy/retention.ts`) sweeping expired LinkedIn tokens, expiring/purging old export files, purging
+audit logs >24 months, and flagging dormant accounts (24 months inactive, non-subscriber) with
+`deletionScheduledAt='dormancy'`+ warning email — reusing the Phase 2a`processAccountDeletions`
 cascade and`CancelDeletionScreen`for the grace window. See
-[§13](#13-scheduled-jobs-crons) and [§13B](#13b-privacy--compliance). Also reflects **Privacy &
-Compliance Phase 3b (Consent UI + Re-consent + Cookies Frontend)**:`ConsentToggles`(marketing +
-analytics toggles, off by default, inside`PrivacyDataPage`) and `PolicyUpdateScreen`(full-screen`RequireAuth`
+[§13](#13-scheduled-jobs-crons) and [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance Phase 3b (
+Consent UI + Re-consent + Cookies Frontend)**:`ConsentToggles`(marketing + analytics toggles, off by default, inside
+`PrivacyDataPage`) and `PolicyUpdateScreen`(full-screen`RequireAuth`
 interstitial when`acknowledgedPolicyVersion !== POLICY_VERSION`, calls
 `acknowledgePolicy`) in the authenticated app — see [§14](#14-frontend--authenticated-app-app);
-`CookiesPage` (`/cookies`route, essential-storage-only policy) and`CookieNotice`(dismissible
-first-visit banner,`localStorage`-persisted, SSR-safe via `useSyncExternalStore`) in the landing
-site, with `Footer`updated to link`/cookies`— see [§15](#15-frontend--landing-site-landing);
-new i18n keys`privacy.consent._`and`privacy.policyUpdate._`in all three locales (en/pt/es).
-Also reflects **Privacy & Compliance Phase 4 (Legal / Transparency Docs)**: six DRAFT compliance
-documents created under`docs/compliance/` (`DATA-INVENTORY.md`ROPA,`SUBPROCESSORS.md`,
-`RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`, `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`) with an index
-and consolidated human/legal to-do list in `docs/compliance/README.md`; `/privacy`and`/terms`
-landing pages rewritten as full GDPR/LGPD/US-state DRAFT notices (pending legal review);
-§17 updated with compliance documentation table; §15 updated to reflect the rewritten legal pages.
-Also reflects **new-user consent prompt** (`ConsentPromptScreen`+`completeConsentPrompt`+`users.consentPromptedAt`):
-one-time first-login full-screen prompt for Communication & analytics
-preferences (marketing + analytics toggles, OFF by default); `RequireAuth` interception order
-extended with step 6 (`!consentPromptedAt → ConsentPromptScreen`); `consentPromptedAt`field
-added to the`users`table (§5);`completeConsentPrompt`mutation documented in §13B; new`privacy.consentPrompt._` i18n keys
-in all three locales.\*
+`CookiesPage` (`/cookies`route, essential-storage-only policy) and`CookieNotice`(dismissible first-visit banner,
+`localStorage`-persisted, SSR-safe via `useSyncExternalStore`) in the landing site, with `Footer`updated to link
+`/cookies`— see [§15](#15-frontend--landing-site-landing); new i18n keys`privacy.consent._`and`privacy.policyUpdate._`in
+all three locales (en/pt/es). Also reflects **Privacy & Compliance Phase 4 (Legal / Transparency Docs)**: six DRAFT
+compliance documents created under`docs/compliance/` (`DATA-INVENTORY.md`ROPA,`SUBPROCESSORS.md`,
+`RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`, `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`) with an index and consolidated
+human/legal to-do list in `docs/compliance/README.md`; `/privacy`and`/terms`
+landing pages rewritten as full GDPR/LGPD/US-state DRAFT notices (pending legal review); §17 updated with compliance
+documentation table; §15 updated to reflect the rewritten legal pages. Also reflects **new-user consent prompt**
+(`ConsentPromptScreen`+`completeConsentPrompt`+`users.consentPromptedAt`):
+one-time first-login full-screen prompt for Communication & analytics preferences (marketing + analytics toggles, OFF by
+default); `RequireAuth` interception order extended with step 6 (`!consentPromptedAt → ConsentPromptScreen`);
+`consentPromptedAt`field added to the`users`table (§5);`completeConsentPrompt`mutation documented in §13B; new
+`privacy.consentPrompt._` i18n keys in all three locales.\*

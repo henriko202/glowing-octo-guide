@@ -1,4 +1,4 @@
-import type { Dictionary } from '../i18n/getDictionary'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'] }) {
   return (
@@ -21,15 +21,15 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
           {dict.pillars.map(pillar => (
             <div
               key={pillar.title}
-              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-all duration-300 hover:border-cream/15"
+              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-colors duration-300 hover:border-cream/15"
             >
               <div className="mb-5 flex items-start justify-between">
                 <span className="text-2xl">{pillar.icon}</span>
-                <span className="rounded-full border border-cream/10 px-2.5 py-1 text-xs font-medium text-cream/30">
+                <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-xs font-medium text-cream/50 dark:bg-cream/[0.06] dark:text-cream/40">
                   {pillar.pts} pts
                 </span>
               </div>
-              <h3 className="mb-2 font-display text-xl font-semibold text-cream">{pillar.title}</h3>
+              <h3 className="mb-2 font-display text-xl font-bold text-cream">{pillar.title}</h3>
               <p className="text-sm leading-relaxed text-cream/50">{pillar.body}</p>
             </div>
           ))}
@@ -44,7 +44,7 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
               >
                 <p className="font-display text-6xl font-semibold text-gold-text">{stat.value}</p>
                 <p className="mx-auto mt-3 max-w-[180px] text-sm leading-relaxed text-cream/60">{stat.label}</p>
-                <p className="mt-2 text-xs text-cream/25">{stat.source}</p>
+                <p className="mt-2 text-xs text-cream/50 dark:text-cream/25">{stat.source}</p>
               </div>
             ))}
           </div>

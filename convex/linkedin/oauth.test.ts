@@ -10,28 +10,20 @@ describe('buildAuthUrl', () => {
     expect(url).toContain('linkedin.com/oauth/v2/authorization')
     expect(url).toContain('response_type=code')
     expect(url).toContain('openid')
-    expect(url).toContain('w_member_social')
     expect(url).toContain('state=test-state-123')
     expect(url).toContain('client_id=test-client-id')
   })
 
-  it('includes the required OIDC scopes', () => {
+  it('requests only the OpenID Connect scopes', () => {
     process.env.LINKEDIN_CLIENT_ID = 'test-client-id'
     process.env.LINKEDIN_REDIRECT_URI = 'https://shocking-dragon-458.convex.site/auth/linkedin/callback'
 
     const url = buildAuthUrl('state')
-    const parsed = new URL(url)
-    const scope = parsed.searchParams.get('scope') ?? ''
-    // OpenID Connect scopes (current LinkedIn sign-in product)
-    expect(scope).toContain('openid')
-    expect(scope).toContain('profile')
-    expect(scope).toContain('email')
-    expect(scope).toContain('w_member_social')
-    // Deprecated / unusable scopes are no longer requested
-    expect(scope).not.toContain('r_liteprofile')
-    expect(scope).not.toContain('r_emailaddress')
-    // r_profile_basicinfo only authorized /rest/identityMe, which needs Partner/MDP
-    // access we don't have — removed so we don't request an unusable permission.
-    expect(scope).not.toContain('r_profile_basicinfo')
+    const scope = new URL(url).searchParams.get('scope') ?? ''
+    // Exactly these three (the Standard-tier Sign In / OIDC product). Anything else —
+    // w_member_social*, r_basicprofile, or legacy r_liteprofile/r_emailaddress — is
+    // Development-tier or ungranted and throws unauthorized_scope_error for members without a
+    // role on the app, so this exact match guards the login flow for external users.
+    expect(scope).toBe('openid profile email')
   })
 })

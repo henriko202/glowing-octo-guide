@@ -1,5 +1,5 @@
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth, resolveSession } from './lib/auth'
@@ -27,17 +27,23 @@ export const getPublicAuthor = internalQuery({
   }
 })
 
-// Internal: returns all users with active subscriptions (excludes trialing).
-// Uses the by_subscription_status index so this reads only active subscribers
-// instead of scanning the whole users table. Returns the full set on purpose —
-// the Apify sync fans out one job per active subscriber.
+// Internal: returns users with active subscriptions (excludes trialing) for the Apify post-sync
+// fan-out. Uses the by_subscription_status index so it reads only active subscribers, not the whole
+// users table. Bounded take(500) with a non-silent cap (mirrors getUsersWithLinkedin): the fan-out
+// spawns one job per subscriber, so an unbounded .collect() here would be the first thing to blow the
+// query read limit as the base grows. Revisit (paginate the fan-out) if the active base nears 500.
 export const getActiveSubscribers = internalQuery({
   args: {},
   handler: async ctx => {
-    return ctx.db
+    const SCAN_CAP = 500
+    const users = await ctx.db
       .query('users')
       .withIndex('by_subscription_status', q => q.eq('subscriptionStatus', 'active'))
-      .collect()
+      .take(SCAN_CAP)
+    if (users.length === SCAN_CAP) {
+      console.warn(`[apify-sync] getActiveSubscribers hit the ${SCAN_CAP}-subscriber cap — some may be skipped`)
+    }
+    return users
   }
 })
 
@@ -67,23 +73,16 @@ export const getUsersWithLinkedin = internalQuery({
 // client can render the banned screen.
 export function toSafeMe(user: Doc<'users'>) {
   // Strip secrets + internal fields. bannedReason stays (shown on the banned screen).
+  // tokenExpiresAt is intentionally KEPT (not a secret — just an expiry timestamp for the
+  // owner's own connection) so the client can show a reconnect-before-expiry banner (B01b).
   /* eslint-disable @typescript-eslint/no-unused-vars -- destructure-and-discard sensitive fields */
-  const {
-    linkedinAccessToken,
-    linkedinRefreshToken,
-    tokenExpiresAt,
-    stripeCustomerId,
-    bannedBy,
-    bannedAt,
-    isAdmin,
-    ...safeUser
-  } = user
+  const { linkedinAccessToken, linkedinRefreshToken, stripeCustomerId, bannedBy, bannedAt, isAdmin, ...safeUser } = user
   /* eslint-enable @typescript-eslint/no-unused-vars */
   return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
 }
 
-/** LinkedIn's own headline limit; used to cap the user-editable headline field. */
-export const MAX_HEADLINE_LENGTH = 220
+/** Cap for the user-editable headline field; mirrored by the Settings input's maxLength. */
+export const MAX_HEADLINE_LENGTH = 65
 
 /** Narrow db surface for applyScrapedProfileHandler — only needs get + patch. */
 interface ScrapedProfileDb {
@@ -109,7 +108,8 @@ export async function applyScrapedProfileHandler(db: ScrapedProfileDb, args: App
   if (args.location !== undefined) patch.location = args.location
   if (args.primaryLocale !== undefined) patch.primaryLocale = args.primaryLocale
   if (args.country !== undefined && !existing?.country) patch.country = args.country.toUpperCase()
-  if (args.headline !== undefined && !existing?.headline) patch.headline = args.headline
+  if (args.headline !== undefined && !existing?.headline)
+    patch.headline = args.headline.trim().slice(0, MAX_HEADLINE_LENGTH)
   if (Object.keys(patch).length > 0) await db.patch(args.userId, patch)
 }
 
@@ -127,17 +127,17 @@ export interface UpdateProfileArgs {
 export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args: UpdateProfileArgs): Promise<void> {
   const patch: Record<string, unknown> = {}
   if (args.industry !== undefined) {
-    if (args.industry !== '' && !isValidIndustry(args.industry)) throw new Error('Invalid industry')
+    if (args.industry !== '' && !isValidIndustry(args.industry)) throw new ConvexError('Invalid industry')
     patch.industry = args.industry === '' ? undefined : args.industry
   }
   if (args.country !== undefined) {
     const normalized = args.country.toUpperCase()
-    if (args.country !== '' && !isValidCountry(normalized)) throw new Error('Invalid country')
+    if (args.country !== '' && !isValidCountry(normalized)) throw new ConvexError('Invalid country')
     patch.country = args.country === '' ? undefined : normalized
   }
   if (args.headline !== undefined) {
     const trimmed = args.headline.trim()
-    if (trimmed.length > MAX_HEADLINE_LENGTH) throw new Error('Headline too long')
+    if (trimmed.length > MAX_HEADLINE_LENGTH) throw new ConvexError('Headline too long')
     patch.headline = trimmed === '' ? undefined : trimmed
   }
   if (Object.keys(patch).length > 0) await db.patch(userId, patch)
@@ -145,8 +145,9 @@ export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args
 
 /** Guard for the refresh mutation. Throws a user-facing message; never leaks the flag. */
 export function assertCanRefresh(user: { linkedinPublicIdentifier?: string }, settings: ApifyFlags): void {
-  if (!user.linkedinPublicIdentifier) throw new Error('Set your LinkedIn profile URL first.')
-  if (!isApifyProfileScrapeEnabled(settings)) throw new Error('Profile refresh is currently unavailable.')
+  if (!user.linkedinPublicIdentifier)
+    throw new ConvexError('Submit one of your posts first so we can detect your LinkedIn profile.')
+  if (!isApifyProfileScrapeEnabled(settings)) throw new ConvexError('Profile refresh is currently unavailable.')
 }
 
 // Public: whether the dev-only LinkedIn profile refresh (Apify scrape) is currently enabled.
@@ -162,7 +163,8 @@ export const isProfileRefreshEnabled = query({
   }
 })
 
-// Public: returns safe user profile — strips ALL token fields.
+// Public: returns safe user profile — strips the token VALUES (access/refresh) but keeps
+// tokenExpiresAt (an expiry timestamp, not a secret) so the client can show a reconnect banner.
 // Auth: resolves the session token server-side; never accepts a userId from the client.
 // NOTE: resolves via resolveSession (not requireAuth) so a banned user gets an
 // isBanned signal instead of null — otherwise the client would loop back to LinkedIn.
@@ -231,7 +233,10 @@ export const getSubscriptionInfo = query({
         tier: ourSub?.tier ?? user.tier ?? null,
         status: activeSub.status,
         cancelAtPeriodEnd: activeSub.cancelAtPeriodEnd ?? false,
-        stripeSubscriptionId: activeSub.stripeSubscriptionId
+        stripeSubscriptionId: activeSub.stripeSubscriptionId,
+        // Renewal/access-end instant for the billing page — from our own subscriptions row
+        // (the component doesn't store it). Undefined only if our row hasn't caught up yet.
+        currentPeriodEnd: ourSub?.currentPeriodEnd
       }
     }
 
@@ -240,61 +245,32 @@ export const getSubscriptionInfo = query({
       tier: null,
       status: user.subscriptionStatus ?? 'trialing',
       cancelAtPeriodEnd: false,
-      stripeSubscriptionId: null
+      stripeSubscriptionId: null,
+      currentPeriodEnd: undefined
     }
   }
 })
 
-// Public: stores the user's LinkedIn public profile identifier (vanityName).
-// Called from Settings page when the user enters their LinkedIn profile URL.
-// Used for post ownership verification without requiring LinkedIn Partner API access.
-export const setPublicIdentifier = mutation({
-  args: {
-    sessionToken: v.string(),
-    publicIdentifier: v.string()
-  },
-  handler: async (ctx, { sessionToken, publicIdentifier }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    // Trust model: we validate FORMAT only — we do NOT verify the vanity name actually belongs
-    // to the signed-in member. This is self-attribution; the post-ownership fallback
-    // (verifyPostOwnership Step B) trusts it, but every real LinkedIn action (comment/react) still
-    // uses the user's own OAuth token, so it cannot be used to act as someone else. See PLATFORM.md §17.
-    // Validate LinkedIn vanity name format: alphanumeric, hyphens, underscores, 3-100 chars
-    const trimmed = publicIdentifier.trim().toLowerCase()
-    if (!/^[a-zA-Z0-9\-_]{3,100}$/.test(trimmed)) {
-      throw new Error('Invalid LinkedIn profile identifier format')
-    }
-    const changed = user.linkedinPublicIdentifier !== trimmed
-    // Store lowercase for consistent comparison (LinkedIn vanityNames are case-insensitive)
-    await ctx.db.patch(user._id, { linkedinPublicIdentifier: trimmed })
-    // Auto-scrape only when the identifier actually changed AND the profile scrape is enabled,
-    // and only within the shared 2/day budget (the same `profile_refresh` counter the Refresh
-    // button uses) — so repeatedly changing the URL can't run unlimited paid scrapes. The flag is
-    // checked BEFORE consuming the budget, so a disabled scrape never wastes the user's daily
-    // budget (and we avoid scheduling a no-op action). The non-throwing budget check means an
-    // exhausted budget never blocks saving the identifier; the user can scrape later via Refresh.
-    if (changed) {
-      const settings = await ctx.db.query('appSettings').first()
-      if (isApifyProfileScrapeEnabled(settings as ApifyFlags)) {
-        // Admins bypass the daily budget; everyone else consumes one (non-throwing) slot.
-        const allowed =
-          user.isAdmin || (await tryConsumeRateLimit(ctx, user._id, 'profile_refresh', 2, 24 * 60 * 60 * 1000))
-        if (allowed) {
-          await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: user._id })
-        }
+// Internal: fill the member's LinkedIn vanity from a name-verified post's author profile URL — called
+// by submitPost once the author-name ownership check passes. The value is LinkedIn-authoritative
+// (parsed from the post's JSON-LD `author.url`), never user-typed, so it's the trustworthy seed for
+// the Apify profile/post scrape. Set-once — never overwrites an existing identifier. Kicks off a
+// one-time, budget-guarded profile scrape, mirroring the old manual setter.
+export const setDerivedPublicIdentifier = internalMutation({
+  args: { userId: v.id('users'), vanity: v.string() },
+  handler: async (ctx, { userId, vanity }) => {
+    const user = await ctx.db.get(userId)
+    if (!user || user.linkedinPublicIdentifier) return // set-once — never overwrite
+    await ctx.db.patch(userId, { linkedinPublicIdentifier: vanity })
+    // Country/locale enrichment scrape — budget-guarded (admins bypass), same policy as before.
+    const settings = await ctx.db.query('appSettings').first()
+    if (isApifyProfileScrapeEnabled(settings as ApifyFlags)) {
+      const allowed =
+        user.isAdmin || (await tryConsumeRateLimit(ctx, userId, 'profile_refresh', 2, 24 * 60 * 60 * 1000))
+      if (allowed) {
+        await ctx.scheduler.runAfter(0, internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId })
       }
     }
-  }
-})
-
-// Public: marks the one-time "confirm your LinkedIn profile URL" onboarding prompt as shown, so
-// RequireAuth stops displaying PublicIdentifierPromptScreen even when the user skipped it. The user
-// can still set their identifier later in Settings (setPublicIdentifier).
-export const dismissPublicIdentifierPrompt = mutation({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, { sessionToken }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    await ctx.db.patch(user._id, { publicIdentifierPromptedAt: Date.now() })
   }
 })
 
@@ -347,14 +323,126 @@ export const updateProfile = mutation({
   }
 })
 
+export interface SetPostVisibilityArgs {
+  industries: string[]
+  countries: string[]
+}
+
+/**
+ * Validates + patches the caller's default post-visibility allowlists (backlog/B06). Every post
+ * writer (posts.submitPost, jobs/processQueue.ts, jobs/syncPostsApify.ts) copies these onto
+ * posts.visibilityIndustries/visibilityCountries at insert time — see convex/feed.ts for the
+ * enforcement. Gated to Pro/Contact tiers HERE (server-side) — never trust the caller's UI gate.
+ * Rejects any value not in the canonical INDUSTRIES/COUNTRY_CODES lists (trust boundary). Empty
+ * arrays are valid and mean "visible to everyone" (the feed treats an empty list as unrestricted).
+ */
+export async function setPostVisibilityHandler(
+  db: PatchOnlyDb,
+  userId: string,
+  tier: string | undefined,
+  args: SetPostVisibilityArgs
+): Promise<void> {
+  if (tier !== 'pro' && tier !== 'contact') {
+    throw new ConvexError('Post-visibility controls require a Pro or Contact plan')
+  }
+  if (!args.industries.every(isValidIndustry)) throw new ConvexError('Invalid industry')
+  const countries = args.countries.map(c => c.toUpperCase())
+  if (!countries.every(isValidCountry)) throw new ConvexError('Invalid country')
+  await db.patch(userId, { defaultVisibilityIndustries: args.industries, defaultVisibilityCountries: countries })
+}
+
+// Public: Pro/Contact user sets the default post-visibility allowlists applied to every post they
+// author from now on. Existing posts (and their enforcement) are untouched — see
+// setPostVisibilityHandler. A downgrade does NOT clear these; only this setter is tier-gated.
+export const setPostVisibility = mutation({
+  args: {
+    sessionToken: v.string(),
+    industries: v.array(v.string()),
+    countries: v.array(v.string())
+  },
+  handler: async (ctx, { sessionToken, industries, countries }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await setPostVisibilityHandler(
+      ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> },
+      user._id,
+      user.tier,
+      { industries, countries }
+    )
+  }
+})
+
+/**
+ * Validates + patches the caller's Pro/Contact feed filter. The feed (convex/feed.ts getFeed →
+ * buildFeedFilter) reads these straight off the viewer doc: the viewer sees only posts whose AUTHOR
+ * matches one of `feedFilterIndustries` AND one of `feedFilterCountries` (each dimension ORs over
+ * its list; empty ⇒ that dimension isn't filtered). A "what I want to see" preference, not an access
+ * rule. Gated to Pro/Contact tiers HERE (server-side) — never trust the caller's UI gate. Rejects
+ * any value not in the canonical INDUSTRIES/COUNTRY_CODES lists (trust boundary). Mirrors
+ * setPostVisibilityHandler.
+ */
+export async function setFeedFilterHandler(
+  db: PatchOnlyDb,
+  userId: string,
+  tier: string | undefined,
+  args: SetPostVisibilityArgs
+): Promise<void> {
+  if (tier !== 'pro' && tier !== 'contact') {
+    throw new ConvexError('Feed filtering requires a Pro or Contact plan')
+  }
+  if (!args.industries.every(isValidIndustry)) throw new ConvexError('Invalid industry')
+  const countries = args.countries.map(c => c.toUpperCase())
+  if (!countries.every(isValidCountry)) throw new ConvexError('Invalid country')
+  await db.patch(userId, { feedFilterIndustries: args.industries, feedFilterCountries: countries })
+}
+
+// Public: Pro/Contact user sets the industry/country allowlists that filter THEIR feed. Applied
+// live — the feed reads these from the viewer doc, so patching re-runs getFeed reactively. Empty
+// arrays clear the filter. A downgrade does NOT clear these; only this setter is tier-gated.
+export const setFeedFilter = mutation({
+  args: {
+    sessionToken: v.string(),
+    industries: v.array(v.string()),
+    countries: v.array(v.string())
+  },
+  handler: async (ctx, { sessionToken, industries, countries }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await setFeedFilterHandler(
+      ctx.db as unknown as { patch: (id: string, f: Record<string, unknown>) => Promise<void> },
+      user._id,
+      user.tier,
+      { industries, countries }
+    )
+  }
+})
+
 // Public: set the default language for AI-generated comments ('auto' or an ISO 639-1 code).
 // Validated against convex/lib/languages.ts. The per-comment picker can still override this.
 export const setCommentLanguage = mutation({
   args: { sessionToken: v.string(), commentLanguage: v.string() },
   handler: async (ctx, { sessionToken, commentLanguage }) => {
     const user = await requireAuth(ctx, sessionToken)
-    if (!isValidCommentLanguage(commentLanguage)) throw new Error('Unsupported language')
+    if (!isValidCommentLanguage(commentLanguage)) throw new ConvexError('Unsupported language')
     await ctx.db.patch(user._id, { commentLanguage })
+  }
+})
+
+// Public: mark the first-post onboarding step resolved when the user skips it ("I'll do this
+// later"). Set-once — submitting any post sets the same flag server-side (markFirstPostPrompted).
+export const dismissFirstPostPrompt = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    if (!user.firstPostPromptedAt) await ctx.db.patch(user._id, { firstPostPromptedAt: Date.now() })
+  }
+})
+
+// Internal: called from posts.submitPost after a post is persisted, so posting (from the
+// onboarding gate or the normal My Posts composer) also clears the first-post step. Set-once.
+export const markFirstPostPrompted = internalMutation({
+  args: { userId: v.id('users') },
+  handler: async (ctx, { userId }) => {
+    const user = await ctx.db.get(userId)
+    if (user && !user.firstPostPromptedAt) await ctx.db.patch(userId, { firstPostPromptedAt: Date.now() })
   }
 })
 

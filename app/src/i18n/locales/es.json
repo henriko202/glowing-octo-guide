@@ -1,10 +1,10 @@
 {
   "nav": {
     "feed": "Feed",
-    "myPosts": "Mis Publicaciones",
+    "myPosts": "Mis publicaciones",
     "settings": "Configuración",
     "billing": "Suscripción",
-    "privacy": "Privacidad y Datos",
+    "privacy": "Privacidad y datos",
     "signOut": "Cerrar sesión",
     "openMenu": "Abrir menú de usuario",
     "groups": { "main": "Principal", "manage": "Gestionar" },
@@ -13,7 +13,13 @@
   },
   "shell": {
     "search": "Buscar publicaciones, personas",
-    "searchComingSoon": "La búsqueda llegará pronto.",
+    "commandTitle": "Búsqueda y comandos",
+    "searchPlaceholder": "Buscar publicaciones y personas…",
+    "noResults": "Sin resultados.",
+    "groupActions": "Acciones rápidas",
+    "groupPeople": "Personas",
+    "groupPosts": "Publicaciones",
+    "actionToggleTheme": "Cambiar tema",
     "language": "Idioma",
     "theme": "Cambiar tema",
     "profile": "Perfil y ajustes",
@@ -26,30 +32,74 @@
     "signInButton": "Iniciar sesión con LinkedIn"
   },
   "onboarding": {
-    "linkedinIdentifier": {
-      "title": "Confirma tu perfil de LinkedIn",
-      "intro": "Pega la URL de tu perfil de LinkedIn para que podamos verificar que las publicaciones que envías te pertenecen. Puedes cambiarlo más tarde en Configuración.",
-      "placeholder": "https://www.linkedin.com/in/tu-nombre",
-      "willSaveAs": "Se guardará como: {{vanity}}",
-      "invalid": "No se pudo leer un nombre de usuario de esa URL. Prueba https://www.linkedin.com/in/tu-nombre",
-      "save": "Guardar y continuar",
-      "skip": "Omitir por ahora"
+    "firstPost": {
+      "title": "Comparte tu mejor publicación reciente",
+      "intro": "Añade una de tus publicaciones de LinkedIn para dar vida a tu feed y que otras personas puedan interactuar con ella. Puedes añadir más cuando quieras.",
+      "skip": "Lo haré más tarde"
     }
   },
   "feed": {
-    "title": "Tu Feed",
+    "title": "Tu feed",
     "loading": "Cargando feed...",
     "empty": "Aún no hay publicaciones. ¡Invita a colegas a unirse a Link Into The SSI!",
     "loadMore": "Cargar más",
-    "featured": "★ Destacado",
+    "featured": "★ Destacada",
     "like": "Me gusta",
     "comment": "Comentar",
-    "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar."
+    "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar.",
+    "viewOnLinkedIn": "Ver en LinkedIn ↗",
+    "emptyFiltered": "Ninguna publicación coincide con tu filtro. Ajústalo o bórralo para ver más.",
+    "filter": {
+      "toggle": "Filtrar feed",
+      "note": "Muestra solo publicaciones de las industrias y países que elijas. Déjalo vacío para ver a todos.",
+      "industries": "Industrias",
+      "countries": "Países",
+      "addIndustry": "Añadir una industria…",
+      "addCountry": "Añadir un país…",
+      "remove": "Eliminar {{label}}",
+      "clear": "Borrar filtros",
+      "selectPlaceholder": "Seleccionar…",
+      "noResults": "Sin resultados."
+    }
+  },
+  "myPosts": {
+    "featuredPill": "{{used}} de {{limit}} destacadas este mes",
+    "featuredPillUnlimited": "{{used}} destacadas este mes · ilimitado",
+    "featuredPillHint": "Este mes",
+    "feature": "Destacar",
+    "unfeature": "Quitar destacado",
+    "featureLimitReached": "Límite mensual de destacados alcanzado",
+    "today": "Hoy",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "tierPlan": "Plan {{tier}}",
+    "weeklyUsageHint": "En los últimos 7 días",
+    "weeklyUsage": "{{used}} de {{limit}} publicaciones esta semana",
+    "weeklyLimitReached": "Límite semanal alcanzado",
+    "heading": "Tus publicaciones ({{count}})",
+    "emptyState": "Comparte tu primera publicación usando el formulario de arriba ↑",
+    "hiddenFromFeed": "Oculta del feed",
+    "visibleInFeed": "Visible en el feed",
+    "hide": "Ocultar",
+    "unhide": "Mostrar",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar esta publicación? Se eliminará del feed y de Mis Publicaciones. Seguirá contando para tu límite semanal de publicaciones.",
+    "updateError": "No se pudo actualizar la publicación.",
+    "deleteError": "No se pudo eliminar la publicación."
+  },
+  "composer": {
+    "shareLabel": "Compartir una publicación",
+    "placeholder": "https://www.linkedin.com/posts/your-name_…",
+    "hint": "Pega la URL de tu publicación de LinkedIn",
+    "submitting": "Enviando…",
+    "submit": "Enviar →",
+    "submitError": "No se pudo enviar la publicación"
   },
   "reactions": {
     "react": "Reaccionar",
-    "like": "Recomendar",
-    "celebrate": "Felicitar",
+    "openHint": "Abriendo la publicación en LinkedIn — reacciona allí.",
+    "like": "Me gusta",
+    "celebrate": "Celebrar",
     "love": "Me encanta",
     "insightful": "Interesante",
     "support": "Apoyo",
@@ -58,8 +108,9 @@
   "comment": {
     "placeholder": "Escribe un comentario…",
     "cancel": "Cancelar",
-    "submit": "Publicar en LinkedIn",
-    "submitting": "Publicando...",
+    "submit": "Copiar y comentar en LinkedIn",
+    "submitting": "Abriendo…",
+    "copiedHint": "Borrador copiado — pégalo en el cuadro de comentario en la pestaña de LinkedIn que abrimos.",
     "generate": "Generar con IA",
     "regenerate": "Regenerar",
     "generating": "Generando…",
@@ -69,7 +120,7 @@
   },
   "settings": {
     "title": "Configuración",
-    "profile": "Tu Perfil",
+    "profile": "Tu perfil",
     "industry": "Sector",
     "country": "País",
     "headline": "Titular",
@@ -77,6 +128,7 @@
     "headlineHint": "Se muestra bajo tu nombre en el feed y la barra lateral. Usa tu sector si lo dejas en blanco.",
     "location": "Ubicación",
     "notSet": "No definido",
+    "clear": "Limpiar selección",
     "selectPlaceholder": "Selecciona…",
     "noResults": "Sin resultados.",
     "save": "Guardar",
@@ -87,7 +139,13 @@
     "profileNote": "Edita tu sector y país abajo.",
     "visibility": "Quién puede ver tus publicaciones",
     "visibilityNote": "Restringe qué sectores y países pueden ver tus publicaciones en el feed. Déjalo vacío para mostrar a todos.",
-    "visibilityComingSoon": "Próximamente",
+    "feedFilter": "Lo que ves en tu feed",
+    "feedFilterNote": "Muestra solo publicaciones de estos sectores y países. Déjalo vacío para ver publicaciones de todos.",
+    "visibilityIndustries": "Sectores",
+    "visibilityCountries": "Países",
+    "visibilityAddIndustry": "Añadir un sector…",
+    "visibilityAddCountry": "Añadir un país…",
+    "visibilityRemove": "Quitar {{label}}",
     "upgradePrompt": "Mejora a Pro para controlar quién ve tus publicaciones.",
     "aiComments": "Comentarios con IA",
     "aiCommentsNote": "Idioma predeterminado de los comentarios generados por IA. Puedes cambiarlo en cada comentario.",
@@ -101,13 +159,16 @@
     "currentPlanLabel": "Plan actual",
     "contact": "Contáctanos",
     "enterprise": "¿Necesitas más? Contáctanos para planes empresariales personalizados.",
-    "subscriptionInfo": "Tu Suscripción",
+    "subscriptionInfo": "Tu suscripción",
     "status": "Estado",
-    "nextBilling": "Próxima Fecha de Facturación",
-    "cancelsOn": "Cancela El",
-    "endOfPeriod": "Final del período actual",
-    "manageSubscription": "Gestionar Suscripción",
-    "freeTrial": "Período de Prueba Gratuito",
+    "nextBilling": "Próxima fecha de facturación",
+    "cancelsOn": "Se cancela el",
+    "renewsOn": "Se renueva el {{date}}",
+    "accessUntil": "Acceso hasta {{date}}",
+    "cancelPending": "Tu suscripción no se renovará.",
+    "renewal": "Renovación",
+    "manageSubscription": "Gestionar suscripción",
+    "freeTrial": "Período de prueba gratuito",
     "daysRemaining_one": "{{count}} día restante",
     "daysRemaining_other": "{{count}} días restantes",
     "expiredBanner": "Tu suscripción ha finalizado. Elige un plan a continuación para continuar.",
@@ -121,22 +182,47 @@
     "trialCtaNote": "Luego {{price}} · cancela cuando quieras. Se te facturará cuando alcances 50 interacciones o tras 7 días, lo que ocurra primero.",
     "trialIncludes": "Acceso completo a {{plan}} durante tu prueba. La comparación de planes aparece una vez que empieces.",
     "comparisonNote": "Compara los planes tras tu prueba — mejora, cambia a un plan inferior o cancela cuando quieras.",
+    "newUserLead": "Elige un plan abajo — Growth es la mejor relación calidad-precio.",
+    "newUserTrialNote": "Todos los planes incluyen una prueba gratuita de 7 días · cancela cuando quieras.",
+    "recommended": "Recomendado",
     "annual": "Anual · 2 meses gratis",
     "monthly": "Mensual",
+    "checkoutFailed": "Fallo en el pago: {{error}}",
+    "portalFailed": "No se pudo abrir el portal: {{error}}",
+    "customPrice": "Personalizado",
     "plans": {
       "starter": {
         "name": "Starter",
         "description": "Comienza e interactúa",
+        "features": [
+          "Accede al feed completo en vivo",
+          "Comenta y reacciona con IA",
+          "25 interacciones contadas por publicación",
+          "1 publicación en el feed / semana"
+        ],
         "cta": "Iniciar prueba gratuita"
       },
       "growth": {
         "name": "Growth",
         "description": "Feed dirigido para resultados más rápidos",
+        "features": [
+          "Feed filtrado por industria + país",
+          "Todo lo de Starter",
+          "50 interacciones contadas por publicación",
+          "2 publicaciones en el feed / semana"
+        ],
         "cta": "Obtener Growth"
       },
       "pro": {
         "name": "Pro",
         "description": "Máxima visibilidad y control",
+        "features": [
+          "Filtros personalizados de industria + país",
+          "Controla quién ve tus publicaciones",
+          "Todo lo de Growth",
+          "200 interacciones contadas por publicación",
+          "5 publicaciones en el feed / semana"
+        ],
         "cta": "Obtener Pro"
       },
       "contact": {
@@ -147,16 +233,8 @@
     }
   },
   "auth": {
-    "loading": "Cargando..."
-  },
-  "admin": {
-    "title": "Panel de Administración",
-    "forbidden": "No tienes acceso de administrador.",
-    "apifySync": "Sincronización de Publicaciones via Apify",
-    "apifySyncDescription": "Recopila publicaciones de LinkedIn para todos los usuarios activos cada hora via Apify.",
-    "enable": "Activar",
-    "disable": "Desactivar",
-    "lastSync": "Última sincronización"
+    "loading": "Cargando...",
+    "notSignedIn": "Sesión no iniciada"
   },
   "feedback": {
     "button": "Feedback",
@@ -185,11 +263,22 @@
     "dismiss": "Descartar",
     "ok": "OK"
   },
+  "errorBoundary": {
+    "title": "Algo salió mal",
+    "body": "Ocurrió un error inesperado. Recargar la página suele solucionarlo.",
+    "reload": "Recargar página"
+  },
+  "reconnectBanner": {
+    "expiredMessage": "Tu conexión con LinkedIn ha caducado — reconéctate para seguir publicando.",
+    "expiringMessage_one": "Tu conexión con LinkedIn caduca en {{count}} día — reconéctate.",
+    "expiringMessage_other": "Tu conexión con LinkedIn caduca en {{count}} días — reconéctate.",
+    "reconnect": "Reconectar"
+  },
   "privacy": {
-    "title": "Privacidad y Datos",
+    "title": "Privacidad y datos",
     "consentPrompt": {
       "title": "Configura tus preferencias",
-      "intro": "Antes de continuar, elige cómo podemos contactarte. Son opcionales y están desactivadas por defecto — puedes cambiarlas cuando quieras en Configuración → Privacidad y Datos.",
+      "intro": "Antes de continuar, elige cómo podemos contactarte. Son opcionales y están desactivadas por defecto — puedes cambiarlas cuando quieras en Configuración → Privacidad y datos.",
       "save": "Guardar y continuar",
       "note": "El procesamiento de servicio, seguridad y obligaciones legales ocurre independientemente de estas opciones."
     },
@@ -223,5 +312,23 @@
       "readPolicy": "Leer la política",
       "acknowledge": "Acepto"
     }
+  },
+  "bannedScreen": {
+    "badge": "Cuenta suspendida",
+    "heading": "Tu cuenta ha sido suspendida",
+    "body": "Un administrador ha revocado tu acceso a esta aplicación.",
+    "reasonLabel": "Motivo",
+    "contactSupport": "Contactar con soporte"
+  },
+  "cancelDeletion": {
+    "badge": "Eliminación de cuenta pendiente",
+    "heading": "Tu cuenta está programada para eliminación",
+    "bodyWithDate": "Tu cuenta y tus datos personales se eliminarán permanentemente el {{date}}. Puedes conservar tu cuenta cancelando la eliminación.",
+    "bodyNoDate": "Tu cuenta está pendiente de eliminación. Puedes conservarla cancelando la eliminación.",
+    "cancelling": "Cancelando…",
+    "keepAccount": "Conservar mi cuenta"
+  },
+  "linkedInEmbed": {
+    "title": "Publicación de LinkedIn"
   }
 }

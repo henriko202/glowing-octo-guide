@@ -5,6 +5,7 @@ import { api } from '../convex'
 import Modal from './Modal'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { friendlyError } from '@/lib/errors'
 
 const CATEGORIES = [
   'feature_request',
@@ -40,7 +41,8 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
       await submit({ sessionToken: token, category, message: trimmed })
       setDone(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('feedback.error'))
+      setError(friendlyError(e, t('feedback.error')))
+    } finally {
       setSubmitting(false)
     }
   }

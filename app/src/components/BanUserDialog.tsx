@@ -20,10 +20,14 @@ export default function BanUserDialog({ userName, pending, onConfirm, onCancel }
         They'll be signed out immediately and blocked from the app until an admin unbans them.
       </p>
 
-      <label className="text-muted-foreground mt-4 block text-[11px] font-semibold uppercase tracking-wide">
+      <label
+        htmlFor="ban-reason"
+        className="text-muted-foreground mt-4 block text-[11px] font-semibold tracking-wide uppercase"
+      >
         Reason (optional — shown to the user)
       </label>
       <Textarea
+        id="ban-reason"
         value={reason}
         onChange={e => setReason(e.target.value)}
         rows={2}

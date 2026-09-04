@@ -1,8 +1,8 @@
 // convex/feedback/feedback.ts
 // User feedback: submission (authenticated), admin listing/triage, and admin email replies.
 // Replies are stored in the feedbackResponses table (Task 10); each admin reply is a separate row.
-import { internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
-import { v } from 'convex/values'
+import { internalAction, internalQuery, mutation, query } from '../_generated/server'
+import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { requireAuth } from '../lib/auth'
 import { assertAdmin } from '../admin'
@@ -39,9 +39,9 @@ const categoryValidator = v.union(
 // Pure validator — exported for unit testing. Returns the trimmed message or throws.
 export function validateFeedbackMessage(message: string): string {
   const trimmed = message.trim()
-  if (trimmed.length === 0) throw new Error('Feedback message cannot be empty.')
+  if (trimmed.length === 0) throw new ConvexError('Feedback message cannot be empty.')
   if (trimmed.length > MAX_FEEDBACK_LENGTH) {
-    throw new Error(`Feedback must be ${MAX_FEEDBACK_LENGTH} characters or fewer.`)
+    throw new ConvexError(`Feedback must be ${MAX_FEEDBACK_LENGTH} characters or fewer.`)
   }
   return trimmed
 }
@@ -77,36 +77,44 @@ export const listFeedback = query({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const rows = await ctx.db.query('feedback').order('desc').take(500)
-    return await Promise.all(
-      rows.map(async f => {
-        const u = f.userId ? await ctx.db.get(f.userId) : null
-        // Fetch all responses for this feedback item, chronological ascending.
-        const responseRows = await ctx.db
+
+    // Fetch each item's responses (one bounded indexed read per item — the unavoidable join), then
+    // resolve submitter + responder names through a single batched get() per unique id instead of one
+    // per row/response. Prevents the up-to-500×101 read fan-out on this admin listing.
+    const responseRowsByFeedback = await Promise.all(
+      rows.map(f =>
+        ctx.db
           .query('feedbackResponses')
           .withIndex('by_feedback', q => q.eq('feedbackId', f._id))
           .take(100)
-        const responses = await Promise.all(
-          responseRows.map(async r => {
-            const responder = await ctx.db.get(r.responderId)
-            return {
-              text: r.text,
-              createdAt: r.createdAt,
-              responderName: responder?.name ?? null
-            }
-          })
-        )
-        return {
-          _id: f._id,
-          category: f.category,
-          message: f.message,
-          status: f.status,
-          createdAt: f.createdAt,
-          userName: u?.name ?? null,
-          userEmail: u?.email ?? null,
-          responses
-        }
-      })
+      )
     )
+
+    const userIds = new Set(rows.map(f => f.userId).filter((id): id is NonNullable<typeof id> => !!id))
+    const responderIds = new Set(responseRowsByFeedback.flat().map(r => r.responderId))
+    const userDocs = await Promise.all([...userIds].map(id => ctx.db.get(id)))
+    const responderDocs = await Promise.all([...responderIds].map(id => ctx.db.get(id)))
+    const userMap = new Map(userDocs.filter(u => u !== null).map(u => [u!._id, u!]))
+    const responderMap = new Map(responderDocs.filter(u => u !== null).map(u => [u!._id, u!]))
+
+    return rows.map((f, i) => {
+      const u = f.userId ? userMap.get(f.userId) : null
+      const responses = responseRowsByFeedback[i].map(r => ({
+        text: r.text,
+        createdAt: r.createdAt,
+        responderName: responderMap.get(r.responderId)?.name ?? null
+      }))
+      return {
+        _id: f._id,
+        category: f.category,
+        message: f.message,
+        status: f.status,
+        createdAt: f.createdAt,
+        userName: u?.name ?? null,
+        userEmail: u?.email ?? null,
+        responses
+      }
+    })
   }
 })
 
@@ -122,7 +130,7 @@ export const respondToFeedback = mutation({
     assertAdmin(admin)
     const reply = validateFeedbackMessage(responseText)
     const feedback = await ctx.db.get(feedbackId)
-    if (!feedback) throw new Error('Feedback not found')
+    if (!feedback) throw new ConvexError('Feedback not found')
 
     // Insert a new response row — feedbackResponses is the source of truth for replies.
     const responseId = await ctx.db.insert('feedbackResponses', {
@@ -155,7 +163,7 @@ export const archiveFeedback = mutation({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const f = await ctx.db.get(feedbackId)
-    if (!f) throw new Error('Feedback not found')
+    if (!f) throw new ConvexError('Feedback not found')
     await ctx.db.patch(feedbackId, { status: 'archived' })
     await writeAuditLog(ctx.db as unknown as AuditDb, {
       actor: 'admin',
@@ -173,7 +181,7 @@ export const reopenFeedback = mutation({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const f = await ctx.db.get(feedbackId)
-    if (!f) throw new Error('Feedback not found')
+    if (!f) throw new ConvexError('Feedback not found')
     // Source of truth: feedbackResponses existence (not the legacy responseText field).
     const hasResponse = await ctx.db
       .query('feedbackResponses')
@@ -223,32 +231,5 @@ export const sendFeedbackReply = internalAction({
       text: m.text,
       ...(replyTo ? { replyTo } : {})
     })
-  }
-})
-
-// One-time operator migration: backfills feedbackResponses from legacy single-reply fields.
-// Idempotent — rows already cleared (responseText undefined) are skipped.
-// Not auto-scheduled; run once by the operator via the Convex dashboard or CLI.
-export const backfillFeedbackResponses = internalMutation({
-  args: {},
-  handler: async ctx => {
-    // Process in bounded batches to stay within transaction limits.
-    const rows = await ctx.db.query('feedback').take(200)
-    for (const f of rows) {
-      // Only migrate rows that still have both responseText and respondedBy set.
-      if (f.responseText === undefined || f.respondedBy === undefined) continue
-      await ctx.db.insert('feedbackResponses', {
-        feedbackId: f._id,
-        responderId: f.respondedBy,
-        text: f.responseText,
-        createdAt: f.respondedAt ?? f.createdAt
-      })
-      // Clear the legacy fields to make this idempotent.
-      await ctx.db.patch(f._id, {
-        responseText: undefined,
-        respondedAt: undefined,
-        respondedBy: undefined
-      })
-    }
   }
 })

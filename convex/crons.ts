@@ -1,8 +1,8 @@
 // convex/crons.ts
 // THIS IS THE ONLY FILE Convex reads for scheduled jobs.
 // Cron definitions in other files are silently ignored.
-import { cronJobs } from 'convex/server'
-import { internal } from './_generated/api.js'
+import {cronJobs} from 'convex/server'
+import {internal} from './_generated/api.js'
 
 const crons = cronJobs()
 
@@ -10,6 +10,16 @@ const crons = cronJobs()
 // Runs daily at 03:00 UTC — fetches latest LinkedIn posts for all active users.
 // crons.cron pins a wall-clock time; crons.interval would drift relative to deploy time.
 crons.cron('sync LinkedIn posts', '0 3 * * *', internal.jobs.syncPosts.syncAllPosts, {})
+
+// Refresh like/comment counts on ALL feed-eligible posts every 30 minutes via one batched Apify run.
+// Dev/local only: the job self-gates on isApifyPostSyncEnabled, so prod (Apify dormant) is untouched.
+// crons.interval is fine here — unlike the daily syncs there is no cross-cron ordering to preserve.
+crons.interval(
+  'refresh feed engagement',
+  { minutes: 30 },
+  internal.jobs.refreshFeedEngagement.refreshFeedEngagement,
+  {}
+)
 
 // Promote queued posts to the feed when authors regain capacity. Runs daily at 04:00 UTC —
 // one hour after the post sync so newly-synced posts are already settled. A fixed cron time keeps
@@ -28,7 +38,19 @@ crons.interval('cleanup expired oauth states', { hours: 1 }, internal.sessions.d
 // Batched; reschedules itself when a run fills the batch.
 crons.interval('process account deletions', { hours: 24 }, internal.privacy.deletion.processAccountDeletions, {})
 
+// LinkedIn token refresh: renews tokens in the pre-expiry window via the by_token_expiry index.
+// Runs every 6h — more frequently than "enforce data retention" below (24h) — so a refreshable
+// token is renewed BEFORE retention nulls it as expired. Best-effort/mostly dormant in practice
+// (see linkedin/tokenRefresh.ts): the app's current OAuth tier almost never yields a
+// refresh_token. Cursor-paginated (mirrors migrations/backfillFeedFields.ts): each 6h tick
+// self-reschedules with the cursor until the whole pre-expiry window has been paged through, so
+// coverage never depends on per-user refresh success/failure. Called with no args — cursor
+// undefined starts a fresh sweep from the front of the window each tick.
+crons.interval('refresh LinkedIn tokens', { hours: 6 }, internal.linkedin.tokenRefresh.refreshExpiringTokens, {})
+
 // Data minimization: expire tokens, purge old export files + audit logs, flag dormant accounts.
+// Must run AFTER the refresh cron has a chance to act (see above) — retention only clears tokens
+// already past expiry, so ordering ensures a refreshable token is renewed first.
 crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retention.enforceDataRetention, {})
 
 export default crons

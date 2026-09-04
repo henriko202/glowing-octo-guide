@@ -1,4 +1,4 @@
-import type { Locale } from '../../../../i18n/config'
+import type { Locale } from '@/i18n/config'
 
 export default function En({ lang }: { lang: Locale }) {
   return (
@@ -6,7 +6,7 @@ export default function En({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Terms of Service</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Last updated:</strong> June 2026 &mdash; draft pending legal review.
+          <strong className="text-cream">Last updated:</strong> June 2026
         </p>
 
         {/* 1. Acceptance */}
@@ -24,8 +24,10 @@ export default function En({ lang }: { lang: Locale }) {
         {/* 2. The service */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. The Service</h2>
         <p>
-          Link Into The SSI is a LinkedIn-connected SaaS platform that provides a shared feed of member posts and
-          enables real LinkedIn engagement &mdash; comments and reactions &mdash; on your behalf. Its purpose is to help
+          Link Into The SSI is a LinkedIn-connected SaaS platform that provides a shared feed of member posts and helps
+          you engage with them. Reactions and comments are made by you, directly on LinkedIn: the Service surfaces
+          relevant posts, can suggest a reaction and draft a comment, and then opens the post on LinkedIn so you can
+          choose to act. The Service does not post, comment, or react on LinkedIn on your behalf. Its purpose is to help
           professionals grow their LinkedIn Social Selling Index (SSI) through authentic, mutual engagement within the
           community.
         </p>
@@ -35,17 +37,15 @@ export default function En({ lang }: { lang: Locale }) {
           3. Your LinkedIn Account &amp; Authorization
         </h2>
         <p>
-          To use the Service you must connect your LinkedIn account via LinkedIn OAuth. By doing so you grant Link Into
-          The SSI permission to:
+          To use the Service you sign in with your LinkedIn account via LinkedIn OpenID Connect. This confirms your
+          identity and provides your basic profile information: your LinkedIn member ID, name, profile picture, and
+          email address. The Service requests no permission to post, comment, or react on LinkedIn, and makes no writes
+          to your LinkedIn account.
         </p>
-        <ul className="list-disc space-y-1 pl-5">
-          <li>read the LinkedIn posts associated with your account; and</li>
-          <li>publish comments and reactions on LinkedIn on your behalf.</li>
-        </ul>
         <p>
           You remain fully responsible for all activity that occurs under your LinkedIn account, including any comments
-          or reactions published through the Service. You may revoke this authorization at any time through your
-          LinkedIn account settings or by deleting your account.
+          or reactions you make on LinkedIn after opening a post through the Service. You may revoke this authorization
+          at any time through your LinkedIn account settings or by deleting your account.
         </p>
 
         {/* 4. Acceptable use */}
@@ -128,9 +128,6 @@ export default function En({ lang }: { lang: Locale }) {
           7. Disclaimers &amp; Limitation of Liability
         </h2>
         <p>
-          <strong className="text-cream">[standard clauses &mdash; to be completed by legal counsel]</strong>
-        </p>
-        <p>
           This section, including any warranty disclaimers, indemnification provisions, and caps on liability, will be
           drafted and inserted by qualified legal counsel prior to the Service launching publicly. Until these terms are
           finalised no binding limitation of liability applies in either direction.
@@ -157,9 +154,8 @@ export default function En({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">9. Governing Law</h2>
         <p>
           These Terms are governed by and construed in accordance with the laws of{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>. Any disputes arising from or relating to
-          these Terms shall be subject to the exclusive jurisdiction of the courts of{' '}
-          <strong className="text-cream">[GOVERNING_LAW_JURISDICTION]</strong>.
+          <strong className="text-cream">Brazil</strong>. Any disputes arising from or relating to these Terms shall be
+          subject to the exclusive jurisdiction of the courts of <strong className="text-cream">Brazil</strong>.
         </p>
 
         {/* 10. Changes & contact */}
@@ -170,12 +166,12 @@ export default function En({ lang }: { lang: Locale }) {
           acceptance of the revised Terms.
         </p>
         <p>
-          Questions about these Terms? Contact us at{' '}
+          Contact us about these Terms at{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>

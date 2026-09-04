@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import type { Dictionary } from '../i18n/getDictionary'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
@@ -16,7 +16,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
         </div>
 
-        <div className="divide-y divide-ink-600">
+        <div className="divide-y divide-gold">
           {dict.items.map((faq, i) => (
             <div key={faq.q}>
               <button
@@ -29,7 +29,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
                 <span className="text-base font-medium text-cream">{faq.q}</span>
                 <span
                   aria-hidden="true"
-                  className="flex-shrink-0 font-display text-2xl text-gold-text transition-transform duration-200"
+                  className="flex-shrink-0 font-display text-2xl text-gold-text transition-transform duration-300"
                   style={{ transform: openIndex === i ? 'rotate(45deg)' : 'rotate(0deg)' }}
                 >
                   +
@@ -39,7 +39,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
                 id={`faq-panel-${i}`}
                 role="region"
                 aria-labelledby={`faq-btn-${i}`}
-                className="overflow-hidden transition-all duration-300 ease-in-out"
+                className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
                 style={{ maxHeight: openIndex === i ? '600px' : '0px' }}
               >
                 <p className="pb-6 text-sm leading-relaxed text-cream/50">{faq.a}</p>

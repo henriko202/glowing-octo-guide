@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   appendMediaLinks,
   extractArticleUrl,
+  extractPostUrn,
+  isEmbeddablePostHtml,
   parseArticle,
+  parsePostAuthor,
   parsePostContent,
   parsePostEngagement,
   type PostMedia
@@ -152,6 +155,63 @@ describe('extractArticleUrl', () => {
   it('decodes HTML entities in the extracted href', () => {
     const html = `<a data-test-id="article-content" href="https://www.linkedin.com/pulse/a-b?trk=x&amp;utm=y">x</a>`
     expect(extractArticleUrl(html)).toBe('https://www.linkedin.com/pulse/a-b')
+  })
+})
+
+describe('extractPostUrn', () => {
+  // Real newer /posts markup: no data-attributed-urn, but a canonical -activity-{id}- permalink.
+  const canonicalHtml = `<head><link rel="canonical" href="https://pt.linkedin.com/posts/henriko202_gostaria-de-compartilhar-que-estou-come%C3%A7ando-activity-7152671041134211072-qMuM"><meta property="og:url" content="https://pt.linkedin.com/posts/henriko202_x-activity-7152671041134211072-qMuM"></head>`
+  // The submitted/redirected URL carries the ugcPost id LinkedIn minted for sharing.
+  const sharedUrl = 'https://www.linkedin.com/posts/henriko202_x-ugcPost-7152671040479911937-O4Ev/?utm_source=share'
+
+  it('prefers a valid legacy data-attributed-urn attribute', () => {
+    const html = `<div data-attributed-urn="urn:li:ugcPost:7152671040479911937"></div>${canonicalHtml}`
+    expect(extractPostUrn(html, [sharedUrl])).toBe('urn:li:ugcPost:7152671040479911937')
+  })
+
+  it('preserves the ugcPost namespace from the submitted URL (not the canonical activity form)', () => {
+    // The canonical HTML says -activity-…072; the shared URL says -ugcPost-…937. The embed needs
+    // the ugcPost namespace, so the submitted URL wins over the canonical fallback.
+    expect(extractPostUrn(canonicalHtml, [sharedUrl])).toBe('urn:li:ugcPost:7152671040479911937')
+  })
+
+  it('derives the activity URN from the canonical link when no candidate URL carries a namespace slug', () => {
+    expect(extractPostUrn(canonicalHtml, [])).toBe('urn:li:activity:7152671041134211072')
+  })
+
+  it('falls back to og:url when there is no canonical link', () => {
+    const html = `<meta property="og:url" content="https://www.linkedin.com/posts/x_y-activity-7152671041134211072-qMuM">`
+    expect(extractPostUrn(html, [])).toBe('urn:li:activity:7152671041134211072')
+  })
+
+  it('handles a Format-2 /feed/update submitted URL → activity URN', () => {
+    const feedUrl = 'https://www.linkedin.com/feed/update/urn:li:activity:7152671041134211072/'
+    expect(extractPostUrn('<html></html>', [feedUrl])).toBe('urn:li:activity:7152671041134211072')
+  })
+
+  it('ignores an invalid attribute and uses the URL fallback', () => {
+    const html = `<div data-attributed-urn="not-a-urn"></div>${canonicalHtml}`
+    expect(extractPostUrn(html, [sharedUrl])).toBe('urn:li:ugcPost:7152671040479911937')
+  })
+
+  it('returns null when no URN source is present or usable', () => {
+    expect(extractPostUrn('<html></html>', [])).toBeNull()
+    expect(extractPostUrn('<html></html>', ['https://evil.com/posts/x_y-activity-7152671041134211072-z'])).toBeNull()
+  })
+})
+
+describe('isEmbeddablePostHtml', () => {
+  it('accepts embed HTML that carries a rendered card marker', () => {
+    // Public posts (text, image, or video) render a card with these locale-independent classes.
+    expect(isEmbeddablePostHtml('<div class="main-feed-activity-embed-card__social-actions">…</div>')).toBe(true)
+    expect(isEmbeddablePostHtml('<p class="main-feed-activity-embed-card__commentary">hi</p>')).toBe(true)
+  })
+
+  it('rejects the auth-wall stub returned for a non-public post', () => {
+    // The real walled stub: "Sign in or join now … This post is unavailable" and NO card classes.
+    const wall = '<section><h1>Sign in or join now to see this post</h1><p>This post is unavailable.</p></section>'
+    expect(isEmbeddablePostHtml(wall)).toBe(false)
+    expect(isEmbeddablePostHtml('')).toBe(false)
   })
 })
 
@@ -330,5 +390,50 @@ describe('parsePostEngagement', () => {
       ]}
     </script>`
     expect(parsePostEngagement(html)).toEqual({ likeCount: 0, commentCount: 0 })
+  })
+})
+
+describe('parsePostAuthor', () => {
+  it('extracts name + vanity from a SocialMediaPosting author (real-post shape)', () => {
+    // Mirrors the real post JSON-LD: author is a Person with name + a profile url on a country subdomain.
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","articleBody":"hi","author":{"@type":"Person","name":"Mateus Yonemoto","url":"https://br.linkedin.com/in/mateus-yonemoto","image":{"@type":"ImageObject","url":"https://media.licdn.com/x.jpg"}}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Mateus Yonemoto', vanity: 'mateus-yonemoto' })
+  })
+
+  it('handles a DiscussionForumPosting post type', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"DiscussionForumPosting","author":{"name":"Ana Souza","url":"https://www.linkedin.com/in/ana-souza"}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Ana Souza', vanity: 'ana-souza' })
+  })
+
+  it('returns the post block author, never a nested comment author', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","author":{"name":"Real Poster","url":"https://www.linkedin.com/in/real-poster"},"comment":[{"@type":"Comment","author":{"name":"Some Commenter","url":"https://www.linkedin.com/in/commenter"}}]}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Real Poster', vanity: 'real-poster' })
+  })
+
+  it('returns the name but no vanity when author.url is missing', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","author":{"name":"No URL Person"}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'No URL Person', vanity: undefined })
+  })
+
+  it('drops a vanity that fails the accepted format (e.g. too short)', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"SocialMediaPosting","author":{"name":"Short Vanity","url":"https://www.linkedin.com/in/x"}}
+    </script>`
+    expect(parsePostAuthor(html)).toEqual({ name: 'Short Vanity', vanity: undefined })
+  })
+
+  it('returns {} when there is no post-typed JSON-LD block', () => {
+    expect(
+      parsePostAuthor(`<script type="application/ld+json">{"@type":"Article","author":{"name":"A"}}</script>`)
+    ).toEqual({})
+    expect(parsePostAuthor('<html>nothing</html>')).toEqual({})
   })
 })

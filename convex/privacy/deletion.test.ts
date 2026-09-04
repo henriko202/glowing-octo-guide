@@ -52,14 +52,14 @@ const SEED = {
   postQueue: [{ _id: 'pq1', authorId: 'u1' }],
   subscriptions: [{ _id: 's1', userId: 'u1' }],
   sessions: [{ _id: 'se1', userId: 'u1' }],
-  rateLimits: [{ _id: 'r1', userId: 'u1' }],
   featuredPostUsage: [{ _id: 'f1', userId: 'u1' }],
   planLimits: [{ _id: 'pl1', userId: 'u1' }],
   consentRecords: [{ _id: 'c1', userId: 'u1' }],
   dataExportRequests: [{ _id: 'de1', userId: 'u1', fileStorageId: 'stor1' }],
   feedback: [{ _id: 'fb1', userId: 'u1', message: 'test', category: 'comment', status: 'new', createdAt: 1000 }],
   auditLogs: [{ _id: 'al1', targetUserId: 'u1', actorId: 'u1', action: 'x' }],
-  userInteractions: [{ _id: 'ui1', userId: 'u1', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 }]
+  userInteractions: [{ _id: 'ui1', userId: 'u1', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 }],
+  userPostState: [{ _id: 'ups1', userId: 'u1', postId: 'p1', reactedAt: 1000 }]
 }
 
 describe('cascadeDeleteUser', () => {
@@ -74,7 +74,6 @@ describe('cascadeDeleteUser', () => {
       'postQueue',
       'subscriptions',
       'sessions',
-      'rateLimits',
       'featuredPostUsage',
       'planLimits',
       'consentRecords',

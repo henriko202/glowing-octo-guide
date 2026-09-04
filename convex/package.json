@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@convex-dev/rate-limiter": "^0.3.2",
     "@convex-dev/stripe": "^0.1.4",
     "convex": "^1.41.0",
     "stripe": "^20.4.1"

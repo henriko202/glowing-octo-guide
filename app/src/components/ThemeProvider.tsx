@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   type ThemePref,
   type ResolvedTheme,
@@ -27,12 +27,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', sync)
   }, [pref])
 
-  const setPref = (next: ThemePref) => {
+  const setPref = useCallback((next: ThemePref) => {
     setStoredTheme(next)
     setPrefState(next)
-  }
+  }, [])
 
-  return <ThemeContext.Provider value={{ pref, resolved, setPref }}>{children}</ThemeContext.Provider>
+  const value = useMemo(() => ({ pref, resolved, setPref }), [pref, resolved, setPref])
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
 export function useTheme(): ThemeContextValue {

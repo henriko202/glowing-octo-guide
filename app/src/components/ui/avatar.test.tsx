@@ -26,6 +26,8 @@ describe('Avatar', () => {
     expect(img).toHaveAttribute('height', '40')
     expect(img).toHaveAttribute('loading', 'lazy')
     expect(img).toHaveAttribute('alt', '')
+    // Privacy: don't leak the app URL as referer to the LinkedIn/Apify image host.
+    expect(img).toHaveAttribute('referrerpolicy', 'no-referrer')
   })
   it('renders initials when there is no src', () => {
     render(<Avatar name="Mariana Costa" />)

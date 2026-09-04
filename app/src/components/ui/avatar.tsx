@@ -33,6 +33,8 @@ export function Avatar({
         width={px}
         height={px}
         loading="lazy"
+        // Profile pics are LinkedIn/Apify-hosted URLs — don't leak the app URL (referer) to that host.
+        referrerPolicy="no-referrer"
         className={cn('rounded-full object-cover', cls, className)}
       />
     )

@@ -1,8 +1,10 @@
 // convex/privacy/export.ts
-// Right of access / data portability. buildExportBundle is pure (assembles + redacts);
-// gatherUserData reads the user's own rows; the action stores the JSON bundle in Convex
-// file storage behind a 7-day owner-only link and emails the user.
+// Right of access / data portability. buildExportBundle is pure (assembles + redacts); the export
+// reads the user's own rows PER TABLE with pagination (gatherUserTablePage) so a user with an
+// unbounded number of posts/interactions can't blow a single query's read limit; the action stores
+// the JSON bundle in Convex file storage behind a 7-day owner-only link and emails the user.
 import { internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
+import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { resolveSession } from '../lib/auth'
@@ -25,6 +27,7 @@ export interface ExportInput {
   feedback?: AnyDoc[]
   feedbackResponses?: AnyDoc[]
   interactions?: AnyDoc[]
+  userPostState?: AnyDoc[]
   exportedAt?: number
 }
 
@@ -41,52 +44,83 @@ export function buildExportBundle(input: ExportInput) {
     feedbackResponses: input.feedbackResponses ?? [],
     // The user's own engagement log (reactions + comments they made on posts).
     interactions: input.interactions ?? [],
+    // Per-post state: which posts they reacted to + their saved AI comment drafts.
+    userPostState: input.userPostState ?? [],
     // The user is entitled to data ABOUT them, not the internal admin trail — keep the
     // action + when, drop other actors' identifiers and internal fields.
     auditLog: input.audits.map(a => ({ action: a.action, createdAt: a.createdAt, metadata: a.metadata }))
   }
 }
 
-export const gatherUserData = internalQuery({
+// Per-table pagination config for the user-owned tables in the DSR export. Same tables + indexes as
+// the erasure cascade's OWNED list (privacy/deletion.ts) — the export reads what erasure deletes.
+// `key` is the buildExportBundle field name (differs from the table name for the renamed ones).
+// feedbackResponses is gathered separately (keyed by feedbackId, not userId — see below).
+const EXPORT_TABLES: Array<{ key: string; table: string; index: string; field: string }> = [
+  { key: 'posts', table: 'posts', index: 'by_author', field: 'authorId' },
+  { key: 'subscriptions', table: 'subscriptions', index: 'by_user', field: 'userId' },
+  { key: 'consents', table: 'consentRecords', index: 'by_user', field: 'userId' },
+  { key: 'audits', table: 'auditLogs', index: 'by_target', field: 'targetUserId' },
+  { key: 'feedback', table: 'feedback', index: 'by_user', field: 'userId' },
+  { key: 'interactions', table: 'userInteractions', index: 'by_user', field: 'userId' },
+  { key: 'userPostState', table: 'userPostState', index: 'by_user_and_post', field: 'userId' }
+]
+
+const EXPORT_PAGE_SIZE = 500
+
+// Loose db shape for the table-name-parameterized paginated read. Convex's generated ctx.db is
+// statically typed per table, so a dynamic-table query needs a narrowed interface (mirrors the
+// CascadeDb cast in privacy/deletion.ts).
+interface PaginatedDb {
+  query(table: string): {
+    withIndex(
+      name: string,
+      fn: (q: { eq(field: string, value: unknown): unknown }) => unknown
+    ): { paginate(opts: unknown): Promise<{ page: AnyDoc[]; isDone: boolean; continueCursor: string }> }
+  }
+}
+
+// The user document alone (bundle profile). Kept separate from the paginated table reads.
+export const getExportUser = internalQuery({
   args: { userId: v.id('users') },
-  handler: async (ctx, { userId }) => {
-    const user = await ctx.db.get(userId)
-    if (!user) return null
-    const posts = await ctx.db
-      .query('posts')
-      .withIndex('by_author', q => q.eq('authorId', userId))
-      .collect()
-    const subscriptions = await ctx.db
-      .query('subscriptions')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .collect()
-    const consents = await ctx.db
-      .query('consentRecords')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .collect()
-    const audits = await ctx.db
-      .query('auditLogs')
-      .withIndex('by_target', q => q.eq('targetUserId', userId))
-      .collect()
-    const feedback = await ctx.db
-      .query('feedback')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .collect()
-    // Gather all admin replies for each of the user's feedback items.
-    const feedbackResponseArrays = await Promise.all(
-      feedback.map(f =>
+  handler: async (ctx, { userId }) => ctx.db.get(userId)
+})
+
+// One page of a single user-owned table. The action loops this per table with the returned cursor
+// until isDone, so no single query reads more than EXPORT_PAGE_SIZE rows — the whole point of the
+// pagination refactor (a single unbounded .collect() would fail the export for a very active user).
+export const gatherUserTablePage = internalQuery({
+  args: { userId: v.id('users'), table: v.string(), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { userId, table, paginationOpts }) => {
+    const cfg = EXPORT_TABLES.find(t => t.table === table)
+    if (!cfg) throw new Error(`Unknown export table: ${table}`)
+    const db = ctx.db as unknown as PaginatedDb
+    return await db
+      .query(cfg.table)
+      .withIndex(cfg.index, q => q.eq(cfg.field, userId))
+      .paginate(paginationOpts)
+  }
+})
+
+// Admin replies for the user's feedback items. feedbackResponses is keyed by feedbackId (not
+// userId), so it's fetched from the already-collected feedback ids. Both bounds are generous
+// headroom over reality (a user has few feedback items; each gets a handful of replies) — a
+// truncation here is logged, never silent.
+export const gatherFeedbackResponses = internalQuery({
+  args: { feedbackIds: v.array(v.id('feedback')) },
+  handler: async (ctx, { feedbackIds }) => {
+    if (feedbackIds.length > 100) {
+      console.warn(`[export] ${feedbackIds.length} feedback items — only the first 100 have replies gathered`)
+    }
+    const perFeedback = await Promise.all(
+      feedbackIds.slice(0, 100).map(fid =>
         ctx.db
           .query('feedbackResponses')
-          .withIndex('by_feedback', q => q.eq('feedbackId', f._id))
-          .collect()
+          .withIndex('by_feedback', q => q.eq('feedbackId', fid))
+          .take(100)
       )
     )
-    const feedbackResponses = feedbackResponseArrays.flat()
-    const interactions = await ctx.db
-      .query('userInteractions')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .collect()
-    return { user, posts, subscriptions, consents, audits, feedback, feedbackResponses, interactions }
+    return perFeedback.flat()
   }
 })
 
@@ -116,9 +150,46 @@ export const generateExport = internalAction({
   args: { requestId: v.id('dataExportRequests'), userId: v.id('users') },
   handler: async (ctx, { requestId, userId }) => {
     try {
-      const data = await ctx.runQuery(internal.privacy.export.gatherUserData, { userId })
-      if (!data) throw new Error('user not found')
-      const bundle = buildExportBundle({ ...data, exportedAt: Date.now() })
+      const user = await ctx.runQuery(internal.privacy.export.getExportUser, { userId })
+      if (!user) throw new Error('user not found')
+
+      // Paginate every user-owned table across separate point-in-time queries, so a user with an
+      // unbounded number of posts/interactions/post-state rows can't blow a single query's read
+      // limit. A failed export leaves the request permanently 'failed' — a missed GDPR access right —
+      // so correctness at scale matters more than the extra round-trips.
+      const collected: Record<string, AnyDoc[]> = {}
+      for (const { key, table } of EXPORT_TABLES) {
+        const rows: AnyDoc[] = []
+        let cursor: string | null = null
+        // Page ceiling (defensive against a non-advancing cursor): 10k pages × 500 = 5M rows.
+        for (let page = 0; page < 10_000; page++) {
+          const res: { page: AnyDoc[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(
+            internal.privacy.export.gatherUserTablePage,
+            { userId, table, paginationOpts: { numItems: EXPORT_PAGE_SIZE, cursor } }
+          )
+          rows.push(...res.page)
+          if (res.isDone) break
+          cursor = res.continueCursor
+        }
+        collected[key] = rows
+      }
+
+      const feedbackResponses = await ctx.runQuery(internal.privacy.export.gatherFeedbackResponses, {
+        feedbackIds: (collected.feedback ?? []).map(f => f._id)
+      })
+
+      const bundle = buildExportBundle({
+        user,
+        posts: collected.posts ?? [],
+        subscriptions: collected.subscriptions ?? [],
+        consents: collected.consents ?? [],
+        audits: collected.audits ?? [],
+        feedback: collected.feedback ?? [],
+        feedbackResponses,
+        interactions: collected.interactions ?? [],
+        userPostState: collected.userPostState ?? [],
+        exportedAt: Date.now()
+      })
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
       const fileStorageId = await ctx.storage.store(blob)
       await ctx.runMutation(internal.privacy.export.markExportReady, {
@@ -126,7 +197,7 @@ export const generateExport = internalAction({
         fileStorageId,
         expiresAt: Date.now() + EXPORT_TTL_MS
       })
-      const email = data.user.email as string | undefined
+      const email = user.email as string | undefined
       if (email) {
         const m = exportReadyEmail()
         await sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text })

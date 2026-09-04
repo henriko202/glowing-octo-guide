@@ -51,8 +51,7 @@ and
 [PROCESSOR] (legal entity name)
 Registered address: [PROCESSOR_ADDRESS]
 Company registration number: [PROCESSOR_REG_NO]
-Contact for data protection matters: [PRIVACY_CONTACT_EMAIL]
-(hereinafter "**Processor**")
+Contact for data protection matters: contact@linkintothessi.com (hereinafter "**Processor**")
 
 The Controller and Processor are referred to individually as a "**Party**" and collectively as the "**Parties**".
 
@@ -139,7 +138,7 @@ The Personal Data described above relates to the following categories of Data Su
 
 The Processor does not intentionally collect special-category personal data (as defined in GDPR Article 9) or data
 relating to criminal convictions. The Controller must not instruct the Processor to process such data without entering
-into a separate written agreement addressing the additional requirements of GDPR Article 9(2).
+into a separate written agreement addressing the additional requirements of GDPR Article 9 (2).
 
 ---
 
@@ -357,8 +356,8 @@ Processor will bear its own reasonable costs.
 
 Where Personal Data originates in the European Economic Area (EEA) and is transferred to a country outside the EEA that
 has not been subject to an adequacy decision under GDPR Article 45, the Parties agree to enter into the applicable
-European Commission Standard Contractual Clauses (SCCs) as a mechanism for lawful transfer. The appropriate SCC module (
-Controller-to-Processor or Processor-to-Processor) will be appended as **Schedule B**.
+European Commission Standard Contractual Clauses (SCCs) as a mechanism for lawful transfer. The appropriate SCC module
+(Controller-to-Processor or Processor-to-Processor) will be appended as **Schedule B**.
 
 ### 13.2 Sub-Processor Transfers
 
@@ -401,10 +400,9 @@ subject to the liability limits in the Principal Agreement.
 
 ## 15. Governing Law and Jurisdiction
 
-This Agreement is governed by the laws of [GOVERNING_LAW_JURISDICTION]. Any dispute arising from or in connection with
-this Agreement that cannot be resolved amicably will be subject to the exclusive jurisdiction of the courts
-of [GOVERNING_LAW_JURISDICTION], unless the Parties have agreed to an alternative dispute-resolution mechanism in the
-Principal Agreement.
+This Agreement is governed by the laws of Brazil. Any dispute arising from or in connection with this Agreement that
+cannot be resolved amicably will be subject to the exclusive jurisdiction of the courts of Brazil, unless the Parties
+have agreed to an alternative dispute-resolution mechanism in the Principal Agreement.
 
 ---
 
@@ -451,7 +449,7 @@ Date: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
 ---
 
-**[PROCESSOR] ([LEGAL_ENTITY_NAME])**
+**[PROCESSOR] (NEANDERTECH SERVICOS DE TECNOLOGIA LTDA)**
 
 Signed: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
@@ -467,13 +465,13 @@ Date: \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
 
 _As of the Effective Date, the Controller authorises the following Sub-Processors:_
 
-| Sub-Processor        | Registered Location | Processing Activity                                                    | Website              |
-|----------------------|---------------------|------------------------------------------------------------------------|----------------------|
-| Convex, Inc.         | United States       | Backend database, serverless functions, real-time data synchronisation | https://convex.dev   |
-| LinkedIn Corporation | United States       | Profile data retrieval and enrichment via LinkedIn API (OAuth)         | https://linkedin.com |
-| Stripe, Inc.         | United States       | Payment processing and subscription billing                            | https://stripe.com   |
-| Resend, Inc.         | United States       | Transactional email delivery                                           | https://resend.com   |
-| Vercel, Inc.         | United States       | Frontend hosting and serverless edge functions                         | https://vercel.com   |
+| Sub-Processor        | Registered Location | Processing Activity                                                    | Website                |
+|----------------------|---------------------|------------------------------------------------------------------------|------------------------|
+| Convex, Inc.         | United States       | Backend database, serverless functions, real-time data synchronisation | https://convex.dev     |
+| LinkedIn Corporation | United States       | Profile data retrieval and enrichment via LinkedIn API (OAuth)         | https://linkedin.com   |
+| Stripe, Inc.         | United States       | Payment processing and subscription billing                            | https://stripe.com     |
+| Resend, Inc.         | United States       | Transactional email delivery                                           | https://resend.com     |
+| Cloudflare, Inc.     | United States       | Hosting (landing site + application), DNS, CDN, and DDoS mitigation    | https://cloudflare.com |
 
 The authoritative and up-to-date sub-processor list is maintained at `docs/compliance/SUBPROCESSORS.md`.
 
@@ -485,5 +483,5 @@ _[TO BE COMPLETED: Attach the applicable European Commission Standard Contractua
 
 ---
 
-_This template must be reviewed by qualified legal counsel before use. [LEGAL_ENTITY_NAME] accepts no liability for any
-reliance on this template in its unreviewed or incomplete form._
+_This template must be reviewed by qualified legal counsel before use. NEANDERTECH SERVICOS DE TECNOLOGIA LTDA accepts
+no liability for any reliance on this template in its unreviewed or incomplete form._

@@ -71,11 +71,10 @@ describe('buildExportBundle', () => {
       subscriptions: [],
       consents: [],
       audits: [],
-      feedback: [{ _id: 'fb1', category: 'bug', message: 'broken', status: 'responded', responseText: 'fixed' }]
+      feedback: [{ _id: 'fb1', category: 'bug', message: 'broken', status: 'responded' }]
     })
     expect(bundle.feedback).toHaveLength(1)
     expect(bundle.feedback[0].message).toBe('broken')
-    expect(bundle.feedback[0].responseText).toBe('fixed')
   })
 
   it('includes feedbackResponses verbatim', () => {
@@ -131,5 +130,29 @@ describe('buildExportBundle', () => {
       audits: []
     })
     expect(bundle.interactions).toEqual([])
+  })
+
+  it('includes per-post state (reactions + saved comment drafts) verbatim', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      userPostState: [{ _id: 'ups1', postId: 'p1', reactedAt: 1000, commentDraft: 'my draft' }]
+    })
+    expect(bundle.userPostState).toHaveLength(1)
+    expect(bundle.userPostState[0].commentDraft).toBe('my draft')
+  })
+
+  it('defaults userPostState to empty array when omitted', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: []
+    })
+    expect(bundle.userPostState).toEqual([])
   })
 })

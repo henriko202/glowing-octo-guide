@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
+import { Loader2 } from 'lucide-react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { REACTIONS, type Reaction } from '../../../convex/lib/reactions'
-import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
 import LinkedInEmbed from './LinkedInEmbed'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -27,94 +27,51 @@ export type PostWithAuthor = {
 }
 
 /**
- * The row of six reaction buttons shown inside the picker flyout. Pure + exported so the
- * selection behaviour is unit-testable without driving the Radix HoverCard (which is
- * hover/pointer-only and does not open in jsdom). Selecting one calls onSelect(reaction).
+ * The feed's reaction control: a single button that *displays* the post's AI‑suggested reaction
+ * (default LIKE) + the live count, with the reaction name in its tooltip — a visual cue of the
+ * recommendation. Clicking it hands off to LinkedIn (the parent's onReact opens the post there),
+ * so there is no in‑app reaction *picker*: the deep link can't carry a chosen reaction type, so
+ * letting the user pick one in‑app would be meaningless. The suggested type is still sent to the
+ * backend for the optimistic count.
  */
-export function ReactionOptions({
-  suggested,
-  onSelect,
-  gated
-}: {
-  suggested: Reaction
-  onSelect: (reaction: Reaction) => void
-  gated?: boolean
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex gap-1">
-      {REACTIONS.map(r => (
-        <button
-          key={r.value}
-          type="button"
-          aria-pressed={r.value === suggested}
-          title={gated ? t('feed.cardGate') : t(r.labelKey)}
-          onClick={gated ? undefined : () => onSelect(r.value)}
-          disabled={gated}
-          className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border text-lg outline-none ${r.value === suggested ? 'border-primary ring-ring ring-2' : 'hover:bg-muted border-transparent'} disabled:cursor-not-allowed disabled:opacity-50`}
-        >
-          <span aria-hidden="true">{r.emoji}</span>
-          <span className="sr-only">{t(r.labelKey)}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/**
- * LinkedIn-style reaction control. The trigger shows the post's AI-suggested reaction (default
- * LIKE) and the live count; clicking it reacts with that suggestion (the keyboard/click path).
- * Hovering it opens a Radix HoverCard with all six reactions (the suggestion pre-highlighted) so
- * the viewer can pick another — the HoverCard's close-delay bridges the gap to the flyout.
- */
-function ReactionPicker({
+function ReactionButton({
   postId,
   suggested,
   likeCount,
   onReact,
-  gated
+  gated,
+  loading
 }: {
   postId: Id<'posts'>
   suggested: Reaction
   likeCount: number
   onReact: (postId: Id<'posts'>, reaction: Reaction) => void
   gated?: boolean
+  loading?: boolean
 }) {
   const { t } = useTranslation()
   const current = REACTIONS.find(r => r.value === suggested) ?? REACTIONS[0]
 
   return (
-    <HoverCard
-      openDelay={150}
-      closeDelay={150}
+    <Button
+      type="button"
+      variant="ghost"
+      aria-label={t('reactions.react')}
+      onClick={gated || loading ? undefined : () => onReact(postId, current.value)}
+      disabled={gated || loading}
+      title={gated ? t('feed.cardGate') : t(current.labelKey)}
+      className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
     >
-      <HoverCardTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          aria-label={t('reactions.react')}
-          onClick={gated ? undefined : () => onReact(postId, current.value)}
-          disabled={gated}
-          title={gated ? t('feed.cardGate') : undefined}
-          className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
-        >
-          <span aria-hidden="true">{current.emoji}</span> {likeCount}
-        </Button>
-      </HoverCardTrigger>
-      {!gated && (
-        <HoverCardContent
-          side="top"
-          align="start"
-          className="p-1"
-        >
-          <ReactionOptions
-            suggested={suggested}
-            onSelect={r => onReact(postId, r)}
-            gated={gated}
-          />
-        </HoverCardContent>
-      )}
-    </HoverCard>
+      {loading ? (
+        <Loader2
+          className="h-4 w-4 animate-spin"
+          aria-hidden="true"
+        />
+      ) : (
+        <span aria-hidden="true">{current.emoji}</span>
+      )}{' '}
+      {likeCount}
+    </Button>
   )
 }
 
@@ -122,12 +79,14 @@ export default function PostCard({
   post,
   onComment,
   onReact,
-  gated
+  gated,
+  reacting
 }: {
   post: PostWithAuthor
   onComment: (postId: Id<'posts'>) => void
   onReact: (postId: Id<'posts'>, reaction: Reaction) => void
   gated?: boolean
+  reacting?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -139,7 +98,7 @@ export default function PostCard({
         {post.isFeatured && (
           <Badge
             variant="warning"
-            className="mb-2 text-[11px] uppercase tracking-wider"
+            className="mb-2 text-[11px] tracking-wider uppercase"
           >
             {t('feed.featured')}
           </Badge>
@@ -169,12 +128,13 @@ export default function PostCard({
         urn={post.linkedinPostUrn}
         footer={
           <div className="border-border bg-card flex h-[52px] items-center gap-4 border-t px-4">
-            <ReactionPicker
+            <ReactionButton
               postId={post._id}
               suggested={post.suggestedReaction ?? 'LIKE'}
               likeCount={post.likeCount}
               onReact={onReact}
               gated={gated}
+              loading={reacting}
             />
             <Button
               type="button"
@@ -193,18 +153,18 @@ export default function PostCard({
                   type="button"
                   disabled
                   title={t('feed.cardGate')}
-                  className="text-gold-text ml-auto cursor-not-allowed opacity-50"
+                  className="ml-auto cursor-not-allowed text-gold-text opacity-50"
                 >
-                  View on LinkedIn ↗
+                  {t('feed.viewOnLinkedIn')}
                 </button>
               ) : (
                 <a
                   href={post.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-gold-text ml-auto no-underline hover:underline"
+                  className="ml-auto text-gold-text no-underline hover:underline"
                 >
-                  View on LinkedIn ↗
+                  {t('feed.viewOnLinkedIn')}
                 </a>
               ))}
           </div>

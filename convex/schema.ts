@@ -20,6 +20,22 @@ export default defineSchema({
     // Validated against convex/lib/languages.ts in setCommentLanguage. Distinct from primaryLocale
     // (which only seeds the UI i18n language, not what the AI writes comments in).
     commentLanguage: v.optional(v.string()),
+    // Pro/Contact-only post-visibility defaults (backlog/B06 — "user-default" model, not per-post).
+    // Every post writer (posts.submitPost, jobs/processQueue.ts, jobs/syncPostsApify.ts) copies
+    // these onto posts.visibilityIndustries/visibilityCountries at INSERT time — see convex/feed.ts
+    // for the enforcement. Absent/empty ⇒ visible to everyone (same invariant as the post fields).
+    // Set via users.setPostVisibility, gated server-side to tier 'pro'/'contact'. Downgrading does
+    // NOT clear these or the posts already written with them — only the setter is tier-gated.
+    defaultVisibilityIndustries: v.optional(v.array(v.string())),
+    defaultVisibilityCountries: v.optional(v.array(v.string())),
+    // Pro/Contact-only feed filter: the viewer sees only posts whose AUTHOR matches one of these
+    // industries AND one of these countries (each dimension is an OR over its list; the two
+    // dimensions are ANDed). A "what I want to see" preference, NOT an access rule — read straight
+    // off the viewer doc by feed.getFeed (via buildFeedFilter). Set via users.setFeedFilter, gated
+    // server-side to tier 'pro'/'contact'. Absent/empty for a dimension ⇒ that dimension isn't
+    // filtered. A downgrade does NOT clear these; only the setter is tier-gated.
+    feedFilterIndustries: v.optional(v.array(v.string())),
+    feedFilterCountries: v.optional(v.array(v.string())),
     tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))),
     subscriptionStatus: v.union(
       v.literal('trialing'),
@@ -29,18 +45,23 @@ export default defineSchema({
       v.literal('none')
     ),
     trialEndsAt: v.optional(v.number()),
+    // Paid-through timestamp (Stripe current_period_end, ms). Mirrored from the subscription on
+    // every Stripe sync + cancellation. A canceled author's posts stay in the feed until this
+    // instant, then drop out (see feed.isAuthorFeedEligible) — access to engage is NOT affected.
+    subscriptionEndsAt: v.optional(v.number()),
     trialInteractionsMade: v.optional(v.number()),
     trialInteractionsReceived: v.optional(v.number()),
     stripeCustomerId: v.optional(v.string()),
     linkedinAccessToken: v.optional(v.string()),
     linkedinRefreshToken: v.optional(v.string()),
     tokenExpiresAt: v.optional(v.number()),
-    // The user's LinkedIn public profile identifier (vanityName / publicIdentifier).
-    // Set once by the user in Settings. Used for post ownership verification without
-    // requiring LinkedIn Partner API access.
+    // The member's LinkedIn public profile identifier (vanityName). Auto-derived (set-once) from the
+    // `author.url` of a name-verified submitted post (setDerivedPublicIdentifier) — never user-typed.
+    // Seeds the Apify profile/post scrape; it is NOT the ownership check (that matches the post's
+    // author name against the OIDC name — see linkedin/verifyPostOwnership.ts).
     linkedinPublicIdentifier: v.optional(v.string()),
     // Admin flag — MUST only be set directly in the database.
-    // All application code (upsertUser, setPublicIdentifier, etc.) must ignore this field.
+    // All application code (upsertUser, etc.) must ignore this field.
     isAdmin: v.optional(v.boolean()),
     // Ban state — set/cleared only by the admin banUser/unbanUser mutations.
     // bannedReason is user-visible (shown on the banned screen).
@@ -53,9 +74,10 @@ export default defineSchema({
     // Used for DSR confirmations and breach notification. Stored under legitimate interest /
     // legal obligation, NOT marketing consent.
     email: v.optional(v.string()),
-    emailVerified: v.optional(v.boolean()),
-    // Account-deletion lifecycle (self-service erasure + dormancy). Presence of
-    // `deletionScheduledAt` means the account is pending hard-deletion by the cron.
+    // Account-deletion lifecycle (self-service erasure + dormancy). `deletionRequestedAt` is an
+    // intentional erasure-audit-trail timestamp (when the user asked) — kept for compliance even
+    // though no query reads it back; do not treat it as dead. Presence of `deletionScheduledAt`
+    // means the account is pending hard-deletion by the cron.
     deletionRequestedAt: v.optional(v.number()),
     deletionScheduledAt: v.optional(v.number()),
     deletionReason: v.optional(v.union(v.literal('user_request'), v.literal('dormancy'))),
@@ -65,9 +87,9 @@ export default defineSchema({
     acknowledgedPolicyVersion: v.optional(v.string()),
     // When the user completed the one-time consent prompt (marketing/analytics). Unset ⇒ prompt on login.
     consentPromptedAt: v.optional(v.number()),
-    // When the user was shown the one-time "confirm your LinkedIn profile URL" onboarding prompt.
-    // Unset AND no linkedinPublicIdentifier ⇒ show the prompt on login (see App RequireAuth).
-    publicIdentifierPromptedAt: v.optional(v.number()),
+    // When the first-post onboarding step was resolved — set once, either by submitting any post
+    // (server-side in posts.submitPost) or by skipping the prompt. Unset ⇒ show FirstPostPromptScreen.
+    firstPostPromptedAt: v.optional(v.number()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
@@ -83,7 +105,10 @@ export default defineSchema({
     //  • dormancy sweep: eq(deletionScheduledAt, undefined) + range on lastLoginAt.
     // Because flagging a dormant user SETS deletionScheduledAt, that row immediately leaves
     // the dormancy range — so the retention cron can self-reschedule without re-reading it.
-    .index('by_deletion_and_last_login', ['deletionScheduledAt', 'lastLoginAt']),
+    .index('by_deletion_and_last_login', ['deletionScheduledAt', 'lastLoginAt'])
+    // Full-text people search for the ⌘K command palette (convex/search.ts). Results are
+    // projected through toSearchPerson (safe display fields only — never tokens/PII).
+    .searchIndex('search_name', { searchField: 'name' }),
 
   posts: defineTable({
     linkedinPostUrn: v.string(),
@@ -140,7 +165,11 @@ export default defineSchema({
     // NOTE: the older by_featured / by_published / by_feed indexes were removed once the
     // feed migrated to by_feed_rank — they had no remaining withIndex callers and every
     // index adds write amplification on this (highest-write) table.
-    .index('by_feed_rank', ['inFeed', 'feedRank']),
+    .index('by_feed_rank', ['inFeed', 'feedRank'])
+    // Full-text content search for the ⌘K command palette (convex/search.ts). filterField
+    // `inFeed` pins the scan to feed-eligible posts so hidden/capped/deleted posts never
+    // enter the candidate set; per-viewer visibility is still applied on top (mirrors getFeed).
+    .searchIndex('search_content', { searchField: 'content', filterFields: ['inFeed'] }),
 
   subscriptions: defineTable({
     userId: v.id('users'),
@@ -183,12 +212,8 @@ export default defineSchema({
     // full-table .filter() scan that would read every live session to find the expired tail.
     .index('by_expires_at', ['expiresAt']),
 
-  rateLimits: defineTable({
-    userId: v.id('users'),
-    action: v.string(),
-    windowStart: v.number(),
-    count: v.number()
-  }).index('by_user_and_action', ['userId', 'action']),
+  // Rate-limit state lives in the @convex-dev/rate-limiter component's own isolated tables (mounted in
+  // convex.config.ts, consumed via lib/rateLimit.ts) — no app-level table needed.
 
   // Ephemeral OAuth state storage for CSRF protection.
   // Each entry lives for 10 minutes — enough time to complete the LinkedIn OAuth flow.
@@ -209,7 +234,11 @@ export default defineSchema({
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     userId: v.optional(v.id('users')), // Only set for contact-tier per-user overrides
     interactionsPerPost: v.number(),
-    postsPerWeek: v.number()
+    postsPerWeek: v.number(),
+    // Max posts.featurePost calls allowed per calendar month (UTC), enforced against
+    // featuredPostUsage. Optional (widen-safe): getPlanLimitsHelper coalesces a missing
+    // value to the tier's DEFAULTS entry, so existing unseeded rows keep working.
+    featuredPerMonth: v.optional(v.number())
   })
     .index('by_tier', ['tier'])
     .index('by_user', ['userId']),
@@ -233,17 +262,14 @@ export default defineSchema({
     .index('by_urn', ['linkedinPostUrn']),
 
   // Append-only consent/withdrawal log. Current effective consent for a purpose is the
-  // latest record for (userId, purpose). 'location_enrichment' is reserved for future use
-  // (the Apify profile scrape is disabled at launch).
+  // latest record for (userId, purpose).
   consentRecords: defineTable({
     userId: v.id('users'),
     purpose: v.union(v.literal('marketing'), v.literal('analytics')),
     granted: v.boolean(),
     policyVersion: v.string(),
     createdAt: v.number()
-  })
-    .index('by_user', ['userId'])
-    .index('by_user_and_purpose', ['userId', 'purpose']),
+  }).index('by_user', ['userId']),
 
   // Tracks asynchronous data-export jobs. The generated bundle is held in Convex file
   // storage; the link expires (fileStorageId/expiresAt) and is purged by the retention cron.
@@ -288,19 +314,11 @@ export default defineSchema({
     ),
     message: v.string(),
     status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
-    createdAt: v.number(),
-    // DEPRECATED — superseded by feedbackResponses table (Task 10).
-    // Retained as v.optional to avoid a schema-narrowing migration on existing rows.
-    // Stop writing these fields; read feedbackResponses instead.
-    responseText: v.optional(v.string()),
-    respondedAt: v.optional(v.number()),
-    respondedBy: v.optional(v.id('users'))
-  })
-    .index('by_user', ['userId']) // export + locate rows to anonymize on deletion
-    .index('by_status', ['status', 'createdAt']), // reserved for future server-side status triage
+    createdAt: v.number()
+  }).index('by_user', ['userId']), // export + locate rows to anonymize on deletion
 
   // Append-only reply log for feedback items. Replaces the single-reply fields on the
-  // feedback row (responseText/respondedAt/respondedBy). Each admin reply is a separate row.
+  // feedback row. Each admin reply is a separate row.
   // Index order: feedbackId first (equality), createdAt second (range / chronological).
   feedbackResponses: defineTable({
     feedbackId: v.id('feedback'),
@@ -337,5 +355,24 @@ export default defineSchema({
     createdAt: v.number()
   })
     .index('by_user', ['userId']) // DSR export + a user's activity
-    .index('by_post', ['postId']) // admin: who engaged with a post
+    // Locate rows referencing a given post so account erasure can delete OTHER users' interactions
+    // on the deleted user's posts (they aren't caught by the by_user drain). See privacy/deletion.ts.
+    .index('by_post', ['postId']),
+
+  // Per-(user, post) engagement state. One lazily-created row per user+post — distinct from the
+  // append-only userInteractions LOG above. Holds CURRENT state: `reactedAt` (set on the user's
+  // first reaction so a repeat reaction doesn't double-count / double-bill — a LinkedIn member can
+  // only hold one reaction per post) and `commentDraft` (their last AI-generated comment for the
+  // post, reloaded into the comment box for reuse/regeneration). Per-user data: exported for DSR
+  // and deleted on account erasure.
+  userPostState: defineTable({
+    userId: v.id('users'),
+    postId: v.id('posts'),
+    reactedAt: v.optional(v.number()),
+    commentDraft: v.optional(v.string())
+  })
+    .index('by_user_and_post', ['userId', 'postId'])
+    // Locate rows referencing a given post so account erasure can delete OTHER users' per-post state
+    // on the deleted user's posts (not caught by the by_user_and_post drain). See privacy/deletion.ts.
+    .index('by_post', ['postId'])
 })

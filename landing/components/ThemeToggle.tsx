@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useSyncExternalStore } from 'react'
-import { type ThemePref, getStoredTheme, setStoredTheme, resolveTheme, applyTheme } from '../lib/theme'
-import type { Dictionary } from '../i18n/getDictionary'
+import { applyTheme, getStoredTheme, resolveTheme, setStoredTheme, type ThemePref } from '@/lib/theme'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 const ORDER: ThemePref[] = ['system', 'light', 'dark']
 
@@ -46,7 +46,7 @@ export default function ThemeToggle({ dict }: { dict: Dictionary['themeToggle'] 
       onClick={cycle}
       aria-label={label[pref]}
       title={label[pref]}
-      className="flex h-9 w-9 items-center justify-center rounded-full border border-cream/15 text-cream/70 transition-colors hover:border-cream/30 hover:text-cream"
+      className="flex h-9 w-9 items-center justify-center rounded-full border border-cream/15 text-cream/70 hover:border-cream/30 hover:text-cream"
     >
       {pref === 'system' ? (
         <svg

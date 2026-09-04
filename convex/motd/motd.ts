@@ -9,6 +9,9 @@ import { assertAdmin } from '../admin'
 
 export const MAX_MOTD_BODY_LENGTH = 5000
 export const REQUIRED_LOCALE = 'en'
+// The locales the app UI actually renders (app/src/i18n supportedLngs). A body under any other key
+// could never resolve on the client, so reject it at the trust boundary rather than store dead data.
+export const SUPPORTED_MOTD_LOCALES = ['en', 'pt', 'es'] as const
 
 type MotdActiveFields = {
   enabled: boolean
@@ -35,6 +38,9 @@ export function validateMotdInput(input: {
 }): Record<string, string> {
   const cleaned: Record<string, string> = {}
   for (const [locale, body] of Object.entries(input.bodies)) {
+    if (!(SUPPORTED_MOTD_LOCALES as readonly string[]).includes(locale)) {
+      throw new Error(`Unsupported MOTD locale "${locale}". Allowed: ${SUPPORTED_MOTD_LOCALES.join(', ')}.`)
+    }
     const trimmed = body.trim()
     if (trimmed.length === 0) continue
     if (trimmed.length > MAX_MOTD_BODY_LENGTH) {

@@ -4,6 +4,9 @@
 // flows never fail merely because email isn't configured — the caller decides whether
 // a skipped send matters. The real upstream error is logged server-side; callers get
 // a generic error.
+import { scrubError } from './scrubError'
+import { fetchWithTimeout } from './fetchWithTimeout'
+
 export interface SendEmailArgs {
   to: string
   subject: string
@@ -25,7 +28,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
     return { sent: false, skipped: true }
   }
 
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await fetchWithTimeout('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -43,7 +46,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
 
   if (!res.ok) {
     const body = await res.text()
-    console.error(`[email] Resend send failed: ${res.status}`, body)
+    console.error(`[email] Resend send failed: ${res.status}`, scrubError(body))
     throw new Error('Failed to send email')
   }
   return { sent: true }

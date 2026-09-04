@@ -1,4 +1,4 @@
-import type { Dictionary } from '../i18n/getDictionary'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function Features({ dict, tiers }: { dict: Dictionary['features']; tiers: Dictionary['tiers'] }) {
   return (
@@ -15,17 +15,17 @@ export default function Features({ dict, tiers }: { dict: Dictionary['features']
           {dict.items.map(f => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-all duration-300 hover:border-cream/15"
+              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-colors duration-300 hover:border-cream/15"
             >
               <div className="mb-5 flex items-start justify-between">
-                <span className="text-2xl text-gold-text opacity-70 transition-opacity group-hover:opacity-100">
+                <span className="text-2xl text-gold-text opacity-70 transition-opacity duration-300 group-hover:opacity-100">
                   {f.icon}
                 </span>
-                <span className="rounded-full border border-cream/10 px-2.5 py-1 text-xs font-medium text-cream/30">
+                <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-xs font-medium text-cream/50 dark:bg-cream/[0.06] dark:text-cream/40">
                   {tiers[f.tier as keyof typeof tiers]}
                 </span>
               </div>
-              <h3 className="mb-2 font-display text-xl font-semibold text-cream">{f.title}</h3>
+              <h3 className="mb-2 font-display text-xl font-bold text-cream">{f.title}</h3>
               <p className="text-sm leading-relaxed text-cream/50">{f.body}</p>
             </div>
           ))}

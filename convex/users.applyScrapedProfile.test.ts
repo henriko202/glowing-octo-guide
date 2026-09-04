@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyScrapedProfileHandler } from './users'
+import { applyScrapedProfileHandler, MAX_HEADLINE_LENGTH } from './users'
 
 function createMockDb(existing?: any) {
   const patches: any[] = []
@@ -59,5 +59,11 @@ describe('applyScrapedProfileHandler', () => {
     const db = createMockDb({ _id: 'u1', headline: 'My own title' })
     await applyScrapedProfileHandler(db as any, { userId: 'u1', headline: 'Scraped title', location: 'Lisbon' })
     expect(db._patches[0].data).toEqual({ location: 'Lisbon' })
+  })
+
+  it('truncates a scraped headline that exceeds the max length', async () => {
+    const db = createMockDb({ _id: 'u1' })
+    await applyScrapedProfileHandler(db as any, { userId: 'u1', headline: 'x'.repeat(MAX_HEADLINE_LENGTH + 50) })
+    expect(db._patches[0].data.headline).toBe('x'.repeat(MAX_HEADLINE_LENGTH))
   })
 })

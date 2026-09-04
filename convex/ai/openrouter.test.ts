@@ -25,7 +25,7 @@ describe('callOpenRouter', () => {
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions')
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer test-key')
     const body = JSON.parse(init.body as string)
-    expect(body.model).toBe('google/gemma-4-26b-a4b-it:floor')
+    expect(body.model).toBe('google/gemma-4-26b-a4b-it')
     // Privacy routing must be enforced on every request: zero data retention + no data collection.
     expect(body.provider).toMatchObject({
       data_collection: 'deny',
@@ -66,6 +66,16 @@ describe('callOpenRouter', () => {
     )
     await expect(callOpenRouter([{ role: 'user', content: 'x' }], { action: 'generate comment' })).rejects.toThrow(
       /Failed to generate comment/i
+    )
+  })
+
+  it('throws a distinct misconfigured error on a model-not-found (404) response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => 'no such model' } as unknown as Response)
+    )
+    await expect(callOpenRouter([{ role: 'user', content: 'x' }], { action: 'test' })).rejects.toThrow(
+      /AI model misconfigured/i
     )
   })
 

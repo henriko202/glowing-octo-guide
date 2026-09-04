@@ -1,5 +1,5 @@
 // app/src/pages/MyPostsPage.test.tsx
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import MyPostsPage from './MyPostsPage'
@@ -13,9 +13,12 @@ vi.mock('../convex', () => ({
     posts: {
       getMyPosts: 'posts.getMyPosts',
       getWeeklyUsage: 'posts.getWeeklyUsage',
+      getFeaturedUsage: 'posts.getFeaturedUsage',
       submitPost: 'posts.submitPost',
       setPostHidden: 'posts.setPostHidden',
-      deletePost: 'posts.deletePost'
+      deletePost: 'posts.deletePost',
+      featurePost: 'posts.featurePost',
+      unfeaturePost: 'posts.unfeaturePost'
     }
   }
 }))
@@ -23,11 +26,15 @@ vi.mock('../convex', () => ({
 // Per-test return values keyed by the refs above. Must be `mock`-prefixed so
 // Vitest allows it inside the hoisted vi.mock factory.
 let mockQueryReturns: Record<string, unknown> = {}
+let mockMutations: Record<string, ReturnType<typeof vi.fn>> = {}
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
   useAction: vi.fn(() => async () => {}),
-  useMutation: vi.fn(() => async () => {})
+  useMutation: vi.fn((ref: string) => {
+    mockMutations[ref] ||= vi.fn(async () => {})
+    return mockMutations[ref]
+  })
 }))
 
 function renderPage() {
@@ -40,10 +47,13 @@ function renderPage() {
 
 describe('MyPostsPage', () => {
   beforeEach(() => {
+    sessionStorage.setItem('sessionToken', 'tok')
+    mockMutations = {}
     mockQueryReturns = {
       'users.getMe': { name: 'Henri Durand', tier: 'starter' },
       'posts.getMyPosts': [],
-      'posts.getWeeklyUsage': { postsThisWeek: 2, postsPerWeek: 5 }
+      'posts.getWeeklyUsage': { postsThisWeek: 2, postsPerWeek: 5 },
+      'posts.getFeaturedUsage': { usedCount: 0, featuredPerMonth: 3 }
     }
   })
 
@@ -109,5 +119,139 @@ describe('MyPostsPage', () => {
     renderPage()
     expect(screen.getByText(/hidden from feed/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /unhide/i })).toBeInTheDocument()
+  })
+
+  it('shows the featured usage pill', () => {
+    renderPage()
+    expect(screen.getByText(/0 of 3 featured this month/i)).toBeInTheDocument()
+  })
+
+  it('shows "unlimited" instead of the raw 999 sentinel for a contact-tier cap', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 2, featuredPerMonth: 999 }
+    renderPage()
+    expect(screen.getByText(/2 featured this month.*unlimited/i)).toBeInTheDocument()
+    expect(screen.queryByText(/999/)).not.toBeInTheDocument()
+  })
+
+  it('shows an enabled Feature control for a non-featured post', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p3',
+        linkedinPostUrn: 'urn:li:activity:3',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false,
+        isFeatured: false
+      }
+    ]
+    renderPage()
+    const featureButton = screen.getByRole('button', { name: /^feature$/i })
+    expect(featureButton).toBeInTheDocument()
+    expect(featureButton).not.toBeDisabled()
+  })
+
+  it('shows a "★ Featured" badge and an Unfeature control for a featured post', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p4',
+        linkedinPostUrn: 'urn:li:activity:4',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false,
+        isFeatured: true
+      }
+    ]
+    renderPage()
+    expect(screen.getByText('★ Featured')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^unfeature$/i })).toBeInTheDocument()
+  })
+
+  it('disables Feature and explains why once the monthly cap is reached', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 3, featuredPerMonth: 3 }
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p5',
+        linkedinPostUrn: 'urn:li:activity:5',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false,
+        isFeatured: false
+      }
+    ]
+    renderPage()
+    const featureButton = screen.getByRole('button', { name: /^feature$/i })
+    expect(featureButton).toBeDisabled()
+    expect(featureButton).toHaveAttribute('title', 'Monthly featured limit reached')
+  })
+
+  it('keeps Unfeature enabled for an already-featured post even at the monthly cap', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 3, featuredPerMonth: 3 }
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p6',
+        linkedinPostUrn: 'urn:li:activity:6',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false,
+        isFeatured: true
+      }
+    ]
+    renderPage()
+    expect(screen.getByRole('button', { name: /^unfeature$/i })).not.toBeDisabled()
+  })
+
+  it('opens a themed confirm dialog on Delete (not window.confirm), and Cancel closes it', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p7',
+        linkedinPostUrn: 'urn:li:activity:7',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false
+      }
+    ]
+    renderPage()
+
+    // Before confirming, only the row's own Delete button exists — no dialog yet.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/removed from the feed/i)).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('confirming the delete dialog runs the delete and closes the dialog', () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p8',
+        linkedinPostUrn: 'urn:li:activity:8',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false
+      }
+    ]
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }))
+
+    expect(mockMutations['posts.deletePost']).toHaveBeenCalledWith({ sessionToken: 'tok', postId: 'p8' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

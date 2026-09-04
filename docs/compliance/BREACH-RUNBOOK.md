@@ -3,9 +3,9 @@
 
 # Personal Data Breach Incident-Response Runbook
 
-This runbook governs [LEGAL_ENTITY_NAME]'s response to actual or suspected personal data breaches affecting data
-processed by the LinkIntoTheSSI platform. It is intended for internal operational and compliance use. All breach events
-must be handled in accordance with GDPR Article 33–34 and LGPD Article 48–49.
+This runbook governs NEANDERTECH SERVICOS DE TECNOLOGIA LTDA's response to actual or suspected personal data breaches
+affecting data processed by the LinkIntoTheSSI platform. It is intended for internal operational and compliance use. All
+breach events must be handled in accordance with GDPR Article 33–34 and LGPD Article 48–49.
 
 ---
 
@@ -44,9 +44,9 @@ A breach may be identified through any of the following channels:
 
 ### 1.3 Sub-Processor Notifications
 
-Sub-processors listed in `docs/compliance/SUBPROCESSORS.md` (Convex, LinkedIn, Stripe, Resend, Vercel) may
-notify [LEGAL_ENTITY_NAME] of a security incident on their side. Any such notification must be escalated immediately
-to [INCIDENT_OWNER].
+Sub-processors listed in `docs/compliance/SUBPROCESSORS.md` (Convex, LinkedIn, Stripe, Resend, Cloudflare) may notify
+NEANDERTECH SERVICOS DE TECNOLOGIA LTDA of a security incident on their side. Any such notification must be escalated
+immediately to [INCIDENT_OWNER].
 
 ### 1.4 Initial Recording
 
@@ -112,14 +112,14 @@ these tokens may have been exposed:
 
 Rotate all secrets that may have been exposed, in this order of priority:
 
-| Secret                                        | Rotation Action                                                                                                         |
-|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| **LinkedIn Client Secret**                    | Regenerate in the LinkedIn Developer Portal; update `LINKEDIN_CLIENT_SECRET` environment variable in Convex and Vercel. |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Roll keys in the Stripe Dashboard; update `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in Convex and Vercel.         |
-| `RESEND_API_KEY`                              | Regenerate in the Resend dashboard; update in Convex and Vercel.                                                        |
-| **Convex deploy key**                         | Rotate via the Convex dashboard (Project Settings → Deploy Keys); update in CI/CD pipelines and Vercel.                 |
+| Secret                                        | Rotation Action                                                                                                                     |
+|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| **LinkedIn Client Secret**                    | Regenerate in the LinkedIn Developer Portal; update `LINKEDIN_CLIENT_SECRET` environment variable in Convex and Cloudflare.         |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Roll keys in the Stripe Dashboard; update `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in Convex and Cloudflare.                 |
+| `RESEND_API_KEY`                              | Regenerate in the Resend dashboard; update in Convex and Cloudflare.                                                                |
+| **Convex deploy key**                         | Rotate via the Convex dashboard (Project Settings → Deploy Keys); update wherever `convex deploy` runs (Cloudflare Workers Builds). |
 
-After rotating, redeploy the Convex backend and Vercel frontend to pick up the new values.
+After rotating, redeploy the Convex backend and the Cloudflare frontends to pick up the new values.
 
 ### 3.4 Patch & Redeploy
 
@@ -141,41 +141,42 @@ forensic purposes. Do not overwrite or delete logs that may be needed for invest
 
 ### 4.1 GDPR — Article 33
 
-**[LEGAL_ENTITY_NAME] must notify `[SUPERVISORY_AUTHORITY]` within 72 hours of becoming aware of a personal data breach
+**NEANDERTECH SERVICOS DE TECNOLOGIA LTDA must notify `[SUPERVISORY_AUTHORITY]` within 72 hours of becoming aware of a
+personal data breach
 **, unless the breach is unlikely to result in a risk to the rights and freedoms of natural persons.
 
-- The 72-hour clock starts from the moment [LEGAL_ENTITY_NAME] — or any staff member or processor acting on its behalf —
-  first becomes aware of the incident.
+- The 72-hour clock starts from the moment NEANDERTECH SERVICOS DE TECNOLOGIA LTDA — or any staff member or processor
+  acting on its behalf — first becomes aware of the incident.
 - If notification cannot be made within 72 hours, it must still be submitted as soon as possible, with a reasoned
   explanation for the delay.
 
-**The notification must include (Art. 33(3)):**
+**The notification must include (Art. 33 (3)):**
 
 1. **Nature of the breach** — type (confidentiality, integrity, availability), how it occurred, and the systems
    involved.
 2. **Categories and approximate number of data subjects** affected.
 3. **Categories and approximate number of personal data records** affected (e.g., email addresses, LinkedIn tokens,
    Stripe customer IDs).
-4. **Name and contact details** of the Data Protection Officer or other privacy contact: [PRIVACY_CONTACT_EMAIL].
+4. **Name and contact details** of the Data Protection Officer or other privacy contact: contact@linkintothessi.com.
 5. **Likely consequences** of the breach for data subjects.
 6. **Measures taken or proposed** to address the breach and mitigate its effects.
 
-Where all required information is not yet available, it may be provided in phases (Art. 33(4)) — submit an initial
+Where all required information is not yet available, it may be provided in phases (Art. 33 (4)) — submit an initial
 notification within 72 hours and supplement it as the investigation progresses.
 
 ### 4.2 LGPD — Article 48
 
-Under Brazil's Lei Geral de Proteção de Dados, [LEGAL_ENTITY_NAME] must notify the **ANPD (Autoridade Nacional de
-Proteção de Dados)** and affected data subjects of a breach that may result in risk or relevant harm to data subjects.
-The LGPD notification should mirror the content required under Art. 33 GDPR. Submit via the ANPD's official notification
-portal.
+Under Brazil's Lei Geral de Proteção de Dados, NEANDERTECH SERVICOS DE TECNOLOGIA LTDA must notify the **ANPD (
+Autoridade Nacional de Proteção de Dados)** and affected data subjects of a breach that may result in risk or relevant
+harm to data subjects. The LGPD notification should mirror the content required under Art. 33 GDPR. Submit via the
+ANPD's official notification portal.
 
 ### 4.3 Notification Checklist
 
 - [ ] Breach log entry created with date/time of awareness.
 - [ ] Severity assessed (Section 2.2).
 - [ ] 72-hour clock tracked from time of awareness.
-- [ ] Draft notification prepared using Art. 33(3) content requirements above.
+- [ ] Draft notification prepared using Art. 33 (3) content requirements above.
 - [ ] Notification submitted to `[SUPERVISORY_AUTHORITY]` (and ANPD if LGPD applies).
 - [ ] Confirmation / reference number from authority recorded in breach log.
 - [ ] Supplementary notifications filed if initial notification was incomplete.
@@ -186,16 +187,17 @@ portal.
 
 ### 5.1 When Notification Is Required
 
-Under **GDPR Article 34**, [LEGAL_ENTITY_NAME] must notify affected data subjects **without undue delay** when a breach
-is likely to result in a **high risk** to their rights and freedoms (e.g., exposure of LinkedIn OAuth tokens, financial
-data, or credentials enabling identity theft or account takeover).
+Under **GDPR Article 34**, NEANDERTECH SERVICOS DE TECNOLOGIA LTDA must notify affected data subjects **without undue
+delay** when a breach is likely to result in a **high risk** to their rights and freedoms (e.g., exposure of LinkedIn
+OAuth tokens, financial data, or credentials enabling identity theft or account takeover).
 
 Under **LGPD Article 48**, affected data subjects must be notified when the breach may cause relevant harm to them.
 
 Notification is not required if:
 
 - The personal data was rendered unintelligible (e.g., encrypted with keys not compromised).
-- [LEGAL_ENTITY_NAME] has taken subsequent measures that ensure high risk is no longer likely to materialise.
+- NEANDERTECH SERVICOS DE TECNOLOGIA LTDA has taken subsequent measures that ensure high risk is no longer likely to
+  materialise.
 - Notification would involve disproportionate effort (in which case a public communication or equivalent measure may be
   substituted — confirm with legal counsel).
 
@@ -209,9 +211,9 @@ alternative transactional email provider for the notification send.
 
 ---
 
-**Subject:** Important security notice regarding your [LEGAL_ENTITY_NAME] account
+**Subject:** Important security notice regarding your NEANDERTECH SERVICOS DE TECNOLOGIA LTDA account
 
-**From:** [PRIVACY_CONTACT_EMAIL]
+**From:** contact@linkintothessi.com
 
 **To:** [AFFECTED_USER_EMAIL]
 
@@ -219,7 +221,8 @@ alternative transactional email provider for the notification send.
 
 Dear [USER_FIRST_NAME],
 
-We are writing to inform you of a security incident that may have affected your [LEGAL_ENTITY_NAME] account.
+We are writing to inform you of a security incident that may have affected your NEANDERTECH SERVICOS DE TECNOLOGIA LTDA
+account.
 
 **What happened**
 
@@ -249,19 +252,19 @@ We recommend you take the following steps:
 2. **Review your LinkedIn account** for any unexpected activity or third-party app authorisations you do not recognise.
 3. **Be alert to phishing** — we will never ask for your password or full card number by email.
 
-If you have any questions or concerns, please contact us at [PRIVACY_CONTACT_EMAIL].
+If you have any questions or concerns, please contact us at contact@linkintothessi.com.
 
 We sincerely apologise for any concern or inconvenience this incident may cause.
 
 Yours sincerely,
 
 [INCIDENT_OWNER]
-[LEGAL_ENTITY_NAME]
-[PRIVACY_CONTACT_EMAIL]
+NEANDERTECH SERVICOS DE TECNOLOGIA LTDA contact@linkintothessi.com
 
 ---
 
-_(This message was sent to [AFFECTED_USER_EMAIL] because you hold an account with [LEGAL_ENTITY_NAME].)_
+_(This message was sent to [AFFECTED_USER_EMAIL] because you hold an account with NEANDERTECH SERVICOS DE TECNOLOGIA
+LTDA.)_
 
 ---
 
@@ -269,8 +272,8 @@ _(This message was sent to [AFFECTED_USER_EMAIL] because you hold an account wit
 
 ## 6. Record-Keeping
 
-[LEGAL_ENTITY_NAME] must maintain a written record of **all** personal data breaches under GDPR Article 33(5),
-regardless of whether the breach required notification to a supervisory authority or data subjects.
+NEANDERTECH SERVICOS DE TECNOLOGIA LTDA must maintain a written record of **all** personal data breaches under GDPR
+Article 33 (5), regardless of whether the breach required notification to a supervisory authority or data subjects.
 
 ### 6.1 Internal Breach Log
 
@@ -279,7 +282,7 @@ Maintain a breach log document (stored securely and accessible only to authorise
 | Field                                   | Description                                                                                                   |
 |-----------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | **Incident ID**                         | Unique reference (e.g., `BREACH-YYYY-NNN`).                                                                   |
-| **Date/time of awareness**              | When [LEGAL_ENTITY_NAME] first became aware.                                                                  |
+| **Date/time of awareness**              | When NEANDERTECH SERVICOS DE TECNOLOGIA LTDA first became aware.                                              |
 | **Date/time of occurrence**             | When the breach occurred or is estimated to have occurred.                                                    |
 | **Description**                         | Nature of the breach (confidentiality, integrity, availability), how it was discovered, and affected systems. |
 | **Data types affected**                 | Categories of personal data involved (e.g., email, LinkedIn tokens, Stripe IDs).                              |
@@ -304,14 +307,14 @@ compliance record-keeping obligations.
 | Role                                                                                                   | Contact                                |
 |--------------------------------------------------------------------------------------------------------|----------------------------------------|
 | **Incident Owner** (primary responder, accountable for runbook execution and regulatory notifications) | [INCIDENT_OWNER]                       |
-| **Privacy Contact** (DPO or equivalent; named in regulatory notifications)                             | [PRIVACY_CONTACT_EMAIL]                |
+| **Privacy Contact** (DPO or equivalent; named in regulatory notifications)                             | contact@linkintothessi.com             |
 | **Supervisory Authority** (GDPR)                                                                       | [SUPERVISORY_AUTHORITY]                |
 | **ANPD** (LGPD — Brazil)                                                                               | https://www.gov.br/anpd                |
 | **Convex support**                                                                                     | https://www.convex.dev/support         |
 | **LinkedIn Developer Support**                                                                         | https://developer.linkedin.com/support |
 | **Stripe support**                                                                                     | https://support.stripe.com             |
 | **Resend support**                                                                                     | https://resend.com/support             |
-| **Vercel support**                                                                                     | https://vercel.com/support             |
+| **Cloudflare support**                                                                                 | https://www.cloudflare.com/support/    |
 
 ---
 

@@ -9,6 +9,7 @@ import { resolveSession } from '../lib/auth'
 import { sendEmail } from '../lib/email'
 import { deletionScheduledEmail, deletionCompletedEmail } from './emails'
 import { writeAuditLog } from '../lib/audit'
+import { resetUserRateLimits } from '../lib/rateLimit'
 
 interface CascadeDb {
   query(table: string): {
@@ -27,16 +28,21 @@ interface CascadeStorage {
 }
 
 // Tables owned by a user and the index used to find their rows (first index field = userId-like).
+// NOTE: `posts` is handled separately (the posts + orphan-cleanup step in cascadeDeleteUser) so the
+// cross-user interaction/state rows that reference a post are deleted before the post itself — a
+// plain by-author drain here would leave those rows dangling at a now-deleted post.
 const OWNED: Array<{ table: string; index: string; field: string }> = [
-  { table: 'posts', index: 'by_author', field: 'authorId' },
   { table: 'postQueue', index: 'by_author', field: 'authorId' },
   { table: 'subscriptions', index: 'by_user', field: 'userId' },
   { table: 'sessions', index: 'by_userId', field: 'userId' },
-  { table: 'rateLimits', index: 'by_user_and_action', field: 'userId' },
+  // NOTE: rate-limit state is NOT here — it lives in the rate-limiter component's isolated tables,
+  // which the by-index db drains below can't reach. processAccountDeletions calls resetUserRateLimits
+  // on the terminal pass to erase it.
   { table: 'featuredPostUsage', index: 'by_user_month', field: 'userId' },
   { table: 'planLimits', index: 'by_user', field: 'userId' },
   { table: 'consentRecords', index: 'by_user', field: 'userId' },
-  { table: 'userInteractions', index: 'by_user', field: 'userId' }
+  { table: 'userInteractions', index: 'by_user', field: 'userId' },
+  { table: 'userPostState', index: 'by_user_and_post', field: 'userId' }
 ]
 
 // Tables with user references that are ANONYMIZED rather than deleted (userId cleared to undefined).
@@ -49,6 +55,15 @@ const ANONYMIZED: Array<{ table: string; index: string; field: string }> = [
 // One cascade pass deletes/anonymizes at most this many rows per owned table — bounded so a single
 // mutation stays within Convex's read/write budget even for a user with an unbounded number of posts.
 const CASCADE_BATCH = 100
+
+// Posts processed for orphan cleanup per pass. Each post can carry up to CASCADE_BATCH child rows in
+// EACH of these tables, so bounding posts-per-pass keeps a pass's writes (POST_ORPHAN_BATCH × child
+// tables × CASCADE_BATCH) well under a transaction's limit even for a user whose posts are heavily
+// engaged. A prolific user just takes more passes — fine for a background erasure cron.
+const POST_ORPHAN_BATCH = 10
+// Child tables keyed by postId whose rows may be owned by OTHER users (their reactions/comments on
+// this user's posts). Both carry a by_post index for exactly this cleanup (see schema.ts).
+const POST_CHILD_TABLES = ['userInteractions', 'userPostState'] as const
 
 /**
  * Deletes / anonymizes up to `batch` rows per owned table for `userId`. Returns `true` only once
@@ -76,6 +91,32 @@ export async function cascadeDeleteUser(
     await db.delete(e._id)
   }
   if (exports.length === batch) moreWork = true
+
+  // 1b. Posts + the cross-user rows that reference them. A reaction/comment ANOTHER user made on this
+  // user's post lives in userInteractions/userPostState keyed by postId — rows owned by that other
+  // user, so the by-user drains in step 2 never touch them. Delete a post's referencing child rows
+  // first; only delete the post once none remain, so a post with more child rows than one pass can
+  // drain is fully cleaned across passes before we lose its id to query by. (This user's OWN
+  // interaction/state rows are still fully removed by step 2's by-user drains — including rows on
+  // posts authored by others.)
+  const userPosts = await db
+    .query('posts')
+    .withIndex('by_author', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('authorId', userId))
+    .take(POST_ORPHAN_BATCH)
+  for (const p of userPosts) {
+    let postClean = true
+    for (const childTable of POST_CHILD_TABLES) {
+      const children = await db
+        .query(childTable)
+        .withIndex('by_post', (q: unknown) => (q as { eq(f: string, v: unknown): unknown }).eq('postId', p._id))
+        .take(batch)
+      for (const c of children) await db.delete(c._id)
+      if (children.length === batch) postClean = false // a full batch ⇒ more child rows remain
+    }
+    if (postClean) await db.delete(p._id)
+    else moreWork = true // leave this post in place; its remaining child rows drain next pass
+  }
+  if (userPosts.length === POST_ORPHAN_BATCH) moreWork = true
 
   // 2. Delete all other owned rows.
   for (const { table, index, field } of OWNED) {
@@ -236,8 +277,13 @@ export const processAccountDeletions = internalMutation({
       ctx.storage as unknown as CascadeStorage,
       user._id
     )
-    if (done && email) {
-      await ctx.scheduler.runAfter(0, internal.privacy.deletion.sendDeletionCompleted, { email })
+    if (done) {
+      // Erase the user's rate-limit counters from the component's isolated tables (the by-index db
+      // drains above can't reach them). Terminal pass only, so this runs once per account.
+      await resetUserRateLimits(ctx, user._id)
+      if (email) {
+        await ctx.scheduler.runAfter(0, internal.privacy.deletion.sendDeletionCompleted, { email })
+      }
     }
     // Keep going until the due-set is empty: either this account needs more passes (done === false)
     // or there may be further due accounts (done === true).

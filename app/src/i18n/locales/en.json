@@ -13,7 +13,13 @@
   },
   "shell": {
     "search": "Search posts, people",
-    "searchComingSoon": "Search is coming soon.",
+    "commandTitle": "Search & commands",
+    "searchPlaceholder": "Search posts and people…",
+    "noResults": "No results.",
+    "groupActions": "Quick actions",
+    "groupPeople": "People",
+    "groupPosts": "Posts",
+    "actionToggleTheme": "Toggle theme",
     "language": "Language",
     "theme": "Toggle theme",
     "profile": "Profile & settings",
@@ -26,14 +32,10 @@
     "signInButton": "Sign in with LinkedIn"
   },
   "onboarding": {
-    "linkedinIdentifier": {
-      "title": "Confirm your LinkedIn profile",
-      "intro": "Paste your LinkedIn profile URL so we can verify that posts you submit belong to you. You can change this later in Settings.",
-      "placeholder": "https://www.linkedin.com/in/your-name",
-      "willSaveAs": "Will save as: {{vanity}}",
-      "invalid": "Couldn't read a username from that URL. Try https://www.linkedin.com/in/your-name",
-      "save": "Save & continue",
-      "skip": "Skip for now"
+    "firstPost": {
+      "title": "Share your best recent post",
+      "intro": "Add one of your LinkedIn posts to bring your feed to life and let others engage with it. You can add more anytime.",
+      "skip": "I'll do this later"
     }
   },
   "feed": {
@@ -44,10 +46,58 @@
     "featured": "★ Featured",
     "like": "Like",
     "comment": "Comment",
-    "cardGate": "Add a payment method on the Billing page to start engaging."
+    "cardGate": "Add a payment method on the Billing page to start engaging.",
+    "viewOnLinkedIn": "View on LinkedIn ↗",
+    "emptyFiltered": "No posts match your filter yet. Adjust it or clear it to see more.",
+    "filter": {
+      "toggle": "Filter feed",
+      "note": "Show only posts from the industries and countries you choose. Leave empty to see everyone.",
+      "industries": "Industries",
+      "countries": "Countries",
+      "addIndustry": "Add an industry…",
+      "addCountry": "Add a country…",
+      "remove": "Remove {{label}}",
+      "clear": "Clear filters",
+      "selectPlaceholder": "Select…",
+      "noResults": "No results."
+    }
+  },
+  "myPosts": {
+    "featuredPill": "{{used}} of {{limit}} featured this month",
+    "featuredPillUnlimited": "{{used}} featured this month · unlimited",
+    "featuredPillHint": "This calendar month",
+    "feature": "Feature",
+    "unfeature": "Unfeature",
+    "featureLimitReached": "Monthly featured limit reached",
+    "today": "Today",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "tierPlan": "{{tier}} plan",
+    "weeklyUsageHint": "In the last 7 days",
+    "weeklyUsage": "{{used}} of {{limit}} posts this week",
+    "weeklyLimitReached": "Weekly limit reached",
+    "heading": "Your posts ({{count}})",
+    "emptyState": "Share your first post using the composer above ↑",
+    "hiddenFromFeed": "Hidden from feed",
+    "visibleInFeed": "Visible in feed",
+    "hide": "Hide",
+    "unhide": "Unhide",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this post? It will be removed from the feed and from My Posts. It still counts toward your weekly post limit.",
+    "updateError": "Could not update the post.",
+    "deleteError": "Could not delete the post."
+  },
+  "composer": {
+    "shareLabel": "Share a post",
+    "placeholder": "https://www.linkedin.com/posts/your-name_…",
+    "hint": "Paste your LinkedIn post URL",
+    "submitting": "Submitting…",
+    "submit": "Submit →",
+    "submitError": "Failed to submit post"
   },
   "reactions": {
     "react": "React",
+    "openHint": "Opening the post on LinkedIn — add your reaction there.",
     "like": "Like",
     "celebrate": "Celebrate",
     "love": "Love",
@@ -58,8 +108,9 @@
   "comment": {
     "placeholder": "Write a comment…",
     "cancel": "Cancel",
-    "submit": "Post to LinkedIn",
-    "submitting": "Posting...",
+    "submit": "Copy & comment on LinkedIn",
+    "submitting": "Opening…",
+    "copiedHint": "Draft copied — paste it into the comment box on the LinkedIn tab we just opened.",
     "generate": "Generate with AI",
     "regenerate": "Regenerate",
     "generating": "Generating…",
@@ -77,6 +128,7 @@
     "headlineHint": "Shown under your name in the feed and sidebar. Falls back to your industry if left blank.",
     "location": "Location",
     "notSet": "Not set",
+    "clear": "Clear selection",
     "selectPlaceholder": "Select…",
     "noResults": "No results.",
     "save": "Save",
@@ -87,7 +139,13 @@
     "profileNote": "Edit your industry and country below.",
     "visibility": "Who can see your posts",
     "visibilityNote": "Restrict which industries and countries can see your posts in the feed. Leave empty to show to all users.",
-    "visibilityComingSoon": "Coming in next task",
+    "feedFilter": "What you see in your feed",
+    "feedFilterNote": "Show only posts from these industries and countries. Leave empty to see posts from everyone.",
+    "visibilityIndustries": "Industries",
+    "visibilityCountries": "Countries",
+    "visibilityAddIndustry": "Add an industry…",
+    "visibilityAddCountry": "Add a country…",
+    "visibilityRemove": "Remove {{label}}",
     "upgradePrompt": "Upgrade to Pro to control who sees your posts.",
     "aiComments": "AI Comments",
     "aiCommentsNote": "Default language for AI-drafted comments. You can override it per comment.",
@@ -105,7 +163,10 @@
     "status": "Status",
     "nextBilling": "Next Billing Date",
     "cancelsOn": "Cancels On",
-    "endOfPeriod": "End of current period",
+    "renewsOn": "Renews on {{date}}",
+    "accessUntil": "Access until {{date}}",
+    "cancelPending": "Your subscription will not renew.",
+    "renewal": "Renewal",
     "manageSubscription": "Manage Subscription",
     "freeTrial": "Free Trial",
     "daysRemaining_one": "{{count}} day remaining",
@@ -121,22 +182,47 @@
     "trialCtaNote": "Then {{price}} · cancel anytime. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
     "trialIncludes": "Full {{plan}} access during your trial. The full plan comparison appears once you start.",
     "comparisonNote": "Compare plans after your trial — upgrade, downgrade, or cancel anytime.",
+    "newUserLead": "Select a plan below — Growth is the best bang for your buck.",
+    "newUserTrialNote": "Every plan starts with a free 7-day trial · cancel anytime.",
+    "recommended": "Recommended",
     "annual": "Annual · 2 months free",
     "monthly": "Monthly",
+    "checkoutFailed": "Checkout failed: {{error}}",
+    "portalFailed": "Failed to open portal: {{error}}",
+    "customPrice": "Custom",
     "plans": {
       "starter": {
         "name": "Starter",
         "description": "Get started and start engaging",
+        "features": [
+          "See the full live feed",
+          "Comment & react with AI",
+          "25 interactions counted per post",
+          "1 post into the feed / week"
+        ],
         "cta": "Start free trial"
       },
       "growth": {
         "name": "Growth",
         "description": "Targeted feed for faster results",
+        "features": [
+          "Feed filtered to your industry + country",
+          "Everything in Starter",
+          "50 interactions counted per post",
+          "2 posts into the feed / week"
+        ],
         "cta": "Get Growth"
       },
       "pro": {
         "name": "Pro",
         "description": "Maximum visibility and control",
+        "features": [
+          "Custom industry + country filters",
+          "Control who sees your posts",
+          "Everything in Growth",
+          "200 interactions counted per post",
+          "5 posts into the feed / week"
+        ],
         "cta": "Get Pro"
       },
       "contact": {
@@ -147,16 +233,8 @@
     }
   },
   "auth": {
-    "loading": "Loading..."
-  },
-  "admin": {
-    "title": "Admin Panel",
-    "forbidden": "You do not have admin access.",
-    "apifySync": "Apify Post Sync",
-    "apifySyncDescription": "Scrapes LinkedIn posts for all active users every hour via Apify.",
-    "enable": "Enable",
-    "disable": "Disable",
-    "lastSync": "Last sync"
+    "loading": "Loading...",
+    "notSignedIn": "Not signed in"
   },
   "feedback": {
     "button": "Feedback",
@@ -184,6 +262,17 @@
   "motd": {
     "dismiss": "Dismiss",
     "ok": "OK"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "body": "An unexpected error occurred. Reloading the page usually fixes it.",
+    "reload": "Reload page"
+  },
+  "reconnectBanner": {
+    "expiredMessage": "Your LinkedIn connection has expired — reconnect to keep posting.",
+    "expiringMessage_one": "Your LinkedIn connection expires in {{count}} day — reconnect.",
+    "expiringMessage_other": "Your LinkedIn connection expires in {{count}} days — reconnect.",
+    "reconnect": "Reconnect"
   },
   "privacy": {
     "title": "Privacy & Data",
@@ -223,5 +312,23 @@
       "readPolicy": "Read the policy",
       "acknowledge": "I acknowledge"
     }
+  },
+  "bannedScreen": {
+    "badge": "Account suspended",
+    "heading": "Your account has been suspended",
+    "body": "An administrator has revoked your access to this app.",
+    "reasonLabel": "Reason",
+    "contactSupport": "Contact support"
+  },
+  "cancelDeletion": {
+    "badge": "Account deletion pending",
+    "heading": "Your account is scheduled for deletion",
+    "bodyWithDate": "Your account and personal data will be permanently deleted on {{date}}. You can keep your account by cancelling the deletion.",
+    "bodyNoDate": "Your account is pending deletion. You can keep it by cancelling the deletion.",
+    "cancelling": "Cancelling…",
+    "keepAccount": "Keep my account"
+  },
+  "linkedInEmbed": {
+    "title": "LinkedIn post"
   }
 }

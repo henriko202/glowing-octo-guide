@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '../lib/fetchWithTimeout'
+
 export interface ParsedPostUrl {
   /** LinkedIn activity ID — used to form urn:li:ugcPost:{activityId} */
   activityId: string
@@ -17,6 +19,47 @@ export interface ParsedPostUrl {
 // SSRF guard: the path checks below are NOT sufficient on their own — the caller fetch()es
 // this URL server-side, so scheme + host MUST be restricted. Allows linkedin.com + subdomains.
 const ALLOWED_LINKEDIN_HOST = /^([a-z0-9-]+\.)?linkedin\.com$/
+// lnkd.in is LinkedIn's own URL shortener. It is the ONLY non-linkedin.com host we ever fetch,
+// and only to read its redirect Location (never its target) — see resolveLinkedInShortlink.
+const ALLOWED_SHORTLINK_HOST = /^([a-z0-9-]+\.)?lnkd\.in$/
+
+/**
+ * Resolves a lnkd.in shortlink to the underlying linkedin.com post URL, SSRF-safely.
+ *
+ * lnkd.in shortens ANY link posted on LinkedIn — not just posts — so we must never let a
+ * shortener redirect steer a server-side fetch to an attacker-chosen host. We therefore follow
+ * redirects MANUALLY (`redirect: 'manual'`), re-validating every hop against the host allowlist
+ * before touching it, and stop at the first linkedin.com URL (handed off to the caller's normal
+ * auto-follow fetch, which already stays within linkedin.com).
+ *
+ * A URL that is already on linkedin.com is returned unchanged WITHOUT any network call.
+ * Returns null when the input is not an https linkedin.com / lnkd.in URL, the chain leaves the
+ * allowlist, a hop has no Location, or the hop budget is exceeded.
+ *
+ * ponytail: 5-hop budget — real lnkd.in links resolve in a single hop; raise only if LinkedIn
+ * ever chains shorteners.
+ */
+export async function resolveLinkedInShortlink(url: string): Promise<string | null> {
+  let current = url
+  for (let hop = 0; hop < 5; hop++) {
+    let parsed: URL
+    try {
+      parsed = new URL(current)
+    } catch {
+      return null
+    }
+    if (parsed.protocol !== 'https:') return null
+    const host = parsed.hostname.toLowerCase()
+    if (ALLOWED_LINKEDIN_HOST.test(host)) return current // reached the real post URL
+    if (!ALLOWED_SHORTLINK_HOST.test(host)) return null // off-allowlist → reject before fetching
+    // Shortener hop: read ONE redirect without auto-following it to an unvalidated host.
+    const res = await fetchWithTimeout(current, { redirect: 'manual' }, 10_000)
+    const location = res.headers.get('location')
+    if (!location) return null
+    current = new URL(location, current).toString() // resolve a possibly-relative Location
+  }
+  return null // exceeded the hop budget without reaching linkedin.com
+}
 
 /**
  * SSRF guard for any LinkedIn URL we are about to fetch server-side (e.g. a shared
@@ -32,6 +75,21 @@ export function isAllowedLinkedInUrl(url: string): boolean {
     return false
   }
   return parsed.protocol === 'https:' && ALLOWED_LINKEDIN_HOST.test(parsed.hostname.toLowerCase())
+}
+
+/**
+ * Minimal scheme guard for URLs we STORE and later hand to a third party (LinkedIn media/image links
+ * sent to the AI vision provider, which fetches them). Blocks javascript:/data:/file:/http and other
+ * non-https schemes. Not host-pinned on purpose: LinkedIn media is served from licdn.com — NOT
+ * linkedin.com — so isAllowedLinkedInUrl is too strict for image URLs. https-only is the
+ * proportionate SSRF/scheme guard for a URL fetched off-app.
+ */
+export function isHttpsUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {

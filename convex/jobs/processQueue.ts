@@ -10,6 +10,7 @@ import { internal } from '../_generated/api'
 import type { Id } from '../_generated/dataModel'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
 import { computeFeedFields } from '../lib/feedRank'
+import { hasReachedInteractionLimit } from '../lib/interactionLimit'
 
 const BATCH_SIZE = 100
 
@@ -77,12 +78,20 @@ export const processPostQueue = internalMutation({
         }
 
         const authorTierRank = tierToRank(author.tier)
+        // Seed the interaction-cap flag from the queued engagement counts (Option A: total engagement
+        // counts), consistent with upsertPost's insert — a queued post that already meets the cap is
+        // promoted as interactionLimitReached ⇒ inFeed:false, so it never surfaces.
+        const reached = hasReachedInteractionLimit(
+          queuedPost.likeCount,
+          queuedPost.commentCount,
+          limits.interactionsPerPost
+        )
         const feed = computeFeedFields({
           isFeatured: false,
           publishedAt: queuedPost.publishedAt,
           authorTierRank,
           hidden: queuedPost.hidden,
-          interactionLimitReached: false,
+          interactionLimitReached: reached,
           deletedAt: undefined
         })
         await ctx.db.insert('posts', {
@@ -94,12 +103,14 @@ export const processPostQueue = internalMutation({
           commentCount: queuedPost.commentCount,
           mediaUrls: queuedPost.mediaUrls,
           isFeatured: false,
-          visibilityIndustries: [],
-          visibilityCountries: [],
+          // Copy the author's stored default visibility allowlists (backlog/B06). `author` was
+          // fetched above via ctx.db.get(authorId) — absent/empty ⇒ visible to everyone.
+          visibilityIndustries: author.defaultVisibilityIndustries ?? [],
+          visibilityCountries: author.defaultVisibilityCountries ?? [],
           hidden: queuedPost.hidden,
           sourceUrl: queuedPost.sourceUrl,
           authorTierRank,
-          interactionLimitReached: false,
+          interactionLimitReached: reached,
           ...feed
         })
         await ctx.db.delete(queuedPost._id)

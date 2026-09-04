@@ -34,7 +34,11 @@ export default defineConfig(({ command }) => {
     test: {
       globals: true,
       environment: 'jsdom',
-      setupFiles: ['./src/test/setup.ts']
+      setupFiles: ['./src/test/setup.ts'],
+      // Force host-only cookies under jsdom (page origin is http://localhost).
+      // Otherwise a developer's .env.local VITE_COOKIE_DOMAIN=.linkintothessi.com
+      // leaks in and jsdom rejects the cross-domain cookie, failing cookie tests.
+      env: { VITE_COOKIE_DOMAIN: '' }
     }
   }
 })

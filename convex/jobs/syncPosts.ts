@@ -1,5 +1,5 @@
 // convex/jobs/syncPosts.ts
-import { internalAction, internalMutation } from '../_generated/server'
+import { internalAction, internalMutation, internalQuery } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
@@ -7,10 +7,13 @@ import { computeFeedFields } from '../lib/feedRank'
 import { type ApifyFlags, isApifyPostSyncEnabled } from '../lib/apify'
 import { articleValidator } from '../lib/articleValidator'
 import { isWeeklyLimitReached } from '../lib/postLimit'
+import { hasReachedInteractionLimit } from '../lib/interactionLimit'
 
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
 // If the limit is reached and queueOnLimitReached is true, routes to postQueue instead.
+// Returns `created: true` only on a genuine insert, so callers can schedule follow-up work
+// (e.g. AI reaction prediction — backlog/B09) exactly once per post, never on a re-sync.
 export const upsertPost = internalMutation({
   args: {
     linkedinPostUrn: v.string(),
@@ -54,7 +57,7 @@ export const upsertPost = internalMutation({
         hidden: args.hidden,
         ...feed
       })
-      return existing._id
+      return { postId: existing._id, created: false }
     }
 
     // Insert branch — atomic weekly-limit check (all reads+write in one transaction)
@@ -90,7 +93,7 @@ export const upsertPost = internalMutation({
             queuedAt: Date.now()
           })
         }
-        return null
+        return { postId: null, created: false }
       }
       throw new Error(
         `Weekly post limit reached. Your plan allows ${limits.postsPerWeek} post${limits.postsPerWeek === 1 ? '' : 's'} per week.`
@@ -100,21 +103,28 @@ export const upsertPost = internalMutation({
     const authorTierRank = tierToRank(author?.tier ?? 'starter')
     // Destructure out queueOnLimitReached so it is never stored on the post
     const { queueOnLimitReached: _queueOnLimitReached, ...postArgs } = args
+    // Seed the interaction-cap flag from the incoming engagement counts (Option A: total LinkedIn +
+    // in-app engagement counts toward the per-post cap). A post that already meets the author's cap
+    // inserts as interactionLimitReached ⇒ inFeed:false, so an over-cap Apify import never surfaces
+    // in the feed. The manual submit path rejects earlier (posts.submitPost) with a user-facing
+    // message, so this branch flags over-cap posts only on the Apify path.
+    const reached = hasReachedInteractionLimit(postArgs.likeCount, postArgs.commentCount, limits.interactionsPerPost)
     const feed = computeFeedFields({
       isFeatured: postArgs.isFeatured,
       publishedAt: postArgs.publishedAt,
       authorTierRank,
       hidden: postArgs.hidden,
-      interactionLimitReached: false,
+      interactionLimitReached: reached,
       deletedAt: undefined
     })
-    return await ctx.db.insert('posts', {
+    const postId = await ctx.db.insert('posts', {
       ...postArgs,
       featuredAt: undefined,
       authorTierRank,
-      interactionLimitReached: false,
+      interactionLimitReached: reached,
       ...feed
     })
+    return { postId, created: true }
   }
 })
 
@@ -129,6 +139,71 @@ export const syncAllPosts = internalAction({
     if (isApifyPostSyncEnabled(settings as ApifyFlags)) {
       await ctx.runAction(internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
       return
+    }
+  }
+})
+
+// ─── Feed engagement refresh (30-min cron) ────────────────────────────────────
+
+// Feed-eligible posts for the 30-min Apify engagement refresh. `inFeed === true` is the same
+// structural gate the feed itself walks (not hidden / not interaction-capped / not soft-deleted),
+// so this returns exactly "all posts visible in the feed" minus per-viewer filters. Only the fields
+// the refresh needs: the URN to match scraped results back, and the URL to scrape.
+// ponytail: .take(500) bound — dev feeds are tiny; paginate only if a feed ever exceeds this.
+export const getFeedPostsForRefresh = internalQuery({
+  args: {},
+  handler: async ctx => {
+    const posts = await ctx.db
+      .query('posts')
+      .withIndex('by_feed_rank', q => q.eq('inFeed', true))
+      .take(500)
+    return posts.map(p => ({ _id: p._id, linkedinPostUrn: p.linkedinPostUrn, sourceUrl: p.sourceUrl }))
+  }
+})
+
+// Patch like/comment COUNTS on a batch of existing feed posts (the 30-min refresh). Re-evaluates the
+// interaction-cap gate from the refreshed LinkedIn engagement (Option A: total engagement counts), so
+// a post that crosses the author's per-post cap on external growth drops out of the feed here too —
+// the same one-way flip the in-app increment path applies (interactions.ts), never un-hiding a post
+// that already tripped the gate. Plan limits are cached per author within the batch. Skips any id that
+// vanished between the query and this write.
+export const applyEngagementCounts = internalMutation({
+  args: {
+    updates: v.array(v.object({ postId: v.id('posts'), likeCount: v.number(), commentCount: v.number() }))
+  },
+  handler: async (ctx, { updates }) => {
+    const capCache = new Map<string, number>() // authorId -> interactionsPerPost
+    for (const u of updates) {
+      const post = await ctx.db.get(u.postId)
+      if (!post) continue
+      // One-way: if already flagged, stay flagged. Otherwise flip when the fresh counts meet the cap.
+      let reached = post.interactionLimitReached === true
+      if (!reached) {
+        const author = await ctx.db.get(post.authorId)
+        if (author) {
+          const key = author._id as string
+          let cap = capCache.get(key)
+          if (cap === undefined) {
+            cap = (await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')).interactionsPerPost
+            capCache.set(key, cap)
+          }
+          reached = hasReachedInteractionLimit(u.likeCount, u.commentCount, cap)
+        }
+      }
+      const feed = computeFeedFields({
+        isFeatured: post.isFeatured,
+        publishedAt: post.publishedAt,
+        authorTierRank: post.authorTierRank,
+        hidden: post.hidden,
+        interactionLimitReached: reached,
+        deletedAt: post.deletedAt
+      })
+      await ctx.db.patch(u.postId, {
+        likeCount: u.likeCount,
+        commentCount: u.commentCount,
+        interactionLimitReached: reached,
+        ...feed
+      })
     }
   }
 })

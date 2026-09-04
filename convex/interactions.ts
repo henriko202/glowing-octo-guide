@@ -1,16 +1,16 @@
 // convex/interactions.ts
-import { action, internalMutation, internalQuery } from './_generated/server'
+import { action, internalMutation, internalQuery, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
-import { requireAuthAction } from './lib/auth'
+import { requireAuth, requireAuthAction } from './lib/auth'
 import { assertCanEngage } from './lib/access'
+import { assertPostEngageable } from './feed'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { shouldFlipInteractionLimit } from './lib/interactionLimit'
 import { crossesThreshold } from './lib/trialMilestone'
-import { callMemberApi } from './linkedin/client'
 import { reactionValidator } from './lib/reactions'
 
 // Bump one side of a trialing user's interaction counter; when their combined count first
@@ -45,6 +45,22 @@ export const getPost = internalQuery({
   }
 })
 
+// Load a post for engagement (comment / react / AI draft) and enforce the SAME gate the feed and
+// search apply — so a direct get() by id can't reach a post the viewer could never see or act on.
+// Throws ConvexError when the post isn't engageable by this viewer; returns the post otherwise.
+export const getEngageablePost = internalQuery({
+  args: { postId: v.id('posts'), viewerId: v.id('users') },
+  handler: async (ctx, { postId, viewerId }) => {
+    const post = await ctx.db.get(postId)
+    if (!post) throw new ConvexError('Post not found')
+    const viewer = await ctx.db.get(viewerId)
+    if (!viewer) throw new ConvexError('Post not found')
+    const author = await ctx.db.get(post.authorId)
+    assertPostEngageable(post, viewer, author, Date.now())
+    return post
+  }
+})
+
 // Append a per-user engagement record (one reaction or comment) to `userInteractions`. Feeds the
 // DSR export + a future admin dashboard. Callers wrap this best-effort so a logging failure never
 // fails the user's already-completed LinkedIn action.
@@ -61,12 +77,45 @@ export const recordInteraction = internalMutation({
   }
 })
 
+// Load the user's saved AI comment draft for a post — shown in the comment box so they can reuse it
+// or regenerate. Null when they haven't generated one for this post yet.
+export const getCommentDraft = query({
+  args: { sessionToken: v.string(), postId: v.id('posts') },
+  handler: async (ctx, { sessionToken, postId }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const state = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', user._id).eq('postId', postId))
+      .unique()
+    return state?.commentDraft ?? null
+  }
+})
+
+// Persist the last AI-generated comment for (user, post) onto userPostState so the comment box can
+// reload it. Upsert: patch the existing row or create one.
+export const saveCommentDraft = internalMutation({
+  args: { userId: v.id('users'), postId: v.id('posts'), draft: v.string() },
+  handler: async (ctx, { userId, postId, draft }) => {
+    const state = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', userId).eq('postId', postId))
+      .unique()
+    if (state) await ctx.db.patch(state._id, { commentDraft: draft })
+    else await ctx.db.insert('userPostState', { userId, postId, commentDraft: draft })
+  }
+})
+
 // Internal mutation to increment comment count
 export const incrementCommentCount = internalMutation({
   args: { postId: v.id('posts'), actorId: v.id('users') },
   handler: async (ctx, { postId, actorId }) => {
     const post = await ctx.db.get(postId)
     if (!post) return
+    // Already at the cap — never overshoot. Under concurrent engagement, OCC retries this mutation
+    // against the now-flagged post, and this guard turns that retry into a no-op (mirrors
+    // featurePost's `if (post.isFeatured) return`). getEngageablePost gates the happy path; this
+    // closes the race window.
+    if (post.interactionLimitReached) return
     const newCommentCount = post.commentCount + 1
     await ctx.db.patch(postId, { commentCount: newCommentCount })
 
@@ -82,7 +131,8 @@ export const incrementCommentCount = internalMutation({
           post.likeCount,
           newCommentCount,
           limits.interactionsPerPost,
-          post.interactionLimitReached === true
+          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
+          false
         )
       ) {
         // Hitting the interaction limit removes the post from the feed — refresh feed fields.
@@ -100,12 +150,28 @@ export const incrementCommentCount = internalMutation({
   }
 })
 
-// Internal mutation to increment like count
+// Internal mutation to increment like count. Deduped: at most one reaction per user per post — a
+// repeat tap is a no-op (a LinkedIn member can only hold one reaction on a post, so we must not
+// double-count or double-bill). Returns { counted } so the caller skips the engagement log on a repeat.
 export const incrementLikeCount = internalMutation({
   args: { postId: v.id('posts'), actorId: v.id('users') },
-  handler: async (ctx, { postId, actorId }) => {
+  handler: async (ctx, { postId, actorId }): Promise<{ counted: boolean }> => {
+    const state = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', actorId).eq('postId', postId))
+      .unique()
+    if (state?.reactedAt) return { counted: false } // already reacted — don't double point
+
     const post = await ctx.db.get(postId)
-    if (!post) return
+    if (!post) return { counted: false }
+    // Already at the cap — never overshoot (see incrementCommentCount). Bail before writing
+    // reactedAt so a capped post never records a reaction that wasn't counted.
+    if (post.interactionLimitReached) return { counted: false }
+
+    const now = Date.now()
+    if (state) await ctx.db.patch(state._id, { reactedAt: now })
+    else await ctx.db.insert('userPostState', { userId: actorId, postId, reactedAt: now })
+
     const newLikeCount = post.likeCount + 1
     await ctx.db.patch(postId, { likeCount: newLikeCount })
 
@@ -121,7 +187,8 @@ export const incrementLikeCount = internalMutation({
           newLikeCount,
           post.commentCount,
           limits.interactionsPerPost,
-          post.interactionLimitReached === true
+          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
+          false
         )
       ) {
         // Hitting the interaction limit removes the post from the feed — refresh feed fields.
@@ -136,10 +203,14 @@ export const incrementLikeCount = internalMutation({
         await ctx.db.patch(postId, { interactionLimitReached: true, ...feed })
       }
     }
+    return { counted: true }
   }
 })
 
-// Public action: post a comment on a LinkedIn post using the current user's token
+// Public action: record an in-app comment engagement + count it. The comment itself is posted by
+// the user on LinkedIn — the client opens the post and copies the AI draft to the clipboard —
+// because LinkedIn exposes no member API for commenting on another member's post. We therefore
+// count optimistically on tap rather than confirming the LinkedIn action. See docs/PLATFORM.md §11.
 export const commentOnPost = action({
   args: {
     postId: v.id('posts'),
@@ -148,11 +219,10 @@ export const commentOnPost = action({
   },
   handler: async (ctx, { postId, commentText, sessionToken }) => {
     if (commentText.length > 3000) {
-      throw new Error('Comment text exceeds maximum length of 3000 characters')
+      throw new ConvexError('Comment text exceeds maximum length of 3000 characters')
     }
 
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
-    if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
     assertCanEngage(user)
 
     // Rate limit: 20 comments/hour (admins are exempt)
@@ -164,21 +234,9 @@ export const commentOnPost = action({
       })
     }
 
-    const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new Error('Post not found')
-    if (post.hidden) throw new Error('This post is not available.')
-    if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
-
-    await callMemberApi(
-      user.linkedinAccessToken,
-      {
-        method: 'POST',
-        path: `/v2/socialActions/${encodeURIComponent(post.linkedinPostUrn)}/comments`,
-        body: { actor: `urn:li:person:${user.linkedinId}`, message: { text: commentText } },
-        headers: { 'X-Restli-Protocol-Version': '2.0.0' }
-      },
-      { action: 'post comment' }
-    )
+    // Enforce the shared engagement gate (hidden / soft-deleted / at cap / not visible to this
+    // viewer) — the same rule the feed, search and AI-draft paths use, so none can diverge.
+    await ctx.runQuery(internal.interactions.getEngageablePost, { postId, viewerId: user._id })
 
     await ctx.runMutation(internal.interactions.incrementCommentCount, { postId, actorId: user._id })
     try {
@@ -195,16 +253,17 @@ export const commentOnPost = action({
   }
 })
 
-// Public action: react to a LinkedIn post using the current user's token
+// Public action: record an in-app reaction engagement + count it. The reaction itself happens on
+// LinkedIn — the client opens the post so the user reacts there — because LinkedIn exposes no
+// member API for reacting to another member's post. Counted optimistically on tap. See §11.
 export const reactToPost = action({
   args: {
     postId: v.id('posts'),
     reactionType: reactionValidator,
     sessionToken: v.string()
   },
-  handler: async (ctx, { postId, reactionType, sessionToken }) => {
+  handler: async (ctx, { postId, reactionType, sessionToken }): Promise<{ success: boolean; counted: boolean }> => {
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
-    if (!user?.linkedinAccessToken) throw new Error('No LinkedIn token')
     assertCanEngage(user)
 
     // Rate limit: 30 reactions/hour (admins are exempt)
@@ -216,33 +275,27 @@ export const reactToPost = action({
       })
     }
 
-    const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post) throw new Error('Post not found')
-    if (post.hidden) throw new Error('This post is not available.')
-    if (post.interactionLimitReached) throw new Error('This post has reached its interaction limit.')
+    // Enforce the shared engagement gate (hidden / soft-deleted / at cap / not visible to this
+    // viewer) — the same rule the feed, search and AI-draft paths use, so none can diverge.
+    await ctx.runQuery(internal.interactions.getEngageablePost, { postId, viewerId: user._id })
 
-    await callMemberApi(
-      user.linkedinAccessToken,
-      {
-        method: 'POST',
-        path: `/rest/reactions?actor=${encodeURIComponent(`urn:li:person:${user.linkedinId}`)}`,
-        body: { root: post.linkedinPostUrn, reactionType },
-        headers: { 'X-Restli-Protocol-Version': '2.0.0', 'Linkedin-Version': '202603' }
-      },
-      { action: 'post reaction' }
-    )
-
-    await ctx.runMutation(internal.interactions.incrementLikeCount, { postId, actorId: user._id })
-    try {
-      await ctx.runMutation(internal.interactions.recordInteraction, {
-        userId: user._id,
-        postId,
-        kind: 'reaction',
-        reaction: reactionType
-      })
-    } catch (e) {
-      console.error('recordInteraction (reaction) failed:', e)
+    const { counted }: { counted: boolean } = await ctx.runMutation(internal.interactions.incrementLikeCount, {
+      postId,
+      actorId: user._id
+    })
+    // Skip the engagement log on a repeat reaction (already counted — see incrementLikeCount dedup).
+    if (counted) {
+      try {
+        await ctx.runMutation(internal.interactions.recordInteraction, {
+          userId: user._id,
+          postId,
+          kind: 'reaction',
+          reaction: reactionType
+        })
+      } catch (e) {
+        console.error('recordInteraction (reaction) failed:', e)
+      }
     }
-    return { success: true }
+    return { success: true, counted }
   }
 })

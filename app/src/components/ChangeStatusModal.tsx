@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import Modal from './Modal'
 import { Button } from '@/components/ui/button'
+import { friendlyError } from '@/lib/errors'
 
 type Status = 'trialing' | 'active' | 'canceled' | 'past_due' | 'none'
 
@@ -39,7 +40,8 @@ export default function ChangeStatusModal({ user, sessionToken, onClose }: Props
       await setUserSubscriptionStatus({ sessionToken, userId: user._id, status })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to change status')
+      setError(friendlyError(e, 'Failed to change status'))
+    } finally {
       setSaving(false)
     }
   }

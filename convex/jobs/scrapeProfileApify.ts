@@ -5,7 +5,9 @@ import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
 import type { ActionCtx } from '../_generated/server'
 import type { Id } from '../_generated/dataModel'
-import { isApifyProfileScrapeEnabled, runApifyTask } from '../lib/apify.js' // Only the fields we read from the (much larger) profile-scraper payload.
+import { APIFY_FANOUT_CONCURRENCY, isApifyProfileScrapeEnabled, runApifyTask } from '../lib/apify.js'
+import { settledInBatches } from '../lib/concurrency.js'
+// Only the fields we read from the (much larger) profile-scraper payload.
 
 // Only the fields we read from the (much larger) profile-scraper payload.
 interface ApifyProfileResult {
@@ -98,8 +100,10 @@ export const scrapeAllProfilesViaApify = internalAction({
 
     const users = await actionCtx.runQuery(internal.users.getUsersWithLinkedin, {})
 
-    const results = await Promise.allSettled(
-      users.map(u => actionCtx.runAction(internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: u._id }))
+    // Bounded fan-out (see syncAllPostsViaApify): cap concurrent per-user scrapes so a large
+    // subscriber list can't open an unbounded number of paid, rate-limited Apify runs at once.
+    const results = await settledInBatches(users, APIFY_FANOUT_CONCURRENCY, u =>
+      actionCtx.runAction(internal.jobs.scrapeProfileApify.scrapeUserProfile, { userId: u._id })
     )
 
     const failed = results.filter(r => r.status === 'rejected')

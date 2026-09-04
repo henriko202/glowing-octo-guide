@@ -1,4 +1,4 @@
-import type { Dictionary } from '../i18n/getDictionary'
+import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function HowItWorks({ dict }: { dict: Dictionary['howItWorks'] }) {
   return (
@@ -14,16 +14,14 @@ export default function HowItWorks({ dict }: { dict: Dictionary['howItWorks'] })
         <div className="grid grid-cols-1 gap-10 md:grid-cols-3">
           {dict.steps.map((step, i) => (
             <div
-              key={i}
+              key={step.title}
               className="group relative"
             >
-              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full border border-cream/15 transition-colors group-hover:border-gold/40">
-                <span className="font-display text-xl font-semibold text-cream/40 transition-colors group-hover:text-gold-text">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
+              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-gold/10 transition-colors duration-300 group-hover:bg-gold/20 dark:bg-gold/15">
+                <span className="font-display text-xl font-bold text-gold-text">{String(i + 1).padStart(2, '0')}</span>
               </div>
-              <h3 className="mb-3 font-display text-2xl font-semibold text-cream">{step.title}</h3>
-              <p className="text-sm leading-relaxed text-cream/50">{step.body}</p>
+              <h3 className="mb-3 font-display text-2xl font-bold text-cream">{step.title}</h3>
+              <p className="text-sm leading-relaxed text-cream/70 dark:text-cream/50">{step.body}</p>
             </div>
           ))}
         </div>

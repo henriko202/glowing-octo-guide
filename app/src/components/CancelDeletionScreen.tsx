@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from 'convex/react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import { signOut } from '../lib/session'
 import BrandMark from '@/components/BrandMark'
@@ -11,6 +12,7 @@ type Props = {
 }
 
 export default function CancelDeletionScreen({ deletionScheduledAt }: Props) {
+  const { t } = useTranslation()
   const cancelDeletion = useMutation(api.privacy.deletion.cancelAccountDeletion)
   const [working, setWorking] = useState(false)
   const dateLabel = deletionScheduledAt ? new Date(deletionScheduledAt).toLocaleDateString() : null
@@ -33,14 +35,12 @@ export default function CancelDeletionScreen({ deletionScheduledAt }: Props) {
         <BrandMark className="mb-4 justify-center" />
 
         <div className="mb-3">
-          <Badge variant="warning">Account deletion pending</Badge>
+          <Badge variant="warning">{t('cancelDeletion.badge')}</Badge>
         </div>
 
-        <h1 className="text-foreground font-display text-2xl font-semibold">Your account is scheduled for deletion</h1>
+        <h1 className="text-foreground font-display text-2xl font-semibold">{t('cancelDeletion.heading')}</h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          {dateLabel
-            ? `Your account and personal data will be permanently deleted on ${dateLabel}. You can keep your account by cancelling the deletion.`
-            : 'Your account is pending deletion. You can keep it by cancelling the deletion.'}
+          {dateLabel ? t('cancelDeletion.bodyWithDate', { date: dateLabel }) : t('cancelDeletion.bodyNoDate')}
         </p>
         <div className="mt-5 flex items-center gap-3">
           <Button
@@ -48,14 +48,14 @@ export default function CancelDeletionScreen({ deletionScheduledAt }: Props) {
             onClick={keepAccount}
             disabled={working}
           >
-            {working ? 'Cancelling…' : 'Keep my account'}
+            {working ? t('cancelDeletion.cancelling') : t('cancelDeletion.keepAccount')}
           </Button>
           <Button
             type="button"
             variant="ghost"
             onClick={signOut}
           >
-            Sign out
+            {t('nav.signOut')}
           </Button>
         </div>
       </div>

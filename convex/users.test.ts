@@ -19,11 +19,13 @@ function makeUser(overrides: Partial<Doc<'users'>> = {}): Doc<'users'> {
 }
 
 describe('toSafeMe', () => {
-  it('strips token fields and the raw isAdmin flag', () => {
+  it('strips token secrets but keeps the raw isAdmin flag out and tokenExpiresAt in', () => {
     const safe = toSafeMe(makeUser({ isAdmin: true })) as Record<string, unknown>
     expect(safe.linkedinAccessToken).toBeUndefined()
     expect(safe.linkedinRefreshToken).toBeUndefined()
-    expect(safe.tokenExpiresAt).toBeUndefined()
+    // tokenExpiresAt is not a secret (just an expiry timestamp) and is exposed for the
+    // reconnect-before-expiry banner (B01b) — see backlog/B01-linkedin-token-refresh.md.
+    expect(safe.tokenExpiresAt).toBe(123)
     expect(safe.name).toBe('Jordan Maxwell')
   })
 

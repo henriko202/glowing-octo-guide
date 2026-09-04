@@ -6,6 +6,7 @@
 export function defineTable(_fields: any) {
   const tableStub: any = { _fields }
   tableStub.index = (_name: string, _fields: string[]) => tableStub
+  tableStub.searchIndex = (_name: string, _opts: unknown) => tableStub
   return tableStub
 }
 

@@ -1,4 +1,4 @@
-import type { Locale } from '../../../../i18n/config'
+import type { Locale } from '@/i18n/config'
 
 export default function Pt({ lang: _lang }: { lang: Locale }) {
   return (
@@ -6,7 +6,7 @@ export default function Pt({ lang: _lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Política de Cookies &amp; Armazenamento</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Ultima atualizacao:</strong> Junho 2026
+          <strong className="text-cream">Última atualização:</strong> Junho 2026
         </p>
         <p>
           Link Into The SSI usa apenas armazenamento de navegador{' '}
@@ -16,16 +16,16 @@ export default function Pt({ lang: _lang }: { lang: Locale }) {
         </p>
         <p>
           Como esse armazenamento é essencial para prestar o serviço solicitado, não requer consentimento sob as regras
-          de ePrivacidade. Analises opcionais, caso venham a ser introduzidas, estarão desativadas por padrão e poderão
+          de ePrivacidade. Análises opcionais, caso venham a ser introduzidas, estarão desativadas por padrão e poderão
           ser controladas em <strong className="text-cream">Configurações &rarr; Privacidade &amp; Dados</strong>.
         </p>
         <p>
-          Duvidas:{' '}
+          Dúvidas:{' '}
           <a
-            href="mailto:hello@linkintothessi.com"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            hello@linkintothessi.com
+            contact@linkintothessi.com
           </a>
         </p>
       </div>

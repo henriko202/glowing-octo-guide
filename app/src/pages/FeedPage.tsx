@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useAction, usePaginatedQuery } from 'convex/react'
+import { useAction, usePaginatedQuery, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 import PostCard, { type PostWithAuthor } from '../components/PostCard'
+import { buildPostUrl } from '../components/LinkedInEmbed'
+import { toast } from '../components/ui/toast'
+import { delay, HANDOFF_DELAY_MS, openLinkedIn } from '../lib/handoff'
 import CommentBox from '../components/CommentBox'
 import PostComposer from '../components/PostComposer'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { FeedFilterPanel } from '../components/FeedFilterPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useCardGate } from '@/hooks/useCardGate'
+import { friendlyError } from '@/lib/errors'
 
 const FEED_PAGE_SIZE = 20
 
@@ -25,13 +30,27 @@ export default function FeedPage() {
     { sessionToken },
     { initialNumItems: FEED_PAGE_SIZE }
   )
+  // Viewer profile — drives the Pro/Contact feed filter (tier gate + saved industries/countries).
+  const me = useQuery(api.users.getMe, { sessionToken }) as
+    | {
+        tier?: string
+        feedFilterIndustries?: string[]
+        feedFilterCountries?: string[]
+      }
+    | null
+    | undefined
+  const canFilter = me?.tier === 'pro' || me?.tier === 'contact'
+  const filterIndustries = me?.feedFilterIndustries ?? []
+  const filterCountries = me?.feedFilterCountries ?? []
+  const filterActive = filterIndustries.length + filterCountries.length > 0
   const react = useAction(api.interactions.reactToPost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
+  const [reactingPostId, setReactingPostId] = useState<Id<'posts'> | null>(null)
   const [reactError, setReactError] = useState<{ postId: Id<'posts'>; msg: string } | null>(null)
 
   async function handlePostSubmit(url: string) {
-    if (!sessionToken) throw new Error('Not signed in')
+    if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl: url })
   }
 
@@ -99,7 +118,19 @@ export default function FeedPage() {
 
       <PostComposer onSubmit={handlePostSubmit} />
 
-      {posts.length === 0 && <p className="text-muted-foreground py-8 text-center">{t('feed.empty')}</p>}
+      {canFilter && sessionToken && (
+        <FeedFilterPanel
+          sessionToken={sessionToken}
+          industries={filterIndustries}
+          countries={filterCountries}
+        />
+      )}
+
+      {posts.length === 0 && (
+        <p className="text-muted-foreground py-8 text-center">
+          {filterActive ? t('feed.emptyFiltered') : t('feed.empty')}
+        </p>
+      )}
 
       {/* Outer list ref used for scrollMargin calculation */}
       <div ref={listRef}>
@@ -137,17 +168,28 @@ export default function FeedPage() {
                     onComment={id => handleToggleComment(id)}
                     onReact={async (id, reactionType) => {
                       setReactError(null)
+                      setReactingPostId(id)
+                      // No member API exists for reacting to another member's post — the user reacts
+                      // there. Show the toast, count optimistically, then hand off to LinkedIn.
+                      toast(t('reactions.openHint'))
                       try {
                         await react({ postId: id, reactionType, sessionToken: sessionToken ?? '' })
                       } catch (err: unknown) {
-                        const msg = err instanceof Error ? err.message : String(err)
+                        const msg = friendlyError(err, String(err))
                         setReactError({
                           postId: id,
                           msg: msg.startsWith('PAYMENT_REQUIRED') ? t('feed.cardGate') : msg
                         })
+                        setReactingPostId(null)
+                        return
                       }
+                      // Keep the toast + spinner on screen for a beat, THEN open LinkedIn.
+                      await delay(HANDOFF_DELAY_MS)
+                      openLinkedIn(buildPostUrl(post.linkedinPostUrn, post.sourceUrl))
+                      setReactingPostId(null)
                     }}
                     gated={gated}
+                    reacting={reactingPostId === post._id}
                   />
                   {reactError?.postId === post._id && (
                     <p className="text-destructive px-1 pt-1 text-xs">{reactError.msg}</p>
@@ -155,6 +197,7 @@ export default function FeedPage() {
                   {isCommentOpen && (
                     <CommentBox
                       postId={post._id}
+                      postUrl={buildPostUrl(post.linkedinPostUrn, post.sourceUrl)}
                       sessionToken={sessionToken ?? ''}
                       onClose={() => setCommentingOn(null)}
                       gated={gated}

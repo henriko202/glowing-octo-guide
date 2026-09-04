@@ -46,6 +46,10 @@ describe('validateMotdInput', () => {
     })
   })
 
+  it('rejects an unsupported locale key', () => {
+    expect(() => validateMotdInput({ bodies: { en: 'hi', fr: 'salut' } })).toThrow(/locale/i)
+  })
+
   it('rejects an over-length body', () => {
     const long = 'a'.repeat(MAX_MOTD_BODY_LENGTH + 1)
     expect(() => validateMotdInput({ bodies: { en: long } })).toThrow(/characters or fewer/)

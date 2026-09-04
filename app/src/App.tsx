@@ -11,15 +11,19 @@ import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
 import AdminPage from './pages/AdminPage'
 import AppShell from './components/shell/AppShell'
+import ScrollToTop from './components/ScrollToTop'
 import Motd from './components/Motd'
+import ReconnectBanner from './components/ReconnectBanner'
 import FeedbackButton from './components/FeedbackButton'
 import LoadingSpinner from './components/LoadingSpinner'
 import BannedScreen from './components/BannedScreen'
 import CancelDeletionScreen from './components/CancelDeletionScreen'
 import PolicyUpdateScreen from './components/PolicyUpdateScreen'
 import ConsentPromptScreen from './components/ConsentPromptScreen'
+import FirstPostPromptScreen from './components/FirstPostPromptScreen'
+import AnalyticsConsentGate from './components/AnalyticsConsentGate'
 import PrivacyDataPage from './pages/PrivacyDataPage'
-import PublicIdentifierPromptScreen from './components/PublicIdentifierPromptScreen'
+import { Toaster } from './components/ui/toast'
 import { POLICY_VERSION } from '../../convex/lib/policy'
 import { AUTH_URL, LANDING_URL, isSignedOut } from './lib/session'
 
@@ -54,11 +58,18 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!me.consentPromptedAt) return <ConsentPromptScreen />
 
-  if (!me.linkedinPublicIdentifier && !me.publicIdentifierPromptedAt) return <PublicIdentifierPromptScreen />
+  // Prompt every new member for their first post — even before they add a card. The post is
+  // created hidden (postCreatedHidden) and the screen funnels non-subscribers to billing.
+  if (!me.firstPostPromptedAt) return <FirstPostPromptScreen />
 
   return (
     <AppShell>
+      <AnalyticsConsentGate
+        userId={me._id}
+        sessionToken={sessionToken}
+      />
       <Motd />
+      <ReconnectBanner />
       {children}
       <FeedbackButton />
     </AppShell>
@@ -68,6 +79,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <div className="flex min-h-screen flex-col">
+      <Toaster />
+      <ScrollToTop />
       <Routes>
         <Route
           path="/auth/success"

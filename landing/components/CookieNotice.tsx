@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useSyncExternalStore } from 'react'
-import type { Dictionary } from '../i18n/getDictionary'
-import type { Locale } from '../i18n/config'
+import type { Dictionary } from '@/i18n/getDictionary'
+import type { Locale } from '@/i18n/config'
 
 const KEY = 'cookieNoticeDismissed'
 

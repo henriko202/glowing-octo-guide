@@ -6,6 +6,7 @@ import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
 import { getTierFromPriceId } from './lib/stripePrices'
+import { scrubError } from './lib/scrubError'
 
 const http = httpRouter()
 
@@ -79,10 +80,10 @@ http.route({
 
       const tokenExpiresAt = Date.now() + tokens.expires_in * 1000
 
-      // Note: linkedinPublicIdentifier is NOT available from the OIDC userinfo response — LinkedIn's
-      // identity/vanityName endpoints require Partner/MDP access we don't have. Instead we capture it
-      // from the user via the one-time first-login prompt (PublicIdentifierPromptScreen) and Settings
-      // (users.setPublicIdentifier).
+      // Note: linkedinPublicIdentifier (vanityName) is NOT in the OIDC userinfo response — LinkedIn's
+      // identity/vanity endpoints require Partner/MDP access we don't have. It is derived later,
+      // set-once, from the author.url of a name-verified submitted post (posts.submitPost →
+      // users.setDerivedPublicIdentifier). Ownership itself matches userInfo.name ↔ the post author name.
       const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
         linkedinId: userInfo.sub,
         name: userInfo.name,
@@ -91,17 +92,16 @@ http.route({
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         tokenExpiresAt,
-        email: userInfo.email,
-        emailVerified: userInfo.email_verified
+        email: userInfo.email
       })
 
       // Issue a cryptographically random session token — never expose the raw userId.
-      // The client stores this token; all protected functions resolve it server-side.
+      // The client stores this token; all protected functions resolve it server-side. The 15-day
+      // sliding TTL is owned by sessions.create (see SESSION_TTL_MS).
       const sessionToken = crypto.randomUUID()
       await ctx.runMutation(internal.sessions.create, {
         token: sessionToken,
-        userId: userId as Id<'users'>,
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days
+        userId: userId as Id<'users'>
       })
 
       // Append plan/interval to the success redirect when they were carried through OAuth.
@@ -116,7 +116,7 @@ http.route({
     } catch (err) {
       // Log the real error server-side; send only a generic message to the client
       // to prevent leaking internal details (API responses, stack traces, etc.)
-      console.error('OAuth callback error:', err instanceof Error ? err.message : String(err), err)
+      console.error('OAuth callback error:', scrubError(err))
       return new Response(null, {
         status: 302,
         headers: { Location: `${appUrl}/?error=auth_failed` }
@@ -144,7 +144,8 @@ registerRoutes(http, components.stripe, {
         stripeSubscriptionId: sub.id,
         tier: getTierFromPriceId(priceId),
         status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined
+        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
+        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
       })
     },
     'customer.subscription.updated': async (ctx: StripeEvent, event: StripeEvent) => {
@@ -155,7 +156,8 @@ registerRoutes(http, components.stripe, {
         stripeSubscriptionId: sub.id,
         tier: getTierFromPriceId(priceId),
         status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined
+        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
+        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
       })
     },
     'customer.subscription.deleted': async (ctx: StripeEvent, event: StripeEvent) => {
@@ -175,7 +177,9 @@ registerRoutes(http, components.stripe, {
     }
   },
   onEvent: async (_ctx: StripeEvent, event: StripeEvent) => {
-    console.log('[Stripe webhook]', event.type, event.id)
+    // event.type/event.id are safe identifiers, but route through the scrub helper anyway so this
+    // seam stays PII-safe if a future edit logs more of the event object.
+    console.log('[Stripe webhook]', scrubError({ type: event.type, id: event.id }))
   }
 })
 

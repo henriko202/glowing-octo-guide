@@ -5,6 +5,7 @@ import type { Id } from '../../../convex/_generated/dataModel'
 import Modal from './Modal'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { friendlyError } from '@/lib/errors'
 
 type FeedbackResponse = {
   text: string
@@ -45,7 +46,8 @@ export default function RespondFeedbackModal({ feedback, sessionToken, onClose }
       await respond({ sessionToken, feedbackId: feedback._id, responseText: trimmed, sendEmail })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to send reply')
+      setError(friendlyError(e, 'Failed to send reply'))
+    } finally {
       setSending(false)
     }
   }
@@ -57,18 +59,18 @@ export default function RespondFeedbackModal({ feedback, sessionToken, onClose }
     >
       <h3 className="text-foreground text-[15px] font-semibold">Respond to {feedback.userName ?? '(deleted user)'}</h3>
 
-      <div className="border-border bg-muted text-foreground mt-3 whitespace-pre-wrap rounded-md border p-3 text-sm">
+      <div className="border-border bg-muted text-foreground mt-3 rounded-md border p-3 text-sm whitespace-pre-wrap">
         {feedback.message}
       </div>
 
       {feedback.responses.length > 0 && (
         <div className="mt-3">
-          <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">Reply history</span>
+          <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Reply history</span>
           <div className="mt-1 flex flex-col gap-2">
-            {feedback.responses.map((r, i) => (
+            {feedback.responses.map(r => (
               <div
-                key={i}
-                className="border-border bg-muted text-foreground whitespace-pre-wrap rounded-md border p-3 text-sm"
+                key={r.createdAt}
+                className="border-border bg-muted text-foreground rounded-md border p-3 text-sm whitespace-pre-wrap"
               >
                 <p>{r.text}</p>
                 <p className="text-muted-foreground mt-1 text-[11px]">
@@ -82,11 +84,11 @@ export default function RespondFeedbackModal({ feedback, sessionToken, onClose }
       )}
 
       {!canReply && (
-        <p className="text-gold-text mt-3 text-xs">This user has no email on file — you can't send a reply.</p>
+        <p className="mt-3 text-xs text-gold-text">This user has no email on file — you can't send a reply.</p>
       )}
 
       <label className="mt-4 flex flex-col gap-1">
-        <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">Your reply</span>
+        <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Your reply</span>
         <Textarea
           value={text}
           disabled={!canReply}

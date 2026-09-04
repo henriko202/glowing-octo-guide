@@ -1,22 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAction, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
+import { Loader2 } from 'lucide-react'
 import { api } from '../convex'
+import { delay, HANDOFF_DELAY_MS, openLinkedIn } from '../lib/handoff'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { toast } from '@/components/ui/toast'
 import { VirtualizedCombobox } from './VirtualizedCombobox'
 import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } from '../../../convex/lib/languages'
 
 import type { Id } from '../../../convex/_generated/dataModel'
+import { friendlyError } from '@/lib/errors'
 
 export default function CommentBox({
   postId,
+  postUrl,
   sessionToken,
   onClose,
   gated
 }: {
   postId: Id<'posts'>
+  postUrl: string
   sessionToken: string
   onClose: () => void
   gated?: boolean
@@ -26,19 +32,29 @@ export default function CommentBox({
   const [submitting, setSubmitting] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
+  const [draftHydrated, setDraftHydrated] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const comment = useAction(api.interactions.commentOnPost)
   const generate = useAction(api.ai.comments.generateComment)
 
-  // The per-comment language mirrors the user's saved default until they change it here.
+  // Load the user's saved draft for this post and hydrate the textarea once, so they can reuse it or
+  // regenerate. Applied only on first load; later generations set the text directly.
+  const savedDraft = useQuery(api.interactions.getCommentDraft, { sessionToken, postId })
+  // Hydrate the saved draft once, when the query first resolves — a guarded render-phase update that
+  // converges (draftHydrated flips true and never re-enters). Later generations set the text directly.
+  if (!draftHydrated && savedDraft !== undefined) {
+    setDraftHydrated(true)
+    if (savedDraft) {
+      setText(savedDraft)
+      setHasDraft(true)
+    }
+  }
+
+  // The per-comment language mirrors the user's saved default until they pick one here (the override wins).
   const me = useQuery(api.users.getMe, { sessionToken }) as { commentLanguage?: string } | null | undefined
   const meCommentLanguage = me?.commentLanguage
-  const [language, setLanguage] = useState<string>(AUTO_LANGUAGE)
-  const [languageDirty, setLanguageDirty] = useState(false)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mirror the saved default until the user picks a per-comment language
-    if (!languageDirty) setLanguage(resolveCommentLanguage(meCommentLanguage))
-  }, [meCommentLanguage, languageDirty])
+  const [languageOverride, setLanguageOverride] = useState<string | null>(null)
+  const language = languageOverride ?? resolveCommentLanguage(meCommentLanguage)
 
   const uiLang = i18n.language?.split('-')[0] ?? 'en'
   const languageOptions = useMemo(
@@ -59,7 +75,7 @@ export default function CommentBox({
       setText(draft)
       setHasDraft(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('comment.generateError'))
+      setError(friendlyError(err, t('comment.generateError')))
     } finally {
       setGenerating(false)
     }
@@ -67,18 +83,34 @@ export default function CommentBox({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!text.trim()) return
+    const draft = text.trim()
+    if (!draft) return
     setSubmitting(true)
     setError(null)
+    // Ask for clipboard permission and wait; only confirm with a toast once the copy succeeds
+    // (LinkedIn has no member API to comment on another member's post — the user pastes it there).
+    let copied = false
     try {
-      await comment({ postId, commentText: text.trim(), sessionToken })
-      setText('')
-      onClose()
+      await navigator.clipboard.writeText(draft)
+      copied = true
+      toast(t('comment.copiedHint'))
+    } catch {
+      // Copy blocked/denied — no toast; the draft stays in the box so it can be copied manually.
+    }
+    let submitted = false
+    try {
+      // Optimistic: record + count the engagement now; the API can't confirm the LinkedIn post.
+      await comment({ postId, commentText: draft, sessionToken })
+      // Keep the toast + spinner on screen for a beat, THEN open LinkedIn.
+      await delay(HANDOFF_DELAY_MS)
+      openLinkedIn(postUrl)
+      submitted = true
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to post comment')
+      setError(friendlyError(err, t('comment.generateError')))
     } finally {
       setSubmitting(false)
     }
+    if (submitted && copied) onClose()
   }
 
   return (
@@ -91,10 +123,7 @@ export default function CommentBox({
           <VirtualizedCombobox
             options={languageOptions}
             value={language}
-            onChange={value => {
-              setLanguage(value === '' ? AUTO_LANGUAGE : value)
-              setLanguageDirty(true)
-            }}
+            onChange={value => setLanguageOverride(value === '' ? AUTO_LANGUAGE : value)}
             ariaLabel={t('comment.language')}
             placeholder={t('comment.languageAuto')}
           />
@@ -103,9 +132,9 @@ export default function CommentBox({
           type="button"
           variant="outline"
           onClick={handleGenerate}
-          disabled={generating || gated}
+          disabled={generating || gated || submitting}
           title={gated ? t('feed.cardGate') : undefined}
-          className="px-3 py-1.5 text-[13px] font-semibold"
+          className="cursor-pointer px-3 py-1.5 text-[13px] font-semibold"
         >
           {generating ? t('comment.generating') : hasDraft ? t('comment.regenerate') : t('comment.generate')}
         </Button>
@@ -134,19 +163,17 @@ export default function CommentBox({
         ))}
       <div className="mt-2 flex justify-end gap-2">
         <Button
-          type="button"
-          variant="ghost"
-          onClick={onClose}
-          className="text-[13px]"
-        >
-          {t('comment.cancel')}
-        </Button>
-        <Button
           type="submit"
           disabled={submitting || !text.trim() || gated}
           title={gated ? t('feed.cardGate') : undefined}
-          className="px-4 py-1.5 text-[13px] font-semibold"
+          className="cursor-pointer px-4 py-1.5 text-[13px] font-semibold"
         >
+          {submitting && (
+            <Loader2
+              className="h-3.5 w-3.5 animate-spin"
+              aria-hidden="true"
+            />
+          )}
           {submitting ? t('comment.submitting') : t('comment.submit')}
         </Button>
       </div>

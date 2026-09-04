@@ -1,4 +1,4 @@
-import type { Locale } from '../../../../i18n/config'
+import type { Locale } from '@/i18n/config'
 
 export default function En({ lang }: { lang: Locale }) {
   return (
@@ -14,23 +14,25 @@ export default function En({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Who We Are</h2>
         <p>
           The data controller for your personal information is{' '}
-          <strong className="text-cream">[LEGAL_ENTITY_NAME]</strong>, located at{' '}
-          <strong className="text-cream">[BUSINESS_ADDRESS]</strong> (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;Link
-          Into The SSI&rdquo;).
+          <strong className="text-cream">NEANDERTECH SERVICOS DE TECNOLOGIA LTDA</strong>, located at{' '}
+          <strong className="text-cream">
+            AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil
+          </strong>{' '}
+          (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;Link Into The SSI&rdquo;).
         </p>
         <p>
           Privacy enquiries:{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>
         <p>
-          Data Protection Officer / EU&ndash;UK Representative:{' '}
-          <strong className="text-cream">[DPO_OR_REP_CONTACT]</strong>.
+          Data Protection Officer / EU&ndash;UK Representative: <strong className="text-cream">Henriko Alberton</strong>
+          .
         </p>
 
         {/* 2. Data we collect & sources */}
@@ -45,12 +47,14 @@ export default function En({ lang }: { lang: Locale }) {
           and country in your profile settings.
         </p>
         <p>
-          <strong className="text-cream">Posts you submit.</strong> We store the LinkedIn posts you create or schedule
+          <strong className="text-cream">Posts you submit.</strong> We store the posts you submit to the shared feed
           through the platform.
         </p>
         <p>
-          <strong className="text-cream">Engagement actions.</strong> We record comments and reactions made through your
-          LinkedIn access token on your behalf as part of the platform&rsquo;s core feed-engagement feature.
+          <strong className="text-cream">Engagement activity.</strong> When you choose to react to or comment on a post
+          in the feed, we record that engagement (the reaction type, or the comment text you use) to measure your
+          activity and interaction counts. The reaction or comment itself is made by you, directly on LinkedIn. The
+          Service opens the post so you can act; it does not react or comment on LinkedIn on your behalf.
         </p>
         <p>
           <strong className="text-cream">Billing.</strong> Subscription payments are processed by Stripe. We store your
@@ -70,8 +74,8 @@ export default function En({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">3. Why We Use It &amp; Legal Bases</h2>
         <p>
           <strong className="text-cream">Contract (Art. 6(1)(b) GDPR).</strong> Providing the core service:
-          authenticating you, displaying your feed, publishing posts and engagement actions, and managing your
-          subscription.
+          authenticating you, displaying your feed, letting you submit posts and record your engagement, and managing
+          your subscription.
         </p>
         <p>
           <strong className="text-cream">Legitimate interests (Art. 6(1)(f) GDPR).</strong> Optimising feed quality,
@@ -95,7 +99,7 @@ export default function En({ lang }: { lang: Locale }) {
         <p>We engage the following sub-processors who may process personal data on our behalf:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong className="text-cream">LinkedIn</strong> &mdash; authentication (OIDC) and engagement API.
+            <strong className="text-cream">LinkedIn</strong> &mdash; authentication (OpenID Connect sign-in).
           </li>
           <li>
             <strong className="text-cream">Stripe</strong> &mdash; payment processing and subscription management.
@@ -104,13 +108,8 @@ export default function En({ lang }: { lang: Locale }) {
             <strong className="text-cream">Convex</strong> &mdash; backend database and serverless functions.
           </li>
           <li>
-            <strong className="text-cream">Vercel</strong> &mdash; landing-site hosting and edge delivery.
-          </li>
-          <li>
-            <strong className="text-cream">Railway</strong> &mdash; application server hosting.
-          </li>
-          <li>
-            <strong className="text-cream">Cloudflare</strong> &mdash; DNS, CDN, and DDoS protection.
+            <strong className="text-cream">Cloudflare</strong> &mdash; hosting for the landing site and the application,
+            plus DNS, CDN, and DDoS protection.
           </li>
           <li>
             <strong className="text-cream">Resend</strong> &mdash; transactional email delivery.
@@ -122,7 +121,7 @@ export default function En({ lang }: { lang: Locale }) {
           </li>
         </ul>
         <p>
-          <strong className="text-cream">We do NOT sell or share your personal information</strong> for cross-context
+          <strong className="text-cream">We do not sell or share your personal information</strong> for cross-context
           behavioural advertising or any other commercial purpose.
         </p>
 
@@ -134,10 +133,10 @@ export default function En({ lang }: { lang: Locale }) {
           (SCCs) as the transfer mechanism for each processor. A copy of the relevant transfer safeguards is available
           on request by contacting{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>
@@ -201,10 +200,10 @@ export default function En({ lang }: { lang: Locale }) {
           <strong className="text-cream">Settings &rarr; Privacy &amp; Data</strong>, where you can export your data,
           delete your account, and manage consent toggles. You may also contact us at{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           . We will respond within 30 days (or the statutory deadline where shorter).
         </p>
@@ -237,10 +236,10 @@ export default function En({ lang }: { lang: Locale }) {
           To submit a California privacy request, use{' '}
           <strong className="text-cream">Settings &rarr; Privacy &amp; Data</strong> or email{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>
           .
         </p>
@@ -258,7 +257,7 @@ export default function En({ lang }: { lang: Locale }) {
         <p>Complaints may be filed with the Autoridade Nacional de Prote&ccedil;&atilde;o de Dados (ANPD).</p>
         <p>
           Our encarregado (Data Protection Officer / LGPD representative):{' '}
-          <strong className="text-cream">[DPO_OR_REP_CONTACT]</strong>.
+          <strong className="text-cream">Henriko Alberton</strong>.
         </p>
 
         {/* 10. Cookies & storage */}
@@ -283,10 +282,10 @@ export default function En({ lang }: { lang: Locale }) {
           knowingly collect personal information from anyone under 16. If you believe a child under 16 has provided us
           with personal information, please contact us at{' '}
           <a
-            href="mailto:[PRIVACY_CONTACT_EMAIL]"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            [PRIVACY_CONTACT_EMAIL]
+            contact@linkintothessi.com
           </a>{' '}
           and we will delete it promptly.
         </p>
@@ -300,12 +299,12 @@ export default function En({ lang }: { lang: Locale }) {
           top of this page reflects the most recent revision.
         </p>
         <p>
-          Questions or concerns? Contact us at{' '}
+          Contact us with any questions at{' '}
           <a
-            href="mailto:hello@linkintothessi.com"
+            href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
           >
-            hello@linkintothessi.com
+            contact@linkintothessi.com
           </a>
           .
         </p>

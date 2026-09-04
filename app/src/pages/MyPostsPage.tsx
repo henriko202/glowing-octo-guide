@@ -10,8 +10,10 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import LoadingSpinner from '../components/LoadingSpinner'
+import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
-import LinkedInEmbed from '../components/LinkedInEmbed'
+import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
+import { friendlyError } from '@/lib/errors'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -22,6 +24,7 @@ interface MyPost {
   likeCount: number
   commentCount: number
   hidden?: boolean
+  isFeatured?: boolean
   sourceUrl?: string
 }
 
@@ -31,25 +34,16 @@ interface WeeklyUsage {
   postsPerWeek: number
 }
 
-/**
- * Build the "open on LinkedIn" link.
- * Uses the original sourceUrl if we stored it (most accurate).
- * Falls back to reconstructing a /feed/update/ URL for cron-synced posts.
- * NOTE: urn:li:ugcPost IDs and urn:li:activity IDs can differ in LinkedIn's
- * data model, so sourceUrl is always preferred over reconstruction.
- */
-function buildLinkedInUrl(post: MyPost): string {
-  if (post.sourceUrl) return post.sourceUrl
-  // Fallback for cron-synced posts: use the /feed/update/ format with the ugcPost URN.
-  // This may not always resolve correctly due to URN type differences.
-  return `https://www.linkedin.com/feed/update/${encodeURIComponent(post.linkedinPostUrn)}/`
+// The shape returned by getFeaturedUsage (null when not signed in).
+interface FeaturedUsage {
+  usedCount: number
+  featuredPerMonth: number
 }
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: ReturnType<typeof useTranslation>['t']): string {
   const days = Math.floor((Date.now() - ts) / 86400000)
-  if (days <= 0) return 'Today'
-  if (days === 1) return '1 day ago'
-  return `${days} days ago`
+  if (days <= 0) return t('myPosts.today')
+  return t('myPosts.daysAgo', { count: days })
 }
 
 export default function MyPostsPage() {
@@ -58,16 +52,21 @@ export default function MyPostsPage() {
 
   const me = useQuery(api.users.getMe, { sessionToken })
   const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
+  const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken }) as FeaturedUsage | null | undefined
   const posts = useQuery(api.posts.getMyPosts, { sessionToken }) as unknown as MyPost[] | undefined
   const submitPost = useAction(api.posts.submitPost)
   const setPostHidden = useMutation(api.posts.setPostHidden)
   const deletePost = useMutation(api.posts.deletePost)
+  const featurePost = useMutation(api.posts.featurePost)
+  const unfeaturePost = useMutation(api.posts.unfeaturePost)
 
   // Transient error surfaced above the list when a hide/delete action fails.
   const [actionError, setActionError] = useState<string | null>(null)
+  // The post awaiting delete confirmation in the themed Dialog below (null = closed).
+  const [confirmDeletePost, setConfirmDeletePost] = useState<MyPost | null>(null)
 
   async function handleSubmit(postUrl: string) {
-    if (!sessionToken) throw new Error('Not signed in')
+    if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl })
   }
 
@@ -79,23 +78,48 @@ export default function MyPostsPage() {
     try {
       await setPostHidden({ sessionToken, postId: post._id, hidden: !post.hidden })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Could not update the post.')
+      setActionError(friendlyError(err, t('myPosts.updateError')))
+    }
+  }
+
+  // Feature/unfeature toggle. Featuring is quota-gated server-side (getFeaturedUsage
+  // backs the disabled state below), but we still catch here since the cap can tick
+  // over between render and click. No optimistic update needed — getFeaturedUsage and
+  // getMyPosts are both reactive Convex queries, so the pill and badge update together
+  // once the mutation commits.
+  async function handleToggleFeatured(post: MyPost) {
+    if (!sessionToken) return
+    setActionError(null)
+    try {
+      if (post.isFeatured) {
+        await unfeaturePost({ sessionToken, postId: post._id })
+      } else {
+        await featurePost({ sessionToken, postId: post._id })
+      }
+    } catch (err) {
+      setActionError(friendlyError(err, t('myPosts.updateError')))
     }
   }
 
   // Soft-delete: drops the post from the feed and this list. It still counts
-  // toward the weekly limit, so we say so in the confirmation.
-  async function handleDelete(post: MyPost) {
+  // toward the weekly limit, so we say so in the confirmation dialog opened here.
+  function handleDelete(post: MyPost) {
     if (!sessionToken) return
-    const ok = window.confirm(
-      'Delete this post? It will be removed from the feed and from My Posts. It still counts toward your weekly post limit.'
-    )
-    if (!ok) return
+    setConfirmDeletePost(post)
+  }
+
+  // Runs once the user confirms in the Dialog (see render below). Closes the dialog
+  // immediately — matching the fire-and-forget style of handleToggleHidden/
+  // handleToggleFeatured above — and surfaces any failure in the same error banner.
+  async function handleConfirmDelete() {
+    if (!sessionToken || !confirmDeletePost) return
+    const postId = confirmDeletePost._id
+    setConfirmDeletePost(null)
     setActionError(null)
     try {
-      await deletePost({ sessionToken, postId: post._id })
+      await deletePost({ sessionToken, postId })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Could not delete the post.')
+      setActionError(friendlyError(err, t('myPosts.deleteError')))
     }
   }
 
@@ -105,14 +129,19 @@ export default function MyPostsPage() {
 
   // Hit the weekly cap once usage loads and the count meets the plan limit.
   const atLimit = usage != null && usage.postsThisWeek >= usage.postsPerWeek
+  // Hit the monthly featured cap — mirrors the same >= boundary featurePost enforces
+  // server-side (isFeaturedLimitReached), so the button disables in lockstep with the API.
+  const featuredAtCap = featuredUsage != null && featuredUsage.usedCount >= featuredUsage.featuredPerMonth
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
+    <div className="mx-auto max-w-160 px-4 py-8 font-sans">
       <PageHeader title={t('nav.myPosts')} />
 
-      {/* Profile header — with the weekly-usage pill on the right */}
+      {/* Profile header — with the weekly-usage + featured-usage pills on the right.
+          flex-wrap on both the outer row and the pill group so the pills stack as whole
+          units (never mid-label) instead of overflowing on narrow screens. */}
       {me && (
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Avatar
               name={me.name}
@@ -121,18 +150,34 @@ export default function MyPostsPage() {
             />
             <div>
               <div className="text-foreground text-sm font-semibold">{me.name}</div>
-              <div className="text-muted-foreground text-xs capitalize">{me.tier} plan</div>
+              <div className="text-muted-foreground text-xs capitalize">{t('myPosts.tierPlan', { tier: me.tier })}</div>
             </div>
           </div>
-          {usage && (
-            <Badge
-              title="In the last 7 days"
-              variant={atLimit ? 'warning' : 'primary'}
-              className="shrink-0 rounded-full px-3 py-1 text-xs"
-            >
-              {usage.postsThisWeek} of {usage.postsPerWeek} posts this week
-            </Badge>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {usage && (
+              <Badge
+                title={t('myPosts.weeklyUsageHint')}
+                variant={atLimit ? 'warning' : 'primary'}
+                className="shrink-0 rounded-full px-3 py-1 text-xs"
+              >
+                {t('myPosts.weeklyUsage', { used: usage.postsThisWeek, limit: usage.postsPerWeek })}
+              </Badge>
+            )}
+            {featuredUsage && (
+              <Badge
+                title={t('myPosts.featuredPillHint')}
+                variant={featuredAtCap ? 'warning' : 'primary'}
+                className="shrink-0 rounded-full px-3 py-1 text-xs"
+              >
+                {/* featuredPerMonth >= 999 is the contact/enterprise "unlimited" sentinel
+                    (see convex/lib/planLimits.ts DEFAULTS.contact) — never show the raw
+                    number to the user. */}
+                {featuredUsage.featuredPerMonth >= 999
+                  ? t('myPosts.featuredPillUnlimited', { used: featuredUsage.usedCount })
+                  : t('myPosts.featuredPill', { used: featuredUsage.usedCount, limit: featuredUsage.featuredPerMonth })}
+              </Badge>
+            )}
+          </div>
         </div>
       )}
 
@@ -140,12 +185,14 @@ export default function MyPostsPage() {
           Disabled at the weekly limit so we don't trigger a guaranteed-to-fail submit. */}
       <PostComposer
         atLimit={atLimit}
-        limitHint="Weekly limit reached"
+        limitHint={t('myPosts.weeklyLimitReached')}
         onSubmit={handleSubmit}
       />
 
       {/* Section header */}
-      <div className="text-muted-foreground mb-3 text-[10px] uppercase tracking-wider">Your posts ({posts.length})</div>
+      <div className="text-muted-foreground mb-3 text-[10px] tracking-wider uppercase">
+        {t('myPosts.heading', { count: posts.length })}
+      </div>
 
       {/* Transient error from a hide/delete action */}
       {actionError && (
@@ -157,7 +204,7 @@ export default function MyPostsPage() {
       {/* Post list */}
       {posts.length === 0 ? (
         <div className="border-border border-t pt-5 text-center">
-          <p className="text-muted-foreground text-[13px]">Share your first post using the composer above ↑</p>
+          <p className="text-muted-foreground text-[13px]">{t('myPosts.emptyState')}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
@@ -166,54 +213,79 @@ export default function MyPostsPage() {
               key={post._id}
               className={`border-border bg-card overflow-hidden rounded-lg border ${post.hidden ? 'opacity-60' : ''}`}
             >
-              {/* Owner action bar: visibility state + Hide/Unhide + Delete */}
-              <div className="border-border flex items-center justify-between border-b px-[14px] py-2">
-                {post.hidden ? (
-                  <Badge
-                    variant="warning"
-                    className="rounded-full px-2 py-0.5 text-[11px]"
+              {/* Owner action bar: visibility/featured state + Feature/Unfeature + Hide/Unhide + Delete.
+                  flex-wrap on both sides guards against overflow if translated labels run long. */}
+              <div className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {post.isFeatured && (
+                    <Badge
+                      variant="warning"
+                      className="rounded-full px-2 py-0.5 text-[11px]"
+                    >
+                      {t('feed.featured')}
+                    </Badge>
+                  )}
+                  {post.hidden ? (
+                    <Badge
+                      variant="warning"
+                      className="rounded-full px-2 py-0.5 text-[11px]"
+                    >
+                      {t('myPosts.hiddenFromFeed')}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-[11px]">{t('myPosts.visibleInFeed')}</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-pressed={post.isFeatured ?? false}
+                    disabled={!post.isFeatured && featuredAtCap}
+                    title={!post.isFeatured && featuredAtCap ? t('myPosts.featureLimitReached') : undefined}
+                    onClick={() => handleToggleFeatured(post)}
+                    className="cursor-pointer"
                   >
-                    Hidden from feed
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground text-[11px]">Visible in feed</span>
-                )}
-                <div className="flex items-center gap-2">
+                    {post.isFeatured ? t('myPosts.unfeature') : t('myPosts.feature')}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => handleToggleHidden(post)}
+                    className="cursor-pointer"
                   >
-                    {post.hidden ? 'Unhide' : 'Hide'}
+                    {post.hidden ? t('myPosts.unhide') : t('myPosts.hide')}
                   </Button>
                   <Button
                     type="button"
                     variant="destructive"
                     size="sm"
                     onClick={() => handleDelete(post)}
+                    className="cursor-pointer"
                   >
-                    Delete
+                    {t('myPosts.delete')}
                   </Button>
                 </div>
               </div>
               <LinkedInEmbed
                 urn={post.linkedinPostUrn}
                 footer={
-                  <div className="border-border bg-card flex h-[52px] items-center justify-between border-t px-[14px]">
+                  <div className="border-border bg-card flex h-13 items-center justify-between border-t px-3.5">
                     {/* Engagement stats from our own tracking data */}
                     <span className="text-muted-foreground text-xs">
                       👍 {post.likeCount} · 💬 {post.commentCount}
                     </span>
                     <span className="text-muted-foreground text-xs">
-                      {timeAgo(post.publishedAt)} ·{' '}
+                      {timeAgo(post.publishedAt, t)} ·{' '}
                       <a
-                        href={buildLinkedInUrl(post)}
+                        href={buildPostUrl(post.linkedinPostUrn, post.sourceUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-gold-text no-underline hover:underline"
                       >
-                        View on LinkedIn ↗
+                        {t('feed.viewOnLinkedIn')}
                       </a>
                     </span>
                   </div>
@@ -222,6 +294,36 @@ export default function MyPostsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Delete confirmation — themed Dialog replacing window.confirm. Radix handles the
+          focus trap, focus restore, and Escape/overlay dismiss; Cancel sits first in the DOM
+          so it receives initial focus (safe default for a destructive dialog). */}
+      {confirmDeletePost && (
+        <Modal
+          onClose={() => setConfirmDeletePost(null)}
+          title={t('myPosts.delete')}
+        >
+          <p className="text-foreground m-0 text-sm">{t('myPosts.deleteConfirm')}</p>
+          <div className="mt-5 flex items-center justify-end gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              className="cursor-pointer"
+              onClick={() => setConfirmDeletePost(null)}
+            >
+              {t('privacy.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="cursor-pointer"
+              onClick={() => void handleConfirmDelete()}
+            >
+              {t('myPosts.delete')}
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   )
