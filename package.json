@@ -11,6 +11,7 @@
     "build:convex": "npx convex deploy",
     "deploy:app": "pnpm --filter app build && pnpm --filter app exec wrangler deploy",
     "deploy:landing": "pnpm --filter landing deploy",
+    "deploy:convex": "npx convex deploy",
     "preview:landing": "pnpm --filter landing preview",
     "watch:errors": "npx convex logs",
     "watch:errors:prod": "npx convex logs --prod",

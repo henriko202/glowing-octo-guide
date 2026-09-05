@@ -1005,8 +1005,20 @@ flowchart TD
 
 ### Status semantics
 
-`toSubscriptionStatus(raw)` maps the raw Stripe status onto the
-`trialing|active|canceled|past_due|none` union; **unknown values default to `active`** (with a console warning).
+`toSubscriptionStatus(raw)` (`convex/stripe.ts`) maps the raw Stripe status onto the
+`trialing|active|canceled|past_due|none` union with an explicit, **fail-safe** mapping — a status that does not clearly
+grant access can never become one that does:
+
+| Stripe status                                | Stored `subscriptionStatus`  | `canEngage` |
+|----------------------------------------------|------------------------------|-------------|
+| `active`, `trialing`, `canceled`             | passed through unchanged     | yes         |
+| `past_due`                                   | passed through unchanged     | no          |
+| `unpaid`                                     | `past_due`                   | no          |
+| `incomplete`, `incomplete_expired`, `paused` | `none`                       | no          |
+| anything else (unknown or empty string)      | `none` (+ a console warning) | no          |
+
+**Default is `none`, never `active`.** `none` and `past_due` are both rejected by `canEngage` (`convex/lib/access.ts`),
+so a half-finished, lapsed, paused or unrecognised subscription never grants access. Covered by `convex/stripe.test.ts`.
 
 ### Renewal / access-end date (B21)
 
@@ -2608,7 +2620,8 @@ as-is in the values. Admin UI strings remain out of scope — see [[B17]] below.
 `t('admin.…')` matched nothing; `AdminPage` and its tabs (`UsersTab`, `PlanLimitsTab`, `FeedbackTab`, …) hardcode
 English throughout. Decision: the admin console is intentionally English-only internal tooling, not worth localizing, so
 the dead namespace was **deleted** from `en.json`/`pt.json`/`es.json` rather than wiring the UI to it. All three locale
-files remain structurally identical (241 keys each, verified by a recursive key-diff).
+files remain structurally identical (249 leaf keys each, verified by a recursive key-diff — there is no automated parity
+test).
 
 ---
 
@@ -3038,24 +3051,24 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
 
 ```mermaid
 flowchart TD
-  subgraph Dev["Dev — native, no sub-processor"]
-    D1["pnpm watch:errors / :prod"] --> D2["npx convex logs — live failure + console.error tail"]
-  end
-  subgraph App["app/ — prod only, SDKs inert without keys"]
-    A1["window.onerror / unhandledrejection"] --> S1["Sentry.init (beforeSend: scrubError, no PII)"]
-    A2["ErrorBoundary.componentDidCatch"] --> S1
-    A3["AnalyticsConsentGate reads analytics consent"] --> P1{"analytics consent?"}
-    P1 -- granted --> P2["PostHog opt_in + identify(user._id)"]
-    P1 -- withdrawn/none --> P3["PostHog opt_out + reset"]
-  end
-  subgraph Backend["convex/ — server"]
-    B1["console.error catch seams"] --> B2["scrubError redact + 500-char cap"]
-    B2 --> B3["Convex function logs"]
-    B3 --> B4["Convex Exception Reporting → Sentry (prod, dashboard-configured)"]
-  end
-  S1 --> SENTRY["Sentry (US or EU)"]
-  B4 --> SENTRY
-  P2 --> POSTHOG["PostHog (EU Cloud default)"]
+    subgraph Dev["Dev — native, no sub-processor"]
+        D1["pnpm watch:errors / :prod"] --> D2["npx convex logs — live failure + console.error tail"]
+    end
+    subgraph App["app/ — prod only, SDKs inert without keys"]
+        A1["window.onerror / unhandledrejection"] --> S1["Sentry.init (beforeSend: scrubError, no PII)"]
+        A2["ErrorBoundary.componentDidCatch"] --> S1
+        A3["AnalyticsConsentGate reads analytics consent"] --> P1{"analytics consent?"}
+        P1 -- granted --> P2["PostHog opt_in + identify(user._id)"]
+        P1 -- withdrawn/none --> P3["PostHog opt_out + reset"]
+    end
+    subgraph Backend["convex/ — server"]
+        B1["console.error catch seams"] --> B2["scrubError redact + 500-char cap"]
+        B2 --> B3["Convex function logs"]
+        B3 --> B4["Convex Exception Reporting → Sentry (prod, dashboard-configured)"]
+    end
+    S1 --> SENTRY["Sentry (US or EU)"]
+    B4 --> SENTRY
+    P2 --> POSTHOG["PostHog (EU Cloud default)"]
 ```
 
 **Enabling Sentry on the backend (runbook).** In the **Convex Dashboard**, select the deployment (prod first) →
