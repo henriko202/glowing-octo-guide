@@ -38,6 +38,10 @@ function isPlanId(p: string | null): p is (typeof PLAN_IDS)[number] {
   return !!p && (PLAN_IDS as readonly string[]).includes(p)
 }
 
+function isInterval(i: string | null): i is Interval {
+  return i === 'monthly' || i === 'annual'
+}
+
 function getTrialDaysRemaining(trialEndsAt: number | undefined): number {
   if (!trialEndsAt) return 0
   return Math.max(0, Math.ceil((trialEndsAt - Date.now()) / (1000 * 60 * 60 * 24)))
@@ -53,18 +57,21 @@ export default function BillingPage() {
   const createPortal = useAction(api.billing.createPortalSession)
   const clearBillingNotice = useMutation(api.users.clearBillingNotice)
   const [portalLoading, setPortalLoading] = useState(false)
-  // NB: named setBillingInterval (not setInterval) so it doesn't shadow the global timer API.
-  const [billingInterval, setBillingInterval] = useState<Interval>(
-    () => (sessionStorage.getItem('chosenInterval') as Interval | null) ?? 'annual'
-  )
   const [searchParams] = useSearchParams()
-  // The visitor already chose a plan on the landing page (carried through OAuth into
-  // sessionStorage by AuthSuccessPage, or passed directly as ?plan=). Re-asking is re-opening a
-  // decision they already made. Growth stays the fallback for anyone arriving cold.
+  // The visitor already chose a plan AND an interval on the landing page (carried through OAuth
+  // into sessionStorage by AuthSuccessPage, or passed directly as ?plan=&interval=). Re-asking is
+  // re-opening a decision they already made. Both are read the same way — the URL first, then the
+  // stash — so a direct link honours both. Growth / annual stay the fallbacks for anyone arriving cold.
   const planParam = searchParams.get('plan')
   const stashedPlan = sessionStorage.getItem('chosenPlan')
   const chosenPlan = isPlanId(planParam) ? planParam : isPlanId(stashedPlan) ? stashedPlan : null
   const targetPlan = chosenPlan ?? 'growth'
+  // NB: named setBillingInterval (not setInterval) so it doesn't shadow the global timer API.
+  const [billingInterval, setBillingInterval] = useState<Interval>(() => {
+    const intervalParam = searchParams.get('interval')
+    const stashedInterval = sessionStorage.getItem('chosenInterval')
+    return isInterval(intervalParam) ? intervalParam : isInterval(stashedInterval) ? stashedInterval : 'annual'
+  })
   const [showAllPlans, setShowAllPlans] = useState(false)
 
   // What Stripe will really bill this member, from the price snapshot on their subscription row.
@@ -122,7 +129,8 @@ export default function BillingPage() {
       return `${t('billing.freeTrial')} · ${combined}/${threshold} ${t('billing.trialProgress', { combined, threshold })} · ${t('billing.daysRemaining', { count: trialDaysRemaining })}`
     }
     if (isExpired) return t('billing.none')
-    if (me?.tier) return me.tier.charAt(0).toUpperCase() + me.tier.slice(1)
+    // The localized plan name, never the raw tier id (`contact` is "Enterprise" / "Empresa").
+    if (me?.tier) return t(`billing.plans.${me.tier}.name`)
     return '...'
   })()
 

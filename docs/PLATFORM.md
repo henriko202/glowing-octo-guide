@@ -992,10 +992,10 @@ sequenceDiagram
     B -->> A: findLiveSubscription? → ConvexError ALREADY_SUBSCRIBED (client opens the portal)
     B ->> B: trial = trialEligible(rows.length); billingLocale = resolveBillingLocale(...)
     B ->> SC: getOrCreateCustomer(userId, email, name)
-    B ->> S: checkout.sessions.create(trial? 7d, card-required, promo-codes, locale, custom_text)
-    B ->> DB: setStripeCustomerId (if unset) + users.setLanguage (if changed)
-    B -->> A: { url }
-    A ->> S: window.location = url
+B ->> S: checkout.sessions.create(trial? 7d, card-required, promo-codes, locale, custom_text)
+B ->> DB: setStripeCustomerId (if unset) + users.setLanguage (if changed)
+B -->> A: { url }
+A ->> S: window.location = url
 ```
 
 `createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an existing
@@ -2586,7 +2586,9 @@ sync with the compliance docs and live support inbox.
     - **`ALREADY_SUBSCRIBED`.** When the server refuses a second live subscription (§8), `handleUpgrade` toasts
       `billing.alreadySubscribed` and opens the portal. The member sees a door, never the error prefix.
     - **The plan the visitor chose.** `targetPlan` resolves `?plan=` → `sessionStorage.chosenPlan` (stashed by
-      `AuthSuccessPage` out of the OAuth hash) → `'growth'`, each candidate validated against `PLAN_IDS`. A pre-card
+      `AuthSuccessPage` out of the OAuth hash) → `'growth'`, each candidate validated against `PLAN_IDS`. The interval
+      toggle's initial state resolves the **same way** (`?interval=` → `sessionStorage.chosenInterval` → `'annual'`),
+      so a direct `/billing?plan=pro&interval=monthly` link honours both halves of the landing's choice. A pre-card
       member sees **one primary card** for that plan with a **"See all plans"** toggle that reveals the full grid; card
       holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead` when
       the plan came from the URL or the stash and `billing.newUserLead` otherwise, and every pre-card CTA follows the
@@ -2604,15 +2606,16 @@ sync with the compliance docs and live support inbox.
       above the plans; **Dismiss** calls `users.clearBillingNotice`.
     - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely ended
       subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing block still
-      appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own tier; the
+      appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own tier, and
+      the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id); the
       "Renews on {date}" / "Access until {date}" line still comes from `getSubscriptionInfo.currentPeriodEnd`
       ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
       (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
     - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
       `SUPPORT_EMAIL` constant).
-    - Covered by `app/src/pages/BillingPage.test.tsx` (17 tests: plan-click routing, `ALREADY_SUBSCRIBED` → portal,
-      Manage-button visibility, chosen-plan resolution order, the near-threshold swap, the charged interval and
-      Stripe-snapshot amount, the duplicate notice).
+    - Covered by `app/src/pages/BillingPage.test.tsx` (19 tests: plan-click routing, `ALREADY_SUBSCRIBED` → portal,
+      Manage-button visibility, chosen-plan and chosen-interval resolution order, the localized current-plan label,
+      the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice).
 - **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
   `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
   directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
@@ -3542,8 +3545,10 @@ RCD lens)** then moved the duplicate decision **inside `syncUserSubscription`'s 
 `subscriptions.stripeCreated`, never by webhook arrival; the duplicate's own row never defines the user doc; a stale
 live event for a `canceled` row is ignored; only the `created` handler acts on the returned duplicate),
 `cancelUserSubscription` now follows any surviving live row instead of downgrading blindly, and the near‑threshold
-banner + trial‑ending email quote Stripe's own price snapshot and the 50‑or‑7‑days rule. Gates green (convex 381/381,
-app 244/244; prettier + lint + typecheck clean). Prior: 2026‑08‑31 — migrated per‑user rate limiting to the **
+banner + trial‑ending email quote Stripe's own price snapshot and the 50‑or‑7‑days rule; the two R03 minors followed
+(`?interval=` read URL‑first like `?plan=`, and the "Current plan" lead localized via `billing.plans.<tier>.name`).
+Gates green (convex 381/381, app 246/246; prettier + lint + typecheck clean). Prior: 2026‑08‑31 — migrated per‑user rate
+limiting to the **
 `@convex-dev/rate-limiter`** component. The former
 hand‑rolled `rateLimits` table (a read‑modify‑write that admitted a double‑spend under concurrent taps) is **removed
 from the schema**; counter state now lives in the component's own isolated tables. `convex.config.ts` mounts

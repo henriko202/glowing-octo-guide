@@ -154,6 +154,25 @@ describe('chosen plan (R03)', () => {
     expect(screen.getByText('Starter')).toBeInTheDocument()
   })
 
+  it('follows ?interval= the same way as ?plan=, so a direct landing link honours both', () => {
+    // The landing's Pricing links pass plan and interval together; a member arriving by direct
+    // link (no OAuth stash) must land on the monthly price, not the annual default.
+    render(
+      <MemoryRouter initialEntries={['/billing?plan=pro&interval=monthly']}>
+        <BillingPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByText('$50/mo')).toBeInTheDocument()
+    expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
+  })
+
+  it('shows the localized plan name as the current plan, never the capitalized tier id', () => {
+    setUser({ subscriptionStatus: 'active', tier: 'contact' })
+    renderPage()
+    expect(screen.getByText(/billing\.currentPlan: Enterprise/)).toBeInTheDocument()
+    expect(screen.queryByText(/Contact/)).not.toBeInTheDocument()
+  })
+
   it('names the real tier in the trial banner, not always Growth', () => {
     setUser({ subscriptionStatus: 'trialing', tier: 'pro', trialEndsAt: Date.now() + 86400000 })
     renderPage()
