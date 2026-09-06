@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 import { api } from '../convex'
 
 import { PageHeader } from '@/components/PageHeader'
@@ -169,10 +170,9 @@ export default function MyPostsPage() {
                 variant={featuredAtCap ? 'warning' : 'primary'}
                 className="shrink-0 rounded-full px-3 py-1 text-xs"
               >
-                {/* featuredPerMonth >= 999 is the contact/enterprise "unlimited" sentinel
-                    (see convex/lib/planLimits.ts DEFAULTS.contact) — never show the raw
-                    number to the user. */}
-                {featuredUsage.featuredPerMonth >= 999
+                {/* The contact/enterprise "unlimited" sentinel (convex/lib/postLimit.ts) is
+                    never shown as a raw number. */}
+                {isUnlimitedFeatured(featuredUsage.featuredPerMonth)
                   ? t('myPosts.featuredPillUnlimited', { used: featuredUsage.usedCount })
                   : t('myPosts.featuredPill', { used: featuredUsage.usedCount, limit: featuredUsage.featuredPerMonth })}
               </Badge>

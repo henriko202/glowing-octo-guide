@@ -126,11 +126,11 @@ describe('MyPostsPage', () => {
     expect(screen.getByText(/0 of 3 featured this month/i)).toBeInTheDocument()
   })
 
-  it('shows "unlimited" instead of the raw 999 sentinel for a contact-tier cap', () => {
-    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 2, featuredPerMonth: 999 }
+  it('shows "unlimited" instead of the raw 9999 sentinel for a contact-tier cap', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 2, featuredPerMonth: 9999 }
     renderPage()
     expect(screen.getByText(/2 featured this month.*unlimited/i)).toBeInTheDocument()
-    expect(screen.queryByText(/999/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/9999/)).not.toBeInTheDocument()
   })
 
   it('shows an enabled Feature control for a non-featured post', () => {

@@ -11,13 +11,14 @@
 import type { QueryCtx, MutationCtx } from '../_generated/server'
 import { internalQuery } from '../_generated/server'
 import { v } from 'convex/values'
+import { UNLIMITED_FEATURED_SENTINEL } from './postLimit'
 import type { Id } from '../_generated/dataModel'
 
 export type PlanLimits = { interactionsPerPost: number; postsPerWeek: number; featuredPerMonth: number }
 
-// Featured-post monthly caps (backlog/B07). contact's 999 is a Custom/enterprise sentinel
-// (effectively unlimited) — real enterprise deals use the existing per-user planLimits
-// override row (see the contact branch of getPlanLimitsHelper below).
+// Featured-post monthly caps (backlog/B07). contact's cap is UNLIMITED_FEATURED_SENTINEL (9999,
+// lib/postLimit.ts), a Custom/enterprise sentinel (effectively unlimited) — real enterprise deals
+// use the existing per-user planLimits override row (see the contact branch of getPlanLimitsHelper below).
 //
 // Single source of truth (backlog/B27): exported so migrations/seedPlanLimits.ts and
 // admin.ts's updateTierDefault self-heal both build their inserted rows from this same
@@ -27,7 +28,7 @@ export const DEFAULTS: Record<'starter' | 'growth' | 'pro' | 'contact', PlanLimi
   starter: { interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
   growth: { interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
-  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 999 }
+  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: UNLIMITED_FEATURED_SENTINEL }
 }
 
 export type PlanLimitsDefaultRow = { tier: 'starter' | 'growth' | 'pro' | 'contact' } & PlanLimits

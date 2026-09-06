@@ -8,6 +8,15 @@ export function isFeaturedLimitReached(usedCount: number, featuredPerMonth: numb
   return usedCount >= featuredPerMonth
 }
 
+// The contact/enterprise "unlimited" featured-post cap (planLimits.ts DEFAULTS.contact). Lives in
+// this pure module, not planLimits.ts (which imports server code), so the app bundle shares the
+// same rule instead of hardcoding the number.
+export const UNLIMITED_FEATURED_SENTINEL = 9999
+
+export function isUnlimitedFeatured(featuredPerMonth: number): boolean {
+  return featuredPerMonth >= UNLIMITED_FEATURED_SENTINEL
+}
+
 // The UTC calendar-month key ("YYYY-MM") featuredPostUsage rows are keyed by. Deterministic and
 // timezone-independent (derives from the UTC calendar date, not the server's local time), so the
 // monthly featured-post quota resets at the same instant for every user regardless of where the

@@ -81,17 +81,18 @@ engagement/post‑volume limits. See
 | Control who sees your posts         |   ✗    |                 ✗                  |     ✓      |              ✓              |
 | Interactions counted per post (cap) |   25    |                 50                  |     200     | 200 (per‑user override‑able) |
 | Posts admitted to feed / week       |    1    |                  2                  |      5      |  5 (per‑user override‑able)  |
-| Featured posts / month              |    0    |                  1                  |      3      |   999 (unlimited sentinel)   |
+| Featured posts / month              |    0    |                  1                  |      3      |  9999 (unlimited sentinel)   |
 | AI comment generator                |   ✓    |                 ✓                  |     ✓      |              ✓              |
 
 The numeric limits (interactions/post, posts/week, featured‑posts/month) are all **enforced**
 values read from the `planLimits` table via `getPlanLimitsHelper` (see
 [§9](#9-plan-limits-system)); the AI comment generator is **live** for every tier — gated on an active subscription (the
 same `assertCanEngage` card-on-file gate as engaging), rate-limited, but never tier-gated
-(see [§11A](#11a-ai-reaction--comment-assistance)). Contact tier's featured‑posts cap of 999 is a sentinel for
+(see [§11A](#11a-ai-reaction--comment-assistance)). Contact tier's featured‑posts cap of 9999
+(`UNLIMITED_FEATURED_SENTINEL` in `lib/postLimit.ts`) is a sentinel for
 "effectively unlimited". Unlike the other two caps, it is **not**
 exposed in the admin per‑user override UI — `setContactUserLimit` only edits `interactionsPerPost`/
-`postsPerWeek`, so a contact user's `featuredPerMonth` always coalesces to the 999 default; a custom featured cap for
+`postsPerWeek`, so a contact user's `featuredPerMonth` always coalesces to the 9999 default; a custom featured cap for
 one enterprise account currently requires a direct DB edit to that user's
 `planLimits` row (no admin control yet). See [§19](#19-known-discrepancies-dead-code--roadmap).
 
@@ -1065,12 +1066,13 @@ Three enforced limits per tier, stored in `planLimits` and looked up via
 | starter |         25          |      1       |        0         |     1      |
 | growth  |         50          |      2       |        1         |     2      |
 | pro     |         200         |      5       |        3         |     3      |
-| contact |         200         |      5       |  999 (sentinel)  |     4      |
+| contact |         200         |      5       | 9999 (sentinel)  |     4      |
 
-`contact`'s 999 is a "Custom/effectively‑unlimited" sentinel, not a real cap. For `interactionsPerPost` and
+`contact`'s 9999 (`UNLIMITED_FEATURED_SENTINEL` in `lib/postLimit.ts`, shared with the app's `isUnlimitedFeatured` pill
+check) is a "Custom/effectively‑unlimited" sentinel, not a real cap. For `interactionsPerPost` and
 `postsPerWeek`, actual enterprise deals get a per‑user override row (below) with whatever number was negotiated.
 `featuredPerMonth` is **not** part of that admin‑editable override today — a contact per‑user row always coalesces to
-the 999 sentinel (see the lookup precedence note below); a bespoke featured cap needs a direct DB edit.
+the 9999 sentinel (see the lookup precedence note below); a bespoke featured cap needs a direct DB edit.
 
 These live in exactly **one place** (backlog/B27): the `DEFAULTS` const in `lib/planLimits.ts`. Everything that needs a
 full tier-default row — the read fallback (below), the explicit seed mutation, and the admin self-heal — builds it from
@@ -3368,11 +3370,14 @@ already rendered the "★ Featured" badge, but nothing ever set `isFeatured: tru
 was unwired — this closes that gap. `planLimits` schema gained `featuredPerMonth: v.optional(v.number())`
 (widen‑then‑coalesce, no backfill migration); `lib/planLimits.ts`'s `DEFAULTS` and every return path in
 `getPlanLimitsHelper` now populate it (`row.featuredPerMonth ?? DEFAULTS[tier].featuredPerMonth`), seed values
-`starter:0, growth:1, pro:3, contact:999` (999 = Custom/enterprise sentinel; unlike `interactionsPerPost`/
-`postsPerWeek`, this field is **not** exposed in the admin per‑user override UI — a contact row always coalesces to 999,
+`starter:0, growth:1, pro:3, contact:9999` (9999 = Custom/enterprise sentinel, `UNLIMITED_FEATURED_SENTINEL` in
+`lib/postLimit.ts`, moved from 999 on 2026-09-05; unlike `interactionsPerPost`/
+`postsPerWeek`, this field is **not** exposed in the admin per‑user override UI — a contact row always coalesces to
+9999,
 and a bespoke featured cap needs a direct DB edit today, see §1/§9); `migrations/seedPlanLimits.ts` seeds the same
 values. New pure helpers
-`lib/postLimit.ts:isFeaturedLimitReached` (boundary `usedCount >= featuredPerMonth`) and `currentUtcMonthKey` (UTC
+`lib/postLimit.ts:isFeaturedLimitReached` (boundary `usedCount >= featuredPerMonth`) plus `isUnlimitedFeatured`/
+`UNLIMITED_FEATURED_SENTINEL` (the pill's "unlimited" rule, 2026-09-05) and `currentUtcMonthKey` (UTC
 `"YYYY-MM"`, so the quota resets at the same instant worldwide, not at each user's local midnight) — both unit‑tested
 including the UTC month/year rollover boundary. New `posts.featurePost`/`unfeaturePost` mutations (author or admin via
 the existing `canModifyPost`) and `posts.getFeaturedUsage` query: featuring is quota‑gated against
@@ -3383,7 +3388,8 @@ featuring permanently consumes a monthly slot). Both mutations short‑circuit a
 target state — the actual fix for double‑incrementing usage under Convex's OCC retry semantics, not just an optimization
 (see §10). `jobs/syncPosts.upsertPost` is unchanged (still inserts `isFeatured: false`; the mutation is now the sole
 writer of `true`). MyPostsPage gained a second usage pill ("N of M featured this month", or "N featured this month ·
-unlimited" when `featuredPerMonth >= 999` — the raw 999 sentinel is never shown to the user) next to the existing weekly
+unlimited" when `isUnlimitedFeatured(featuredPerMonth)` (cap >= 9999) — the raw 9999 sentinel is never shown to the
+user) next to the existing weekly
 pill, and each post's action bar gained a Feature/Unfeature toggle (`aria-pressed`, disabled + `title`
 reason at the cap, reusing the existing `feed.featured` badge when a post is featured) — new `myPosts.*` i18n keys
 (en/pt/es). `admin.ts`'s plan‑limits UI was deliberately left untouched: it uses its own inline type shapes rather than

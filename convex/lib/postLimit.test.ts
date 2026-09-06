@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { currentUtcMonthKey, isFeaturedLimitReached, isWeeklyLimitReached } from './postLimit'
+import {
+  currentUtcMonthKey,
+  isFeaturedLimitReached,
+  isUnlimitedFeatured,
+  isWeeklyLimitReached,
+  UNLIMITED_FEATURED_SENTINEL
+} from './postLimit'
 
 describe('isWeeklyLimitReached', () => {
   it('returns false when under limit', () => {
@@ -40,8 +46,20 @@ describe('isFeaturedLimitReached', () => {
     expect(isFeaturedLimitReached(0, 0)).toBe(true)
   })
 
-  it('contact tier sentinel (cap 999) stays open at realistic usage', () => {
-    expect(isFeaturedLimitReached(50, 999)).toBe(false)
+  it('contact tier sentinel stays open at realistic usage', () => {
+    expect(isFeaturedLimitReached(50, UNLIMITED_FEATURED_SENTINEL)).toBe(false)
+  })
+})
+
+// The "unlimited" featured cap: pinned here so a drift of the number or of the boundary fails a
+// test instead of leaking a raw number into the My Posts pill (and later the recap page).
+describe('isUnlimitedFeatured', () => {
+  it('is 9999, true at and above the sentinel, false for every real cap below it', () => {
+    expect(UNLIMITED_FEATURED_SENTINEL).toBe(9999)
+    expect(isUnlimitedFeatured(UNLIMITED_FEATURED_SENTINEL)).toBe(true)
+    expect(isUnlimitedFeatured(UNLIMITED_FEATURED_SENTINEL + 1)).toBe(true)
+    expect(isUnlimitedFeatured(UNLIMITED_FEATURED_SENTINEL - 1)).toBe(false)
+    expect(isUnlimitedFeatured(3)).toBe(false)
   })
 })
 
