@@ -26,11 +26,6 @@
     "openSidebar": "Open navigation",
     "skipToContent": "Skip to content"
   },
-  "login": {
-    "title": "Link Into The SSI",
-    "tagline": "Grow your LinkedIn SSI by engaging with your community.",
-    "signInButton": "Sign in with LinkedIn"
-  },
   "onboarding": {
     "firstPost": {
       "title": "Share your best recent post",

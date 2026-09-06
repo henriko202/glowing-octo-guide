@@ -26,11 +26,6 @@
     "openSidebar": "Abrir navegación",
     "skipToContent": "Saltar al contenido"
   },
-  "login": {
-    "title": "Link Into The SSI",
-    "tagline": "Aumenta tu SSI en LinkedIn interactuando con tu comunidad.",
-    "signInButton": "Iniciar sesión con LinkedIn"
-  },
   "onboarding": {
     "firstPost": {
       "title": "Comparte tu mejor publicación reciente",

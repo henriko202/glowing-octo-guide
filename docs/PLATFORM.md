@@ -2622,8 +2622,22 @@ as-is in the values. Admin UI strings remain out of scope — see [[B17]] below.
 `t('admin.…')` matched nothing; `AdminPage` and its tabs (`UsersTab`, `PlanLimitsTab`, `FeedbackTab`, …) hardcode
 English throughout. Decision: the admin console is intentionally English-only internal tooling, not worth localizing, so
 the dead namespace was **deleted** from `en.json`/`pt.json`/`es.json` rather than wiring the UI to it. All three locale
-files remain structurally identical (249 leaf keys each, verified by a recursive key-diff — there is no automated parity
+files remain structurally identical (249 leaf keys each at the time, verified by a recursive key-diff — there is no
+automated parity
 test).
+
+**Dead `login.*` namespace removed (2026-09-06):** the locale files also carried a `login` namespace (`title`,
+`tagline`,
+`signInButton`) written for a sign-in screen the app never had. No route renders one: `RequireAuth` in `App.tsx`
+redirects an
+unauthenticated visitor to the landing site (`LANDING_URL`) after an explicit sign-out and straight into LinkedIn OAuth
+(`AUTH_URL`) otherwise, so no component read the keys. The only reader was `i18n.test.ts`, which used
+`login.signInButton`
+as its language-switch probe; it now probes `feed.title` ("Your Feed" / "Seu feed" / "Tu feed"), which differs per
+locale
+and therefore also proves the `en` fallback that the old `login.title` probe (identical in all three files) could not.
+Deleted from `en.json`/`pt.json`/`es.json`; the three files stay structurally identical (246 leaf keys each, recursive
+key-diff).
 
 ---
 
