@@ -33,6 +33,7 @@ export default function FinalCTA({ dict }: { dict: Dictionary['finalCta'] }) {
           >
             {dict.cta} →
           </a>
+          <p className="text-xs tracking-wide text-cream/40">{dict.ctaTrust}</p>
           <p className="text-sm text-gold-text">{dict.earlyAccess}</p>
         </div>
       </div>

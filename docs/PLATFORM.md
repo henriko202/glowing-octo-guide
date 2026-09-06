@@ -50,7 +50,9 @@
 
 ## 1. Product Overview & Business Model
 
-**Link Into The SSI** is a LinkedIn growth‑accelerator SaaS. The product premise:
+**Link Into The SSI** is a LinkedIn growth‑accelerator SaaS for people whose next piece of work depends on the right
+people finding them on LinkedIn — one ICP, defined by buying criteria rather than job title (see
+[§15](#15-frontend--landing-site-landing)). The product premise:
 
 1. A user signs in with **LinkedIn OAuth** (OpenID Connect), so the app can identify them and show their posts in the
    shared feed.
@@ -2862,6 +2864,37 @@ i18next instance — see [§8](#8-subscriptions--billing).
 Standalone **Next.js 15 (App Router)**, React 19, **Tailwind CSS 4** (CSS-first, migrated from v3 in Plan 1 Phase B).
 Pure marketing — **no API/Convex calls**; all content (pricing, FAQ, stats) is hard‑coded in module constants.
 
+### Audience & awareness (R11 / R12)
+
+Every string on this site is written for **one** ICP, defined by buying criteria rather than demographics:
+
+| Criterion         | The one ICP                                                                           |
+|-------------------|---------------------------------------------------------------------------------------|
+| **Who**           | Someone whose next piece of work depends on the right people finding them on LinkedIn |
+| **Trigger**       | Income or next role depends on being found, and nothing is arriving                   |
+| **Pain**          | Good at the work, invisible to the algorithm                                          |
+| **Prior attempt** | Posted more. Applied, or pitched. Cold DMs. Silence                                   |
+| **Proof needed**  | That engagement is the lever, visible on their own account                            |
+
+The employed specialist and the independent consultant are the **same buyer** here: only *what arrives* differs (an
+offer or a client). Two rules follow, and they are why this subsection exists:
+
+- **Never name two audiences.** "For professionals and freelancers" is forbidden — the unifying word is the outcome,
+  *the right people come to you*.
+- **Never list job titles.** A page that talks to everyone convinces no one.
+
+`hero.subLine2` ("Every action is yours. Nothing automated.") is the **omission filter**: it deliberately repels
+automation seekers and quota-carrying sales teams.
+
+**Awareness level: problem-aware, SSI-unaware.** The visitor feels invisible and has never heard of the SSI. Two
+consequences bind the page:
+
+1. Section order is fixed at Hero → PainBeat → HowItWorks → SSIExplainer. The SSI is the **mechanism reveal**, not the
+   promise, and `SSIExplainer` is where the acronym is first taught (`ssiExplainer.intro` defines it as "LinkedIn's own
+   0–100 measure of how findable you are").
+2. The hero **must not lead with the SSI** — "raise your SSI" is solution-aware copy for an audience that isn't.
+   `hero` and `painBeat` speak only in outcomes; the acronym's first appearance is two sections down.
+
 ### Locale routing (Plan 2 — i18n)
 
 All pages live under `app/[lang]/` where `lang ∈ { en, pt, es }` (default `en`).
@@ -2920,7 +2953,8 @@ at `/<lang>`.)
 
 #### Dictionary (`landing/i18n/`)
 
-UI strings live in `i18n/dictionaries/{en,pt,es}.json` (~208 keys in groups: `meta`, `nav`,
+UI strings live in `i18n/dictionaries/{en,pt,es}.json` (**173 keys** — counted recursively
+over `en.json`, 161 of them string values once array entries are included — in groups: `meta`, `nav`,
 `hero`, `painBeat`, `howItWorks`, `ssiExplainer`, `proof`, `features`, `tiers`, `pricing`, `faq`,
 `finalCta`, `footer`, `cookieNotice`, `themeToggle`, `languageSelector`). The server utility
 `i18n/getDictionary.ts` imports the correct JSON at request time and returns a typed `Dictionary`
@@ -2969,8 +3003,13 @@ section of the Home page (`Pricing` component), not a standalone route.
 
 `app/[lang]/layout.tsx` renders `<CookieNotice>` (see below) and contains the no-flash theme script. **Notable section
 content** (encodes the business rules):
-`PainBeat` frames the core problem (algorithm invisibility). `HowItWorks` describes the three-step engagement flow
-(connect → engage → get found) plus the network-effect line. `SSIExplainer` covers the four 25-point pillars with real
+`Hero` leads with the outcome and never the mechanism — "Stop chasing work. / Let them find you." over the decorative
+rings — so the SSI is absent from the headline and both sub-lines (see "Audience & awareness" above). `PainBeat`
+frames the core problem (algorithm invisibility) in the visitor's own two beats, "You post. You reach out." →
+"Silence.", with a body that covers the employed and the independent half in one sentence ("The best work never
+reaches you, because LinkedIn never surfaces you. Recruiters and clients search, and the algorithm ranks.").
+`HowItWorks` describes the three-step engagement flow (connect → engage → get found) plus the network-effect line.
+`SSIExplainer` covers the four 25-point pillars with real
 LinkedIn-attributed statistics (45% more opportunities, 5× profile views, +51% recruiter contact for SSI > 70). `Proof`
 is an honest pre-launch block: a founder note, a link to check the user's own SSI on `linkedin.com/sales/ssi`, and an
 early-access line (no fabricated counts or testimonials). `Features` markets exactly three shipped capabilities
@@ -2978,8 +3017,8 @@ early-access line (no fabricated counts or testimonials). `Features` markets exa
 items. `Pricing` is a `'use client'` component with an annual/monthly toggle (annual default, annual = monthly × 10
 giving 2 months free); three tiers — Starter $5/$50, Growth $15/$150 (Recommended, elevated), Pro $50/$500 — plus an
 Enterprise contact-us line; trial copy reads "no charge until 50 interactions or 7 days, whichever comes first; card
-required, cancel anytime" (the card-capture and milestone-gate mechanics are implemented in Plan 2). Each tier's **"
-Start free" CTA** links directly to OAuth and appends
+required, cancel anytime" (the card-capture and milestone-gate mechanics are implemented in Plan 2). Each tier's
+trial CTA (`Start 7-day <Plan> trial`) links directly to OAuth and appends
 `?plan=<starter|growth|pro>&interval=<monthly|annual>` so the chosen tier is carried through the OAuth flow and
 pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with honest
 trial-scope and SSI answers; no "no credit card required" or "3-day free trial" claims. `Footer` links to
@@ -3045,7 +3084,7 @@ See [`docs/compliance/README.md`](compliance/README.md) for the consolidated leg
 
 ### CTAs → app
 
-Every conversion CTA (Nav "Start free", Hero, Pricing, FinalCTA) is a plain `<a>` whose `href` is the shared **
+Every conversion CTA (Nav, Hero, the three Pricing cards, FinalCTA) is a plain `<a>` whose `href` is the shared **
 `SIGN_IN_URL`** (`landing/lib/links.ts`) — i.e.
 `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, sending visitors **straight into LinkedIn OAuth** (it falls back to
 `NEXT_PUBLIC_APP_URL` if the Convex site URL is unset). Going directly to OAuth (rather than the app root) is what lets
@@ -3059,6 +3098,34 @@ app's `#session=…&plan=…&interval=…` hash, `AuthSuccessPage` stashes them 
 resolves its single primary plan card from `?plan=` → `sessionStorage.chosenPlan` → Growth (see
 [§14](#14-frontend--authenticated-app-app)). A visitor who picked Pro on the Pricing table is offered Pro, not Growth —
 the decision they already made is not re-opened.
+
+**CTA inventory** (labels are R12 — every one names the trial length, the plan cards also name the plan, and no CTA
+says "Start free" in any locale):
+
+| Location               | Label (`en`)                       | Trigger line beside it                         | `href`                                          |
+|------------------------|------------------------------------|------------------------------------------------|-------------------------------------------------|
+| `Nav`                  | Start 7-day trial                  | (none, by design)                              | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| `Hero`                 | Start my 7-day trial with LinkedIn | `ctaDisclaimer` (cost) + `ctaTrust` (safety)   | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| `Pricing` (Starter)    | Start 7-day Starter trial          | `trialNote`, shared under the grid             | `${SIGN_IN_URL}?plan=starter&interval=<toggle>` |
+| `Pricing` (Growth)     | Start 7-day Growth trial           | (same)                                         | `${SIGN_IN_URL}?plan=growth&interval=<toggle>`  |
+| `Pricing` (Pro)        | Start 7-day Pro trial              | (same)                                         | `${SIGN_IN_URL}?plan=pro&interval=<toggle>`     |
+| `Pricing` (Enterprise) | Talk to us                         | `enterpriseNote` + `enterprisePrice` ($100/mo) | `mailto:contact@linkintothessi.com`             |
+| `FinalCTA`             | Start my 7-day trial with LinkedIn | `ctaTrust` (safety), then `earlyAccess`        | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+
+`<toggle>` is the visitor's annual/monthly `Pricing` toggle (annual by default); `Nav`, `Hero` and `FinalCTA` pin
+Growth/annual. `ctaTrust` ("Official LinkedIn sign-in · Name, photo and email only · Nothing posted for you") is the
+fear answered two centimetres from the button, and every clause of it is verifiable: OIDC-only scopes are asserted
+in `convex/linkedin/oauth.test.ts`, and the platform performs no API writes on the member's behalf
+([§1](#1-product-overview--business-model)).
+
+Because those two lines answer the top objection and carry the card-required disclosure, **they must stay visible
+above the fixed `CookieNotice` on a first mobile visit** — the visitor who most needs them is exactly the one who
+still has the banner on screen. At 375×812 the usable band is `y=64..671`: the `Nav` overlay is opaque (`fixed top-0`,
+`h-16`) and the notice covers the bottom 141px. The `pt`/`es` headlines wrap two lines longer than
+`en`, which previously pushed the whole CTA column under the banner. `Hero` therefore drops the headline to
+`text-4xl` below `sm` (`sm:text-5xl md:text-7xl` — desktop unchanged) and reserves `pb-24 sm:pb-0` on the section,
+leaving ≥ 50px of clearance in the longest locale. Raising either value, or lengthening `hero.headlineLine2` in any
+locale, re-opens the bug; re-measure at 375×812 in all three locales after touching them.
 
 ### Styling
 

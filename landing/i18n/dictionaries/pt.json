@@ -1,31 +1,32 @@
 {
   "meta": {
-    "title": "Link Into The SSI · Aumente Sua Influência no LinkedIn",
-    "description": "Aumente seu SSI no LinkedIn engajando de verdade com os profissionais e as conversas da sua área.",
+    "title": "Link Into The SSI · Seja encontrado no LinkedIn",
+    "description": "Um feed focado nos profissionais e nas conversas da sua área. Apareça onde importa e as pessoas certas começam a te encontrar.",
     "ogTitle": "Link Into The SSI",
-    "ogDescription": "Aumente seu SSI no LinkedIn de forma orgânica com interações reais."
+    "ogDescription": "Pare de correr atrás. Apareça onde importa e deixe as pessoas certas te encontrarem."
   },
   "nav": {
     "howItWorks": "Como funciona",
     "features": "Recursos",
     "pricing": "Planos",
-    "cta": "Comece grátis"
+    "cta": "Comece o teste de 7 dias"
   },
   "hero": {
     "eyebrow": "Crescimento deliberado no LinkedIn",
     "headlineLine1": "Pare de correr atrás.",
     "headlineLine2": "Faça as oportunidades virem até você.",
-    "subLine1": "Um feed focado nos profissionais e conversas da sua área. Apareça onde importa e seu SSI sobe.",
+    "subLine1": "Um feed focado nos profissionais e nas conversas da sua área. Apareça onde importa e o LinkedIn começa a te destacar.",
     "subLine2": "Cada ação é sua. Nada automatizado.",
-    "cta": "Comece grátis com o LinkedIn",
+    "cta": "Começar meu teste de 7 dias com o LinkedIn",
     "ctaDisclaimer": "Cartão necessário · Sem cobrança até 50 interações ou 7 dias · Cancele quando quiser",
+    "ctaTrust": "Login oficial do LinkedIn · Só nome, foto e e-mail · Nada é publicado em seu nome",
     "scrollLabel": "Rolar"
   },
   "painBeat": {
     "eyebrow": "O problema",
-    "headlineLine1": "Você publica. Você se candidata.",
+    "headlineLine1": "Você publica. Você vai atrás.",
     "headlineLine2": "Silêncio.",
-    "body": "As melhores oportunidades nunca chegam até você porque o LinkedIn nunca te destaca. Recrutadores pesquisam e o algoritmo classifica. Um perfil inativo fica invisível, por melhor que você seja."
+    "body": "As melhores oportunidades nunca chegam até você porque o LinkedIn nunca te destaca. Recrutadores e clientes pesquisam, e o algoritmo classifica. Um perfil inativo fica invisível, por melhor que você seja."
   },
   "howItWorks": {
     "eyebrow": "Como funciona",
@@ -40,8 +41,8 @@
         "body": "Reaja e comente nas publicações que importam na sua área. Cada interação genuína alimenta os quatro pilares do SSI: marca, rede, conhecimento e relacionamentos."
       },
       {
-        "title": "Recrutadores começam a te encontrar",
-        "body": "Conforme seu SSI sobe, você aparece em mais buscas e feeds, e as pessoas certas chegam até você primeiro."
+        "title": "As pessoas certas começam a te encontrar",
+        "body": "Conforme seu SSI sobe, você aparece em mais buscas e feeds. Quem procura o que você faz chega até você primeiro."
       }
     ]
   },
@@ -49,7 +50,7 @@
     "eyebrow": "Por que o SSI",
     "headlineLine1": "A pontuação que decide",
     "headlineLine2": "quem te encontra",
-    "intro": "Seu Social Selling Index é a métrica de 0 a 100 do próprio LinkedIn que mede o quão fácil é te encontrar, seja por recrutadores ou colegas. Quatro pilares, 25 pontos cada. Engajamento é o que sobe mais rápido.",
+    "intro": "Seu Social Selling Index é a métrica de 0 a 100 do próprio LinkedIn que mede o quão fácil é te encontrar, seja por recrutadores, clientes ou colegas. Quatro pilares, 25 pontos cada. Engajamento é o que sobe mais rápido.",
     "pillars": [
       {
         "icon": "🏆",
@@ -149,7 +150,7 @@
     "periodYear": "/ano",
     "annualSubLabel": "{{perMonth}}/mês cobrado anualmente",
     "monthlySubLabel": "2 meses grátis no plano anual",
-    "trialNote": "Comece grátis. Sem cobrança até 50 interações ou 7 dias, o que vier primeiro. Cartão necessário, cancele quando quiser.",
+    "trialNote": "Sem cobrança até 50 interações ou 7 dias, o que vier primeiro. Cartão necessário, cancele quando quiser.",
     "enterpriseNote": "Times e agências: Enterprise a partir de",
     "enterprisePrice": "$100/mês",
     "enterpriseCta": "Fale conosco",
@@ -164,7 +165,7 @@
           "25 interações contadas por publicação",
           "1 publicação no feed / semana"
         ],
-        "cta": "Comece grátis"
+        "cta": "Testar o Starter por 7 dias"
       },
       {
         "id": "growth",
@@ -176,7 +177,7 @@
           "50 interações contadas por publicação",
           "2 publicações no feed / semana"
         ],
-        "cta": "Comece grátis"
+        "cta": "Testar o Growth por 7 dias"
       },
       {
         "id": "pro",
@@ -189,7 +190,7 @@
           "200 interações contadas por publicação",
           "5 publicações no feed / semana"
         ],
-        "cta": "Comece grátis"
+        "cta": "Testar o Pro por 7 dias"
       }
     ]
   },
@@ -226,8 +227,9 @@
   "finalCta": {
     "headlineLine1": "Pronto para parar de correr atrás?",
     "headlineLine2": "Deixe as oportunidades virem até você.",
-    "subheadline": "Comece grátis com o LinkedIn. Construa SSI real desde o primeiro dia.",
-    "cta": "Comece grátis com o LinkedIn",
+    "subheadline": "Sete dias para ver funcionando. Construa SSI real desde o primeiro dia.",
+    "cta": "Começar meu teste de 7 dias com o LinkedIn",
+    "ctaTrust": "Login oficial do LinkedIn · Só nome, foto e e-mail · Nada é publicado em seu nome",
     "earlyAccess": "Seja um dos primeiros. Faça valer."
   },
   "footer": {

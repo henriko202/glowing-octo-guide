@@ -3,7 +3,7 @@ import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
   return (
-    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-ink px-6 text-center">
+    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-ink px-6 pb-24 text-center sm:pb-0">
       {/* Radial glow */}
       <div
         className="pointer-events-none absolute inset-0"
@@ -34,7 +34,7 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
 
       <div className="relative z-10 mx-auto max-w-3xl space-y-8">
         {/* Outcome-led headline */}
-        <h1 className="font-display text-5xl leading-tight font-semibold text-cream md:text-7xl">
+        <h1 className="font-display text-4xl leading-tight font-semibold text-cream sm:text-5xl md:text-7xl">
           {dict.headlineLine1}
           <br />
           <span className="text-gold-text italic">{dict.headlineLine2}</span>
@@ -55,7 +55,13 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
             {dict.cta}
             <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
           </a>
-          {/* Click trigger */}
+          {/* Click triggers. Safety first: it is this product's top objection ("will this get my
+              LinkedIn restricted?"). The cost rule is repeated in pricing.trialNote and the FAQ.
+              Both lines must stay clear of the fixed CookieNotice (bottom 141px) on a first visit:
+              at 375x812 the usable band is y=64..671 (nav overlay to banner), and pt/es headlines
+              wrap two lines longer than en. That is what the mobile text-4xl and the section pb-24
+              buy — raise either and these lines slide back under the banner. */}
+          <p className="text-xs tracking-wide text-cream/40">{dict.ctaTrust}</p>
           <p className="text-xs tracking-wide text-cream/40">{dict.ctaDisclaimer}</p>
         </div>
       </div>

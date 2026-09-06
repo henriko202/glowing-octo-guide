@@ -1,31 +1,32 @@
 {
   "meta": {
-    "title": "Link Into The SSI · Grow Your LinkedIn Influence",
-    "description": "Grow your LinkedIn SSI through genuine engagement with the professionals and conversations in your field.",
+    "title": "Link Into The SSI · Get Found on LinkedIn",
+    "description": "A focused feed of the professionals and conversations in your field. Show up where it matters, and the right people start finding you.",
     "ogTitle": "Link Into The SSI",
-    "ogDescription": "Grow your LinkedIn SSI organically with real interactions."
+    "ogDescription": "Stop chasing work. Show up where it matters and let the right people find you."
   },
   "nav": {
     "howItWorks": "How it works",
     "features": "Features",
     "pricing": "Pricing",
-    "cta": "Start free"
+    "cta": "Start 7-day trial"
   },
   "hero": {
     "eyebrow": "Deliberate LinkedIn growth",
-    "headlineLine1": "Stop chasing jobs.",
-    "headlineLine2": "Let them find you.",
-    "subLine1": "A focused feed of the professionals and conversations in your field. Show up where it matters, and your SSI climbs.",
+    "headlineLine1": "Stop chasing work.",
+    "headlineLine2": "Let it find you.",
+    "subLine1": "A focused feed of the professionals and conversations in your field. Show up where it matters, and LinkedIn starts surfacing you.",
     "subLine2": "Every action is yours. Nothing automated.",
-    "cta": "Start free with LinkedIn",
+    "cta": "Start my 7-day trial with LinkedIn",
     "ctaDisclaimer": "Card required · No charge until 50 interactions or 7 days · Cancel anytime",
+    "ctaTrust": "Official LinkedIn sign-in · Name, photo and email only · Nothing posted for you",
     "scrollLabel": "Scroll"
   },
   "painBeat": {
     "eyebrow": "The problem",
-    "headlineLine1": "You post. You apply.",
+    "headlineLine1": "You post. You reach out.",
     "headlineLine2": "Silence.",
-    "body": "The best opportunities never reach you, because LinkedIn never surfaces you. Recruiters search and the algorithm ranks. An inactive profile stays invisible, no matter how good you are."
+    "body": "The best work never reaches you, because LinkedIn never surfaces you. Recruiters and clients search, and the algorithm ranks. An inactive profile stays invisible, no matter how good you are."
   },
   "howItWorks": {
     "eyebrow": "How it works",
@@ -40,8 +41,8 @@
         "body": "React and comment on the posts that matter in your field. Every genuine interaction feeds all four SSI pillars: brand, network, insight, and relationships."
       },
       {
-        "title": "Recruiters start finding you",
-        "body": "As your SSI climbs, you surface in more searches and feeds, so the right people reach you first."
+        "title": "The right people start finding you",
+        "body": "As your SSI climbs, you surface in more searches and feeds. The people looking for what you do reach you first."
       }
     ]
   },
@@ -49,7 +50,7 @@
     "eyebrow": "Why SSI",
     "headlineLine1": "The score that decides",
     "headlineLine2": "who finds you",
-    "intro": "Your Social Selling Index is LinkedIn's own 0–100 measure of how findable you are to recruiters and peers. Four pillars, 25 points each. Engagement is the fastest one to move.",
+    "intro": "Your Social Selling Index is LinkedIn's own 0–100 measure of how findable you are to recruiters, clients and peers. Four pillars, 25 points each. Engagement is the fastest one to move.",
     "pillars": [
       {
         "icon": "🏆",
@@ -149,7 +150,7 @@
     "periodYear": "/yr",
     "annualSubLabel": "{{perMonth}}/mo billed annually",
     "monthlySubLabel": "2 months free if you pay annually",
-    "trialNote": "Start free. No charge until 50 interactions or 7 days, whichever comes first. Card required, cancel anytime.",
+    "trialNote": "No charge until 50 interactions or 7 days, whichever comes first. Card required, cancel anytime.",
     "enterpriseNote": "Teams & agencies: Enterprise from",
     "enterprisePrice": "$100/mo",
     "enterpriseCta": "Talk to us",
@@ -164,7 +165,7 @@
           "25 interactions counted per post",
           "1 post into the feed / week"
         ],
-        "cta": "Start free"
+        "cta": "Start 7-day Starter trial"
       },
       {
         "id": "growth",
@@ -176,7 +177,7 @@
           "50 interactions counted per post",
           "2 posts into the feed / week"
         ],
-        "cta": "Start free"
+        "cta": "Start 7-day Growth trial"
       },
       {
         "id": "pro",
@@ -189,7 +190,7 @@
           "200 interactions counted per post",
           "5 posts into the feed / week"
         ],
-        "cta": "Start free"
+        "cta": "Start 7-day Pro trial"
       }
     ]
   },
@@ -225,9 +226,10 @@
   },
   "finalCta": {
     "headlineLine1": "Ready to stop chasing?",
-    "headlineLine2": "Let them find you.",
-    "subheadline": "Start free with LinkedIn. Build real SSI from day one.",
-    "cta": "Start free with LinkedIn",
+    "headlineLine2": "Let it find you.",
+    "subheadline": "Seven days to see it work. Build real SSI from day one.",
+    "cta": "Start my 7-day trial with LinkedIn",
+    "ctaTrust": "Official LinkedIn sign-in · Name, photo and email only · Nothing posted for you",
     "earlyAccess": "Be one of the first in. Make it count."
   },
   "footer": {
