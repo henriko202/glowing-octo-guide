@@ -7,7 +7,7 @@ import { isValidCountry, isValidIndustry } from './lib/profileOptions'
 import { isValidCommentLanguage } from './lib/languages'
 import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
 import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
-import { TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
+import { isNearThreshold, TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -194,6 +194,7 @@ export const getTrialProgress = query({
       combined,
       threshold: TRIAL_INTERACTION_THRESHOLD,
       reached: combined >= TRIAL_INTERACTION_THRESHOLD,
+      nearThreshold: isNearThreshold(combined),
       status: user.subscriptionStatus,
       trialEndsAt: user.trialEndsAt
     }
@@ -236,7 +237,13 @@ export const getSubscriptionInfo = query({
         stripeSubscriptionId: activeSub.stripeSubscriptionId,
         // Renewal/access-end instant for the billing page — from our own subscriptions row
         // (the component doesn't store it). Undefined only if our row hasn't caught up yet.
-        currentPeriodEnd: ourSub?.currentPeriodEnd
+        currentPeriodEnd: ourSub?.currentPeriodEnd,
+        // The interval Stripe will actually bill on, off the webhook price snapshot. The page's
+        // own `billingInterval` is a browser-local toggle defaulting to 'annual', so it must
+        // never be used to tell a member what they are about to be charged.
+        priceInterval: ourSub?.priceInterval,
+        priceAmount: ourSub?.priceAmount,
+        priceCurrency: ourSub?.priceCurrency
       }
     }
 
@@ -246,8 +253,36 @@ export const getSubscriptionInfo = query({
       status: user.subscriptionStatus ?? 'trialing',
       cancelAtPeriodEnd: false,
       stripeSubscriptionId: null,
-      currentPeriodEnd: undefined
+      currentPeriodEnd: undefined,
+      priceInterval: undefined,
+      priceAmount: undefined,
+      priceCurrency: undefined
     }
+  }
+})
+
+/** Records the language the member checked out in, so billing emails reach them in it. */
+export const setLanguage = internalMutation({
+  args: { userId: v.id('users'), language: v.string() },
+  handler: async (ctx, { userId, language }) => {
+    await ctx.db.patch(userId, { language })
+  }
+})
+
+/** Raises a one-shot billing notice banner (see schema: users.billingNotice). */
+export const setBillingNotice = internalMutation({
+  args: { userId: v.id('users'), notice: v.string() },
+  handler: async (ctx, { userId, notice }) => {
+    await ctx.db.patch(userId, { billingNotice: notice })
+  }
+})
+
+/** Dismisses the billing notice banner. Public: the owner clears their own. */
+export const clearBillingNotice = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await ctx.db.patch(user._id, { billingNotice: undefined })
   }
 })
 

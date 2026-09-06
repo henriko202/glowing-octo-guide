@@ -10,7 +10,7 @@ import { assertPostEngageable } from './feed'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { shouldFlipInteractionLimit } from './lib/interactionLimit'
-import { crossesThreshold } from './lib/trialMilestone'
+import { crossesThreshold, pickTrialingSubscription, TRIAL_WARNING_THRESHOLD } from './lib/trialMilestone'
 import { reactionValidator } from './lib/reactions'
 
 // Bump one side of a trialing user's interaction counter; when their combined count first
@@ -24,11 +24,20 @@ async function bumpTrialInteraction(ctx: MutationCtx, userId: Id<'users'>, kind:
   if (kind === 'made') await ctx.db.patch(userId, { trialInteractionsMade: made + 1 })
   else await ctx.db.patch(userId, { trialInteractionsReceived: received + 1 })
 
+  // 80% of the way: one heads-up before the plan starts, never an alarm. crossesThreshold's
+  // semantics guarantee it fires exactly once per member.
+  if (crossesThreshold(combined, 1, TRIAL_WARNING_THRESHOLD)) {
+    await ctx.scheduler.runAfter(0, internal.notifications.sendTrialNearEnd, { userId })
+  }
+
   if (crossesThreshold(combined, 1)) {
-    const sub = await ctx.db
+    // NOT .first(): by_user is ordered by _creationTime, so .first() is the OLDEST row — after a
+    // cancel + re-subscribe that is the canceled subscription, and ending its trial does nothing.
+    const rows = await ctx.db
       .query('subscriptions')
       .withIndex('by_user', q => q.eq('userId', userId))
-      .first()
+      .collect()
+    const sub = pickTrialingSubscription(rows)
     if (sub?.stripeSubscriptionId) {
       await ctx.scheduler.runAfter(0, internal.billingNode.endTrialEarly, {
         stripeSubscriptionId: sub.stripeSubscriptionId

@@ -109,7 +109,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
 
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+          <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
             Interactions per post
           </span>
           <Input
@@ -121,7 +121,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+          <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
             Posts per week
           </span>
           <Input

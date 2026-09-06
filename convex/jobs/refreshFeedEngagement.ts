@@ -1,11 +1,11 @@
 // Refresh like/comment COUNTS on every feed-eligible post via ONE batched Apify run, every 30 min.
 // Dev/local only: isApifyPostSyncEnabled gates it, so prod (Apify dormant at launch — see docs
 // §16 / lib/apify.ts) is never scraped. Counts only — scrapeComments/scrapeReactions stay off.
-import {internalActionGeneric as internalAction} from 'convex/server'
-import {internal} from '../_generated/api.js'
-import type {ActionCtx} from '../_generated/server'
-import type {Id} from '../_generated/dataModel'
-import {isApifyPostSyncEnabled, runApifyTask} from '../lib/apify.js' // Only the fields we read from the (much larger) profile-posts scraper payload.
+import { internalActionGeneric as internalAction } from 'convex/server'
+import { internal } from '../_generated/api.js'
+import type { ActionCtx } from '../_generated/server'
+import type { Id } from '../_generated/dataModel'
+import { isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js' // Only the fields we read from the (much larger) profile-posts scraper payload.
 
 // Only the fields we read from the (much larger) profile-posts scraper payload.
 interface ApifyPostResult {

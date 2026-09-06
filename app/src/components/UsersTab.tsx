@@ -245,7 +245,7 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
                   {user.isBanned && (
                     <Badge
                       variant="destructive"
-                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase"
                     >
                       Banned
                     </Badge>

@@ -79,9 +79,19 @@ export default function En({ lang }: { lang: Locale }) {
         {/* 5. Subscriptions & billing */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. Subscriptions &amp; Billing</h2>
         <p>
-          Access to the Service requires an active paid subscription. Subscriptions are billed on a{' '}
-          <strong className="text-cream">monthly</strong> basis via Stripe. By subscribing you authorise Stripe to
-          charge the payment method you provide on a recurring monthly basis until you cancel.
+          Access to the Service requires an active paid subscription. Subscriptions are billed{' '}
+          <strong className="text-cream">monthly or annually</strong>, according to the plan and interval you choose,
+          via Stripe. By subscribing you authorise Stripe to charge the payment method you provide on that recurring
+          basis until you cancel.
+        </p>
+        <p>
+          <strong className="text-cream">Free trial.</strong> New accounts start with a{' '}
+          <strong className="text-cream">7-day free trial</strong> and a payment method is required to begin it. The
+          trial ends — and billing starts — as soon as you reach <strong className="text-cream">50 interactions</strong>{' '}
+          (made plus received) or after <strong className="text-cream">7 days</strong>, whichever comes first. We notify
+          you by email before the first charge. You may cancel at any time before the trial ends from the Subscription
+          page in your account, and you will not be charged. One free trial is available per account; if you subscribe
+          again after cancelling, billing starts immediately and this is stated at checkout.
         </p>
         <p>
           <strong className="text-cream">Cancellation.</strong> You may cancel your subscription at any time through

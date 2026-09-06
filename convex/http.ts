@@ -133,37 +133,62 @@ http.route({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
 type StripeEvent = any
 
+// syncUserSubscription's args for a Stripe subscription object — shared by created + updated.
+function syncArgs(sub: StripeEvent) {
+  const price = sub.items?.data?.[0]?.price
+  return {
+    stripeCustomerId: String(sub.customer),
+    stripeSubscriptionId: sub.id,
+    tier: getTierFromPriceId(price?.id ?? ''),
+    status: sub.status,
+    currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
+    trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined,
+    // Price snapshot so a billing email can state the exact amount without a second Stripe call.
+    priceAmount: typeof price?.unit_amount === 'number' ? price.unit_amount : undefined,
+    priceCurrency: price?.currency ?? undefined,
+    priceInterval: price?.recurring?.interval ?? undefined,
+    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+    // Stripe's own creation instant: the duplicate guard voids the newest by this, not by arrival.
+    stripeCreated: typeof sub.created === 'number' ? sub.created * 1000 : undefined
+  }
+}
+
 registerRoutes(http, components.stripe, {
   webhookPath: '/stripe/webhook',
   events: {
     'customer.subscription.created': async (ctx: StripeEvent, event: StripeEvent) => {
-      const sub = event.data.object
-      const priceId = sub.items?.data?.[0]?.price?.id ?? ''
-      await ctx.runMutation(internal.stripe.syncUserSubscription, {
-        stripeCustomerId: String(sub.customer),
-        stripeSubscriptionId: sub.id,
-        tier: getTierFromPriceId(priceId),
-        status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
-        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
-      })
+      // Two tabs, two checkouts: the checkout guard cannot see a second checkout completed between
+      // session creation and Stripe confirming payment. syncUserSubscription decides, inside its own
+      // transaction, whether this member now holds a duplicate and which row is the newer one. Only
+      // `created` acts on it — Stripe emits `updated` for the duplicate right after, and acting there
+      // too would void (and notify) twice.
+      const duplicate = await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event.data.object))
+      if (duplicate) {
+        await ctx.scheduler.runAfter(0, internal.billingNode.cancelDuplicateSubscription, {
+          userId: duplicate.userId,
+          stripeSubscriptionId: duplicate.stripeSubscriptionId,
+          tier: duplicate.keepTier
+        })
+      }
     },
     'customer.subscription.updated': async (ctx: StripeEvent, event: StripeEvent) => {
-      const sub = event.data.object
-      const priceId = sub.items?.data?.[0]?.price?.id ?? ''
-      await ctx.runMutation(internal.stripe.syncUserSubscription, {
-        stripeCustomerId: String(sub.customer),
-        stripeSubscriptionId: sub.id,
-        tier: getTierFromPriceId(priceId),
-        status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
-        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
-      })
+      await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event.data.object))
     },
     'customer.subscription.deleted': async (ctx: StripeEvent, event: StripeEvent) => {
       const sub = event.data.object
       await ctx.runMutation(internal.stripe.cancelUserSubscription, {
         stripeSubscriptionId: sub.id
+      })
+    },
+    // Stripe fires this 3 days before trial_end. It NEVER fires for the 50-interaction path
+    // (endTrialEarly sets trial_end:'now'), which is why that path has its own 40-of-50 notice.
+    // Stripe's built-in trial-ending email must stay OFF so the member gets exactly one warning.
+    'customer.subscription.trial_will_end': async (ctx: StripeEvent, event: StripeEvent) => {
+      const sub = event.data.object
+      if (!sub.trial_end) return
+      await ctx.scheduler.runAfter(0, internal.notifications.sendTrialEnding, {
+        stripeSubscriptionId: sub.id,
+        trialEndsAt: sub.trial_end * 1000
       })
     },
     'invoice.payment_failed': async (ctx: StripeEvent, event: StripeEvent) => {

@@ -33,7 +33,7 @@ export default function PolicyUpdateScreen() {
             href="https://linkintothessi.com/privacy"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-gold-text text-sm font-semibold hover:underline"
+            className="text-sm font-semibold text-gold-text hover:underline"
           >
             {t('privacy.policyUpdate.readPolicy')}
           </a>

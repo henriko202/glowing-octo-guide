@@ -7,6 +7,13 @@
 import { scrubError } from './scrubError'
 import { fetchWithTimeout } from './fetchWithTimeout'
 
+/** A rendered transactional message, ready for sendEmail. Built by pure per-flow modules. */
+export interface EmailContent {
+  subject: string
+  html: string
+  text: string
+}
+
 export interface SendEmailArgs {
   to: string
   subject: string

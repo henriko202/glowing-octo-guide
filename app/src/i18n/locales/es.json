@@ -167,7 +167,7 @@
     "daysRemaining_other": "{{count}} días restantes",
     "expiredBanner": "Tu suscripción ha finalizado. Elige un plan a continuación para continuar.",
     "none": "Ninguno",
-    "trialBanner": "Estás en una prueba gratuita de Growth. Se te facturará cuando alcances 50 interacciones o tras 7 días, lo que ocurra primero.",
+    "trialBanner": "Estás en una prueba gratuita de {{plan}}. El cobro empieza al llegar a 50 interacciones o después de 7 días, lo que ocurra primero.",
     "trialProgress": "{{combined}} / {{threshold}} interacciones",
     "ssiLink": "Ver tu SSI en LinkedIn",
     "whatYouLlMiss": "Con Starter pierdes el feed filtrado por sector, bajas de 50 a 25 interacciones por publicación y de 2 a 1 publicación por semana.",
@@ -179,6 +179,15 @@
     "checkoutFailed": "Fallo en el pago: {{error}}",
     "portalFailed": "No se pudo abrir el portal: {{error}}",
     "customPrice": "Personalizado",
+    "switchPlan": "Cambiar a {{plan}}",
+    "startTrialCta": "Iniciar prueba de 7 días de {{plan}}",
+    "seeAllPlans": "Ver todos los planes",
+    "hideAllPlans": "Ocultar los otros planes",
+    "chosenPlanLead": "Elegiste {{plan}} en el sitio. Su prueba de 7 días empieza abajo.",
+    "alreadySubscribed": "Ya tienes un plan. Adminístralo desde el portal de facturación.",
+    "nearThresholdBanner": "Faltan {{remaining}} interacciones para que empiece tu plan · {{plan}}, {{price}}",
+    "duplicateCanceledNotice": "Se creó una suscripción duplicada por error y la cancelamos de inmediato. No se te cobró por ella.",
+    "dismiss": "Descartar",
     "plans": {
       "starter": {
         "name": "Starter",
@@ -188,8 +197,7 @@
           "Comenta y reacciona con IA",
           "25 interacciones contadas por publicación",
           "1 publicación en el feed / semana"
-        ],
-        "cta": "Iniciar prueba gratuita"
+        ]
       },
       "growth": {
         "name": "Growth",
@@ -199,8 +207,7 @@
           "Todo lo de Starter",
           "50 interacciones contadas por publicación",
           "2 publicaciones en el feed / semana"
-        ],
-        "cta": "Obtener Growth"
+        ]
       },
       "pro": {
         "name": "Pro",
@@ -211,8 +218,7 @@
           "Todo lo de Growth",
           "200 interacciones contadas por publicación",
           "5 publicaciones en el feed / semana"
-        ],
-        "cta": "Obtener Pro"
+        ]
       },
       "contact": {
         "name": "Empresa",

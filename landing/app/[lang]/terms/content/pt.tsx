@@ -82,8 +82,19 @@ export default function Pt({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. Assinaturas &amp; Cobrança</h2>
         <p>
           O acesso ao Serviço requer uma assinatura paga ativa. As assinaturas são cobradas{' '}
-          <strong className="text-cream">mensalmente</strong> via Stripe. Ao assinar você autoriza o Stripe a cobrar o
-          método de pagamento informado de forma recorrente mensalmente até que você cancele.
+          <strong className="text-cream">mensalmente ou anualmente</strong>, conforme o plano e o intervalo que você
+          escolher, via Stripe. Ao assinar você autoriza o Stripe a cobrar o método de pagamento informado de forma
+          recorrente até que você cancele.
+        </p>
+        <p>
+          <strong className="text-cream">Teste grátis.</strong> Novas contas começam com um{' '}
+          <strong className="text-cream">teste grátis de 7 dias</strong> e é necessário informar um método de pagamento
+          para iniciá-lo. O teste termina — e a cobrança começa — assim que você atingir{' '}
+          <strong className="text-cream">50 interações</strong> (feitas e recebidas) ou depois de{' '}
+          <strong className="text-cream">7 dias</strong>, o que vier primeiro. Avisamos você por e-mail antes da
+          primeira cobrança. Você pode cancelar a qualquer momento antes do fim do teste, na página Assinatura da sua
+          conta, e nada será cobrado. Há um teste grátis por conta; se você assinar novamente após cancelar, a cobrança
+          começa imediatamente e isso é informado no checkout.
         </p>
         <p>
           <strong className="text-cream">Cancelamento.</strong> Você pode cancelar sua assinatura a qualquer momento

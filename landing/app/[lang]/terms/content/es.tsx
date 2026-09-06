@@ -80,8 +80,19 @@ export default function Es({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. Suscripciones &amp; Facturación</h2>
         <p>
           El acceso al Servicio requiere una suscripción de pago activa. Las suscripciones se facturan de forma{' '}
-          <strong className="text-cream">mensual</strong> a través de Stripe. Al suscribirse autoriza a Stripe a cargar
-          el método de pago proporcionado de forma recurrente mensual hasta que cancele.
+          <strong className="text-cream">mensual o anual</strong>, según el plan y el intervalo que elija, a través de
+          Stripe. Al suscribirse autoriza a Stripe a cargar el método de pago proporcionado de forma recurrente hasta
+          que cancele.
+        </p>
+        <p>
+          <strong className="text-cream">Prueba gratuita.</strong> Las cuentas nuevas comienzan con una{' '}
+          <strong className="text-cream">prueba gratuita de 7 días</strong> y se requiere un método de pago para
+          iniciarla. La prueba termina —y la facturación comienza— en cuanto alcanza{' '}
+          <strong className="text-cream">50 interacciones</strong> (hechas y recibidas) o a los{' '}
+          <strong className="text-cream">7 días</strong>, lo que ocurra primero. Le avisamos por correo antes del primer
+          cobro. Puede cancelar en cualquier momento antes de que termine la prueba desde la página Suscripción de su
+          cuenta, y no se le cobrará. Hay una prueba gratuita por cuenta; si se suscribe de nuevo tras cancelar, el
+          cobro comienza de inmediato y se indica en el checkout.
         </p>
         <p>
           <strong className="text-cream">Cancelación.</strong> Puede cancelar su suscripción en cualquier momento desde

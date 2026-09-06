@@ -11,6 +11,7 @@ import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
 import { canEngage } from './lib/access'
 import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
+import { findDuplicateSubscription, findLiveSubscription } from './lib/trialMilestone'
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
 // any status that does not clearly grant access (incomplete, unpaid, paused, unknown)
@@ -41,7 +42,7 @@ export function toSubscriptionStatus(raw: string): Doc<'users'>['subscriptionSta
 export function resolveSyncedTier(
   currentTier: Doc<'users'>['tier'],
   isAdmin: boolean | undefined,
-  stripeTier: 'starter' | 'growth' | 'pro'
+  stripeTier: Doc<'subscriptions'>['tier']
 ): Doc<'users'>['tier'] {
   return isAdmin ? currentTier : stripeTier
 }
@@ -57,7 +58,13 @@ export const syncUserSubscription = internalMutation({
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro')),
     status: v.string(),
     currentPeriodEnd: v.optional(v.number()),
-    trialEndsAt: v.optional(v.number())
+    trialEndsAt: v.optional(v.number()),
+    // Price snapshot straight off the webhook payload — see schema: subscriptions.priceAmount.
+    priceAmount: v.optional(v.number()),
+    priceCurrency: v.optional(v.string()),
+    priceInterval: v.optional(v.string()),
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    stripeCreated: v.optional(v.number())
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -66,8 +73,57 @@ export const syncUserSubscription = internalMutation({
       .first()
     if (!user) {
       console.warn(`syncUserSubscription: no user for Stripe customer ${args.stripeCustomerId}`)
-      return
+      return null
     }
+
+    // Upsert our own subscriptions row first: the member's state is derived from their rows below.
+    const existing = await ctx.db
+      .query('subscriptions')
+      .withIndex('by_stripe_id', q => q.eq('stripeSubscriptionId', args.stripeSubscriptionId))
+      .first()
+    // A canceled Stripe subscription never comes back, so a live status for a canceled row is a
+    // stale replay (Stripe retries on any non-2xx). Applying it would resurrect a voided duplicate.
+    if (existing?.status === 'canceled' && args.status !== 'canceled') {
+      console.warn(`syncUserSubscription: ignoring stale ${args.status} event for a canceled subscription`)
+      return null
+    }
+    const fields = {
+      tier: args.tier,
+      status: args.status,
+      currentPeriodEnd: args.currentPeriodEnd,
+      priceAmount: args.priceAmount,
+      priceCurrency: args.priceCurrency,
+      priceInterval: args.priceInterval,
+      cancelAtPeriodEnd: args.cancelAtPeriodEnd,
+      stripeCreated: args.stripeCreated ?? existing?.stripeCreated
+    }
+    if (existing) {
+      await ctx.db.patch(existing._id, fields)
+    } else {
+      await ctx.db.insert('subscriptions', {
+        userId: user._id,
+        stripeSubscriptionId: args.stripeSubscriptionId,
+        ...fields
+      })
+    }
+
+    // Every row this member holds, including the write above. Two live rows is the two-tab
+    // checkout race (see http.ts): the newest by Stripe `created` is the duplicate to void, and the
+    // member keeps following the other row. Decided HERE, inside the transaction, so two concurrent
+    // syncs cannot each take the other for the duplicate and void both.
+    const rows = await ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', user._id))
+      .collect()
+    const duplicate = findDuplicateSubscription(rows)
+    const defining = findLiveSubscription(duplicate ? rows.filter(r => r._id !== duplicate._id) : rows)
+    const result =
+      duplicate && defining
+        ? { userId: user._id, stripeSubscriptionId: duplicate.stripeSubscriptionId, keepTier: defining.tier }
+        : null
+    // Another row defines the member (this one is the duplicate, or a non-live event for a row they
+    // no longer rely on): leave the user doc alone.
+    if (defining && defining.stripeSubscriptionId !== args.stripeSubscriptionId) return result
 
     // Admins' tier is fixed (see resolveSyncedTier); everyone else follows Stripe.
     const effectiveTier = resolveSyncedTier(user.tier, user.isAdmin, args.tier)
@@ -97,26 +153,7 @@ export const syncUserSubscription = internalMutation({
       }
     }
 
-    // Upsert our own subscriptions table
-    const existing = await ctx.db
-      .query('subscriptions')
-      .withIndex('by_stripe_id', q => q.eq('stripeSubscriptionId', args.stripeSubscriptionId))
-      .first()
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        tier: args.tier,
-        status: args.status,
-        currentPeriodEnd: args.currentPeriodEnd
-      })
-    } else {
-      await ctx.db.insert('subscriptions', {
-        userId: user._id,
-        stripeSubscriptionId: args.stripeSubscriptionId,
-        tier: args.tier,
-        status: args.status,
-        currentPeriodEnd: args.currentPeriodEnd
-      })
-    }
+    return result
   }
 })
 
@@ -131,16 +168,25 @@ export const cancelUserSubscription = internalMutation({
     if (!sub) return
     await ctx.db.patch(sub._id, { status: 'canceled' })
 
+    // The member may still hold ANOTHER live subscription: the voided duplicate's own `deleted`
+    // event (see syncUserSubscription), or a period-end cancel landing after a re-subscribe. Then
+    // their state follows the row they keep and nothing is downgraded.
+    const rows = await ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', sub.userId))
+      .collect()
+    const live = findLiveSubscription(rows)
+
     // Cancellation NEVER revokes access — status goes 'canceled' but canEngage() still allows it
     // (see lib/access.ts). Instead, the author's posts stay in the feed only until their paid period
     // ends (subscriptionEndsAt = the sub's last known current_period_end). Tier drops to starter for
     // everyone except admins, whose tier is fixed (resolveSyncedTier).
     const user = await ctx.db.get(sub.userId)
-    const tier = resolveSyncedTier(user?.tier, user?.isAdmin, 'starter')
+    const tier = resolveSyncedTier(user?.tier, user?.isAdmin, live?.tier ?? 'starter')
     await ctx.db.patch(sub.userId, {
       tier,
-      subscriptionStatus: 'canceled',
-      subscriptionEndsAt: sub.currentPeriodEnd
+      subscriptionStatus: live ? toSubscriptionStatus(live.status) : 'canceled',
+      subscriptionEndsAt: (live ?? sub).currentPeriodEnd
     })
 
     // Re-stamp authorTierRank (→ feedRank) on all posts by this user to match the resolved tier.

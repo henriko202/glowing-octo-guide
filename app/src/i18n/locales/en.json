@@ -167,7 +167,7 @@
     "daysRemaining_other": "{{count}} days remaining",
     "expiredBanner": "Your subscription has ended. Choose a plan below to continue.",
     "none": "None",
-    "trialBanner": "You're on a free Growth trial. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
+    "trialBanner": "You're on a free {{plan}} trial. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
     "trialProgress": "{{combined}} / {{threshold}} interactions",
     "ssiLink": "View your SSI on LinkedIn",
     "whatYouLlMiss": "On Starter you lose your industry-filtered feed, drop from 50 to 25 interactions per post, and from 2 to 1 posts per week.",
@@ -179,6 +179,15 @@
     "checkoutFailed": "Checkout failed: {{error}}",
     "portalFailed": "Failed to open portal: {{error}}",
     "customPrice": "Custom",
+    "switchPlan": "Switch to {{plan}}",
+    "startTrialCta": "Start 7-day {{plan}} trial",
+    "seeAllPlans": "See all plans",
+    "hideAllPlans": "Hide other plans",
+    "chosenPlanLead": "You picked {{plan}} on the site. Its 7-day trial starts below.",
+    "alreadySubscribed": "You already have a plan. Manage it from the billing portal.",
+    "nearThresholdBanner": "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}",
+    "duplicateCanceledNotice": "A duplicate subscription was created by mistake and we cancelled it right away. You were not charged for it.",
+    "dismiss": "Dismiss",
     "plans": {
       "starter": {
         "name": "Starter",
@@ -188,8 +197,7 @@
           "Comment & react with AI",
           "25 interactions counted per post",
           "1 post into the feed / week"
-        ],
-        "cta": "Start free trial"
+        ]
       },
       "growth": {
         "name": "Growth",
@@ -199,8 +207,7 @@
           "Everything in Starter",
           "50 interactions counted per post",
           "2 posts into the feed / week"
-        ],
-        "cta": "Get Growth"
+        ]
       },
       "pro": {
         "name": "Pro",
@@ -211,8 +218,7 @@
           "Everything in Growth",
           "200 interactions counted per post",
           "5 posts into the feed / week"
-        ],
-        "cta": "Get Pro"
+        ]
       },
       "contact": {
         "name": "Enterprise",

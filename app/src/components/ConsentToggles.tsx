@@ -18,8 +18,8 @@ export default function ConsentToggles() {
 
   return (
     <section className="border-border bg-card mb-4 rounded-xl border p-5">
-      <h2 className="text-foreground mb-1 mt-0 text-base font-semibold">{t('privacy.consent.title')}</h2>
-      <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('privacy.consent.note')}</p>
+      <h2 className="text-foreground mt-0 mb-1 text-base font-semibold">{t('privacy.consent.title')}</h2>
+      <p className="text-muted-foreground mt-0 mb-3 text-[13px]">{t('privacy.consent.note')}</p>
       {PURPOSES.map(p => (
         <label
           key={p}

@@ -54,7 +54,7 @@ export default function ChangeStatusModal({ user, sessionToken, onClose }: Props
       </p>
 
       <label className="mt-4 flex flex-col gap-1">
-        <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+        <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
           Subscription status
         </span>
         <select

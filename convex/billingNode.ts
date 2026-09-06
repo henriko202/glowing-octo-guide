@@ -6,6 +6,9 @@ import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
 import { requireAuthAction } from './lib/auth'
 import { ALLOWED_PRICE_IDS } from './lib/stripePrices'
+import { findLiveSubscription, trialEligible } from './lib/trialMilestone'
+import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
+import { scrubError } from './lib/scrubError'
 
 const stripeComponent = new StripeSubscriptions(components.stripe, {})
 
@@ -21,12 +24,27 @@ const TRIAL_PERIOD_DAYS = 7
 // trial / card-collection / promo codes, so we call the Stripe SDK directly here. The
 // component still owns the customer record and webhook sync.
 export const createCheckoutSession = action({
-  args: { priceId: v.string(), sessionToken: v.string() },
-  handler: async (ctx, { priceId, sessionToken }) => {
+  args: { priceId: v.string(), sessionToken: v.string(), locale: v.optional(v.string()) },
+  handler: async (ctx, { priceId, sessionToken, locale }) => {
     if (!ALLOWED_PRICE_IDS.has(priceId)) throw new ConvexError('Invalid price ID')
 
     const user = await requireAuthAction(ctx, sessionToken)
     if (!user) throw new ConvexError('User not found')
+
+    // One live subscription per user. A card holder who wants another plan switches in the
+    // Customer Portal — the client branches on this prefix and opens it (lib/access.ts
+    // convention). The blocked path is a door, never an accusation.
+    const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
+    if (findLiveSubscription(subscriptions)) {
+      // Counted, so the guard's hit rate is visible in `pnpm watch:errors` (R01).
+      console.warn('[billing] checkout refused: live subscription', scrubError({ userId: user._id }))
+      throw new ConvexError('ALREADY_SUBSCRIBED: You already have a plan. Manage it from the billing portal.')
+    }
+
+    // One trial per user, forever. A returning subscriber checks out without a trial and is told
+    // so under the pay button, before the card — never discovered on the statement.
+    const trial = trialEligible(subscriptions.length)
+    const billingLocale = resolveBillingLocale(locale ?? user.language, user.primaryLocale)
 
     const customer = await stripeComponent.getOrCreateCustomer(ctx, {
       userId: user._id,
@@ -41,11 +59,14 @@ export const createCheckoutSession = action({
       customer: customer.customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: TRIAL_PERIOD_DAYS,
+        ...(trial ? { trial_period_days: TRIAL_PERIOD_DAYS } : {}),
         metadata: { convexUserId: user._id }
       },
       payment_method_collection: 'always', // card required even during the trial
       allow_promotion_codes: true, // manual free-month campaign codes (Henriko-managed)
+      locale: stripeCheckoutLocale(billingLocale),
+      // The rule the member is agreeing to, two centimetres from the pay button.
+      custom_text: { submit: { message: checkoutSubmitMessage(billingLocale, { trial }) } },
       success_url: `${appUrl}/billing?success=true`,
       cancel_url: `${appUrl}/billing`
     })
@@ -55,6 +76,12 @@ export const createCheckoutSession = action({
         userId: user._id,
         stripeCustomerId: customer.customerId
       })
+    }
+
+    // The member's UI language lives only in a browser cookie; billing emails are sent from the
+    // backend long after this request, so record it here.
+    if (user.language !== billingLocale) {
+      await ctx.runMutation(internal.users.setLanguage, { userId: user._id, language: billingLocale })
     }
 
     return { url: session.url }
@@ -67,5 +94,27 @@ export const endTrialEarly = internalAction({
   args: { stripeSubscriptionId: v.string() },
   handler: async (_ctx, { stripeSubscriptionId }) => {
     await stripe().subscriptions.update(stripeSubscriptionId, { trial_end: 'now' })
+  }
+})
+
+/**
+ * Voids a subscription created while the member already had a live one (the two-tab race the
+ * checkout guard cannot see). The NEWER subscription is the one cancelled, so the member keeps the
+ * plan they already had. Never silent: it raises an in-app notice and sends an email.
+ */
+export const cancelDuplicateSubscription = internalAction({
+  args: { userId: v.id('users'), stripeSubscriptionId: v.string(), tier: v.string() },
+  handler: async (ctx, { userId, stripeSubscriptionId, tier }) => {
+    try {
+      await stripe().subscriptions.cancel(stripeSubscriptionId, { prorate: false, invoice_now: false })
+    } catch (err) {
+      // Already canceled (a Stripe webhook retry re-ran the guard) or a transient Stripe failure.
+      // Either way this run must not notify: the first run did, or the duplicate is still live.
+      console.error('[billing] could not void duplicate subscription', stripeSubscriptionId, scrubError(err))
+      return
+    }
+    console.error('[billing] voided duplicate subscription', scrubError({ stripeSubscriptionId }))
+    await ctx.runMutation(internal.users.setBillingNotice, { userId, notice: 'duplicate_canceled' })
+    await ctx.scheduler.runAfter(0, internal.notifications.sendDuplicateCanceled, { userId, tier })
   }
 })

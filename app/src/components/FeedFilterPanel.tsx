@@ -1,12 +1,12 @@
-import {useState} from 'react'
-import {useMutation} from 'convex/react'
-import {useTranslation} from 'react-i18next'
-import {SlidersHorizontal} from 'lucide-react'
-import {api} from '../convex'
-import {COUNTRY_CODES, countryLabel, INDUSTRIES} from '../../../convex/lib/profileOptions'
-import {ChipMultiSelect} from '@/components/ChipMultiSelect'
-import {Button} from '@/components/ui/button'
-import {friendlyError} from '@/lib/errors'
+import { useState } from 'react'
+import { useMutation } from 'convex/react'
+import { useTranslation } from 'react-i18next'
+import { SlidersHorizontal } from 'lucide-react'
+import { api } from '../convex'
+import { COUNTRY_CODES, countryLabel, INDUSTRIES } from '../../../convex/lib/profileOptions'
+import { ChipMultiSelect } from '@/components/ChipMultiSelect'
+import { Button } from '@/components/ui/button'
+import { friendlyError } from '@/lib/errors'
 
 /**
  * Pro/Contact feed filter. The selected industries/countries are the saved server values (from

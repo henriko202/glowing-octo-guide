@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useAction, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { SUPPORT_EMAIL } from '@/lib/support'
 import { friendlyError } from '@/lib/errors'
+import { formatPriceLabel } from '../../../convex/lib/billingEmails'
+import { resolveBillingLocale } from '../../../convex/lib/checkoutCopy'
 
 const PLAN_IDS = ['starter', 'growth', 'pro'] as const
 
@@ -31,28 +34,65 @@ const PLAN_PRICES: Record<Interval, Record<string, string>> = {
   annual: { starter: '$50/yr', growth: '$150/yr', pro: '$500/yr' }
 }
 
+function isPlanId(p: string | null): p is (typeof PLAN_IDS)[number] {
+  return !!p && (PLAN_IDS as readonly string[]).includes(p)
+}
+
 function getTrialDaysRemaining(trialEndsAt: number | undefined): number {
   if (!trialEndsAt) return 0
   return Math.max(0, Math.ceil((trialEndsAt - Date.now()) / (1000 * 60 * 60 * 24)))
 }
 
 export default function BillingPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
   const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, sessionToken ? { sessionToken } : 'skip')
   const progress = useQuery(api.users.getTrialProgress, sessionToken ? { sessionToken } : 'skip')
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
+  const clearBillingNotice = useMutation(api.users.clearBillingNotice)
   const [portalLoading, setPortalLoading] = useState(false)
   // NB: named setBillingInterval (not setInterval) so it doesn't shadow the global timer API.
   const [billingInterval, setBillingInterval] = useState<Interval>(
     () => (sessionStorage.getItem('chosenInterval') as Interval | null) ?? 'annual'
   )
+  const [searchParams] = useSearchParams()
+  // The visitor already chose a plan on the landing page (carried through OAuth into
+  // sessionStorage by AuthSuccessPage, or passed directly as ?plan=). Re-asking is re-opening a
+  // decision they already made. Growth stays the fallback for anyone arriving cold.
+  const planParam = searchParams.get('plan')
+  const stashedPlan = sessionStorage.getItem('chosenPlan')
+  const chosenPlan = isPlanId(planParam) ? planParam : isPlanId(stashedPlan) ? stashedPlan : null
+  const targetPlan = chosenPlan ?? 'growth'
+  const [showAllPlans, setShowAllPlans] = useState(false)
+
+  // What Stripe will really bill this member, from the price snapshot on their subscription row.
+  // `billingInterval` above is only the plan-grid toggle (browser-local, defaults to 'annual'),
+  // so it must never be the source for a pre-charge amount. Falls back to the toggle if the
+  // webhook row has not caught up yet.
+  const chargedInterval: Interval =
+    subscriptionInfo?.priceInterval === 'month'
+      ? 'monthly'
+      : subscriptionInfo?.priceInterval === 'year'
+        ? 'annual'
+        : billingInterval
+  // The amount itself is Stripe's own, off the same snapshot; the client table is only the fallback
+  // until the webhook row has caught up.
+  const chargedPrice =
+    formatPriceLabel(resolveBillingLocale(i18n.language), {
+      amount: subscriptionInfo?.priceAmount,
+      currency: subscriptionInfo?.priceCurrency,
+      interval: subscriptionInfo?.priceInterval
+    }) ||
+    PLAN_PRICES[chargedInterval][me?.tier ?? 'growth'] ||
+    ''
 
   const isTrialing = me?.subscriptionStatus === 'trialing'
   const trialEndsAt = me?.trialEndsAt
-  // eslint-disable-next-line react-hooks/purity -- intentional: Date.now() used for trial-expiry comparison; stale-by-one-render is acceptable
+  // Date.now() in render is intentional: a trial-expiry comparison that is stale by at most one
+  // render. (react-hooks/purity no longer flags it here, so the disable directive it used to need
+  // was removed — ESLint fails the build on unused directives. Re-add it if the rule fires again.)
   const isTrialExpired = isTrialing && !!trialEndsAt && trialEndsAt <= Date.now()
   const isExpired = me?.subscriptionStatus === 'canceled' || me?.subscriptionStatus === 'none' || isTrialExpired
   // "Ended" = a subscription that actually stopped (canceled or trial ran out). Excludes brand-new users
@@ -60,8 +100,14 @@ export default function BillingPage() {
   const isEnded = me?.subscriptionStatus === 'canceled' || isTrialExpired
   const trialDaysRemaining = isTrialing ? getTrialDaysRemaining(trialEndsAt) : 0
 
-  // A user "has a card" if they are trialing or active — these are the only card-backed states.
-  const hasCard = me?.subscriptionStatus === 'trialing' || me?.subscriptionStatus === 'active'
+  // A "card holder" is anyone Stripe is currently managing: they switch plans in the Customer
+  // Portal, never through a second checkout. 'canceled' is deliberately excluded — a canceled
+  // member re-subscribes through checkout (without a trial, enforced server-side).
+  // NB: keyed on status, not stripeCustomerId — toSafeMe (convex/users.ts) strips that field.
+  const hasCard =
+    me?.subscriptionStatus === 'trialing' ||
+    me?.subscriptionStatus === 'active' ||
+    me?.subscriptionStatus === 'past_due'
 
   // Renewal/access-end date for the Billing Info Card below — undefined for free/trial users
   // (no Stripe subscription row yet), so there's simply nothing to format.
@@ -83,11 +129,29 @@ export default function BillingPage() {
   async function handleUpgrade(priceId: string) {
     try {
       if (!sessionToken) throw new Error(t('auth.notSignedIn'))
-      const result = await createCheckout({ priceId, sessionToken })
-      if (result?.url) window.location.href = result.url
+      const result = await createCheckout({ priceId, sessionToken, locale: i18n.language.slice(0, 2) })
+      if (result?.url) {
+        // Consume the landing's choice so a later visit in this tab does not re-nudge.
+        sessionStorage.removeItem('chosenPlan')
+        sessionStorage.removeItem('chosenInterval')
+        window.location.href = result.url
+      }
     } catch (err: unknown) {
-      toast(t('billing.checkoutFailed', { error: friendlyError(err, String(err)) }))
+      const message = friendlyError(err, String(err))
+      // The server refuses a second live subscription. That is a door, not a failure: open it.
+      if (message.startsWith('ALREADY_SUBSCRIBED')) {
+        toast(t('billing.alreadySubscribed'))
+        await handleManageSubscription()
+        return
+      }
+      toast(t('billing.checkoutFailed', { error: message }))
     }
+  }
+
+  // Card holders switch plans in the portal; everyone else checks out.
+  function handlePlanClick(priceId: string) {
+    if (hasCard) return void handleManageSubscription()
+    return void handleUpgrade(priceId)
   }
 
   async function handleManageSubscription() {
@@ -112,8 +176,9 @@ export default function BillingPage() {
         lead={lead}
       />
 
-      {/* Billing Info Card — shown for active subscribers */}
-      {subscriptionInfo && me?.subscriptionStatus === 'active' && (
+      {/* Billing Info Card — shown to every card holder, so a trialing or past_due member can
+          reach the Customer Portal (and cancel) at all. */}
+      {subscriptionInfo && hasCard && (
         <div className="border-border bg-muted mb-6 rounded-xl border p-5">
           <h2 className="text-foreground mt-0 mb-3 text-base font-bold">{t('billing.subscriptionInfo')}</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -153,10 +218,42 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Trial banner — shown when actively trialing */}
+      {/* A voided duplicate subscription is never silent — see convex/http.ts. */}
+      {me?.billingNotice === 'duplicate_canceled' && (
+        <div className="border-border bg-muted mb-6 flex items-start justify-between gap-3 rounded-xl border p-4 text-sm">
+          <p className="m-0">{t('billing.duplicateCanceledNotice')}</p>
+          <Button
+            variant="outline"
+            className="shrink-0 text-[12px]"
+            onClick={() => sessionToken && void clearBillingNotice({ sessionToken })}
+          >
+            {t('billing.dismiss')}
+          </Button>
+        </div>
+      )}
+
+      {/* Trial banner — accent while there is room, amber-emphasised from 40 of 50 (information,
+          not alarm). There is no `warning` colour token: the Badge `warning` variant resolves to
+          bg-accent/text-accent-foreground, and the emphasis pattern is the gold --primary border
+          already used by ChangeTierModal. */}
       {isTrialing && !isTrialExpired && (
-        <div className="border-border bg-accent text-accent-foreground mb-6 rounded-xl border p-4 text-sm">
-          <p className="m-0">⏳ {t('billing.trialBanner')}</p>
+        <div
+          className={`mb-6 rounded-xl border p-4 text-sm ${
+            progress?.nearThreshold
+              ? 'border-primary bg-accent text-accent-foreground'
+              : 'border-border bg-accent text-accent-foreground'
+          }`}
+        >
+          <p className="m-0">
+            ⏳{' '}
+            {progress?.nearThreshold
+              ? t('billing.nearThresholdBanner', {
+                  remaining: Math.max(0, progress.threshold - progress.combined),
+                  plan: t(`billing.plans.${me?.tier ?? 'growth'}.name`),
+                  price: chargedPrice
+                })
+              : t('billing.trialBanner', { plan: t(`billing.plans.${me?.tier ?? 'growth'}.name`) })}
+          </p>
           {/* X/50 interaction progress meter */}
           {progress != null && (
             <div className="mt-3">
@@ -195,10 +292,14 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* New / no-card users — plan-selection lead (push toward Growth without limiting to it) */}
+      {/* New / no-card users — lead with the decision the visitor already made on the landing page */}
       {!hasCard && (
         <div className="mb-4">
-          <p className="text-foreground text-base font-semibold">{t('billing.newUserLead')}</p>
+          <p className="text-foreground text-base font-semibold">
+            {chosenPlan
+              ? t('billing.chosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`) })
+              : t('billing.newUserLead')}
+          </p>
           <p className="text-muted-foreground mt-1 text-[13px]">{t('billing.newUserTrialNote')}</p>
         </div>
       )}
@@ -219,14 +320,26 @@ export default function BillingPage() {
         </button>
       </div>
 
-      {/* Plan grid — 3 plans + Enterprise, shown to everyone (new, trialing, active) */}
+      {/* Pre-card: one plan, one decision. The full grid (and the Pro/Enterprise anchor that makes
+          Growth look cheap) stays one click away. Card holders always see the grid — a member
+          switching plans needs the comparison. */}
+      {!hasCard && (
+        <button
+          onClick={() => setShowAllPlans(v => !v)}
+          className="text-muted-foreground hover:text-foreground mb-3 text-[13px] underline"
+        >
+          {showAllPlans ? t('billing.hideAllPlans') : t('billing.seeAllPlans')}
+        </button>
+      )}
+
+      {/* Plan grid — Enterprise sits outside the map, so it stays visible in both layouts */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
-        {PLAN_IDS.map(planId => {
+        {(hasCard || showAllPlans ? PLAN_IDS : PLAN_IDS.filter(p => p === targetPlan)).map(planId => {
           // "Current plan" badge only for a card-backed, non-trialing (i.e. active) subscriber on this tier.
           // Guarding on hasCard stops a brand-new user's default tier from being mislabeled as current.
           const isCurrent = hasCard && me?.tier === planId && me?.subscriptionStatus !== 'trialing'
-          // Nudge new / no-card users toward Growth without hiding the other plans.
-          const isRecommended = planId === 'growth' && !hasCard
+          // Nudge new / no-card users toward the plan they chose, without hiding the other plans.
+          const isRecommended = planId === targetPlan && !hasCard
           const priceId = PLAN_PRICE_IDS[billingInterval][planId]
           const showWhatYouLlMiss = isTrialing && planId === 'starter'
           const features = t(`billing.plans.${planId}.features`, { returnObjects: true }) as unknown as string[]
@@ -277,11 +390,13 @@ export default function BillingPage() {
                 </div>
               ) : (
                 <Button
-                  onClick={() => priceId && handleUpgrade(priceId)}
+                  onClick={() => priceId && handlePlanClick(priceId)}
                   disabled={!priceId}
                   className={`mt-auto w-full text-[13px] ${priceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
                 >
-                  {t(`billing.plans.${planId}.cta`)}
+                  {hasCard
+                    ? t('billing.switchPlan', { plan: t(`billing.plans.${planId}.name`) })
+                    : t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`) })}
                 </Button>
               )}
             </div>

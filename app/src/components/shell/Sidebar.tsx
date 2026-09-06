@@ -26,7 +26,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             key={group.labelKey}
             className="mb-2"
           >
-            <p className="text-muted-foreground px-2 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide">
+            <p className="text-muted-foreground px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
               {t(group.labelKey)}
             </p>
             {group.items.map(item => {
@@ -63,7 +63,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           href="https://linkedin.com/sales/ssi"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-gold-text mb-2 flex items-center gap-2 px-3 py-1.5 text-[13px] hover:underline"
+          className="mb-2 flex items-center gap-2 px-3 py-1.5 text-[13px] text-gold-text hover:underline"
         >
           {t('nav.viewSsi')} ↗
         </a>

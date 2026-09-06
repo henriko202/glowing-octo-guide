@@ -90,7 +90,7 @@ export default function PlanLimitsTab({ sessionToken, isAdmin }: Props) {
           <TableRow>
             <TableCell
               colSpan={4}
-              className="bg-muted text-muted-foreground py-1.5 text-[10px] font-semibold uppercase tracking-wide"
+              className="bg-muted text-muted-foreground py-1.5 text-[10px] font-semibold tracking-wide uppercase"
             >
               Contact users
             </TableCell>

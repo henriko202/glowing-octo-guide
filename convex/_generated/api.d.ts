@@ -31,6 +31,8 @@ import type * as lib_apify from "../lib/apify.js";
 import type * as lib_articleValidator from "../lib/articleValidator.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_billingEmails from "../lib/billingEmails.js";
+import type * as lib_checkoutCopy from "../lib/checkoutCopy.js";
 import type * as lib_concurrency from "../lib/concurrency.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_feedRank from "../lib/feedRank.js";
@@ -57,6 +59,7 @@ import type * as linkedin_verifyPostOwnership from "../linkedin/verifyPostOwners
 import type * as migrations_backfillFeedFields from "../migrations/backfillFeedFields.js";
 import type * as migrations_seedPlanLimits from "../migrations/seedPlanLimits.js";
 import type * as motd_motd from "../motd/motd.js";
+import type * as notifications from "../notifications.js";
 import type * as posts from "../posts.js";
 import type * as privacy_consent from "../privacy/consent.js";
 import type * as privacy_deletion from "../privacy/deletion.js";
@@ -99,6 +102,8 @@ declare const fullApi: ApiFromModules<{
   "lib/articleValidator": typeof lib_articleValidator;
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
+  "lib/billingEmails": typeof lib_billingEmails;
+  "lib/checkoutCopy": typeof lib_checkoutCopy;
   "lib/concurrency": typeof lib_concurrency;
   "lib/email": typeof lib_email;
   "lib/feedRank": typeof lib_feedRank;
@@ -125,6 +130,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillFeedFields": typeof migrations_backfillFeedFields;
   "migrations/seedPlanLimits": typeof migrations_seedPlanLimits;
   "motd/motd": typeof motd_motd;
+  notifications: typeof notifications;
   posts: typeof posts;
   "privacy/consent": typeof privacy_consent;
   "privacy/deletion": typeof privacy_deletion;

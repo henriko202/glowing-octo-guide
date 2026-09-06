@@ -98,9 +98,9 @@ one enterprise account currently requires a direct DB edit to that user's
 
 **Trial model (Plan 2B).** New users start at `subscriptionStatus: 'none'` with no app-side trial. The trial begins when
 they add a card via Stripe Checkout, which creates a real subscription in
-`trialing` status for the **tier they pick on the billing plan grid** — every plan card starts the same trial for that
-tier, with **Growth** recommended (`interval` is carried through OAuth via `sessionStorage` to pre-select the
-monthly/annual toggle — see §14). Billing starts at **50 combined interactions (made + received)
+`trialing` status for the **plan the member chose** — the one they picked on the landing site, carried through OAuth as
+`?plan=`/`?interval=` and re-offered as the single primary card on `/billing`, with **Growth** as the fallback for
+anyone arriving cold (see §14). Billing starts at **50 combined interactions (made + received)
 OR 7 days, whichever comes first**: the 7-day side is Stripe's own `trial_period_days`; the 50-interaction milestone
 fires `endTrialEarly` (server-side) to convert the trial immediately. Because the trial is a real Stripe subscription,
 trialing users get the **chosen tier's plan limits naturally** — no tier mapping shim is needed. **Engaging** with
@@ -110,6 +110,12 @@ an engage‑granting `subscriptionStatus ∈ {trialing, active, canceled}`; only
 engaging; instead their own posts stop showing in the feed once their paid period ends (see §Feed). The app-facing UI
 for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C** — shipped; see
 [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
+
+**One trial per account, forever.** `createCheckoutSession` grants `trial_period_days` only to a member who has never
+held a `subscriptions` row, and refuses a second _live_ subscription outright (`ALREADY_SUBSCRIBED` → the Customer
+Portal). A returning subscriber checks out **without** a trial and is billed on day one — stated under the pay button
+before the card, not discovered on the statement. Members are warned before the first charge on both paths (at 40 of 50
+interactions, and 3 days before day 7). See [§8](#8-subscriptions--billing).
 
 ---
 
@@ -348,6 +354,8 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `country`                     | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                              |
 | `location`                    | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                                                                                                                            |
 | `primaryLocale`               | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                                                                                                                         |
+| `language`                    | string                                                 |  –  | UI language the member last checked out in (`'en'`/`'pt'`/`'es'`). Written by `billingNode.createCheckoutSession` via `internal.users.setLanguage`, read by the billing mailers — the UI-language choice otherwise lives only in a browser cookie the backend never sees. Distinct from `primaryLocale`. See [§8](#8-subscriptions--billing).                                                    |
+| `billingNotice`               | string                                                 |  –  | One-shot billing notice key, rendered as a dismissible banner on `/billing` (only `'duplicate_canceled'` today). Set by the duplicate-subscription webhook, cleared by `users.clearBillingNotice`. Absent ⇒ no notice; a voided subscription is never silent.                                                                                                                                    |
 | `commentLanguage`             | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                                                                                                                  |
 | `defaultVisibilityIndustries` | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist copied onto every post this user authors from now on (`posts.visibilityIndustries`, set at insert time — not retroactive). Absent/empty ⇒ new posts are visible to everyone. Set via `users.setPostVisibility` (tier-gated server-side); a downgrade does **not** clear it. See [§11](#11-feed--engagement).                                           |
 | `defaultVisibilityCountries`  | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist copied onto every post this user authors from now on (`posts.visibilityCountries`, set at insert time — not retroactive). Same semantics as `defaultVisibilityIndustries` above.                                                                                                                                                                        |
@@ -428,15 +436,23 @@ table). See
 
 #### `subscriptions` — Stripe subscription mirror
 
-Written/read by `stripe.ts`; read by `users.getSubscriptionInfo`.
+Written by `stripe.ts` (`syncUserSubscription`, driven by the Stripe webhooks); read by `users.getSubscriptionInfo`
+and by the internal readers in `billing.ts` (`listUserSubscriptions`, `getBillingContext`,
+`getUserBySubscriptionId`) that back the checkout guard, the duplicate-subscription guard and the billing mailers
+(see [§8](#8-subscriptions--billing)).
 
-| Field                  | Type                                    | Req | Meaning                                                         |
-|------------------------|-----------------------------------------|:---:|-----------------------------------------------------------------|
-| `userId`               | `id('users')`                           | ✓  | Subscriber.                                                     |
-| `stripeSubscriptionId` | string                                  | ✓  | Stripe sub id (`by_stripe_id`).                                 |
-| `tier`                 | `'starter'\|'growth'\|'pro'\|'contact'` | ✓  | Subscribed tier.                                                |
-| `status`               | string                                  | ✓  | **Free‑form** raw Stripe status (not a constrained union here). |
-| `currentPeriodEnd`     | number                                  |  –  | Period end (ms).                                                |
+| Field                  | Type                                    | Req | Meaning                                                                                                                                                                                                                                                                                        |
+|------------------------|-----------------------------------------|:---:|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `userId`               | `id('users')`                           | ✓  | Subscriber.                                                                                                                                                                                                                                                                                    |
+| `stripeSubscriptionId` | string                                  | ✓  | Stripe sub id (`by_stripe_id`).                                                                                                                                                                                                                                                                |
+| `tier`                 | `'starter'\|'growth'\|'pro'\|'contact'` | ✓  | Subscribed tier.                                                                                                                                                                                                                                                                               |
+| `status`               | string                                  | ✓  | **Free‑form** raw Stripe status (not a constrained union here).                                                                                                                                                                                                                                |
+| `currentPeriodEnd`     | number                                  |  –  | Period end (ms).                                                                                                                                                                                                                                                                               |
+| `priceAmount`          | number                                  |  –  | Price snapshot from the webhook payload (`items.data[0].price.unit_amount`), in **minor units** (e.g. `15000`). Lets a billing email state the exact amount with no second Stripe call and no hardcoded price table that drifts the day pricing changes. Absent ⇒ the email renders no amount. |
+| `priceCurrency`        | string                                  |  –  | ISO 4217, lowercase as Stripe sends it (e.g. `'usd'`).                                                                                                                                                                                                                                         |
+| `priceInterval`        | string                                  |  –  | `'month'` or `'year'`, from `price.recurring.interval`.                                                                                                                                                                                                                                        |
+| `cancelAtPeriodEnd`    | boolean                                 |  –  | Mirrors Stripe's `cancel_at_period_end`. **Stripe keeps `status: 'trialing'` after a member cancels mid-trial**, so this is the only signal that tells the trial mailers not to promise a charge that will never happen (see [§8](#8-subscriptions--billing)).                                 |
+| `stripeCreated`        | number                                  |  –  | Stripe's own `created` (ms). The duplicate-subscription guard voids the **newest** live row by this stamp, never by webhook arrival order, which Stripe does not guarantee (see [§8](#8-subscriptions--billing)). Absent on a row ⇒ it counts as the oldest and is never the one voided.       |
 
 Indexes: `by_user [userId]`, `by_stripe_id [stripeSubscriptionId]`.
 
@@ -927,24 +943,57 @@ sync**; `billing.ts` retains only
 
 Key checkout parameters:
 
-- `trial_period_days: 7` — 7-day trial on every new subscription.
+- `trial_period_days: 7` — **conditional**, not unconditional: set only when `trialEligible(rows.length)`
+  (`lib/trialMilestone.ts`) is true, i.e. the member has never held a subscription row. See "One live subscription, one
+  trial" below.
 - `payment_method_collection: 'always'` — card required even during the trial (no free-ride signups).
 - `allow_promotion_codes: true` — enables Henriko's manual free-month promotion-code campaign on Stripe hosted checkout.
   No coupons are created or auto-applied in code.
+- `locale: stripeCheckoutLocale(billingLocale)` (`lib/checkoutCopy.ts`) — the hosted page renders in the member's own
+  language. Stripe's codes are not ours: our `pt` maps onto Stripe's `pt-BR`.
+- `custom_text.submit.message: checkoutSubmitMessage(billingLocale, { trial })` — the early-charge rule, stated under
+  the pay button, **before** the card. Two deterministic variants (trial / no trial) × three languages, pure and
+  unit-tested. Never "may end early" — the rule is a fact, not a hedge — and Stripe caps the field at 1200 characters.
+
+#### One live subscription, one trial
+
+Two pure guards run before the session is created, both reading `internal.billing.listUserSubscriptions` (every
+`subscriptions` row the member has ever had — bounded: at most one row per subscription they have ever held):
+
+- **`findLiveSubscription(rows)`** — if any row is `trialing`, `active` or `past_due`, the action throws
+  `ConvexError('ALREADY_SUBSCRIBED: You already have a plan. Manage it from the billing portal.')` rather than creating
+  a second Stripe subscription. `canceled` is deliberately **not** a live status: a canceled member re-subscribes
+  through checkout. The client branches on the prefix (the `PREFIX: sentence` convention of `lib/access.ts`) and opens
+  the **Customer Portal** instead — a card holder who wants another plan switches there, never through a second
+  checkout. The blocked path is a door, not an accusation: no "trial abuse" copy, no warning, no penalty state.
+- **`trialEligible(rows.length)`** — the trial is granted only to a member with **no subscription row, ever**. It is
+  keyed on the row **count**, not on `users.trialEndsAt`, because `syncUserSubscription` overwrites `trialEndsAt` with
+  `undefined` for a non-trial subscription: a marker that erases itself would hand a returning member a second free
+  trial. A returning subscriber is billed on day one and is told so in `custom_text` before entering the card, never
+  discovered on the statement.
+
+**Language.** `createCheckoutSession` takes an optional `locale` argument (the app passes `i18n.language`) and persists
+the resolved value to `users.language` through `internal.users.setLanguage`. The member's UI language otherwise lives
+only in a browser cookie the backend never sees, and the billing mailers run hours or days later. Resolution order for
+every billing notice is `resolveBillingLocale(users.language, users.primaryLocale)`, falling back to `'en'`; regional
+and mis-cased tags (`pt-BR`, `ES`) normalize, unsupported ones fall through to the next candidate.
 
 ```mermaid
 sequenceDiagram
     participant A as App (BillingPage)
     participant B as billingNode.createCheckoutSession (node action)
-    participant SC as Stripe component
     participant DB as Convex DB
+    participant SC as Stripe component
     participant S as Stripe Checkout
-    A ->> B: createCheckoutSession(priceId, sessionToken)
+    A ->> B: createCheckoutSession(priceId, sessionToken, locale)
     B ->> B: validate priceId ∈ ALLOWED_PRICE_IDS
     B ->> B: requireAuthAction(sessionToken)
+    B ->> DB: internal.billing.listUserSubscriptions(userId)
+    B -->> A: findLiveSubscription? → ConvexError ALREADY_SUBSCRIBED (client opens the portal)
+    B ->> B: trial = trialEligible(rows.length); billingLocale = resolveBillingLocale(...)
     B ->> SC: getOrCreateCustomer(userId, email, name)
-    B ->> S: stripe().checkout.sessions.create(trial=7d, card-required, promo-codes)
-    B ->> DB: setStripeCustomerId(userId) (if not already set)
+    B ->> S: checkout.sessions.create(trial? 7d, card-required, promo-codes, locale, custom_text)
+    B ->> DB: setStripeCustomerId (if unset) + users.setLanguage (if changed)
     B -->> A: { url }
     A ->> S: window.location = url
 ```
@@ -973,16 +1022,73 @@ reads back as a past/`now` timestamp on the next sync). The UI's `status === 'tr
 value of `trialEndsAt` itself — decides when the countdown is shown, so a stale past `trialEndsAt` left over after
 conversion to `active` never misrenders.
 
+**Which subscription the early end targets.** `bumpTrialInteraction` reads **all** of the member's `subscriptions` rows
+(`.collect()`) and selects with the pure `pickTrialingSubscription`. It must never use `.first()` on the `by_user`
+index: Convex appends `_creationTime` to every index, so `.first()` returns the **oldest** row — after a cancel and
+re-subscribe that is the _canceled_ subscription, and calling `endTrialEarly` on it is a silent no-op. Harmless while
+every member had exactly one row; a real bug the moment the guard above deliberately permits a second one.
+
+### Trial notifications
+
+Two trial-end paths exist, and they must never both warn about the same event:
+
+- **50 interactions** — `endTrialEarly` sets `trial_end: 'now'`, so Stripe emits **no** `trial_will_end`. Ours is the
+  only warning, and it fires earlier, at **40 of 50** (`TRIAL_WARNING_THRESHOLD`, 80% of the threshold), scheduled from
+  `bumpTrialInteraction` through the same `crossesThreshold` helper — so it fires exactly once per member.
+- **7 elapsed days** — Stripe emits `customer.subscription.trial_will_end` three days ahead; `http.ts` schedules
+  `internal.notifications.sendTrialEnding`. Stripe's own built-in trial-ending email stays **OFF** in the Dashboard (see
+  "Stripe Dashboard setup" below), so exactly one warning reaches the member.
+
+| Event                              | Channel                                         | Sender                                                |
+|------------------------------------|-------------------------------------------------|-------------------------------------------------------|
+| 40 of 50 combined interactions     | Email + emphasised in-app banner on `/billing`  | Ours — `internal.notifications.sendTrialNearEnd`      |
+| 3 days before the 7-day trial ends | Email                                           | Ours — `internal.notifications.sendTrialEnding`       |
+| First successful charge            | Email receipt                                   | **Stripe** (Dashboard setting, kept ON)               |
+| Duplicate subscription voided      | Email + dismissible in-app notice on `/billing` | Ours — `internal.notifications.sendDuplicateCanceled` |
+
+`convex/notifications.ts` is I/O only. Every string comes from the pure `lib/billingEmails.ts` — three builders
+(`trialNearEndEmail`, `trialEndingEmail`, `duplicateSubscriptionCanceledEmail`) plus `formatPriceLabel`, the `INTL_TAG`
+map and `planName(locale, tier)` — and every branch from `lib/trialMilestone.ts`, so the copy and the rules are
+unit-tested without a database. **Plan names are localized:** `planName` mirrors `billing.plans.*.name` in the app
+locales (only the enterprise tier differs — Enterprise / Empresa / Empresa), so a raw tier id never reaches a member and
+an English plan name never lands inside a Portuguese email. `sendDuplicateCanceled` therefore takes a **tier id**, not a
+rendered plan name: `http.ts` deals in tier ids and the mailer localizes, so display copy never passes through the
+webhook layer.
+
+Each mailer **re-reads state before sending** and skips when the member is no longer `trialing` — and, critically, when
+the row's `cancelAtPeriodEnd` is set. **Stripe keeps `status: 'trialing'` after a member cancels mid-trial**, so that
+flag is the only signal that no charge is coming; both trial mailers check it, so we never promise a charge that will
+not happen. A member who already cancelled receives nothing.
+
+**The amount is Stripe's own.** No backend module knows a plan's price — `lib/stripePrices.ts` maps price id → tier and
+nothing else, and the `$150/yr` strings live on the client. Rather than duplicate a price table that drifts the day
+pricing changes, both subscription webhooks persist `items.data[0].price`'s `unit_amount`, `currency` and
+`recurring.interval` onto the `subscriptions` row (`priceAmount` / `priceCurrency` / `priceInterval`), and
+`formatPriceLabel` renders them with `Intl.NumberFormat` in the member's locale. A missing snapshot degrades to an empty
+label, never to a wrong number.
+
+`sendEmail` (`lib/email.ts`) no-ops when `RESEND_API_KEY` / `EMAIL_FROM` are unset. For a privacy flow that is a
+convenience; for a pre-charge notice it is a compliance hole, so `notifications.deliver` logs
+`console.error('[billing] notification skipped — email not configured', scrubError(…))`, which surfaces in
+`pnpm watch:errors` and the Convex dashboard. If Resend returns a non-2xx, `sendEmail` throws and the scheduled action
+fails loudly; there is no retry loop, because the in-app banner is the durable channel.
+
+**Erasure resets the trial.** A member who deletes their account ([§13B](#13b-privacy--compliance)) and signs in again
+is a **new** `users` row with a new Stripe customer and no `subscriptions` rows, so `trialEligible` grants a fresh
+7-day trial. This is accepted deliberately: the alternative — retaining an identifier of an erased person purely to deny
+them a future trial — would sit badly against the erasure right the same section implements.
+
 ### Webhook‑driven subscription sync
 
 `http.ts` registers handlers for these Stripe events, each delegating to an internal mutation in
 `stripe.ts`:
 
-| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). |
-| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`; set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this). Downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                        |
-| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears.                                                                                                                                                                                                                                                                                                                                                                |
+| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), persist the **price snapshot** (`unit_amount` / `currency` / `recurring.interval` off `items.data[0].price`) and `cancelAtPeriodEnd`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). Also persists `stripeCreated`, **refuses a stale replay** (a live status for a row already `canceled` — Stripe retries on any non-2xx), and when **another row defines the member** (this row is the duplicate, or this is a non-live event while they still hold a live row) leaves the user doc alone. Returns the **duplicate to void**, which only the `created` handler acts on (below). |
+| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`. If the member **still holds a live row** (the voided duplicate's own `deleted`, or a period-end cancel landing after a re-subscribe) their `tier` / `subscriptionStatus` / `subscriptionEndsAt` follow that row — nothing is downgraded. Otherwise set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this), downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `customer.subscription.trial_will_end`      | Schedules `internal.notifications.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ```mermaid
 flowchart TD
@@ -990,19 +1096,67 @@ flowchart TD
     T -->|created/updated| SYNC["syncUserSubscription"]
     SYNC --> P1["patch user: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
     SYNC --> P2["re-stamp authorTierRank on all posts"]
-    SYNC --> P3["upsert subscriptions row"]
+    SYNC --> P3["upsert subscriptions row (+ price snapshot, cancelAtPeriodEnd, stripeCreated)"]
     SYNC --> ACT{"status == active?"}
     ACT -->|yes| U1["un-hide author's hidden posts"]
     ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
     G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
     G -->|no| NOOP["no-op (Apify dormant at launch)"]
-    T -->|deleted| CAN["cancelUserSubscription → tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
+    T -->|created| DUP{"sync returned a duplicate (2 live rows; newest by Stripe created)?"}
+    DUP -->|yes| CDS["scheduler → cancelDuplicateSubscription (void the NEWER one)"]
+    DUP -->|no| OK["nothing to do"]
+    T -->|trial_will_end| TWE["scheduler → notifications.sendTrialEnding (day-7 reminder)"]
+    T -->|deleted| CAN["cancelUserSubscription → follow the surviving live row if any, else tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
     T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement)"]
 ```
 
 > **Apify dormant guard:** `syncUserSubscription` reads `appSettings` and checks
 > `isApifyPostSyncEnabled(settings)` (from `lib/apify.ts`) before scheduling any Apify sync.
 > Apify is dormant at launch (compliance gate); billing alone cannot re‑enable it.
+
+### Duplicate-subscription race
+
+The checkout guard runs when the session is **created**; it cannot see a second checkout completed in another tab
+between that check and Stripe confirming payment. `syncUserSubscription` closes that window **inside its own
+transaction**: after upserting the row it collects the member's rows and, when two are live, `findDuplicateSubscription`
+names the **newest by Stripe's own `created`** (persisted as `subscriptions.stripeCreated`) — never by webhook arrival
+order, which Stripe does not guarantee. Deciding in the transaction is what makes it safe: two concurrent `created`
+syncs conflict on the user doc (OCC), so exactly one of them sees both rows and exactly one cancel is scheduled. The
+mutation returns `{ userId, stripeSubscriptionId, keepTier }`, and only the `customer.subscription.created` handler
+acts on it (Stripe emits `updated` for the duplicate right after `created`; acting there too would void and notify
+twice), scheduling `internal.billingNode.cancelDuplicateSubscription`. The member keeps the plan they already had: their
+user doc never follows the duplicate, and the duplicate's own `customer.subscription.deleted` re-derives their state
+from
+the surviving row (table above):
+
+- `stripe.subscriptions.cancel(id, { prorate: false, invoice_now: false })` — no proration credit and no immediate
+  invoice; financially the duplicate never existed.
+- `internal.users.setBillingNotice(userId, 'duplicate_canceled')` — raises the dismissible banner on `/billing`
+  (`users.billingNotice`; cleared by `users.clearBillingNotice`).
+- `internal.notifications.sendDuplicateCanceled({ userId, tier })` — the email, in the member's language.
+
+A voided subscription is **never silent**: the member is told in-app **and** by email, in the same pass that cancels it.
+
+A Stripe **retry** of the duplicate's `created` (after a non-2xx) is harmless: once the row is `canceled`,
+`syncUserSubscription` ignores any live status for it (a canceled Stripe subscription never comes back), and if the
+retry lands before the `deleted` event, `cancelDuplicateSubscription` catches Stripe's already-canceled error and
+returns without a second notice.
+
+```mermaid
+flowchart TD
+    E["customer.subscription.created"] --> SY["syncUserSubscription (one transaction)"]
+    SY --> UP["upsert row (+ stripeCreated)"]
+    UP --> ROWS["collect the member's rows"]
+    ROWS --> Q{"findDuplicateSubscription: 2+ live rows?"}
+    Q -->|no| USER["user doc follows this row"] --> DONE["done"]
+    Q -->|yes, this row is the newest| SKIP["user doc untouched (the kept row defines the member)"] --> RET
+    Q -->|yes, another row is newer| USER2["user doc follows this row"] --> RET["return { userId, duplicate id, keepTier }"]
+    RET --> CDS["created handler: scheduler → billingNode.cancelDuplicateSubscription"]
+    CDS --> C1["stripe.subscriptions.cancel(prorate:false, invoice_now:false)"]
+    CDS --> C2["users.setBillingNotice('duplicate_canceled')"]
+    CDS --> C3["notifications.sendDuplicateCanceled(userId, keepTier)"]
+    C1 --> DEL["customer.subscription.deleted → cancelUserSubscription follows the surviving live row"]
+```
 
 ### Status semantics
 
@@ -1030,6 +1184,30 @@ was persisted but never read back anywhere. `getSubscriptionInfo` (`convex/users
 there's no non-canceled Stripe subscription at all (never subscribed, or fully canceled) or, transiently, if our own
 `subscriptions` row hasn't yet caught up with a brand-new webhook sync — the UI renders nothing for this line in either
 case.
+
+### Stripe Dashboard setup
+
+> **Status (2026-09-06): not yet applied** in test or live mode. Every row below is an open manual step.
+
+None of the following is configurable from code, and **all of it must be applied twice — once in test mode and again in
+live mode**. Two of Stripe's defaults are actively wrong for this product (the built-in trial-ending email, which would
+double up with ours, and downgrade proration), so treat this as required setup rather than preference.
+
+| Setting                | Where (Stripe Dashboard)                               | Value                                                                                                                           | Why                                                                                                                                                                                         |
+|------------------------|--------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Plan switching         | Billing → Customer portal → products/prices            | All **three products** and **six prices** (monthly + annual) listed as switchable                                               | A card holder switches plans in the portal; `createCheckoutSession` refuses a second subscription (`ALREADY_SUBSCRIBED`), so a price missing from the portal is a dead end for that member. |
+| Payment-method updates | Billing → Customer portal                              | Allowed                                                                                                                         | The only route a `past_due` member has to fix a failed card and clear the engagement gate.                                                                                                  |
+| Cancellation           | Billing → Customer portal                              | Allowed                                                                                                                         | The cancel path that the checkout copy, the Terms and every billing email point at has to actually exist. No roach motel.                                                                   |
+| Proration              | Billing → Customer portal → subscription updates       | **Upgrade: immediate, with proration. Downgrade: at period end.**                                                               | Decision D7 of the design spec, and consistent with the no-refund policy: a downgrade never issues a credit.                                                                                |
+| Trial-ending email     | Settings → Billing → automatic customer emails         | **OFF**                                                                                                                         | Ours handles it (`sendTrialEnding`, above). Both enabled = two warnings for one event.                                                                                                      |
+| Payment receipt        | Settings → Billing → automatic customer emails         | **ON**                                                                                                                          | The receipt for the first charge is Stripe's job; we send no receipt of our own.                                                                                                            |
+| Webhook events         | Developers → Webhooks → `<convex site>/stripe/webhook` | `customer.subscription.created` / `.updated` / `.deleted`, **`customer.subscription.trial_will_end`**, `invoice.payment_failed` | `trial_will_end` is new — without it subscribed, the day-7 reminder never fires and the 7-day path charges unannounced.                                                                     |
+
+**Manual check after any of the above changes (test mode).** Switch a plan **during a trial** and confirm two things
+survive: Stripe preserves `trial_end` across the price change (the trial is neither restarted nor dropped), and the
+`customer.subscription.updated` handler re-derives the tier through `getTierFromPriceId`. Separately, confirm **Resend
+has a verified sending domain** in production before launch — without it every billing notice no-ops (loudly logged,
+but not delivered).
 
 ---
 
@@ -2034,6 +2212,16 @@ flowchart TD
 - **Transactional email.** `lib/email.ts` wraps Resend via `sendEmail` and **no‑ops when
   `RESEND_API_KEY`/`EMAIL_FROM` are unset**, so privacy flows never fail merely because email is not configured.
   See [§16](#16-environment-variables).
+- **Transactional billing email.** Three billing notices are sent to `users.email` — trial near-end (40 of 50), trial
+  ending (3 days before day 7), and duplicate-subscription cancelled — all built in `convex/lib/billingEmails.ts` and
+  delivered by `convex/notifications.ts` (see [§8](#8-subscriptions--billing)). Legal basis: **performance of a
+  contract** (and, for the pre-charge reminders, the card-network trial rules that require the amount, the date and the
+  cancellation route to be stated before the first charge) — **not** consent, and **not** marketing. They are therefore
+  **not** gated on the `marketing` consent purpose and a member cannot opt out of them while holding a subscription;
+  the copy is unit-tested to carry no promotional verbs and no urgency (`convex/lib/billingEmails.test.ts`). New
+  personal data: **none beyond what already exists** — `users.language` records a UI-language choice so the notice is
+  written in the member's own language, and the price snapshot on `subscriptions` is contract data returned by Stripe.
+  Delivery is not written to `auditLogs`; a skipped send (email not configured) is logged as a backend error instead.
 - **Apify stays disabled at launch.** The LinkedIn scrape (post sync + profile enrichment) remains **off in production**
   (kill‑switches in `appSettings`; `APIFY_*` env vars unset). It is therefore **not** disclosed as a processing
   activity. **Hard gate:** the day Apify is switched on in production, the privacy‑policy disclosure, the legal basis,
@@ -2384,34 +2572,47 @@ sync with the compliance docs and live support inbox.
   model). Starter/growth see the existing upgrade prompt. Below it, Pro/contact also see a mirror **"What you see in
   your feed"** card — same two chip pickers + Save, writing `feedFilterIndustries`/`feedFilterCountries` via
   `setFeedFilter` (the same fields the Feed-page `FeedFilterPanel` writes, so the two stay in sync).
-- **BillingPage** — `getMe` + `getSubscriptionInfo` + `createCheckoutSession` + `createPortalSession`
-    + `api.users.getTrialProgress` (see §11 — query returns `{ made, received, combined, threshold,
-  reached, status, trialEndsAt }`). Layout varies by subscription state:
+- **BillingPage** — `getMe` + `getSubscriptionInfo` + `getTrialProgress` + `createCheckoutSession` +
+  `createPortalSession` + `users.clearBillingNotice`. `getTrialProgress` returns
+  `{ made, received, combined, threshold, reached, nearThreshold, status, trialEndsAt }` (see §8/§11).
 
-  The **three-tier plan grid + Enterprise card is shown in every state** — no-card users are pushed toward Growth, not
-  limited to it. Every plan card's CTA routes through `createCheckoutSession`, which applies the same card-required
-  7-day trial to any valid price (the trial is plan-agnostic at the backend), so there is no separate
-  "start trial" gate. Each plan card lists that tier's `features` as a ✓ bullet list (copy mirrored from the landing
-  Pricing section's i18n, `billing.plans.<id>.features` in `app/src/i18n/locales/*`). The monthly/annual toggle applies
-  in all states. Checkout/portal-session failures surface via the app's `toast()` helper (`billing.checkoutFailed` /
-  `billing.portalFailed`) rather than a native `alert()` ([[B18]]).
-
-    - **No-card** (`none`/`canceled`/`past_due`): the plan grid is shown under a lead — **"Select a plan below — Growth
-      is the best bang for your buck."** + a "every plan starts with a free 7-day trial · cancel anytime" note. The
-      **Growth** card carries a **"Recommended"** badge and a highlighted border. No card is marked "current". The red
-      **"Your subscription has ended"** banner is shown only for genuinely ended subscriptions (`canceled` or a trial
-      that ran out) — brand-new users (`none`) never see it.
-    - **Trialing** (`trialing`): the trial banner shows an **X / 50 interactions** progress meter (`progress.combined` /
-      `progress.threshold`, with a simple bar), the "or 7 days" secondary count-down (`trialEndsAt`), and a **"View your
-      SSI on LinkedIn" ↗** link-out (`https://linkedin.com/sales/ssi`, new tab). When the user acts on the **Starter**
-      card, an inline "what you'll miss" block lists Growth advantages (industry-filtered feed, 50 vs 25
-      interactions/post, 2 vs 1 posts/week).
-    - **Active**: the current tier's card shows a "Current plan" badge; "Manage Subscription" → Stripe portal. When
-      `getSubscriptionInfo.currentPeriodEnd` is present, a date line renders alongside — "Renews on {date}"
-      normally, or "Access until {date}" (in the destructive color) when `cancelAtPeriodEnd` is set ([[B21]]; see §8
-      "Renewal / access-end date").
-        - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
-          `SUPPORT_EMAIL` constant).
+    - **Card holder vs pre-card.** `hasCard` is `subscriptionStatus ∈ {trialing, active, past_due}` — **not**
+      `stripeCustomerId`, which `toSafeMe` strips before the client ever sees it (and which a member who abandoned a
+      checkout would hold anyway, with nothing for the portal to show). A card holder's plan CTAs read
+      "Switch to {{plan}}" and open the **Customer Portal**; everyone else goes to checkout. `canceled` is deliberately
+      **not** a card holder — they re-subscribe through checkout, without a trial, enforced server-side (§8). The
+      billing-info card and the **Manage Subscription** button now render for all three card-holder statuses, so a
+      trialing or `past_due` member can actually reach the portal; previously only `active` could.
+    - **`ALREADY_SUBSCRIBED`.** When the server refuses a second live subscription (§8), `handleUpgrade` toasts
+      `billing.alreadySubscribed` and opens the portal. The member sees a door, never the error prefix.
+    - **The plan the visitor chose.** `targetPlan` resolves `?plan=` → `sessionStorage.chosenPlan` (stashed by
+      `AuthSuccessPage` out of the OAuth hash) → `'growth'`, each candidate validated against `PLAN_IDS`. A pre-card
+      member sees **one primary card** for that plan with a **"See all plans"** toggle that reveals the full grid; card
+      holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead` when
+      the plan came from the URL or the stash and `billing.newUserLead` otherwise, and every pre-card CTA follows the
+      same "Start 7-day {{plan}} trial" pattern. `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
+      a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle (annual
+      default) and the Enterprise card stay visible in every layout.
+    - **Trial banner, tier-aware.** `billing.trialBanner` interpolates the member's **real** plan name
+      (`billing.plans.<tier>.name`) instead of hard-coding Growth, above the X/50 progress meter, the day count and the
+      SSI link-out. From 40 of 50 (`progress.nearThreshold`, §8) it swaps to `billing.nearThresholdBanner` —
+      "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour token
+      in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
+      text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses (the `Badge` `warning` variant
+      itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system).
+    - **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible notice renders
+      above the plans; **Dismiss** calls `users.clearBillingNotice`.
+    - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely ended
+      subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing block still
+      appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own tier; the
+      "Renews on {date}" / "Access until {date}" line still comes from `getSubscriptionInfo.currentPeriodEnd`
+      ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
+      (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
+    - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
+      `SUPPORT_EMAIL` constant).
+    - Covered by `app/src/pages/BillingPage.test.tsx` (17 tests: plan-click routing, `ALREADY_SUBSCRIBED` → portal,
+      Manage-button visibility, chosen-plan resolution order, the near-threshold swap, the charged interval and
+      Stripe-snapshot amount, the duplicate notice).
 - **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
   `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
   directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
@@ -2555,8 +2756,9 @@ styling; it is always visible regardless of gate state. SSI is a link-out only �
 #### BillingPage — trial progress, chosen-tier CTA, downgrade prompt
 
 See the **BillingPage** bullet in the Pages section above for the full state-dependent layout. Backend query:
-`api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s session-resolution pattern; returns `{ made, received, combined, threshold, reached, status,
-trialEndsAt }`). Cross-reference: §8 (subscription state machine) and §9 (plan limits).
+`api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s session-resolution pattern; returns
+`{ made, received, combined, threshold, reached, nearThreshold, status, trialEndsAt }`). Cross-reference: §8
+(subscription state machine) and §9 (plan limits).
 
 The date-countdown half of the trial UI is now **live**: `trialEndsAt` is populated from Stripe (see §8), so
 `getTrialDaysRemaining(trialEndsAt)` and `isTrialExpired` on `BillingPage` render real values instead of always `0`/
@@ -2638,6 +2840,17 @@ locale
 and therefore also proves the `en` fallback that the old `login.title` probe (identical in all three files) could not.
 Deleted from `en.json`/`pt.json`/`es.json`; the three files stay structurally identical (246 leaf keys each, recursive
 key-diff).
+
+**Trial-correctness keys (2026-09-06):** the BillingPage rework added **nine** `billing.*` keys — `switchPlan`,
+`startTrialCta`, `seeAllPlans`, `hideAllPlans`, `chosenPlanLead`, `alreadySubscribed`, `nearThresholdBanner`,
+`duplicateCanceledNotice`, `dismiss` — and `billing.trialBanner` gained a `{{plan}}` interpolation so the banner names
+the member's real tier instead of hard-coding Growth. Three dead keys went the other way:
+`billing.plans.{starter,growth,pro}.cta` were never read (the CTA label is now derived from `switchPlan` /
+`startTrialCta`), so they were deleted; `billing.plans.contact.cta` stays, because the Enterprise card still uses it.
+Net **252 leaf keys** per file, still verified by recursive key-diff — there is still no automated parity test. The
+outbound **billing emails are not i18n keys**: they are built server-side in `convex/lib/billingEmails.ts`, which keeps
+its own three-language copy (including localized plan names) because Convex actions have no access to the browser's
+i18next instance — see [§8](#8-subscriptions--billing).
 
 ---
 
@@ -2789,6 +3002,20 @@ locale — the only related copy is an inline "drafted and inserted by qualified
 liability section (not a rendered banner; cross-ref [[B29]]). All three locales remain **drafts pending legal review**
 as an internal status — translation does not constitute legal sign-off.
 
+### Free-trial clause (Terms §5)
+
+All three locale modules of `/terms` now state the trial explicitly inside the existing "Subscriptions & Billing"
+section: a **7-day free trial** on a new account, a **payment method required to start it**, billing beginning at **50
+interactions (made plus received) or 7 days, whichever comes first**, an **email before the first charge**,
+cancellation at any time before the trial ends from the Subscription page, and **one free trial per account** — a
+repeat subscription is billed immediately, which is also stated at checkout. The same paragraph corrects the billing
+basis from "monthly" to **"monthly or annually, according to the plan and interval you choose"**, which is what the six
+Stripe prices have actually offered since the annual interval shipped.
+
+The wording deliberately matches the Stripe `custom_text` under the pay button and the billing emails
+([§8](#8-subscriptions--billing)) — one rule, three surfaces, no drift. Like the rest of the legal pages it remains a
+**draft pending legal review**.
+
 ### CookieNotice (Phase 3b)
 
 `CookieNotice` is a **client component** rendered in `landing/app/[lang]/layout.tsx`. It displays a dismissible
@@ -2822,6 +3049,13 @@ Every conversion CTA (Nav "Start free", Hero, Pricing, FinalCTA) is a plain `<a>
 a previously‑signed‑out visitor — whom the app bounces back to this site (§7) — actually log in instead of ping‑ponging.
 Internal nav (logo, footer, section anchors,
 `/pricing`) uses Next `<Link>`.
+
+The `?plan=…&interval=…` parameters those hrefs carry (`Nav`, `Hero`, `FinalCTA` pin Growth/annual; each `Pricing` card
+passes its own tier and the visitor's toggle) are **no longer decorative**. The OAuth callback forwards them into the
+app's `#session=…&plan=…&interval=…` hash, `AuthSuccessPage` stashes them in `sessionStorage`, and `BillingPage` now
+resolves its single primary plan card from `?plan=` → `sessionStorage.chosenPlan` → Growth (see
+[§14](#14-frontend--authenticated-app-app)). A visitor who picked Pro on the Pricing table is offered Pro, not Growth —
+the decision they already made is not re-opened.
 
 ### Styling
 
@@ -3150,6 +3384,13 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   `no-console` off in `convex/`. Ignores `_generated`, `convex-mocks`, config files, agent dirs.
 - **Prettier:** no semicolons, single quotes, `arrowParens: avoid`, no trailing commas, 120 cols,
   `singleAttributePerLine`, `prettier-plugin-tailwindcss`.
+- **What Prettier owns:** code and config only. `.prettierignore` excludes all hand-written prose (`docs/`, `plans/`,
+  `README.md`, `AGENTS.md`, `CLAUDE.md`) plus generated and build output (`convex/_generated`, `landing/.open-next/`,
+  `dist`, `.next`, `pnpm-lock.yaml`). Prose is excluded
+  because its Markdown tables are aligned for the **display width** of `✓ ✗ —`, which Prettier re-pads
+  by codepoint count and thereby misaligns; `docs/PLATFORM.md`'s tables are the reason the rule exists.
+  Do not delete these entries to "fix" `format:check` — reformatting prose is the bug, not the fix.
+  Prettier does not read `.gitignore`, so gitignored build output must be listed here as well.
 - **TS base** (`tsconfig.base.json`): `strict`, `ES2020`, `moduleResolution: bundler`. App builds gate on `tsc`; Vite
   runs an in‑dev type‑check overlay (`vite-plugin-checker`).
 
@@ -3255,7 +3496,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 |-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
 | `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                                            |
 | Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                               |
-| Billing/Stripe (`billing.ts`, `stripe.ts`, `http.ts` webhooks, tiers)                                                                                                                                                                                       | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
+| Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                         | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
 | Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                              |
 | Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                            |
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                    |
@@ -3277,7 +3518,33 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑08‑31. Migrated per‑user rate limiting to the **`@convex-dev/rate-limiter`** component. The former
+_Last updated: 2026‑09‑06. **Trial correctness (R01–R03).** The 7‑day card‑required trial is now consumable exactly once
+per member, the early‑charge rule is disclosed everywhere the member can meet it, and the plan chosen on the landing
+site is honoured. `createCheckoutSession` reads every `subscriptions` row and refuses a second live one
+(`ALREADY_SUBSCRIBED` → the Customer Portal), makes `trial_period_days` conditional on `trialEligible(rowCount)`, and
+adds `locale` + `custom_text.submit.message` (pure `lib/checkoutCopy.ts`, three languages) plus `users.language`
+persistence. `bumpTrialInteraction` swapped `.first()` (the OLDEST row — a canceled one after a re‑subscribe) for
+`.collect()` + `pickTrialingSubscription`, and now schedules a 40‑of‑50 notice. New `convex/notifications.ts` (I/O only)
+sends three transactional notices built by the pure `lib/billingEmails.ts` with **localized plan names**; both trial
+mailers skip when `subscriptions.cancelAtPeriodEnd` is set, because Stripe keeps `status: 'trialing'` after a mid‑trial
+cancel. `http.ts` gained the price‑snapshot + `cancelAtPeriodEnd` passthrough, duplicate detection on
+`customer.subscription.created` (voids the **newer** subscription with `prorate: false`, plus an in‑app notice and an
+email) and a `customer.subscription.trial_will_end` handler. Schema: `users.language`, `users.billingNotice`,
+`subscriptions.priceAmount`/`priceCurrency`/`priceInterval`/`cancelAtPeriodEnd`. `BillingPage` routes card holders
+(`trialing | active | past_due`) to the Customer Portal, shows one primary plan card (`?plan=` →
+`sessionStorage.chosenPlan` → Growth) behind a "See all plans" toggle, interpolates the real tier into the trial banner,
+and emphasises the 40‑of‑50 state with the gold `border-primary bg-accent` pattern (**there is no `warning` colour token
+in this design system**). App locales are 252 keys in parity (the three dead `billing.plans.{starter,growth,pro}.cta`
+keys were dropped); the Terms §5 free‑trial clause landed in en/pt/es and the billing basis was corrected to "monthly or
+annually". Sections updated: §1, §5 (users + subscriptions), §8 (checkout guard, trial‑notification table,
+duplicate‑subscription race, **new Stripe Dashboard setup** subsection), §13B, §14, §15, §21. **Same‑day code review (
+RCD lens)** then moved the duplicate decision **inside `syncUserSubscription`'s transaction** (newest by the new
+`subscriptions.stripeCreated`, never by webhook arrival; the duplicate's own row never defines the user doc; a stale
+live event for a `canceled` row is ignored; only the `created` handler acts on the returned duplicate),
+`cancelUserSubscription` now follows any surviving live row instead of downgrading blindly, and the near‑threshold
+banner + trial‑ending email quote Stripe's own price snapshot and the 50‑or‑7‑days rule. Gates green (convex 381/381,
+app 244/244; prettier + lint + typecheck clean). Prior: 2026‑08‑31 — migrated per‑user rate limiting to the **
+`@convex-dev/rate-limiter`** component. The former
 hand‑rolled `rateLimits` table (a read‑modify‑write that admitted a double‑spend under concurrent taps) is **removed
 from the schema**; counter state now lives in the component's own isolated tables. `convex.config.ts` mounts
 `app.use(rateLimiter)`; `lib/rateLimit.ts` was rewritten to delegate to it while keeping its three entry points

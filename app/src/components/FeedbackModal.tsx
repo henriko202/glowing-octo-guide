@@ -66,7 +66,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
         <div>
           <h2 className="text-foreground text-base font-semibold">{t('feedback.title')}</h2>
 
-          <p className="text-muted-foreground mt-3 text-[11px] font-semibold uppercase tracking-wide">
+          <p className="text-muted-foreground mt-3 text-[11px] font-semibold tracking-wide uppercase">
             {t('feedback.categoryLabel')}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -88,7 +88,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <label className="mt-4 flex flex-col gap-1">
-            <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+            <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
               {t('feedback.messageLabel')}
             </span>
             <Textarea

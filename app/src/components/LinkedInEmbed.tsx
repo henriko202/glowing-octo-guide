@@ -1,5 +1,5 @@
-import type {ReactNode} from 'react'
-import {useTranslation} from 'react-i18next'
+import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Build a LinkedIn embed iframe URL from a post URN.

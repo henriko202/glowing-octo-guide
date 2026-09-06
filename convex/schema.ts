@@ -16,6 +16,15 @@ export default defineSchema({
     location: v.optional(v.string()),
     // Scraped LinkedIn primary-locale language code (e.g. "en"). Drives the UI i18n seed only.
     primaryLocale: v.optional(v.string()),
+    // The UI language the member last checked out in ('en' | 'pt' | 'es'). Written by
+    // billingNode.createCheckoutSession and read by the billing mailers — the member's UI language
+    // choice otherwise lives only in a browser cookie the backend never sees. Distinct from
+    // primaryLocale (the scraped LinkedIn locale, which only seeds the initial UI language).
+    language: v.optional(v.string()),
+    // One-shot billing notice key, rendered as a dismissible banner on /billing (currently only
+    // 'duplicate_canceled'). Set by the duplicate-subscription webhook, cleared by
+    // users.clearBillingNotice. Absent ⇒ no notice. A voided subscription is never silent.
+    billingNotice: v.optional(v.string()),
     // Default language for AI-generated comments: an ISO 639-1 code or 'auto'. Absent ⇒ 'auto'.
     // Validated against convex/lib/languages.ts in setCommentLanguage. Distinct from primaryLocale
     // (which only seeds the UI i18n language, not what the AI writes comments in).
@@ -176,7 +185,20 @@ export default defineSchema({
     stripeSubscriptionId: v.string(),
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     status: v.string(),
-    currentPeriodEnd: v.optional(v.number())
+    currentPeriodEnd: v.optional(v.number()),
+    // Price snapshot from the Stripe webhook payload (items.data[0].price), so a billing email can
+    // state the exact amount without a second Stripe call and without a hardcoded price table that
+    // drifts the day pricing changes. Minor units, e.g. 15000 + 'usd' + 'year'.
+    priceAmount: v.optional(v.number()),
+    priceCurrency: v.optional(v.string()),
+    priceInterval: v.optional(v.string()),
+    // Mirrors Stripe's cancel_at_period_end. Stripe keeps status 'trialing' after a member
+    // cancels mid-trial, so this is the only signal that tells the trial mailers not to
+    // promise a charge that will never happen.
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    // Stripe's own `created` (ms). The duplicate-subscription guard voids the NEWEST live row by
+    // this stamp, never by webhook arrival order, which Stripe does not guarantee.
+    stripeCreated: v.optional(v.number())
   })
     .index('by_user', ['userId'])
     .index('by_stripe_id', ['stripeSubscriptionId']),
