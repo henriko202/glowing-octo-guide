@@ -9,11 +9,12 @@ import MyPostsPage from './MyPostsPage'
 // for, rather than by call order (which broke when a third query was added).
 vi.mock('../convex', () => ({
   api: {
-    users: { getMe: 'users.getMe' },
+    users: { getMe: 'users.getMe', getSubscriptionInfo: 'users.getSubscriptionInfo' },
     posts: {
       getMyPosts: 'posts.getMyPosts',
       getWeeklyUsage: 'posts.getWeeklyUsage',
       getFeaturedUsage: 'posts.getFeaturedUsage',
+      getTierLimits: 'posts.getTierLimits',
       submitPost: 'posts.submitPost',
       setPostHidden: 'posts.setPostHidden',
       deletePost: 'posts.deletePost',
@@ -50,10 +51,20 @@ describe('MyPostsPage', () => {
     sessionStorage.setItem('sessionToken', 'tok')
     mockMutations = {}
     mockQueryReturns = {
-      'users.getMe': { name: 'Henri Durand', tier: 'starter' },
+      // subscriptionStatus: 'active' keeps UpgradeAtLimit's useCardGate() ungated here — its
+      // own gated-member branch is covered by UpgradeAtLimit.test.tsx (F2), not this page's tests.
+      'users.getMe': { name: 'Henri Durand', tier: 'starter', subscriptionStatus: 'active' },
+      'users.getSubscriptionInfo': { priceInterval: 'year' },
       'posts.getMyPosts': [],
       'posts.getWeeklyUsage': { postsThisWeek: 2, postsPerWeek: 5 },
-      'posts.getFeaturedUsage': { usedCount: 0, featuredPerMonth: 3 }
+      'posts.getFeaturedUsage': { usedCount: 0, featuredPerMonth: 3 },
+      // Backs UpgradeAtLimit (backlog/R08), rendered at the weekly/featured/interaction caps below.
+      'posts.getTierLimits': {
+        starter: { interactionsPerPost: 25, postsPerWeek: 5, featuredPerMonth: 0 },
+        growth: { interactionsPerPost: 50, postsPerWeek: 7, featuredPerMonth: 1 },
+        pro: { interactionsPerPost: 200, postsPerWeek: 14, featuredPerMonth: 3 },
+        contact: { interactionsPerPost: 200, postsPerWeek: 14, featuredPerMonth: 9999 }
+      }
     }
   })
 
@@ -82,7 +93,12 @@ describe('MyPostsPage', () => {
     mockQueryReturns['posts.getWeeklyUsage'] = { postsThisWeek: 5, postsPerWeek: 5 }
     renderPage()
     expect(screen.getByText(/5 of 5 posts this week/i)).toBeInTheDocument()
-    expect(screen.getByText(/weekly limit reached/i)).toBeInTheDocument()
+    // UpgradeAtLimit (backlog/R08) replaces the old static "weekly limit reached" copy.
+    expect(screen.getByText(/weekly post cap/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /upgrade to growth/i })).toHaveAttribute(
+      'href',
+      '/billing?plan=growth&interval=annual'
+    )
     expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
   })
 
@@ -168,6 +184,22 @@ describe('MyPostsPage', () => {
     renderPage()
     expect(screen.getByText('★ Featured')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^unfeature$/i })).toBeInTheDocument()
+  })
+
+  // Starter includes 0 featured posts, so `usedCount >= featuredPerMonth` is 0 >= 0 on every visit —
+  // the upgrade ask must not fire on page load for a cap the plan never had (R08: at the limit,
+  // never by interruption). The Feature button's own disabled state is where Starter meets it.
+  it('shows no featured upgrade ask on load for a plan with zero featured posts', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 0, featuredPerMonth: 0 }
+    renderPage()
+    expect(screen.queryByText(/featured posts/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /upgrade to/i })).not.toBeInTheDocument()
+  })
+
+  it('asks for the upgrade at the featured cap when the plan does include featured posts', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 3, featuredPerMonth: 3 }
+    renderPage()
+    expect(screen.getByText(/used all your featured posts/i)).toBeInTheDocument()
   })
 
   it('disables Feature and explains why once the monthly cap is reached', () => {

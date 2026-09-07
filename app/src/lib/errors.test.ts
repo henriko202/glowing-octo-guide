@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ConvexError } from 'convex/values'
-import { friendlyError } from './errors'
+import { friendlyError, mapLimitError } from './errors'
 
 describe('friendlyError', () => {
   it('extracts the developer message from a framed Convex dev error', () => {
@@ -36,5 +36,28 @@ describe('friendlyError', () => {
         'Uncaught Error: PAYMENT_REQUIRED at handler (../convex/interactions.ts:20:11) Called by client'
     )
     expect(friendlyError(err, 'fallback').startsWith('PAYMENT_REQUIRED')).toBe(true)
+  })
+})
+
+describe('mapLimitError', () => {
+  const t = ((key: string, opts?: { limit?: number }) => `${key}:${opts?.limit}`) as never
+
+  it('maps the weekly-cap code to a localized string with the number', () => {
+    expect(mapLimitError('WEEKLY_LIMIT:2', t)).toBe('errors.weeklyLimit:2')
+  })
+
+  it('maps the featured-cap code', () => {
+    expect(mapLimitError('FEATURED_LIMIT:1', t)).toBe('errors.featuredLimit:1')
+  })
+
+  it('passes anything else through untouched', () => {
+    expect(mapLimitError('Something else broke', t)).toBe('Something else broke')
+  })
+
+  // F7: admin.ts's validateLimitArgs rejects values below 1 but never enforces an integer, so a
+  // non-integer plan limit (e.g. postsPerWeek set to 2.5) can reach here — it must still localize,
+  // not leak the raw "WEEKLY_LIMIT:2.5" code to the member.
+  it('still localizes a non-integer limit value instead of leaking the raw code', () => {
+    expect(mapLimitError('WEEKLY_LIMIT:2.5', t)).toBe('errors.weeklyLimit:2.5')
   })
 })

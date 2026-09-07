@@ -8,13 +8,15 @@
 // Usage from an action:
 //   const limits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId, tier })
 
-import type { QueryCtx, MutationCtx } from '../_generated/server'
+import type { MutationCtx, QueryCtx } from '../_generated/server'
 import { internalQuery } from '../_generated/server'
 import { v } from 'convex/values'
 import { UNLIMITED_FEATURED_SENTINEL } from './postLimit'
 import type { Id } from '../_generated/dataModel'
 
 export type PlanLimits = { interactionsPerPost: number; postsPerWeek: number; featuredPerMonth: number }
+
+export type Tier = 'starter' | 'growth' | 'pro' | 'contact'
 
 // Featured-post monthly caps (backlog/B07). contact's cap is UNLIMITED_FEATURED_SENTINEL (9999,
 // lib/postLimit.ts), a Custom/enterprise sentinel (effectively unlimited) — real enterprise deals
@@ -24,14 +26,14 @@ export type PlanLimits = { interactionsPerPost: number; postsPerWeek: number; fe
 // admin.ts's updateTierDefault self-heal both build their inserted rows from this same
 // object (via buildTierDefaultRow below) instead of keeping their own copies of these
 // numbers, which could otherwise silently drift apart.
-export const DEFAULTS: Record<'starter' | 'growth' | 'pro' | 'contact', PlanLimits> = {
+export const DEFAULTS: Record<Tier, PlanLimits> = {
   starter: { interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
   growth: { interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
   contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: UNLIMITED_FEATURED_SENTINEL }
 }
 
-export type PlanLimitsDefaultRow = { tier: 'starter' | 'growth' | 'pro' | 'contact' } & PlanLimits
+export type PlanLimitsDefaultRow = { tier: Tier } & PlanLimits
 
 /**
  * Builds a full tier-default planLimits row (no userId — see the schema comment on
@@ -39,8 +41,17 @@ export type PlanLimitsDefaultRow = { tier: 'starter' | 'growth' | 'pro' | 'conta
  * present, so this is the one place that can go stale if a future field is added.
  * Used by migrations/seedPlanLimits.ts and admin.ts's updateTierDefault self-heal.
  */
-export function buildTierDefaultRow(tier: 'starter' | 'growth' | 'pro' | 'contact'): PlanLimitsDefaultRow {
+export function buildTierDefaultRow(tier: Tier): PlanLimitsDefaultRow {
   return { tier, ...DEFAULTS[tier] }
+}
+
+/**
+ * The next tier up the ladder, for "upgrade at the limit" prompts (backlog/R08).
+ * Returns null at the top (pro, contact) so callers render a contact/custom-limit
+ * line instead of a checkout link — never a plan called "null".
+ */
+export function nextTier(tier: Tier): 'growth' | 'pro' | null {
+  return tier === 'starter' ? 'growth' : tier === 'growth' ? 'pro' : null
 }
 
 /**
@@ -54,7 +65,7 @@ export function buildTierDefaultRow(tier: 'starter' | 'growth' | 'pro' | 'contac
 export async function getPlanLimitsHelper(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
-  tier: 'starter' | 'growth' | 'pro' | 'contact'
+  tier: Tier
 ): Promise<PlanLimits> {
   if (tier === 'contact') {
     // Check for a per-user override first.

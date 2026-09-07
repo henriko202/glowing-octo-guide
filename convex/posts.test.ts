@@ -1,7 +1,8 @@
 // convex/posts.test.ts
 import { describe, expect, it } from 'vitest'
-import { canModifyPost, countPostsSince, isAdminShareOverrideEnabled } from './posts'
-import type { Id } from './_generated/dataModel'
+import { canModifyPost, countPostsSince, findTierDefaultRow, isAdminShareOverrideEnabled } from './posts'
+import type { Doc, Id } from './_generated/dataModel'
+import type { QueryCtx } from './_generated/server'
 
 const asUserId = (s: string) => s as Id<'users'>
 
@@ -84,5 +85,69 @@ describe('canModifyPost', () => {
 
   it('forbids a non-admin from modifying someone else’s post', () => {
     expect(canModifyPost(other, post)).toBe(false)
+  })
+})
+
+// Minimal by_tier ctx: withIndex ignores its predicate (rows are pre-scoped to the tier under
+// test, same fidelity as feedCtx in feed.test.ts) and `.filter` applies its predicate per row with
+// a field/eq-only `q` stand-in — enough to exercise the real userId===undefined check. Reverting
+// the query-level filter (back to a JS-side `rows.find()` after a bare `.take`) changes the call
+// chain shape and breaks this mock, so a revert fails the test either way.
+function tierLimitsCtx(rows: Doc<'planLimits'>[]): QueryCtx {
+  return {
+    db: {
+      query: () => ({
+        withIndex: () => ({
+          filter: (
+            predicate: (q: { field: (name: string) => unknown; eq: (a: unknown, b: unknown) => boolean }) => boolean
+          ) => ({
+            take: async (n: number) =>
+              rows
+                .filter(row =>
+                  predicate({
+                    field: (name: string) => (row as unknown as Record<string, unknown>)[name],
+                    eq: (a, b) => a === b
+                  })
+                )
+                .slice(0, n)
+          })
+        })
+      })
+    }
+  } as unknown as QueryCtx
+}
+
+// F11: the userId===undefined check must live in the query, not a JS-side .find() run only over
+// the first `take(20)` rows — a contact tier with more per-user override rows than the take cap
+// could otherwise push the one true default row out of the window and silently fall back to
+// DEFAULTS[tier].
+describe('findTierDefaultRow', () => {
+  const override = (n: number): Doc<'planLimits'> =>
+    ({
+      _id: `override-${n}`,
+      tier: 'contact',
+      userId: asUserId(`u${n}`),
+      interactionsPerPost: 1,
+      postsPerWeek: 1
+    }) as unknown as Doc<'planLimits'>
+  const defaultRow = {
+    _id: 'default',
+    tier: 'contact',
+    userId: undefined,
+    interactionsPerPost: 10,
+    postsPerWeek: 5,
+    featuredPerMonth: 2
+  } as unknown as Doc<'planLimits'>
+
+  it('finds the default row even when 25 per-user override rows sort ahead of it', async () => {
+    const rows = [...Array.from({ length: 25 }, (_, i) => override(i)), defaultRow]
+    const row = await findTierDefaultRow(tierLimitsCtx(rows), 'contact')
+    expect(row?._id).toBe('default')
+  })
+
+  it('returns null when only override rows exist', async () => {
+    const rows = Array.from({ length: 3 }, (_, i) => override(i))
+    const row = await findTierDefaultRow(tierLimitsCtx(rows), 'contact')
+    expect(row).toBeNull()
   })
 })

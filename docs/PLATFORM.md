@@ -110,8 +110,9 @@ others (comment / react) is **card-gated server-side** via `assertCanEngage` in 
 an engage‑granting `subscriptionStatus ∈ {trialing, active, canceled}`; only `none` (never subscribed) and `past_due`
 (failed payment) receive a `PAYMENT_REQUIRED` error. **Cancellation never revokes access** — a canceled member keeps
 engaging; instead their own posts stop showing in the feed once their paid period ends (see §Feed). The app-facing UI
-for this gate (disabled buttons, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan 2C** — shipped; see
-[§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
+for this gate (hidden-post banner, tap-bound gate dialog, X/50 progress bar, SSI link-out, downgrade prompt) is **Plan
+2C**, reordered by **R04 (Option A)** so the ask binds at the tap instead of on a disabled control — shipped;
+see [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
 
 **One trial per account, forever.** `createCheckoutSession` grants `trial_period_days` only to a member who has never
 held a `subscriptions` row, and refuses a second _live_ subscription outright (`ALREADY_SUBSCRIBED` → the Customer
@@ -346,46 +347,46 @@ erDiagram
 One row per authenticated LinkedIn member. Inserted on first login (`linkedin/auth.ts:upsertUser`), patched thereafter
 (profile, subscription, ban). Read almost everywhere.
 
-| Field                         | Type                                                   | Req | Meaning                                                                                                                                                                                                                                                                                                                                                                                          |
-|-------------------------------|--------------------------------------------------------|:---:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinId`                  | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                                                                                                                                                                             |
-| `name`                        | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                                                                                                                                                                    |
-| `headline`                    | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                                                                                                                                                                               |
-| `profilePictureUrl`           | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                                                                                                                      |
-| `industry`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                              |
-| `country`                     | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                              |
-| `location`                    | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                                                                                                                            |
-| `primaryLocale`               | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                                                                                                                         |
-| `language`                    | string                                                 |  –  | UI language the member last checked out in (`'en'`/`'pt'`/`'es'`). Written by `billingNode.createCheckoutSession` via `internal.users.setLanguage`, read by the billing mailers — the UI-language choice otherwise lives only in a browser cookie the backend never sees. Distinct from `primaryLocale`. See [§8](#8-subscriptions--billing).                                                    |
-| `billingNotice`               | string                                                 |  –  | One-shot billing notice key, rendered as a dismissible banner on `/billing` (only `'duplicate_canceled'` today). Set by the duplicate-subscription webhook, cleared by `users.clearBillingNotice`. Absent ⇒ no notice; a voided subscription is never silent.                                                                                                                                    |
-| `commentLanguage`             | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                                                                                                                  |
-| `defaultVisibilityIndustries` | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist copied onto every post this user authors from now on (`posts.visibilityIndustries`, set at insert time — not retroactive). Absent/empty ⇒ new posts are visible to everyone. Set via `users.setPostVisibility` (tier-gated server-side); a downgrade does **not** clear it. See [§11](#11-feed--engagement).                                           |
-| `defaultVisibilityCountries`  | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist copied onto every post this user authors from now on (`posts.visibilityCountries`, set at insert time — not retroactive). Same semantics as `defaultVisibilityIndustries` above.                                                                                                                                                                        |
-| `feedFilterIndustries`        | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist that filters the viewer's **own** feed (`feed.getFeed` reads it off the viewer doc). Absent/empty ⇒ that dimension isn't filtered. Set via `users.setFeedFilter` (tier-gated server-side); a downgrade does **not** clear it. A "what I want to see" preference — distinct from the author-side `defaultVisibility*`. See [§11](#11-feed--engagement). |
-| `feedFilterCountries`         | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist filtering the viewer's own feed. ANDed with `feedFilterIndustries` (each list ORs internally). Same source/semantics as `feedFilterIndustries` above.                                                                                                                                                                                                   |
-| `tier`                        | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                                                                                                                        |
-| `subscriptionStatus`          | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. Engage access is granted for `{trialing, active, canceled}` — cancellation never revokes it (see `canEngage`).                                      |
-| `trialEndsAt`                 | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                                                                                                                                                                               |
-| `subscriptionEndsAt`          | number                                                 |  –  | Paid‑through instant (ms; Stripe `current_period_end`), mirrored on every sync + cancel. A **canceled** author's posts stay in the feed until `now ≥ subscriptionEndsAt`, then drop out (`isAuthorFeedEligible`). Does not affect engage access.                                                                                                                                                 |
-| `stripeCustomerId`            | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                                                                                                                                                                          |
-| `linkedinAccessToken`         | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                                                                                                                                                                          |
-| `linkedinRefreshToken`        | string                                                 |  –  | **Secret.** Refresh flow exists (dormant — Standard-tier OAuth issues no refresh_token; reconnect banner mitigates). See §7/§13.                                                                                                                                                                                                                                                                 |
-| `tokenExpiresAt`              | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                                                                                                                                                                        |
-| `linkedinPublicIdentifier`    | string                                                 |  –  | LinkedIn vanity name, **auto‑derived (set‑once)** from the `author.url` of a name‑verified submitted post (`users.setDerivedPublicIdentifier`); never user‑typed. Seeds the Apify profile/post scrape. NOT the ownership check (that matches the post's author name against the OIDC `name`).                                                                                                    |
-| `isAdmin`                     | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                                                                                                                                                                            |
-| `isBanned`                    | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                                                                                                                                                                                  |
-| `bannedAt`                    | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                                                                                                                                                                                   |
-| `bannedBy`                    | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                                                                                                                               |
-| `bannedReason`                | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                                                                                                                        |
-| `email`                       | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                                                                                                                              |
-| `deletionRequestedAt`         | number                                                 |  –  | When the user requested account deletion (ms). Erasure-audit-trail field — kept for compliance even though no query reads it back (`deletionScheduledAt` drives the actual cron/idempotency logic).                                                                                                                                                                                              |
-| `deletionScheduledAt`         | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                                                                                                                        |
-| `deletionReason`              | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                                                                                                                                  |
-| `lastLoginAt`                 | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                                                                                                                                                                    |
-| `acknowledgedPolicyVersion`   | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                                                                                                                                                                             |
-| `consentPromptedAt`           | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                                                                                                                                                                                  |
-| `firstPostPromptedAt`         | number                                                 |  –  | When the first‑post onboarding step was resolved (ms) — set once by submitting any post (`posts.submitPost` → `users.markFirstPostPrompted`) or skipping (`users.dismissFirstPostPrompt`). Unset ⇒ `FirstPostPromptScreen` is shown after the consent gate (to every new member; the onboarding post is created hidden for no-card members and funnels them to billing).                         |
-| `createdAt`                   | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                                                                                                                         |
+| Field                         | Type                                                   | Req | Meaning                                                                                                                                                                                                                                                                                                                                                                                                             |
+|-------------------------------|--------------------------------------------------------|:---:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedinId`                  | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                                                                                                                                                                                                |
+| `name`                        | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `headline`                    | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `profilePictureUrl`           | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `industry`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                                                 |
+| `country`                     | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                                                 |
+| `location`                    | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                                                                                                                                               |
+| `primaryLocale`               | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                                                                                                                                            |
+| `language`                    | string                                                 |  –  | UI language the member last checked out in (`'en'`/`'pt'`/`'es'`). Written by `billingNode.createCheckoutSession` via `internal.users.setLanguage`, read by the billing mailers — the UI-language choice otherwise lives only in a browser cookie the backend never sees. Distinct from `primaryLocale`. See [§8](#8-subscriptions--billing).                                                                       |
+| `billingNotice`               | string                                                 |  –  | One-shot billing notice key, rendered as a dismissible banner on `/billing` (only `'duplicate_canceled'` today). Set by the duplicate-subscription webhook, cleared by `users.clearBillingNotice`. Absent ⇒ no notice; a voided subscription is never silent.                                                                                                                                                       |
+| `commentLanguage`             | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                                                                                                                                     |
+| `defaultVisibilityIndustries` | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist copied onto every post this user authors from now on (`posts.visibilityIndustries`, set at insert time — not retroactive). Absent/empty ⇒ new posts are visible to everyone. Set via `users.setPostVisibility` (tier-gated server-side); a downgrade does **not** clear it. See [§11](#11-feed--engagement).                                                              |
+| `defaultVisibilityCountries`  | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist copied onto every post this user authors from now on (`posts.visibilityCountries`, set at insert time — not retroactive). Same semantics as `defaultVisibilityIndustries` above.                                                                                                                                                                                           |
+| `feedFilterIndustries`        | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist that filters the viewer's **own** feed (`feed.getFeed` reads it off the viewer doc). Absent/empty ⇒ that dimension isn't filtered. Set via `users.setFeedFilter` (tier-gated server-side); a downgrade does **not** clear it. A "what I want to see" preference — distinct from the author-side `defaultVisibility*`. See [§11](#11-feed--engagement).                    |
+| `feedFilterCountries`         | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist filtering the viewer's own feed. ANDed with `feedFilterIndustries` (each list ORs internally). Same source/semantics as `feedFilterIndustries` above.                                                                                                                                                                                                                      |
+| `tier`                        | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                                                                                                                                           |
+| `subscriptionStatus`          | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. Engage access is granted for `{trialing, active, canceled}` — cancellation never revokes it (see `canEngage`).                                                         |
+| `trialEndsAt`                 | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `subscriptionEndsAt`          | number                                                 |  –  | Paid‑through instant (ms; Stripe `current_period_end`), mirrored on every sync + cancel. A **canceled** author's posts stay in the feed until `now ≥ subscriptionEndsAt`, then drop out (`isAuthorFeedEligible`). Does not affect engage access.                                                                                                                                                                    |
+| `stripeCustomerId`            | string                                                 |  –  | Resolves Stripe webhooks → user (`by_stripe_customer`).                                                                                                                                                                                                                                                                                                                                                             |
+| `linkedinAccessToken`         | string                                                 |  –  | **Secret.** Used to act as the user on LinkedIn. Never sent to clients.                                                                                                                                                                                                                                                                                                                                             |
+| `linkedinRefreshToken`        | string                                                 |  –  | **Secret.** Refresh flow exists (dormant — Standard-tier OAuth issues no refresh_token; reconnect banner mitigates). See §7/§13.                                                                                                                                                                                                                                                                                    |
+| `tokenExpiresAt`              | number                                                 |  –  | Access‑token expiry (ms).                                                                                                                                                                                                                                                                                                                                                                                           |
+| `linkedinPublicIdentifier`    | string                                                 |  –  | LinkedIn vanity name, **auto‑derived (set‑once)** from the `author.url` of a name‑verified submitted post (`users.setDerivedPublicIdentifier`); never user‑typed. Seeds the Apify profile/post scrape. NOT the ownership check (that matches the post's author name against the OIDC `name`).                                                                                                                       |
+| `isAdmin`                     | boolean                                                |  –  | **Set only by direct DB edit.** No application write path touches it.                                                                                                                                                                                                                                                                                                                                               |
+| `isBanned`                    | boolean                                                |  –  | Ban flag; set/cleared by `banUser`/`unbanUser`.                                                                                                                                                                                                                                                                                                                                                                     |
+| `bannedAt`                    | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `bannedBy`                    | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                                                                                                                                                  |
+| `bannedReason`                | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                                                                                                                                           |
+| `email`                       | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                                                                                                                                                 |
+| `deletionRequestedAt`         | number                                                 |  –  | When the user requested account deletion (ms). Erasure-audit-trail field — kept for compliance even though no query reads it back (`deletionScheduledAt` drives the actual cron/idempotency logic).                                                                                                                                                                                                                 |
+| `deletionScheduledAt`         | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                                                                                                                                           |
+| `deletionReason`              | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                                                                                                                                                     |
+| `lastLoginAt`                 | number                                                 |  –  | Timestamp of most recent login (ms); updated on every `upsertUser` call. Powers the dormancy retention check.                                                                                                                                                                                                                                                                                                       |
+| `acknowledgedPolicyVersion`   | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                                                                                                                                                                                                |
+| `consentPromptedAt`           | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                                                                                                                                                                                                     |
+| `firstPostPromptedAt`         | number                                                 |  –  | When the first‑post onboarding step was resolved (ms) — set once by submitting any post (`posts.submitPost` → `users.markFirstPostPrompted`) or skipping (`users.dismissFirstPostPrompt`). Unset ⇒ `FirstPostPromptScreen` is shown after the consent gate (to every new member; the onboarding post is created hidden for no-card members, and everyone — card or not — lands on the feed afterward, per **R04**). |
+| `createdAt`                   | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                                                                                                                                            |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
 `by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
@@ -727,6 +728,11 @@ Clients **never** pass a `userId`. They pass a `sessionToken`; the server resolv
   `setContactUserLimit`, `setUserTier`, `setUserSubscriptionStatus`, ban/unban, `validateLimitArgs`), the
   `feedback` mutations, and the `assertCanEngage`/`assertCanRefresh` gate helpers. The card‑gate sentinel
   `assertCanEngage` throws `ConvexError('PAYMENT_REQUIRED: …')` so the feed can still detect it by prefix in production.
+  `posts.submitPost`/`featurePost` use the same `PREFIX:value` shape for the weekly/featured plan-limit throws —
+  `` `WEEKLY_LIMIT:${postsPerWeek}` `` / `` `FEATURED_LIMIT:${featuredPerMonth}` `` — carrying the numeric cap rather
+  than
+  English prose, so a production redaction can't strip the number the UI needs; the client's `mapLimitError` (below)
+  matches the prefix and localizes it (see [§9 "Upgrade at the limit"](#9-plan-limits-system)).
 - **Internal invariants and external‑call failures throw plain `Error`** (e.g. `Failed to upsert post`, missing
   `STRIPE_SECRET_KEY`) — deliberately redacted in production and **logged server‑side with the real error**, surfaced to
   clients as generic sanitized messages (see [§17](#17-security-posture)).
@@ -734,7 +740,10 @@ Clients **never** pass a `userId`. They pass a `sessionToken`; the server resolv
   `[CONVEX …] Server Error Uncaught Error: <msg> at handler (…) Called by client` (and redacts `<msg>` in production).
   All UI catch handlers pass the error through `friendlyError(err, fallback)`
   (`app/src/lib/errors.ts`), which unwraps `ConvexError.data`, strips the frame off dev messages, and falls back to a
-  caller‑supplied string when nothing readable remains.
+  caller‑supplied string when nothing readable remains. The composer's and My Posts' catch sites additionally pipe that
+  result through `mapLimitError(msg, t)` (same file), which recognizes the `WEEKLY_LIMIT:<n>`/`FEATURED_LIMIT:<n>`
+  prefixes above and swaps them for the localized `errors.weeklyLimit`/`errors.featuredLimit` copy naming the cap;
+  anything else (an already‑friendly message, or a code it doesn't recognize) passes through untouched.
 
 ### LinkedIn member‑API calls
 
@@ -1002,6 +1011,31 @@ A ->> S: window.location = url
 
 `createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an existing
 `stripeCustomerId`).
+
+**The return leg (R07 — celebrate activation).** The success URL is `${appUrl}/billing?success=true`. `BillingPage`
+reads it once — latching a `justSubscribed` flag during render, not in an effect. The webhook (`http.ts` →
+`stripe.ts`) can land a moment after the redirect, so while `justSubscribed` is true and `me.subscriptionStatus` is
+still pre‑checkout — `none` for a first checkout, or `canceled` for a member re‑subscribing (their row keeps
+`canceled` until the webhook lands) — the page shows an inline activating state: `billing.activating` ("your trial…")
+for `none`, `billing.activatingPlan` ("your plan…") for `canceled`, because the repeat‑trial guard in `billingNode.ts`
+gives a re‑subscriber no second trial. `getMe` is reactive, so it clears itself the instant the row updates — no
+polling. After ~20s with no flip it falls back to `billing.activatingTimeout` (a neutral "your
+plan will show here shortly", the Manage button visible, never blaming the member or naming a webhook) and reports the
+case via `captureException` (§17) so a genuinely lost webhook is visible. Once the status becomes `trialing` or
+`active` (only those two — `past_due`/`canceled` are never "you're in"),
+`CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once — title "You're in.", the member's plan, and "your first
+post is now in the feed" when they had one (reusing FeedPage's `useOwnPostState`, R04, §14 — specifically `hasAnyPost`,
+not `hasHiddenPost`: the hidden-only signal can already read `false` on the very first render before the post has
+synced as hidden, while `hasAnyPost` is race-independent since any pre-existing post is definitely live once the
+member has converted — latched into state before the flip since the conversion itself is what un-hides it) — plus one
+reinforcing line from `billing.plans.<id>.description`. No upsell, no fabricated number. Primary CTA → `/feed`,
+secondary closes the dialog. Fires the consent-gated `checkout_success_viewed` PostHog event (§14 `captureEvent`) with
+the plan id. A cancelled checkout returns to `/billing` without the parameter and changes nothing. The `?success=true`
+param itself is only stripped (`setSearchParams({}, { replace: true })`) **once the celebration has actually fired**,
+not on mount: stripping it eagerly would lose it for good if the member refreshes during the activation window (before
+`hasCelebrated` flips) — a fresh mount can only re-latch `justSubscribed` by reading that same param, so an early strip
+turns a mid-activation refresh into a silently skipped celebration. Once stripped, a later refresh no longer repeats
+it.
 
 **50-interaction milestone (Plan 2B).** `billingNode.endTrialEarly` (internalAction) sets
 `trial_end: 'now'` on a Stripe subscription, converting the trial to a paid subscription immediately. It is scheduled by
@@ -1286,6 +1320,34 @@ full tier-default row — the read fallback (below), the explicit seed mutation,
 `tierToRank(tier?)`: `contact→4, pro→3, growth→2, starter→1, undefined/unknown→1`. Used to stamp
 `posts.authorTierRank`.
 
+### Upgrade at the limit (R08)
+
+The ladder helper `nextTier(tier): 'growth' | 'pro' | null` (`lib/planLimits.ts`) names the tier one step above the
+member's own — `starter→growth`, `growth→pro`, and `null` at the top (`pro`/`contact`). `null` is a deliberate signal,
+not an absence: it tells every caller to render a **contact line**, never a checkout link — Pro members get the
+Enterprise contact line, contact‑tier members (already on a negotiated/custom limit) get a "we'll adjust it" line, both
+`mailto:${SUPPORT_EMAIL}` (decided 2026‑09‑05; the ladder therefore never needs a `'contact'` return value from
+`nextTier` itself).
+
+**`posts.getTierLimits`** (public query, no auth) returns `Record<Tier, PlanLimits>` — the tier‑ **default** row for
+all four tiers in one call, so a UI can name the *next* tier's real numbers ("Growth gives you 7 posts a week")
+instead of a hard‑coded one. `getWeeklyUsage`/`getFeaturedUsage` can't do this — they only ever answer for the
+caller's own tier. Its lookup is split into the exported `findTierDefaultRow(ctx, tier)` (unit‑tested directly with a
+fake `ctx`, same pattern as `feed.ts`'s `fetchFeedPage`): unlike `getPlanLimitsHelper`'s JS‑side `.find()` (above), the
+`userId === undefined` check is pushed **into** the `by_tier` query itself via `.filter()` before `.take(20)` — a
+contact tier with more than 20 per‑user override rows sharing that index value used to be able to push the one true
+default row past the cap, silently falling back to `DEFAULTS.contact` for every caller (fixed 2026‑09‑06). Falls back
+to `DEFAULTS[tier]` when no default row exists. A contact‑tier per‑user override is deliberately **not** resolved
+here — the contact tier always renders the custom‑limit line, never a number, so its own negotiated numbers are
+irrelevant to this query.
+
+**The two limit codes** (`WEEKLY_LIMIT:<n>` / `FEATURED_LIMIT:<n>`, thrown at `posts.submitPost` and
+`posts.featurePost` — see [§6](#6-backend-architecture--conventions)) and `getTierLimits` back the shared
+`app/src/components/UpgradeAtLimit.tsx` component: one sentence naming the next tier's numbers plus one link, shown at
+the four moments a member can actually hit a cap (weekly post cap, featured cap, a post spending its interaction
+budget, and the Pro/Contact‑gated visibility setting) — see [§14](#14-frontend--authenticated-app-app) for the
+component and its placements, and [§11](#11-feed--engagement) for the interaction‑cap moment specifically.
+
 ---
 
 ## 10. Posts & Content Pipeline
@@ -1317,7 +1379,7 @@ flowchart TD
     ADM -->|yes: skip throttles| F["fetch(resolvedUrl) HTML → extractPostUrn<br/>(namespace-preserving: data-attributed-urn, else -{ns}-{id}- slug of submitted/canonical URL)"]
     ADM -->|no| RL["rateLimit submitPost: 10/hour"]
     RL --> WL{"recent posts (7d) ≥ postsPerWeek?"}
-    WL -->|yes| X3["throw 'Weekly post limit reached'"]
+    WL -->|yes| X3["throw 'WEEKLY_LIMIT:<n>'"]
     WL -->|no| F
     F -->|no urn| X4["throw 'Could not find urn'"]
     F -->|urn| EMB["fetch(/embed/feed/update/{urn}) → isEmbeddablePostHtml?<br/>(main-feed-activity-embed-card__ marker — applies to admins too)"]
@@ -1641,8 +1703,9 @@ post is created hidden via `postCreatedHidden`), only reactions/comments are car
 `subscriptionStatus ∈ {trialing, active, canceled}` — **cancellation never revokes access**; only `none` (never
 subscribed) and `past_due` (failed payment) receive a `PAYMENT_REQUIRED` error. Admins (`isAdmin`) always bypass the
 gate. The frontend mirror `useCardGate()` (`app/src/hooks/useCardGate.ts`) uses the same status set and must stay in
-sync. The in-app UI for this gate (disabled buttons, progress bar, CTA) is **Plan 2C** — shipped; see
-[§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
+sync. The in-app UI for this gate (hidden-post banner, tap-bound `CardGateDialog`, progress bar, CTA) is **Plan 2C**
+— shipped, reordered by **R04 (Option A)**; see [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c). R04 is copy and
+routing only: this backend gate is unchanged.
 
 **Per-post engageability gate.** The card gate answers *"may this member engage at all?"*; a second gate answers *"is
 **this post** engageable?"*. All three engagement entry points — `commentOnPost`, `reactToPost` (below) and
@@ -1685,6 +1748,14 @@ cap can't overshoot the count on the OCC retry. The same cap counts LinkedIn‑s
 import and re‑evaluated on the Apify refresh, and blocks an already‑over‑cap post at submit — see the
 `interactionsPerPost`
 bullet under [§9](#9-plan-limits-system).
+
+**Author‑facing post‑cap state (R08).** `interactionLimitReached` is silent on the viewer side (the post just stops
+appearing in the feed) but is surfaced to its **author** in My Posts: a spent‑budget post gets a `Badge
+variant="warning"` reading `myPosts.interactionCapBadge` ("Reached {{limit}} interactions and left the feed") plus the
+shared `UpgradeAtLimit limit="interactionCap"` naming the next tier's higher cap. This is a **passive, in‑page** state
+only — deliberately no toast and no notice surfaced on the next feed visit, so a member who never revisits My Posts is
+never interrupted elsewhere. See [§14](#14-frontend--authenticated-app-app) (`MyPostsPage`) for the full placement and
+[§9](#9-plan-limits-system) for `UpgradeAtLimit` itself.
 
 | Action                                             | Validation                                                                 | Rate limit | Effect (no LinkedIn call)                      |
 |----------------------------------------------------|----------------------------------------------------------------------------|------------|------------------------------------------------|
@@ -2504,9 +2575,9 @@ is the scroller; see AppShell), so without it a scrolled feed would carry its sc
 5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
 6. **`!me.consentPromptedAt`** (new user who has not yet completed the one-time consent prompt) →
    `<ConsentPromptScreen>`
-7. **`!me.firstPostPromptedAt`** (every new member, before billing — the submitted first post is created hidden for a
-   no-card member and the screen funnels them to `/billing`; the post is revealed when they add a card) →
-   `<FirstPostPromptScreen>`
+7. **`!me.firstPostPromptedAt`** (every new member — the submitted first post is created hidden for a no-card member;
+   **everyone lands on the feed** (R04), where a `CardGateBanner` names the hidden post and a card-less member's post
+   is revealed the moment they add a card) → `<FirstPostPromptScreen>`
 8. **user ok** → `<AppShell>` (sidebar + top bar) + `<Motd/>` + **`<ReconnectBanner/>`** (persistent top‑of‑app banner,
    shown when `me.tokenExpiresAt` is null or within 7 days — the user‑facing counterpart to B01a's refresh cron;
    see [§7](#7-authentication--identity)) + the requested page
@@ -2523,7 +2594,7 @@ flowchart TD
     RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
     RA -->|" acknowledgedPolicyVersion ≠ POLICY_VERSION "| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
     RA -->|" !consentPromptedAt "| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
-    RA -->|" !firstPostPromptedAt "| FIRSTPOST["FirstPostPromptScreen → submitPost (hidden if no card) → /billing · or dismiss → reload"]
+    RA -->|" !firstPostPromptedAt "| FIRSTPOST["FirstPostPromptScreen → submitPost (hidden if no card) → reload into feed · or dismiss → reload"]
     RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + Motd + ReconnectBanner + page → page issues Convex queries"]
 ```
 
@@ -2544,21 +2615,51 @@ sync with the compliance docs and live support inbox.
 - **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); for **Pro/Contact** viewers (gated on `getMe.tier`)
   a collapsible **`FeedFilterPanel`** — two `ChipMultiSelect` pickers (industries / countries) whose add/remove/clear
   each call `setFeedFilter`; the saved arrays come from `getMe`, so the feed re-filters reactively (no local state).
-  When a filter hides everything, the empty state shows `feed.emptyFiltered` instead of `feed.empty`. Then a list of
+  When a filter hides everything, the empty state shows `feed.emptyFiltered` (a plain recovery line — adjust or clear
+  the filter). An unfiltered empty feed instead renders **`EmptyFeed`** (R05 — never ships a blank feed: no placeholder
+  posts, no invented counts): a headline, one line of body copy, and one primary button (`feed.emptyCta`, "Share your
+  first post") that scrolls to and focuses the composer's `id="post-url-input"` input (no ref plumbing). Once the
+  member has a post of their own the button drops away (no second, weaker CTA replaces it) and the body swaps to
+  `feed.emptyBodyPosted` ("other members' posts show up here as they share them"); `feed.emptyBody` itself says
+  "yours can be the first" and no longer claims "real posts from real members" (an unverifiable proof line, reviewed
+  out 2026‑09‑06). Below, exactly one progress element — never both: a gated member with any own post
+  (`hasOwnPost = hasAnyPost` from
+  `useOwnPostState` — not `hasHiddenPost`, which can already read `false` on the very first render if the post
+  hasn't synced as hidden yet) sees the same `CardGateBanner` described below instead of a checklist, so the copy
+  never implies a gated member's post is live; everyone else sees a `data-testid="activation-checklist"` 3-step
+  list — signed in with LinkedIn (always done), shared a first post (done when `hasOwnPost`), reacted to two posts (done
+  when `getTrialProgress.made >= 2`) — that disappears once all three are done. The checklist renders only
+  while `trialStatus` is `'trialing'` or `'none'` (the query's own `status` field, passed straight through):
+  `bumpTrialInteraction` only increments `trialInteractionsMade` during an active trial, so for a converted, canceled
+  or past‑due member `made` is a frozen snapshot that can never move again and the "react twice" step would dangle
+  permanently; a member who has **not started** yet (`none`) is the opposite case — every step is still ahead of them
+  (spec §7.2), and the two undone lines are the open loop that makes starting the trial worth it (re‑admitted
+  2026‑09‑06 after the review; Henriko closed the question the same day: the launch feed is pre‑seeded by three or
+  four real members posting through the normal composer, so `EmptyFeed` and its checklist are a safety net, not a
+  launch state, and the status gate stands as built). `getTrialProgress` itself is only queried
+  while the feed is empty (`posts.length === 0`), not on every feed load. Then a list of
   `PostCard`s, each rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
   shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card. Uses `useCardGate()`
   and passes the resulting `gated` boolean to every `<PostCard>`. The
   `react()` call is wrapped in try/catch: a `PAYMENT_REQUIRED` error surfaces an inline gate hint (previously the call
-  failed silently).
-- **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getFeaturedUsage` + `getMyPosts` + `submitPost` + `setPostHidden` +
-  `deletePost` + `featurePost` + `unfeaturePost`. Two usage pills next to the profile header — weekly ("N of M posts
-  this week") and monthly featured ("N of M featured this month") — both fully localized via the `myPosts` i18n
-  namespace — each turns **amber** at its cap; the weekly one also disables the composer (`atLimit`). Each post's owner
-  action bar gets a **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the monthly cap is
-  reached) alongside the existing Hide/Unhide + Delete; a featured post also shows the shared `feed.featured` ("★
-  Featured") badge. **Delete** opens a themed `Modal` confirmation (`myPosts.deleteConfirm`, ghost Cancel + destructive
-  Confirm) instead of a native `window.confirm` ([[B18]]). Renders each post via the shared `LinkedInEmbed` with an app
-  footer (stats, relative time, "View on LinkedIn").
+  failed silently). A gated member with a hidden own post sees a **`CardGateBanner`** above the composer
+  (`useOwnPostState(gated || posts.length === 0)` — one `getMyPosts` subscription, enabled whenever the R04 banner or
+  the R05 checklist could need it); any gated tap on a `PostCard`
+  (`onGated`) opens a shared **`CardGateDialog`** naming the benefit instead of a disabled control — see
+  [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c) for the full R04 flow.
+- **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getFeaturedUsage` + `getTierLimits` + `getMyPosts` + `submitPost` +
+  `setPostHidden` + `deletePost` + `featurePost` + `unfeaturePost`. Two usage pills next to the profile header — weekly
+  ("N of M posts this week") and monthly featured ("N of M featured this month") — both fully localized via the
+  `myPosts` i18n namespace — each turns **amber** at its cap; the weekly one also disables the composer (`atLimit`).
+  At the weekly cap the composer's `limitHint` is the shared `UpgradeAtLimit limit="weeklyPosts"` (R08); at the
+  featured cap the same component (`limit="featured"`) renders under the pill row. Each post's owner action bar gets a
+  **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the monthly cap is reached) alongside
+  the existing Hide/Unhide + Delete; a featured post also shows the shared `feed.featured` ("★ Featured") badge. A post
+  with `interactionLimitReached` (its engagement budget spent — [§9](#9-plan-limits-system)/[§11](#11-feed--engagement))
+  additionally shows a `Badge variant="warning"` (`myPosts.interactionCapBadge`) plus `UpgradeAtLimit
+  limit="interactionCap"` — passive and in‑page only, no toast. **Delete** opens a themed `Modal` confirmation
+  (`myPosts.deleteConfirm`, ghost Cancel + destructive Confirm) instead of a native `window.confirm` ([[B18]]). Renders
+  each post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
 - **SettingsPage** — `getMe` + `updateProfile` + `refreshProfileFromLinkedIn` + `setCommentLanguage` +
   `setPostVisibility` (the standalone LinkedIn‑identity section was **removed** — the auto‑derived vanity is
   internal‑only now, seeding Apify; the "Refresh from LinkedIn" button remains gated on it). Industry and country are
@@ -2571,8 +2672,9 @@ sync with the compliance docs and live support inbox.
   `ChipMultiSelect`** component (a `VirtualizedCombobox` with already-picked options excluded, plus removable `Badge`
   chips — the same component the Feed filter reuses) — same dirty-flag-gated Save pattern as the other Settings fields
   (see [§11](#11-feed--engagement) for the underlying `defaultVisibilityIndustries`/`defaultVisibilityCountries`
-  model). Starter/growth see the existing upgrade prompt. Below it, Pro/contact also see a mirror **"What you see in
-  your feed"** card — same two chip pickers + Save, writing `feedFilterIndustries`/`feedFilterCountries` via
+  model). Starter/growth instead see the shared `UpgradeAtLimit limit="visibility"` (R08) naming the next tier. Below
+  it, Pro/contact also see a mirror **"What you see in your feed"** card — same two chip pickers + Save, writing
+  `feedFilterIndustries`/`feedFilterCountries` via
   `setFeedFilter` (the same fields the Feed-page `FeedFilterPanel` writes, so the two stay in sync).
 - **BillingPage** — `getMe` + `getSubscriptionInfo` + `getTrialProgress` + `createCheckoutSession` +
   `createPortalSession` + `users.clearBillingNotice`. `getTrialProgress` returns
@@ -2587,8 +2689,10 @@ sync with the compliance docs and live support inbox.
       trialing or `past_due` member can actually reach the portal; previously only `active` could.
     - **`ALREADY_SUBSCRIBED`.** When the server refuses a second live subscription (§8), `handleUpgrade` toasts
       `billing.alreadySubscribed` and opens the portal. The member sees a door, never the error prefix.
-    - **The plan the visitor chose.** `targetPlan` resolves `?plan=` → `sessionStorage.chosenPlan` (stashed by
-      `AuthSuccessPage` out of the OAuth hash) → `'growth'`, each candidate validated against `PLAN_IDS`. The interval
+    - **The plan the visitor chose.** `targetPlan` calls the shared `resolveTargetPlan(searchParams)` helper
+      (`lib/targetPlan.ts`, which also exports `PLAN_IDS`/`isPlanId` — the single validation source, reused by
+      `CardGateDialog`/`CardGateBanner` for their own trial-CTA links, R04): `?plan=` → `sessionStorage.chosenPlan`
+      (stashed by `AuthSuccessPage` out of the OAuth hash) → `'growth'`. The interval
       toggle's initial state resolves the **same way** (`?interval=` → `sessionStorage.chosenInterval` → `'annual'`),
       so a direct `/billing?plan=pro&interval=monthly` link honours both halves of the landing's choice. A pre-card
       member sees **one primary card** for that plan with a **"See all plans"** toggle that reveals the full grid; card
@@ -2597,27 +2701,60 @@ sync with the compliance docs and live support inbox.
       same "Start 7-day {{plan}} trial" pattern. `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
       a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle (annual
       default) and the Enterprise card stay visible in every layout.
-    - **Trial banner, tier-aware.** `billing.trialBanner` interpolates the member's **real** plan name
-      (`billing.plans.<tier>.name`) instead of hard-coding Growth, above the X/50 progress meter, the day count and the
-      SSI link-out. From 40 of 50 (`progress.nearThreshold`, §8) it swaps to `billing.nearThresholdBanner` —
+    - **Reused by `UpgradeAtLimit` (R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
+      [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
+      `/billing?plan=${nextTier}&interval=${chargedInterval}` — the same `?plan=`/`?interval=` deep link this page
+      already reads via `resolveTargetPlan`/the interval toggle above, so it needs no bespoke routing. It never
+      re‑derives `hasCard` itself: landing on this page with a card already on file still routes the click through
+      `handlePlanClick`'s existing portal‑switch branch (above), so a card holder always ends up in the Customer
+      Portal regardless of which cap sent them here.
+    - **Trial banner, tier-aware and exact.** `billing.trialBanner` interpolates the member's **real** plan name
+      (`billing.plans.<tier>.name`), the real threshold (`progress.threshold`, falling back to
+      `TRIAL_INTERACTION_THRESHOLD` while the query loads) and the trial's end **date** (`me.trialEndsAt`, localized via
+      `i18n.language`; `billing.trialBannerNoDate` when the row has no date) — "your {{plan}} plan starts at
+      {{threshold}} interactions or on {{date}}", the same promise `shell.trialGoal` and `feed.cardGateCost` make, never
+      a typed "50" or a relative "after 7 days" that is stale from day two. It sits above the X/50 progress meter. The
+      banner's SSI link‑out (`billing.ssiLink`) was removed 2026‑09‑06: the SSI page is behind Sales Navigator, so the
+      sidebar keeps the one qualified link (`nav.viewSsi` + `nav.viewSsiNote`). From 40 of 50 (`progress.nearThreshold`,
+      §8) it swaps to `billing.nearThresholdBanner` —
       "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour token
       in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
       text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses (the `Badge` `warning` variant
       itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system).
-    - **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible notice renders
-      above the plans; **Dismiss** calls `users.clearBillingNotice`.
-    - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely ended
-      subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing block still
-      appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own tier, and
-      the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id); the
-      "Renews on {date}" / "Access until {date}" line still comes from `getSubscriptionInfo.currentPeriodEnd`
-      ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
-      (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
-    - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
-      `SUPPORT_EMAIL` constant).
-    - Covered by `app/src/pages/BillingPage.test.tsx` (19 tests: plan-click routing, `ALREADY_SUBSCRIBED` → portal,
+        - **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible notice
+          renders
+          above the plans; **Dismiss** calls `users.clearBillingNotice`.
+        - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely ended
+          subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing block still
+          appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own tier,
+          and
+          the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id); the
+          "Renews on {date}" / "Access until {date}" line still comes from `getSubscriptionInfo.currentPeriodEnd`
+          ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
+          (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
+        - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
+          `SUPPORT_EMAIL` constant).
+    - **Checkout return (R07 — celebrate activation; see §8 for the full flow).** A `?success=true` redirect latches
+      `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true and
+      `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
+      `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
+      `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the status
+      becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
+      `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your {{plan}}
+      plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a post
+      (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were never
+      hidden); then `billing.successOutcome` (the outcome the member bought, spec §6 as amended 2026‑09‑06: a real
+      LinkedIn
+      presence that gets the right people to find them — never "the next role" or "a client", per the R11 one‑ICP
+      rule that what arrives is never named); then the plan's own description. A card holder who arrives via an
+      upgrade‑at‑the‑limit link (`?plan=` in the URL, R08) sees the same "Recommended" highlight on that plan a no‑card
+      visitor's chosen plan
+      gets — never on the plan they already hold, never on a plain visit.
+    - Covered by `app/src/pages/BillingPage.test.tsx` (26 tests: plan-click routing, `ALREADY_SUBSCRIBED` → portal,
       Manage-button visibility, chosen-plan and chosen-interval resolution order, the localized current-plan label,
-      the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice).
+      the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice, the R07
+      checkout-return celebration/activating states incl. the canceled re‑subscriber path, and the R08 card‑holder
+      plan highlight).
 - **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
   `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
   directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
@@ -2650,8 +2787,30 @@ sync with the compliance docs and live support inbox.
 `Sidebar` (feed/my‑posts/settings/billing/ **privacy** links; **no admin link**), `TopBar` (search, theme toggle,
 language menu, user menu trigger), `UserMenu` (profile & settings + sign‑out via
 `performSignOut`), `LanguageMenu` (Radix dropdown replacing the old native `<select>`),
-`PostComposer` (dark/light themes, `atLimit`), `CommentBox` (calls `commentOnPost`; accepts
-`gated?: boolean` — disables submit/generate when gated; replaces a raw `PAYMENT_REQUIRED` error with a friendly
+`PostComposer` (dark/light themes, `atLimit`, its `limitHint` a `ReactNode` so callers can pass `UpgradeAtLimit`),
+`UpgradeAtLimit` (R08 — one sentence + one link, shown at the moment a member actually hits a cap: reads `getMe`
+(tier), `getTierLimits` (the next tier's real numbers) and `getSubscriptionInfo` (billing interval, mapped
+`'year'→'annual'`/`'month'→'monthly'` exactly as `BillingPage` does); `starter`/`growth` link to
+`/billing?plan=${nextTier}&interval=${interval}` labeled `upgrade.cta`, while `pro`/`contact` (where `nextTier` is
+`null`) render a `mailto:${SUPPORT_EMAIL}` contact line instead — never a checkout link for either. Renders nothing
+while any of its three queries is still loading. Also calls `useCardGate()`: a **gated** viewer (`status` not
+`trialing`/`active`/`canceled`) sees the shared card-gate CTA instead of the next-tier sentence — "upgrade to Growth"
+is a non sequitur for someone who can't engage with the product at all yet — with the usual `past_due` copy/CTA swap
+(above) for a failed-charge member (fixed 2026‑09‑06); that gated CTA fires `card_gate_cta_clicked` (with `source` =
+the limit), not `upgrade_at_limit_clicked`, so the gate funnel stays one event pair across every surface. Two
+limit‑specific rules: the **visibility** upsell resolves `next` to `pro` for a Starter member (visibility control is
+Pro‑only — `SettingsPage`'s `isPro` — so the generic Starter→Growth ladder would sell a plan that doesn't unlock it);
+and the **featured** ask is only rendered by `MyPostsPage` when the member's plan includes featured posts at all
+(`featuredPerMonth > 0`) — on Starter (0/month) `usedCount >= featuredPerMonth` is 0 ≥ 0 on every visit, so the ask
+used to fire on page load, an interruption rather than a limit moment; Starter meets the featured ask where it binds,
+the Feature button's own disabled state (the interim `upgrade.featuredNotIncluded` key is gone). Fires
+`captureEvent('upgrade_at_limit_clicked', { limit, plan })` on click. Placed at four moments: `PostComposer`'s
+weekly‑cap hint, the featured‑cap pill row, a spent‑budget post's
+interaction‑cap badge (all three in `MyPostsPage`), and `SettingsPage`'s Starter/Growth visibility upsell — see
+[§9](#9-plan-limits-system) for the backing `nextTier`/`getTierLimits` and [§11](#11-feed--engagement) for the
+interaction‑cap moment specifically), `CommentBox` (calls `commentOnPost`; only mounts once `PostCard`'s
+gated Comment tap has been let through — a gated member never reaches it, so its own `gated?: boolean` prop is now
+purely a defense-in-depth disable of submit/generate; still replaces a raw `PAYMENT_REQUIRED` error with a friendly
 message + a `<Link to="/billing">` prompt), `Modal`,
 `BannedScreen`, `BanUserDialog`, `UsersTab` (filter/search + per‑row modals + `banUser`/`unbanUser`),
 `FeedbackTab` (status filter pills + per‑row `RowActionsMenu` + `RespondFeedbackModal`),
@@ -2685,8 +2844,9 @@ interception order above and §13B),
 `PostComposer` under a
 "Share your best recent post" heading, plus an "I'll do this later" link. Submitting a post calls
 `api.posts.submitPost` — which stamps `firstPostPromptedAt` server-side via `users.markFirstPostPrompted` and creates
-the post hidden for a no-card member (`postCreatedHidden`). A card-less member is then funneled to `/billing` (their
-post is revealed once they add a card); everyone else reloads to the feed. The skip link calls
+the post hidden for a no-card member (`postCreatedHidden`); the screen no longer branches on card status — **everyone
+reloads straight into the feed** (R04: the card ask arrives after the product, not instead of it), where a card-less
+member's hidden post is named by `CardGateBanner` and revealed the moment they add a card. The skip link calls
 `api.users.dismissFirstPostPrompt` then reloads. Never blocks entry: a member without a post URL handy can skip. See the
 `RequireAuth` interception order above), plus the two LinkedIn‑embed components:
 
@@ -2713,9 +2873,13 @@ post is revealed once they add a card); everyone else reloads to the feed. The s
   `share` IDs differ for the same post and a reconstructed `/feed/update/<urn>/` link can resolve wrongly.
   (`MyPostsPage` keeps a `buildLinkedInUrl` with a reconstruction fallback for cron‑synced posts.) **`PostCard` does not
   render `post.content` or `mediaUrls`** — the post body comes entirely from the embed. Accepts a `gated?: boolean` prop
-  (from `FeedPage` via `useCardGate()`): when gated, the Like and Comment buttons are `disabled` with a `title` tooltip
-  pointing to the Billing page; "View on LinkedIn ↗" is rendered as a disabled `<button>` rather than an `<a>` (anchors
-  cannot be disabled).
+  (from `FeedPage` via `useCardGate()`) and an `onGated?: (source: GateSource) => void` callback (R04): every control
+  stays enabled and keeps its real accessible name, but when gated, tapping React, Comment, or "View on LinkedIn ↗"
+  calls `onGated` with its own source (`'react'` / `'comment'` / `'linkedin'`) instead of the real handler (`onReact`/
+  `onComment`/navigating) — no disabled control, no dead click. "View on LinkedIn ↗" stays the same `<a>`
+  in both branches (same `href`/`target`/`rel`); the gated branch just adds `preventDefault` + `onGated('linkedin')`.
+  `FeedPage` renders a single shared `CardGateDialog` for whichever control fired `onGated`, driven by the source it
+  reported.
 
 > As of `1fcc123`, `MyPostsPage` uses this shared `LinkedInEmbed` directly (its old local
 > `buildEmbedUrl` that force‑normalized to `activity` was removed, eliminating the previous
@@ -2733,37 +2897,112 @@ Shared hook consumed by `FeedPage`, `Sidebar`, and `BillingPage`. Reads `api.use
 `sessionToken` pattern as every other page) and derives:
 
 ```
-gated  ⇔  me loaded  AND  !me.isAdmin  AND  status ∉ { trialing, active }
+gated  ⇔  me loaded  AND  !me.isAdmin  AND  status ∉ { trialing, active, canceled }
 ```
 
 Admins are never gated. Returns `{ gated, isTrialing, status, isAdmin, me }`.
 
-#### Card-gate on the feed
+#### Card-gate on the feed (R04 — value before the card)
 
-`FeedPage` calls `useCardGate()` and passes `gated` to every `<PostCard>`. When `gated`:
+The card ask now arrives **after** a new member has seen the product, not **instead of** it: `FirstPostPromptScreen`
+always reloads into the feed (§14 above), and a gated member browses a fully live feed rather than a wall of disabled
+controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` callback to every `<PostCard>`. When
+`gated`:
 
-- The **Like** and **Comment** buttons in `PostCard` are `disabled` with a tooltip pointing to the Billing page
-  (`feed.cardGate` i18n key: "Add a payment method on the Billing page to start engaging.").
-- The **View on LinkedIn ↗** control is rendered as a `disabled` `<button>` instead of an `<a>`
-  (anchors cannot carry the `disabled` attribute).
-- `CommentBox` disables its submit and generate buttons; a `PAYMENT_REQUIRED` response from the backend replaces the raw
-  error text with the gate message + a `<Link to="/billing">`.
-- The `react()` call in `FeedPage` (previously un-caught) is wrapped in try/catch; a
-  `PAYMENT_REQUIRED` error now surfaces an inline gate hint rather than failing silently.
+- **No control is ever `disabled`.** The React, Comment, and "View on LinkedIn ↗" controls in `PostCard` keep their
+  real accessible name and stay clickable; a tap calls `onGated` instead of `onReact`/`onComment`/navigating (see the
+  `PostCard` bullet above). A dead click was considered worse than a dialog.
+- `onGated` opens a shared **`CardGateDialog`** (`app/src/components/CardGateDialog.tsx`, `feed.cardGateTitle`/
+  `cardGateBody` copy — leads with the result, never billing mechanics). Its `source` prop
+  (`GateSource = 'react' | 'comment' | 'linkedin' | 'aiDraft'`; each `PostCard` control reports its own source —
+  `'aiDraft'` is reserved for `CommentBox`'s AI-draft control, which is structurally unreachable while gated and
+  untouched by R04) only tags the `card_gate_opened` PostHog event, not the copy. Its
+  primary CTA is "Start 7-day trial" — **never** "Add a payment method" — linking to
+  `/billing?plan={{resolveTargetPlan()}}` and firing `card_gate_cta_clicked`; a secondary "Not now" closes it.
+  (`captureEvent`, consent-gated, no-op pre-init.) Under the footer, one muted line says what the CTA costs
+  (`feed.cardGateCost` — "Free for 7 days or {{threshold}} interactions, then your plan starts. Cancel anytime.", the
+  threshold interpolated from `TRIAL_INTERACTION_THRESHOLD`, never typed into the copy; R04's "the line under it says
+  what it costs"). Covered by `app/src/components/CardGateDialog.test.tsx` (event fired once with the tap source, CTA
+  href + cost line, `past_due` swap with no cost line). When the gating reason is `status === 'past_due'` — a member who
+  already has a card on file but whose charge failed — both `CardGateDialog` and `CardGateBanner` (below) swap in a
+  `PastDue`-suffixed copy pair (`feed.cardGateBodyPastDue`/`hiddenPostBannerPastDue`, `feed.cardGatePastDueCta`)
+  pointing at "Update payment" instead of "Start 7-day trial": that member already trialed, so re-offering a trial
+  they've already used would be wrong (fixed 2026‑09‑06).
+- A gated member whose own onboarding post was created hidden (`postCreatedHidden`) sees a **`CardGateBanner`** above
+  the composer, driven by the shared **`useOwnPostState(enabled)`** hook (`CardGateBanner.tsx`) — one
+  `api.posts.getMyPosts` subscription, `'skip'`ped unless `enabled`, exposing `{ hasHiddenPost, hasAnyPost }`. The
+  banner is suppressed until the feed itself has posts, so it never stacks with the empty state.
+  `getMyPosts`/`postCreatedHidden`/the reveal-on-`syncUserSubscription` logic are all unchanged server-side (§11) —
+  R04 only reorders and re-copies the client.
+- `CommentBox` still disables its own submit/generate buttons on `gated` as defense-in-depth (it is no longer
+  reachable by a gated tap at all, since `onComment` is now gated at the `PostCard` level); a `PAYMENT_REQUIRED`
+  response from the backend still replaces the raw error text with the gate message + a `<Link to="/billing">`.
+- The `react()` call in `FeedPage` is still wrapped in try/catch as a race-condition fallback (client thought the
+  member wasn't gated, server disagreed): a `PAYMENT_REQUIRED` error surfaces the `feed.cardGate` inline hint rather
+  than failing silently.
 
-#### Pulsing Billing nav + SSI link-out (`Sidebar`)
+#### Gated Billing nav accent + SSI link-out (`Sidebar`)
 
-`Sidebar` calls `useCardGate()`. When `gated`, the **Billing** nav item receives `animate-pulse
-text-primary` (gold pulse via Tailwind v4 tokens) to draw attention. A persistent **"View your SSI on LinkedIn ↗"** link
-(`https://linkedin.com/sales/ssi`, new tab) is rendered in the sidebar footer above `<UserMenu>` using `text-gold-text`
+`Sidebar` calls `useCardGate()`. When `gated`, the **Billing** nav item takes `text-primary` — a static gold accent,
+no motion. It pulsed (`animate-pulse`) until 2026‑09‑06: the gate already binds at the tap (`CardGateDialog`) and in
+the feed's `CardGateBanner`, so a permanent pulse was a third attention‑grabber that made the administrative step
+(billing) the most salient thing on every screen — RCD's attention hierarchy says salience goes to what retains, one
+attention point per screen (R04's Don't). Guarded by `Sidebar.test.tsx`. A persistent **"View your SSI on LinkedIn ↗"**
+link (`https://linkedin.com/sales/ssi`, new tab) is rendered in the sidebar footer above `<UserMenu>` using
+`text-gold-text`
 styling; it is always visible regardless of gate state. SSI is a link-out only — no score is fetched or displayed.
+Directly beneath it sits `nav.viewSsiNote` ("Requires LinkedIn Sales Navigator" — plain text, sets the right expectation
+now that the SSI page itself sits behind that paywall) and a **`Recap`** link (`nav.recap` → `/feed`) — the in-app
+substitute for a public SSI score once a member doesn't have Sales Navigator (R06/R15 decision D4: keep the link, add
+the qualifier and the recap alternative, never tell a free member to go check their SSI).
+
+#### Trial progress where the work happens — shell card + mobile pill (R06)
+
+The X/N interaction meter used to render **only** on `BillingPage`, one click away from the feed where interactions
+actually happen. `TrialMeter` (`app/src/components/TrialMeter.tsx`) pulls that meter (the `billing.trialProgress`
+caption + progress bar) out into its own default-export component — `BillingPage` now renders `<TrialMeter progress=
+{progress} />` instead of the inline markup it used to own, a pure extraction with no visual change (`BillingPage.test
+.tsx`'s 19 tests cover it unmodified). `TrialMeter` takes one prop, `progress: { made, received, combined, threshold,
+nearThreshold, trialEndsAt? }` — the same shape `getTrialProgress` already returns — so any caller can reuse it.
+
+Two new callers mount it where the taps happen:
+
+- **`TrialProgressCard`** (`app/src/components/shell/TrialProgressCard.tsx`) — rendered by `Sidebar` directly above
+  `<nav>`, only while `isTrialing` (from `useCardGate()`) and `getTrialProgress` has resolved. Wraps `TrialMeter` with
+  the plan-start sentence (`shell.trialGoal`, names the tier and `trialEndsAt` date every time the number appears),
+  the made/received breakdown (`shell.trialMadeReceived` — plain text, **not** a link: D3 keeps it a status line, not
+  a second CTA), and, once `nearThreshold` is true, an extra `shell.trialNearEnd` line plus a `<Link to="/billing">`.
+  Styled to match `BillingPage`'s own trial banner exactly (`bg-accent text-accent-foreground`; `border-primary`
+  instead of `border-border` in the amber/near-threshold state — this design system has no separate `warning` token).
+  Because `Sidebar`'s `<nav>` is `flex-1 overflow-y-auto` inside a fixed-height column, the card growing (its tallest
+  variant is the near-threshold state, with the extra line + link) only shrinks `<nav>`'s own scrollable area — it
+  never pushes the footer (SSI link/note, Recap, `UserMenu`) below the fold; verified at 1280×768 in the card's amber
+  state. `trialEndsAt` is optional (`convex/http.ts` sets it only once Stripe reports `trial_end`), so when it's
+  missing the card renders `shell.trialGoalNoDate` (the same sentence minus the "or on {{date}}" clause) instead of
+  interpolating an empty date — never a dangling "or on .".
+- **`TopBar`** — a compact pill (`shell.trialPill`, `{{combined}}/{{threshold}}`) linking to `/billing`, shown only
+  `lg:hidden` (the sidebar card already covers desktop) so the meter still travels with a trialing member on mobile,
+  where the sidebar is a closed-by-default drawer. Carries a `title` tooltip (`shell.trialStartsAt`, interpolating
+  `{{threshold}}` rather than a hardcoded "50 interactions" — fixed 2026‑09‑06 so a non-default threshold doesn't lie
+  in the tooltip) naming the `trialEndsAt` date when present, omitted (no `title` attribute) when it isn't. Also
+  carries an explicit `aria-label` (`shell.trialPillAriaLabel`, "Trial progress: {{combined}} of {{threshold}}
+  interactions") — the pill's only visible text is the terse `12/50` fraction, which reads poorly as an accessible
+  name on its own.
+
+`Sidebar` and `TopBar` both get their `isTrialing` flag and `getTrialProgress` subscription from one shared hook,
+`app/src/hooks/useTrialProgress.ts` — it wraps `useCardGate()` (adding the `sessionToken`-gated `getTrialProgress`
+query on top) and returns everything `useCardGate()` already returns plus `progress`, so neither call site re-derives
+`sessionToken` or re-implements the `'skip'` gating by hand.
+
+Both new call sites read `api.users.getTrialProgress` themselves (`'skip'`ped unless `isTrialing`), the same query
+`BillingPage` already used — no new backend surface.
 
 #### BillingPage — trial progress, chosen-tier CTA, downgrade prompt
 
 See the **BillingPage** bullet in the Pages section above for the full state-dependent layout. Backend query:
 `api.users.getTrialProgress` (defined in `convex/users.ts`; mirrors `getMe`'s session-resolution pattern; returns
 `{ made, received, combined, threshold, reached, nearThreshold, status, trialEndsAt }`). Cross-reference: §8
-(subscription state machine) and §9 (plan limits).
+(subscription state machine) and §9 (plan limits). Its meter is now the shared `TrialMeter` component described above.
 
 The date-countdown half of the trial UI is now **live**: `trialEndsAt` is populated from Stripe (see §8), so
 `getTrialDaysRemaining(trialEndsAt)` and `isTrialExpired` on `BillingPage` render real values instead of always `0`/
@@ -2796,7 +3035,8 @@ continue" button copy for `ConsentPromptScreen`); all three locales (`en`/`pt`/`
 **Keys added with Plan 2C trial UI:** `nav.viewSsi` (sidebar SSI link-out label);
 `feed.cardGate` (gate tooltip and CommentBox billing prompt); `billing.trialProgress`
 (X / N interactions meter, uses `{{combined}}` and `{{threshold}}` interpolation),
-`billing.ssiLink` (SSI link-out label in the trial banner), `billing.whatYouLlMiss` (inline loss-framing block shown on
+`billing.ssiLink` (SSI link-out label in the trial banner — removed 2026‑09‑06, see §14 BillingPage),
+`billing.whatYouLlMiss` (inline loss-framing block shown on
 the Starter card while trialing), `billing.trialBanner` (updated to mention the 50-interaction milestone alongside the
 7-day window); all three locales (`en`/`pt`/`es`).
 
@@ -2856,6 +3096,22 @@ Net **252 leaf keys** per file, still verified by recursive key-diff — there i
 outbound **billing emails are not i18n keys**: they are built server-side in `convex/lib/billingEmails.ts`, which keeps
 its own three-language copy (including localized plan names) because Convex actions have no access to the browser's
 i18next instance — see [§8](#8-subscriptions--billing).
+
+**R04 keys (2026-09-06):** the card-gate reorder (§14 "Trial UI (Plan 2C)") added five `feed.*` keys —
+`cardGateTitle`, `cardGateBody`, `cardGateCta`, `cardGateLater`, `hiddenPostBanner` — read by the new
+`CardGateDialog`/`CardGateBanner` components. No keys were removed. Net **257 leaf keys** per file, still verified by
+recursive key-diff.
+
+**R06 keys (2026-09-06):** the shell trial card + mobile pill (§14 "Trial progress where the work happens") added
+seven keys — `nav.viewSsiNote`, `nav.recap`, `shell.trialGoal`, `shell.trialStartsAt`, `shell.trialNearEnd`,
+`shell.trialMadeReceived`, `shell.trialPill`. No keys were removed. Net **273 leaf keys** per file (266 after R08's
+`upgrade.*`/`errors.*` addition, +7 here), still verified by recursive key-diff — there is still no automated parity
+test.
+
+**R06 fix round 1 (2026-09-06):** a review pass on the R06 card found `TrialProgressCard` rendering a broken
+"...or on ." sentence whenever `trialEndsAt` was undefined (a real state — `convex/http.ts` sets it only once Stripe
+reports `trial_end`). Added one key, `shell.trialGoalNoDate` (the `shell.trialGoal` sentence minus the date clause),
+selected whenever `trialEndsAt` is missing. Net **274 leaf keys** per file, still verified by recursive key-diff.
 
 ---
 
@@ -3342,8 +3598,10 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
 - **Prod frontend errors — Sentry (`@sentry/react`):** `initSentry()` (`app/src/lib/observability/sentry.ts`), called
   from `main.tsx`, is a **hard no‑op unless `import.meta.env.PROD` and `VITE_SENTRY_DSN` are both set**. It
   auto‑captures
-  `window.onerror`/`unhandledrejection`, and one `captureException` line in the existing
-  `ErrorBoundary.componentDidCatch` ([§14](#14-frontend--authenticated-app-app)) reports React render crashes. Treated
+  `window.onerror`/`unhandledrejection`; `ErrorBoundary.componentDidCatch`
+  ([§14](#14-frontend--authenticated-app-app)) calls `captureException` to report React render crashes, and
+  `BillingPage`'s R07 activation-timeout path (§8, §14) calls the same helper when a checkout's webhook never lands
+  within ~20s — a genuinely lost webhook must be visible even though the member is never told the word. Treated
   as a **necessary security/reliability** function — runs regardless of analytics consent — so PII is stripped **before
   send**: `sendDefaultPii:false`, plus a `beforeSend` that drops `request.cookies`/`request.headers` and any `user`
   identity and runs the message + exception values through the same `scrubError` redactor. No performance tracing
@@ -3481,6 +3739,17 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   `npx convex deploy`. New deploy config: `app/wrangler.jsonc`, `landing/wrangler.jsonc`, `landing/open-next.config.ts`,
   `app/scripts/gen-headers.mjs`; root scripts `deploy:app`/`deploy:landing`/`preview:landing`.
 
+### Pre-launch requirements
+
+Before opening sign-ups:
+
+- **Minimum live posts in feed:** at least 15 live posts must be present in the feed (see [[B24]] Phase D, task D2).
+  Posts are submitted through the normal composer by Henriko and real members; never ship a blank feed. Decided
+  2026‑09‑06: three or four of Henriko's own contacts load posts through the composer before sign‑ups open, so the first
+  cohort never meets `EmptyFeed`; the dev seed stays out of production.
+- **Dev seed never runs against production:** `convex/seed.ts` (the development seeding tool) must **never** run
+  against the production Convex deployment. All production posts come from real user submissions only.
+
 ---
 
 ## 19. Known Discrepancies, Dead Code & Roadmap
@@ -3614,235 +3883,434 @@ live event for a `canceled` row is ignored; only the `created` handler acts on t
 `cancelUserSubscription` now follows any surviving live row instead of downgrading blindly, and the near‑threshold
 banner + trial‑ending email quote Stripe's own price snapshot and the 50‑or‑7‑days rule; the two R03 minors followed
 (`?interval=` read URL‑first like `?plan=`, and the "Current plan" lead localized via `billing.plans.<tier>.name`).
-Gates green (convex 381/381, app 246/246; prettier + lint + typecheck clean). Prior: 2026‑08‑31 — migrated per‑user rate
-limiting to the **
-`@convex-dev/rate-limiter`** component. The former
-hand‑rolled `rateLimits` table (a read‑modify‑write that admitted a double‑spend under concurrent taps) is **removed
-from the schema**; counter state now lives in the component's own isolated tables. `convex.config.ts` mounts
-`app.use(rateLimiter)`; `lib/rateLimit.ts` was rewritten to delegate to it while keeping its three entry points
-identical (`checkRateLimit`, `tryConsumeRateLimit`, and the `checkAndIncrement` internal mutation), so **none of the
-eight call sites changed** — every call passes an inline `{ kind: 'fixed window', rate, period }` config, preserving
-each caller's window and limit (`submitPost` 10/h, `commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h,
-`profile_refresh` 2/day). Erasure: the counters live outside the schema, so the pure `cascadeDeleteUser` can't reach
-them — `processAccountDeletions` now calls the new `resetUserRateLimits` (loops the component's `reset` over
-`RATE_LIMIT_ACTIONS`) on the terminal deletion pass, keeping erasure complete. The `rateLimits` OWNED entry was dropped
-from the cascade and its fixtures/asserts removed from `deletion.test.ts`; `rateLimit.test.ts` was rewritten from
-table‑logic assertions to wiring assertions (inline config, throw‑message, boolean passthrough, per‑action reset). Docs
-updated: §11 rate‑limiting subsection, the schema section (table → component note), the ERD (dropped the
-`rateLimits` relation), the erasure list + §14, the workspace‑deps + file‑tree + security‑summary component mentions.
-All gates green (convex 349/349, typecheck + lint clean). Prior: Updated to reflect the Convex backend audit's five
-deferred hardening items, now **implemented** (all were previously deferred‑with‑reason). (1) **Fetch timeouts on every
-external seam** — a shared
-`convex/lib/fetchWithTimeout.ts` (AbortController + `setTimeout`, chosen over the unproven‑in‑runtime static
-`AbortSignal.timeout`) now wraps LinkedIn member‑API + OAuth (`linkedin/client.ts`, `linkedin/oauth.ts`), shortlink
-resolution (`linkedin/parsePostUrl.ts`, 10s), submit page/embed/article fetches (`posts.ts`), OpenRouter
-(`ai/openrouter.ts`, 60s for legitimate LLM latency), Apify (`lib/apify.ts`, 5min for synchronous run‑sync), and
-transactional email (`lib/email.ts`) — a hung upstream can no longer wedge an action to its platform ceiling. (2) **
-`res.ok` on the submit fetches** (`posts.ts`) — a non‑2xx from LinkedIn's anti‑bot (429/999/5xx) now throws a retryable
-"could not reach LinkedIn, try again" instead of a misleading "post not found / change your audience"; a **200 with wall
-HTML** (a genuinely restricted‑audience post) still routes to the existing audience message via
-`isEmbeddablePostHtml`, so working submits are unchanged. (3) **DSR export pagination** (`privacy/export.ts`) — the old
-`gatherUserData` internalQuery ran 7+ unbounded `.collect()`s in one transaction and would permanently fail the export
-(a missed GDPR access right) for a very active user; replaced by `getExportUser` + a per‑table `gatherUserTablePage`
-(cursor‑looped at 500 rows/page by the action) + `gatherFeedbackResponses`, so no single query approaches the 16384‑doc
-read limit. (4) **Bounded Apify fan‑out** (`jobs/syncPostsApify.ts`, `jobs/scrapeProfileApify.ts`) — the uncapped
-`Promise.allSettled(users.map(...))` is now `settledInBatches(users, APIFY_FANOUT_CONCURRENCY=5, …)`
-(`convex/lib/concurrency.ts`), so a large user base can't spawn hundreds of concurrent scrape sub‑actions in one tick.
-(5) **Cross‑user orphan cleanup on erasure** — new `by_post` indexes on `userInteractions` + `userPostState`
-(`schema.ts`); the erasure cascade (`privacy/deletion.ts`) now drains **other** users' interaction/state rows that
-reference a deleted user's posts (bounded `POST_ORPHAN_BATCH=10` posts/pass) **before** deleting each post, so no
-dangling rows point at a vanished post id. New helpers ship with unit tests (`fetchWithTimeout.test.ts`,
-`concurrency.test.ts`); all gates green (convex 351/351, typecheck + lint clean). Prior: Updated to reflect the
-observability & error‑monitoring wiring (§17 "Observability & Error Monitoring", §16 app env table). The
-`/convex-sentinel` skill's premise — the `@convex-dev/sentinel` Convex component — is **still not published to npm**
-(registry 404), so instead of that component the Sentry + PostHog SDKs are wired directly, respecting the existing
-consent model. Three layers: (1) **dev** — a zero‑dependency native log tail,
-`pnpm watch:errors` / `watch:errors:prod` (`npx convex logs [--prod]`), added to the root `package.json`; (2) **prod
-frontend errors — Sentry** (`@sentry/react`, `app/src/lib/observability/sentry.ts`): `initSentry()` (called from
-`main.tsx`) is a **hard no‑op unless `import.meta.env.PROD` and `VITE_SENTRY_DSN` are both set**, so it is inert in dev
-and in any keyless build; treated as a **necessary/security purpose** (not consent‑gated); PII is stripped in
-`beforeSend` before an event leaves the browser (`sendDefaultPii:false`, `tracesSampleRate:0`, request cookies/headers
-and user identity dropped, message + exception values run through the **same** `convex/lib/scrubError.ts` redactor the
-backend uses); `ErrorBoundary.componentDidCatch` now calls `captureException(error, info.componentStack)`; (3) **prod
-backend errors — Sentry via Convex** (no code): Convex Dashboard → Settings → Integrations → **Exception Reporting** →
-DSN (runbook in §17). Product analytics is the separate **consent‑gated** path — **PostHog** (`posthog-js`,
-`app/src/lib/observability/analytics.ts`): `initPostHog()` is a no‑op unless PROD + `VITE_POSTHOG_KEY`, initialises
-**opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — no replay), and a new null‑render
-`AnalyticsConsentGate` (mounted in `App.tsx`, queries `api.privacy.consent.getConsents`) syncs the user's `analytics`
-consent → `syncAnalyticsConsent` opt‑in + `identify(user._id)` (the **opaque Convex id only** — no name/email) when
-granted, opt‑out + `reset()` otherwise; EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`). Because
-both SDKs are **inert until their prod keys are set** in Cloudflare, the current public privacy/cookies copy ("optional
-analytics … off by default") is accurate today; the public‑copy update **and** the `POLICY_VERSION`
-(`convex/lib/policy.ts`) bump / re‑prompt are recorded as **launch‑time** steps (SUBPROCESSORS.md "Human action
-required") for when the keys go live — not done now, since doing so would misrepresent current processing. Three
-`VITE_*` rows added to the §16 app table; `SUBPROCESSORS.md` gained Sentry + PostHog rows; `DATA-INVENTORY.md` gained
-Activity 14 (Product Analytics & Error Monitoring; adds no schema fields). Prior: Updated to reflect the Convex backend
-audit's interaction‑cap consistency fix. The per‑post interaction cap (`interactionsPerPost`) now counts **total
-engagement** (LinkedIn‑seeded + in‑app) at **every**
-point a post's counts are written, not only on in‑app taps: seeded at insert by all three post writers
-(`jobs/syncPosts.upsertPost`, `jobs/processQueue`) so an already‑over‑cap Apify import never enters the feed;
-re‑evaluated on the 30‑min Apify engagement refresh (`jobs/syncPosts.applyEngagementCounts`) so a post that crosses the
-cap on external growth drops out; and rejected **up front at manual submit** (`posts.submitPost`) with a user‑facing
-message instead of silently creating a hidden post. Both in‑app increment mutations (`interactions.ts`) now guard on the
-flag before writing (`if (post.interactionLimitReached) return`) so a concurrent tap can't overshoot the count on the
-OCC retry. The flip stays one‑way. §9 (`interactionsPerPost` bullet), §10 (submit‑flow "Interaction‑cap gate"), §10
-(queue drain), and §11 (Interactions) updated. Same pass also hardened, without behavior change: `linkedin/oauth.ts` now
-guards its `LINKEDIN_*` env vars explicitly (clear error instead of a `"undefined"`‑poisoned request),
-`users.getActiveSubscribers`
-is bounded `.take(500)` with a non‑silent cap (mirrors `getUsersWithLinkedin`), and `feedback.listFeedback` batches its
-submitter/responder lookups instead of a per‑row/per‑response `get()` fan‑out. Prior: Updated to reflect the landing
-theme-flash (FOUC) refresh fix. Symptom: on refresh, when the OS scheme differed from the stored theme, the page painted
-the OS theme for ~0.5s before flipping to the stored one. Root cause: the inline no-flash `<head>` script read the theme
-from the **cookie only**, while `ThemeToggle`'s post-hydration effect resolves via `lib/theme.ts` `getStoredTheme`
-(**cookie → localStorage → system**). When the pref lived in the localStorage mirror but the cookie was absent (cleared
-or host-only in dev), the pre-paint script fell through to
-`system` (= OS) while hydration later applied the localStorage value — the two resolvers disagreed, producing the flash.
-Fix: the no-flash script now resolves with the **same** cookie → localStorage → system precedence, so pre-paint and
-post-hydration agree and no frame flips. This is a one-file change in `landing/app/[lang]/layout.tsx` (the `NO_FLASH`
-string). An earlier `app/[theme]/[lang]/` server-prerender refactor was tried and **reverted** — it was unnecessary: a
-render-blocking stylesheet does not out-race an inline `<head>` script (rendering is blocked too, so the script always
-runs before first paint), so no per-theme prerender is needed and routes stay `app/[lang]/` with a locale-only
-`middleware.ts`. §4 tree and §15 describe `app/[lang]/`; the stale standalone `/pricing` route (now a Home section) was
-dropped from the route table. Prior: Updated to reflect the plan‑limits self‑heal fix (task B27,
-backlog/B27-seed-plan-limits.md, approach B): `admin.updateTierDefault` threw `No default row found for tier —
+Gates green (convex 381/381, app 246/246; prettier + lint + typecheck clean). **Backfill: Card‑gate before trial (
+R04).** Shipped earlier and already described in full in §8 and §14 ("Trial UI (Plan 2C)") and §11, but never
+summarized here — added now for changelog completeness. A gated member browses a fully live feed instead of a wall of
+disabled controls: every React/Comment/"View on LinkedIn" tap still fires, but for a gated member it calls `onGated`
+instead of acting, opening the shared `CardGateDialog` (`app/src/components/CardGateDialog.tsx`) rather than disabling
+anything. `FirstPostPromptScreen` always reloads into the feed regardless of card status; a card‑less member's
+onboarding post is created hidden and a `CardGateBanner` (`app/src/components/CardGateBanner.tsx`) names it above the
+feed. Five new `feed.*` keys (`cardGateTitle`, `cardGateBody`, `cardGateCta`, `cardGateLater`, `hiddenPostBanner`); app
+locales **257** keys in parity at the time. **Same‑day: Upgrade at the limit (R08).**
+`lib/planLimits.ts` gained `nextTier(tier)` (ladder helper; `null` at the top means "render a contact line, never a
+checkout link") and a `Tier` alias replacing three repeated union literals; `posts.ts` gained the public
+`getTierLimits` query (tier‑default numbers for all four tiers, mirroring `getPlanLimitsHelper`'s `by_tier`
+tier‑default‑row predicate rather than `.collect()`-ing the whole table) and swapped the weekly/featured plan‑limit
+throws from English prose to prefixed `WEEKLY_LIMIT:<n>`/`FEATURED_LIMIT:<n>` codes (§6). The new shared
+`app/src/components/UpgradeAtLimit.tsx` (+ `app/src/lib/errors.ts`'s `mapLimitError`) turns those into one
+loss‑framed sentence and one link at four moments — the weekly‑cap composer hint, the featured‑cap pill row, a
+spent‑budget post's interaction‑cap badge (`MyPostsPage`), and the Starter/Growth visibility upsell (`SettingsPage`)
+— reusing `BillingPage`'s own `?plan=`/`?interval=` deep link and `hasCard` portal‑switch decision rather than
+re‑deriving either. App locales are **266** keys in parity (10 new `upgrade.*`/`errors.*`/`myPosts.interactionCapBadge`
+keys added, the dead `settings.upgradePrompt` key removed). Sections updated: §6, §8, §9, §11, §14. Gates green (convex
+383/383, app 261/261; prettier + lint + typecheck clean). **Same‑day: Trial progress where the work happens (R06).** The
+X/N interaction meter used to live only on `BillingPage`. `TrialMeter`
+(`app/src/components/TrialMeter.tsx`) pulls the meter (caption + bar) out as a shared component — `BillingPage` now
+renders it instead of owning the markup, a pure extraction verified against its own unmodified 19‑test suite. Two new
+callers put it where interactions actually happen: `TrialProgressCard` (`app/src/components/shell/TrialProgressCard
+.tsx`), rendered by `Sidebar` above `<nav>` while `isTrialing`, adds the plan‑start sentence, the made/received line
+(plain text, not a link), and — once `nearThreshold` — an extra line plus a `/billing` link, styled to match
+`BillingPage`'s own amber banner; and a `TopBar` pill (`lg:hidden`, `{{combined}}/{{threshold}}`, links to `/billing`)
+so the meter still reaches a trialing member on mobile where the sidebar is a closed drawer. Both read the existing
+`getTrialProgress` query — no new backend surface. `Sidebar`'s footer also gained `nav.viewSsiNote` ("Requires
+LinkedIn Sales Navigator") under the SSI link and a `Recap` link to `/feed` (R06/R15 decision D4). Seven new keys
+(`nav.viewSsiNote`, `nav.recap`, `shell.trialGoal`, `shell.trialStartsAt`, `shell.trialNearEnd`,
+`shell.trialMadeReceived`, `shell.trialPill`); app locales now **273** keys in parity. Verified at 1280×768 that the
+sidebar card in its tallest (amber) state does not push the footer below the fold — `<nav>`'s `flex-1 overflow-y-auto`
+absorbs the extra height. Sections updated: §14. Gates green (convex 383/383, app 269/269; prettier + lint + typecheck
+clean). **Same‑day, fix round 1 (R06 review):** two review findings fixed. `TrialProgressCard` rendered a broken
+"...or on ." sentence when `trialEndsAt` was undefined (reachable — `convex/http.ts` only sets it once Stripe reports
+`trial_end`); it now selects a new `shell.trialGoalNoDate` key (no date clause) in that case, so the sentence is
+always grammatical and never interpolates an empty `{{date}}`. `Sidebar` and `TopBar` also each hand‑rolled the same
+`sessionToken` + `getTrialProgress` subscription block; both now call one shared hook,
+`app/src/hooks/useTrialProgress.ts`, which wraps `useCardGate()` and adds `progress` to what it already returns. App
+locales now **274** keys in parity. Sections updated: §14. Gates green (convex 383/383, app 271/271; prettier + lint
+
++ typecheck clean). **Backfill: Checkout‑return celebration (R07).** Also shipped earlier and already described in
+  full in §8 ("The return leg") and §14, but likewise missing from this changelog until now. The Stripe success URL is
+  `${appUrl}/billing?success=true`; `BillingPage` latches `justSubscribed` off that param on first render (not inside a
+  `useEffect`, so a refresh mid‑activation can't lose it) and shows an "Activating your trial…" state
+  (`billing.activating`) until the webhook‑driven `subscriptionStatus` moves off `none`, with a 20‑second
+  `ACTIVATION_TIMEOUT_MS` fallback (`billing.activatingTimeout`) if the webhook is slow. Once card‑backed,
+  `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once — `billing.successTitle` ("You're in."),
+  `billing.successBody` (the member's plan), and `billing.successPostLive` when `useOwnPostState` (R04) shows they
+  already had a post — with `billing.successCta`/`successStay` actions. Seven new `billing.*` keys (`successTitle`,
+  `successBody`, `successPostLive`, `successCta`, `successStay`, `activating`, `activatingTimeout`); app locales **281**
+  keys in parity at the time. **Same‑day: Never ship a blank feed (R05), plus three follow‑ups.** An empty *unfiltered*
+  feed used
+  to render `feed.empty`, which advertised a nonexistent invite feature; that key is **deleted**. New
+  `app/src/components/EmptyFeed.tsx` renders a headline (`feed.emptyTitle`), one line of body copy (`feed.emptyBody`),
+  and exactly one primary button (`feed.emptyCta`, "Share your first post") that scrolls to and focuses the composer's
+  new `id="post-url-input"` (`PostComposer.tsx`) — no ref plumbing. Below it, **one progress element, never two**: a
+  gated member with a hidden own post sees the existing `CardGateBanner` instead of a checklist (so the copy can never
+  claim a gated member's post is live); everyone else sees a `data-testid="activation-checklist"` 3‑step list — signed
+  in with LinkedIn (always done, opens at 1 of 3), shared a first post (`hasOwnPost`), reacted to two posts
+  (`getTrialProgress.made >= 2`) — that disappears once every step is done. No placeholder posts, no invented counts.
+  `FeedPage.tsx` now also subscribes to `getTrialProgress` (`'skip'` without a session) and widens `useOwnPostState`'s
+  `enabled` guard from `gated` to `gated || posts.length === 0`, so a non‑gated member's own checklist reflects their
+  real post too, not only a gated member's hidden one. New tests: `EmptyFeed.test.tsx` (4 cases, isolated) and the
+  **first** `FeedPage.test.tsx` (2 cases — empty‑unfiltered renders `EmptyFeed`, empty‑filtered still renders
+  `feed.emptyFiltered` — string‑ref `useQuery`/`usePaginatedQuery`/`react-router-dom` mocks, the same
+  by‑function‑identity
+  convention as `BillingPage.test.tsx`/`MyPostsPage.test.tsx`). **Item A** (threshold literal): `TrialProgressCard`'s
+  two
+  goal sentences (`shell.trialGoal`/`shell.trialGoalNoDate`) hardcoded the literal `50` in all three locales; both now
+  interpolate `{{threshold}}` from `progress.threshold`, with a new `TrialProgressCard.test.tsx` case asserting a
+  non‑50 threshold renders correctly (and that `50` does **not** leak in). **Item B** (activation‑timeout coverage):
+  `BillingPage.test.tsx` gained a `vi.useFakeTimers()` case for the existing 20s `ACTIVATION_TIMEOUT_MS` path — lands on
+  `?success=true` with `subscriptionStatus: 'none'`, advances 20s, asserts the timeout copy and the Manage Subscription
+  button render; real timers are restored in an `afterEach`. App locales are **287** keys in parity in all three files
+  (recursive leaf‑count diff; `feed.empty` removed, `feed.emptyTitle`/`emptyBody`/`emptyCta` and
+  `feed.checklist.{title,signedIn,firstPost,reactTwice}` added). **Item C** (backlog, `backlog/` is gitignored so these
+  edits never show in `git status`): R04, R05, R06, R07 and R08 flipped `TODO` → `DONE`;
+  `R15-interactions-recap-page.md`
+  records three deferrals this batch left open — the R04/R05 empty‑feed and card‑gate paths still point at `/feed`
+  rather than a dedicated recap route, the SSI mention already carries the Sales Navigator qualifier LinkedIn now
+  requires, and `UpgradeAtLimit` shipped without the `nearCap` boolean R15 item 16 will need; `B24-cloudflare-phase-d
+-deploy.md`'s D2 gained a step naming the minimum live‑post count (**at least 15**) before opening sign‑ups, since dev
+  seed data (`convex/seed.ts`) must never run against prod. Sections updated: §14, §21. Gates green (convex 383/383, app
+  283/283; prettier + lint + typecheck clean). **Same‑day: code‑review fix round (R04/R05/R06/R07/R08).** Fifteen
+  findings from a review of the five features above. **Correctness:** `UpgradeAtLimit` now also calls `useCardGate()`
+  and shows the shared gate CTA (with the `past_due` update‑payment swap) instead of a next‑tier sentence for a gated
+  viewer, and a plan with zero included featured posts showed `upgrade.featuredNotIncluded` instead of "+0 more" (F1,
+  F2; F1 superseded the same day — see the next entry); `BillingPage`'s checkout‑return celebration now latches
+  `hasAnyPost` instead of `hasHiddenPost` (race‑independent
+  — see "The return leg" above) and strips `?success=true` only once the celebration has fired, not on mount, so a
+  mid‑activation refresh can't lose it (F3, F4); `CardGateDialog`/`CardGateBanner` gained the `past_due` copy/CTA swap
+  described above (F5); the `TopBar` trial pill's tooltip interpolates `{{threshold}}` instead of a hardcoded "50
+  interactions" and gained an `aria-label` since its visible text is a bare fraction (F6, F13); `mapLimitError`'s regex
+  now accepts any limit value, not just integers, since `admin.ts`'s `validateLimitArgs` never enforced one (F7);
+  `posts.getTierLimits` gained `findTierDefaultRow` (§9) fixing the `.take(20)` JS‑filter cap‑miss (F11); `EmptyFeed`'s
+  activation checklist now only renders while `trialStatus === 'trialing'` — `made` freezes forever outside a trial, so
+  the "react twice" step no longer dangles permanently for a converted/canceled/never‑trialed member (F12; `none`
+  re‑admitted the same day, see the next entry) — and its own
+  gate‑banner‑vs‑checklist decision also switched to `hasAnyPost` (F15); `FeedPage`'s `getTrialProgress` subscription is
+  now skipped whenever the feed already has posts, not just without a session, since `EmptyFeed` is the only reader
+  (F14). **Docs/cleanup:** this entry plus two backfilled entries above (F10) close the gap where R04 and R07 had full
+  prose in §8/§14 but no changelog paragraph; the §14 gate formula's `canceled` omission was fixed (F9); the dead
+  `myPosts.weeklyLimitReached` key (never read) was deleted (F8). Every correctness fix (F1–F5, F7, F11, F12, F14, plus
+  F15 covered by the same `EmptyFeed` cases as F12) landed with a new test asserting the specific failure the fix
+  prevents; `EmptyFeed.test.tsx` also picked up a `../convex`/`convex/react` mock it lacked, needed once F5 gave
+  `CardGateBanner` its own `useQuery` call. App locales are **291** keys in parity (five new `feed.cardGateBodyPastDue`/
+  `cardGatePastDueCta`/`hiddenPostBannerPastDue` + `shell.trialPillAriaLabel` + `upgrade.featuredNotIncluded` keys
+  added,
+  `myPosts.weeklyLimitReached` removed; recursive leaf‑count + placeholder‑set diff, still no automated parity test).
+  Sections updated: §8, §9, §14, §21. Gates green (convex 385/385, app 294/294; prettier + lint + typecheck clean).
+  **Same‑day: RCD + code review round (R04/R05/R06/R07/R08).** Three parallel reviewers (code, revenue‑centric design,
+  i18n) over the batch above. **Truth defects fixed:** `BillingPage`'s celebration fired on any status other than
+  `none` — a canceled member re‑subscribing (repeat‑trial guard: no trial, lands on `active`) saw "your Starter trial is
+  live" while their row still read `canceled`, i.e. before the webhook; activating now covers `none`/`canceled` (with
+  `billing.activatingPlan` for the latter), the dialog opens only on `trialing`/`active`, its body is
+  `billing.successBody` vs the new `billing.successBodyActive`, and "your first post is live" is trialing‑only. The
+  Settings visibility upsell named Growth and linked the Growth checkout for Starter, though visibility is Pro‑only —
+  `UpgradeAtLimit` resolves `next` to `pro` for that limit. The featured upsell rendered on every My Posts load for
+  Starter (0 ≥ 0) — `MyPostsPage` now gates it on `featuredPerMonth > 0` and the interim `upgrade.featuredNotIncluded`
+  key/branch is deleted. **RCD:** `EmptyFeed` shows the checklist for `none` as well as `trialing` (spec §7.2 — a
+  never‑started member has every step ahead of them; converted/lapsed still hide it), drops the "Share your first post"
+  button and swaps to `feed.emptyBodyPosted` once the member has a post, and `feed.emptyBody` no longer says "real posts
+  from real members" (fabricated‑proof smell); `CardGateDialog` gained the cost line under its CTA (`feed.cardGateCost`,
+  threshold interpolated from `TRIAL_INTERACTION_THRESHOLD`, hidden for `past_due`);
+  `CheckoutSuccessDialog` gained `billing.successOutcome`; `shell.trialNearEnd` names the plan; a card holder arriving
+  at `/billing?plan=` from an upgrade link sees the target plan highlighted. **Minors:** `toLocaleDateString` now takes
+  `i18n.language` in `TrialProgressCard`/`TopBar`/`BillingPage`; the sidebar Recap link closes the mobile drawer
+  (`onNavigate`); `UpgradeAtLimit`'s gated CTA fires `card_gate_cta_clicked`; an orphaned docblock in `convex/posts.ts`
+  moved back onto `getTierLimits`; pt copy: "post"→"publicação" in `feed.emptyCta`/`feed.checklist.firstPost`,
+  `upgrade.weeklyPosts` (pt/es) now reads as a sentence, `upgrade.cta` (pt) takes the article. New
+  `CardGateDialog.test.tsx`; every fix landed with a test. App locales **295** keys in parity (+`feed.emptyBodyPosted`,
+  `feed.cardGateCost`, `billing.successBodyActive`, `billing.successOutcome`, `billing.activatingPlan`;
+  −`upgrade.featuredNotIncluded`). Left for Henriko (documented decisions, not defects): the pulsing Billing nav while
+  gated (R04's Don't and Evidence contradict each other), Recap → `/feed` (spec D4), and the R05 checklist as a
+  ratified R05 element. Sections updated: §8, §11, §14, §21. Gates green (convex 385/385, app 306/306; prettier +
+  lint + typecheck clean). **Same‑day follow‑up: three of those decisions resolved with Henriko, RCD lens.** (1) The
+  gated
+  Billing nav no longer pulses — `Sidebar` keeps the static `text-primary` accent (one attention point per screen: the
+  gate already binds at the tap via `CardGateDialog` and in `CardGateBanner`; a permanent pulse gave the most salience
+  to
+  administrative friction, and `animate-pulse` ignores reduced‑motion). (4) `billing.successOutcome` no longer says "the
+  next role" — "That presence is what gets the right people to find you" (en/pt/es), per the R11 one‑ICP rule that never
+  names what arrives (offer vs client); spec §6 amended. (5) `billing.trialBanner` interpolates `{{threshold}}` and the
+  localized trial end `{{date}}` (new `billing.trialBannerNoDate` fallback) instead of a typed "50 interactions … after
+  7 days" — precise numbers signal truth, and "after 7 days" is stale from day two — and the banner's `billing.ssiLink`
+  link‑out is deleted (SSI is paywalled behind Sales Navigator; the sidebar keeps the one qualified link). Locales stay
+  at **295** keys (−`billing.ssiLink`, +`billing.trialBannerNoDate`). Tests: +1 `Sidebar.test.tsx`, +1
+  `BillingPage.test.tsx`. Still open for Henriko: Recap → `/feed` (spec D4). The R05 checklist question closed the same
+  day: Henriko decided the launch feed is pre‑seeded by three or four of their own contacts through the normal composer
+  (§21 launch checklist; `EmptyFeed` is a safety net, the `trialing | none` status gate stands), the invite stays a
+  feature (R19, never an empty‑state line), and the gitignored revenue backlog was brought in line — README status rows
+  and doc status lines for R01–R08, R11, R12 read DONE with acceptance boxes ticked against code; only R02's two
+  Stripe‑Dashboard‑dependent boxes (Stripe's own trial‑ending email OFF, payment receipts ON) stay open.
+  Sections updated: §14, §21. Gates green (convex 385/385, app 308/308; prettier + lint + typecheck clean). Prior:
+  2026‑08‑31 — migrated per‑user rate
+  limiting to the **
+  `@convex-dev/rate-limiter`** component. The former
+  hand‑rolled `rateLimits` table (a read‑modify‑write that admitted a double‑spend under concurrent taps) is **removed
+  from the schema**; counter state now lives in the component's own isolated tables. `convex.config.ts` mounts
+  `app.use(rateLimiter)`; `lib/rateLimit.ts` was rewritten to delegate to it while keeping its three entry points
+  identical (`checkRateLimit`, `tryConsumeRateLimit`, and the `checkAndIncrement` internal mutation), so **none of the
+  eight call sites changed** — every call passes an inline `{ kind: 'fixed window', rate, period }` config, preserving
+  each caller's window and limit (`submitPost` 10/h, `commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h,
+  `profile_refresh` 2/day). Erasure: the counters live outside the schema, so the pure `cascadeDeleteUser` can't reach
+  them — `processAccountDeletions` now calls the new `resetUserRateLimits` (loops the component's `reset` over
+  `RATE_LIMIT_ACTIONS`) on the terminal deletion pass, keeping erasure complete. The `rateLimits` OWNED entry was
+  dropped
+  from the cascade and its fixtures/asserts removed from `deletion.test.ts`; `rateLimit.test.ts` was rewritten from
+  table‑logic assertions to wiring assertions (inline config, throw‑message, boolean passthrough, per‑action reset).
+  Docs
+  updated: §11 rate‑limiting subsection, the schema section (table → component note), the ERD (dropped the
+  `rateLimits` relation), the erasure list + §14, the workspace‑deps + file‑tree + security‑summary component mentions.
+  All gates green (convex 349/349, typecheck + lint clean). Prior: Updated to reflect the Convex backend audit's five
+  deferred hardening items, now **implemented** (all were previously deferred‑with‑reason). (1) **Fetch timeouts on
+  every
+  external seam** — a shared
+  `convex/lib/fetchWithTimeout.ts` (AbortController + `setTimeout`, chosen over the unproven‑in‑runtime static
+  `AbortSignal.timeout`) now wraps LinkedIn member‑API + OAuth (`linkedin/client.ts`, `linkedin/oauth.ts`), shortlink
+  resolution (`linkedin/parsePostUrl.ts`, 10s), submit page/embed/article fetches (`posts.ts`), OpenRouter
+  (`ai/openrouter.ts`, 60s for legitimate LLM latency), Apify (`lib/apify.ts`, 5min for synchronous run‑sync), and
+  transactional email (`lib/email.ts`) — a hung upstream can no longer wedge an action to its platform ceiling. (2) **
+  `res.ok` on the submit fetches** (`posts.ts`) — a non‑2xx from LinkedIn's anti‑bot (429/999/5xx) now throws a
+  retryable
+  "could not reach LinkedIn, try again" instead of a misleading "post not found / change your audience"; a **200 with
+  wall
+  HTML** (a genuinely restricted‑audience post) still routes to the existing audience message via
+  `isEmbeddablePostHtml`, so working submits are unchanged. (3) **DSR export pagination** (`privacy/export.ts`) — the
+  old
+  `gatherUserData` internalQuery ran 7+ unbounded `.collect()`s in one transaction and would permanently fail the export
+  (a missed GDPR access right) for a very active user; replaced by `getExportUser` + a per‑table `gatherUserTablePage`
+  (cursor‑looped at 500 rows/page by the action) + `gatherFeedbackResponses`, so no single query approaches the
+  16384‑doc
+  read limit. (4) **Bounded Apify fan‑out** (`jobs/syncPostsApify.ts`, `jobs/scrapeProfileApify.ts`) — the uncapped
+  `Promise.allSettled(users.map(...))` is now `settledInBatches(users, APIFY_FANOUT_CONCURRENCY=5, …)`
+  (`convex/lib/concurrency.ts`), so a large user base can't spawn hundreds of concurrent scrape sub‑actions in one tick.
+  (5) **Cross‑user orphan cleanup on erasure** — new `by_post` indexes on `userInteractions` + `userPostState`
+  (`schema.ts`); the erasure cascade (`privacy/deletion.ts`) now drains **other** users' interaction/state rows that
+  reference a deleted user's posts (bounded `POST_ORPHAN_BATCH=10` posts/pass) **before** deleting each post, so no
+  dangling rows point at a vanished post id. New helpers ship with unit tests (`fetchWithTimeout.test.ts`,
+  `concurrency.test.ts`); all gates green (convex 351/351, typecheck + lint clean). Prior: Updated to reflect the
+  observability & error‑monitoring wiring (§17 "Observability & Error Monitoring", §16 app env table). The
+  `/convex-sentinel` skill's premise — the `@convex-dev/sentinel` Convex component — is **still not published to npm**
+  (registry 404), so instead of that component the Sentry + PostHog SDKs are wired directly, respecting the existing
+  consent model. Three layers: (1) **dev** — a zero‑dependency native log tail,
+  `pnpm watch:errors` / `watch:errors:prod` (`npx convex logs [--prod]`), added to the root `package.json`; (2) **prod
+  frontend errors — Sentry** (`@sentry/react`, `app/src/lib/observability/sentry.ts`): `initSentry()` (called from
+  `main.tsx`) is a **hard no‑op unless `import.meta.env.PROD` and `VITE_SENTRY_DSN` are both set**, so it is inert in
+  dev
+  and in any keyless build; treated as a **necessary/security purpose** (not consent‑gated); PII is stripped in
+  `beforeSend` before an event leaves the browser (`sendDefaultPii:false`, `tracesSampleRate:0`, request cookies/headers
+  and user identity dropped, message + exception values run through the **same** `convex/lib/scrubError.ts` redactor the
+  backend uses); `ErrorBoundary.componentDidCatch` now calls `captureException(error, info.componentStack)`; (3) **prod
+  backend errors — Sentry via Convex** (no code): Convex Dashboard → Settings → Integrations → **Exception Reporting** →
+  DSN (runbook in §17). Product analytics is the separate **consent‑gated** path — **PostHog** (`posthog-js`,
+  `app/src/lib/observability/analytics.ts`): `initPostHog()` is a no‑op unless PROD + `VITE_POSTHOG_KEY`, initialises
+  **opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — no replay), and a new null‑render
+  `AnalyticsConsentGate` (mounted in `App.tsx`, queries `api.privacy.consent.getConsents`) syncs the user's `analytics`
+  consent → `syncAnalyticsConsent` opt‑in + `identify(user._id)` (the **opaque Convex id only** — no name/email) when
+  granted, opt‑out + `reset()` otherwise; EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`).
+  Because
+  both SDKs are **inert until their prod keys are set** in Cloudflare, the current public privacy/cookies copy (
+  "optional
+  analytics … off by default") is accurate today; the public‑copy update **and** the `POLICY_VERSION`
+  (`convex/lib/policy.ts`) bump / re‑prompt are recorded as **launch‑time** steps (SUBPROCESSORS.md "Human action
+  required") for when the keys go live — not done now, since doing so would misrepresent current processing. Three
+  `VITE_*` rows added to the §16 app table; `SUBPROCESSORS.md` gained Sentry + PostHog rows; `DATA-INVENTORY.md` gained
+  Activity 14 (Product Analytics & Error Monitoring; adds no schema fields). Prior: Updated to reflect the Convex
+  backend
+  audit's interaction‑cap consistency fix. The per‑post interaction cap (`interactionsPerPost`) now counts **total
+  engagement** (LinkedIn‑seeded + in‑app) at **every**
+  point a post's counts are written, not only on in‑app taps: seeded at insert by all three post writers
+  (`jobs/syncPosts.upsertPost`, `jobs/processQueue`) so an already‑over‑cap Apify import never enters the feed;
+  re‑evaluated on the 30‑min Apify engagement refresh (`jobs/syncPosts.applyEngagementCounts`) so a post that crosses
+  the
+  cap on external growth drops out; and rejected **up front at manual submit** (`posts.submitPost`) with a user‑facing
+  message instead of silently creating a hidden post. Both in‑app increment mutations (`interactions.ts`) now guard on
+  the
+  flag before writing (`if (post.interactionLimitReached) return`) so a concurrent tap can't overshoot the count on the
+  OCC retry. The flip stays one‑way. §9 (`interactionsPerPost` bullet), §10 (submit‑flow "Interaction‑cap gate"), §10
+  (queue drain), and §11 (Interactions) updated. Same pass also hardened, without behavior change: `linkedin/oauth.ts`
+  now
+  guards its `LINKEDIN_*` env vars explicitly (clear error instead of a `"undefined"`‑poisoned request),
+  `users.getActiveSubscribers`
+  is bounded `.take(500)` with a non‑silent cap (mirrors `getUsersWithLinkedin`), and `feedback.listFeedback` batches
+  its
+  submitter/responder lookups instead of a per‑row/per‑response `get()` fan‑out. Prior: Updated to reflect the landing
+  theme-flash (FOUC) refresh fix. Symptom: on refresh, when the OS scheme differed from the stored theme, the page
+  painted
+  the OS theme for ~0.5s before flipping to the stored one. Root cause: the inline no-flash `<head>` script read the
+  theme
+  from the **cookie only**, while `ThemeToggle`'s post-hydration effect resolves via `lib/theme.ts` `getStoredTheme`
+  (**cookie → localStorage → system**). When the pref lived in the localStorage mirror but the cookie was absent
+  (cleared
+  or host-only in dev), the pre-paint script fell through to
+  `system` (= OS) while hydration later applied the localStorage value — the two resolvers disagreed, producing the
+  flash.
+  Fix: the no-flash script now resolves with the **same** cookie → localStorage → system precedence, so pre-paint and
+  post-hydration agree and no frame flips. This is a one-file change in `landing/app/[lang]/layout.tsx` (the `NO_FLASH`
+  string). An earlier `app/[theme]/[lang]/` server-prerender refactor was tried and **reverted** — it was unnecessary: a
+  render-blocking stylesheet does not out-race an inline `<head>` script (rendering is blocked too, so the script always
+  runs before first paint), so no per-theme prerender is needed and routes stay `app/[lang]/` with a locale-only
+  `middleware.ts`. §4 tree and §15 describe `app/[lang]/`; the stale standalone `/pricing` route (now a Home section)
+  was
+  dropped from the route table. Prior: Updated to reflect the plan‑limits self‑heal fix (task B27,
+  backlog/B27-seed-plan-limits.md, approach B): `admin.updateTierDefault` threw `No default row found for tier —
 run seedPlanLimits first` in any environment where the one‑time `migrations/seedPlanLimits.ts` mutation had never been
-run, blocking the admin edit path entirely. It now self‑heals — inserts the missing tier‑default row before patching it,
-the same idempotent `userId === undefined` check `seedPlanLimits` already used, so it still can't duplicate a row or
-touch a contact per‑user override. The seed values and the read‑side safety‑net (`DEFAULTS` in
-`lib/planLimits.ts`) were already two hand‑maintained copies of the same numbers (matched, but only by discipline — the
-backlog doc flagged the drift risk); the new self‑heal insert would have been a third. They're now **one**:
-`DEFAULTS` plus a new pure helper, `buildTierDefaultRow(tier)`
-(`{ tier, ...DEFAULTS[tier] }`), that both `seedPlanLimits` and `updateTierDefault` call. New
-`lib/planLimits.test.ts` unit‑tests the helper (every field present per tier, values match `DEFAULTS`, `userId`
-never set). `seedPlanLimits` is unchanged in behavior and kept for explicit/bulk re‑seeding — it's just no longer a hard
-prerequisite for the admin edit path. §9's seed‑values subsection and §12's `updateTierDefault` table row are updated;
-approach A (adding the seed run to the [[B24]] deploy checklist) was **not** taken. Prior: Updated to reflect the
-featured‑posts feature (task B07, backlog/B07-featured-posts-feature.md): the feed already boosted featured posts
-(`lib/feedRank.ts`) and `PostCard`
-already rendered the "★ Featured" badge, but nothing ever set `isFeatured: true` and the `featuredPostUsage` quota table
-was unwired — this closes that gap. `planLimits` schema gained `featuredPerMonth: v.optional(v.number())`
-(widen‑then‑coalesce, no backfill migration); `lib/planLimits.ts`'s `DEFAULTS` and every return path in
-`getPlanLimitsHelper` now populate it (`row.featuredPerMonth ?? DEFAULTS[tier].featuredPerMonth`), seed values
-`starter:0, growth:1, pro:3, contact:9999` (9999 = Custom/enterprise sentinel, `UNLIMITED_FEATURED_SENTINEL` in
-`lib/postLimit.ts`, moved from 999 on 2026-09-05; unlike `interactionsPerPost`/
-`postsPerWeek`, this field is **not** exposed in the admin per‑user override UI — a contact row always coalesces to
-9999,
-and a bespoke featured cap needs a direct DB edit today, see §1/§9); `migrations/seedPlanLimits.ts` seeds the same
-values. New pure helpers
-`lib/postLimit.ts:isFeaturedLimitReached` (boundary `usedCount >= featuredPerMonth`) plus `isUnlimitedFeatured`/
-`UNLIMITED_FEATURED_SENTINEL` (the pill's "unlimited" rule, 2026-09-05) and `currentUtcMonthKey` (UTC
-`"YYYY-MM"`, so the quota resets at the same instant worldwide, not at each user's local midnight) — both unit‑tested
-including the UTC month/year rollover boundary. New `posts.featurePost`/`unfeaturePost` mutations (author or admin via
-the existing `canModifyPost`) and `posts.getFeaturedUsage` query: featuring is quota‑gated against
-`featuredPostUsage` (keyed by `(userId, month)`), patches `isFeatured`/`featuredAt` **and** recomputes
-`feedRank`/`inFeed` via the existing `computeFeedFields` helper (never hand‑rolled — see §10/§11), and
-upserts/increments the usage row in the same mutation; unfeaturing does **not** refund the quota (product decision —
-featuring permanently consumes a monthly slot). Both mutations short‑circuit as a no‑op when the post is already in the
-target state — the actual fix for double‑incrementing usage under Convex's OCC retry semantics, not just an optimization
-(see §10). `jobs/syncPosts.upsertPost` is unchanged (still inserts `isFeatured: false`; the mutation is now the sole
-writer of `true`). MyPostsPage gained a second usage pill ("N of M featured this month", or "N featured this month ·
-unlimited" when `isUnlimitedFeatured(featuredPerMonth)` (cap >= 9999) — the raw 9999 sentinel is never shown to the
-user) next to the existing weekly
-pill, and each post's action bar gained a Feature/Unfeature toggle (`aria-pressed`, disabled + `title`
-reason at the cap, reusing the existing `feed.featured` badge when a post is featured) — new `myPosts.*` i18n keys
-(en/pt/es). `admin.ts`'s plan‑limits UI was deliberately left untouched: it uses its own inline type shapes rather than
-`lib/planLimits.ts`'s module‑private `PlanLimits` type, so the optional field needed no changes there — an unseeded
-contact‑override row (e.g. one `admin.setUserTier` auto‑creates on promotion) is exactly the "missing field" case the
-coalesce already handles. §1's tier table, §9's seed table + lookup precedence, §5's `featuredPostUsage`/`planLimits`
-table docs, §10's new "Featuring a post" subsection + mutation reference table, §14's MyPostsPage description, and §19's
-dead‑code/stub entries are all updated. Prior: Updated to reflect post‑visibility controls (task B06,
-backlog/B06-post-visibility-controls-ui.md): `users` schema gained `defaultVisibilityIndustries`/
-`defaultVisibilityCountries` (Pro/Contact‑only **user‑default** model — not per‑post; see §5); new
-`users.setPostVisibility` mutation patches them, gated server‑side to `tier === 'pro' \| 'contact'` and validating each
-entry against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values, upper‑cases country codes — see
-§11). All three post writers (`posts.submitPost`, `jobs/processQueue.ts`, `jobs/syncPostsApify.ts`) now copy the
-author's stored defaults onto `posts.visibilityIndustries`/`visibilityCountries` at insert time instead of hardcoding
-`[]`; `feed.getFeed`'s enforcement of those fields was already built and is unchanged. SettingsPage's
-"Coming soon" placeholder is replaced with two chip‑picker fields — `VirtualizedCombobox` (already‑selected options
-excluded from the list) plus removable `Badge` chips, no new dependency — sharing the same dirty‑flag/Save pattern as
-the page's other fields (see §14). A downgrade does **not** clear stored defaults or retroactively touch posts already
-written — only the setter is tier‑gated (see §1, §19). New i18n keys `settings.visibilityIndustries` /
-`visibilityCountries` / `visibilityAddIndustry` / `visibilityAddCountry` / `visibilityRemove` (en/pt/es);
-`settings.visibilityComingSoon` removed. Prior: Updated to reflect the LinkedIn reconnect banner (task B01b,
-backlog/B01-linkedin-token-refresh.md, steps 6-7 — the frontend half; B01a below is the backend half):
-new `app/src/components/ReconnectBanner.tsx` — a pure, exported `shouldShowReconnect(me, now)` gate
-(`tokenExpiresAt == null` → "expired"; `tokenExpiresAt < now + 7d`, including already past, → "expiring"
-with a day count; otherwise renders nothing; no `me` → nothing) plus the presentational banner, mounted in `App.tsx`'s
-`RequireAuth` alongside `Motd`, authenticated region only. "Reconnect" re‑runs
-`/auth/linkedin` via the same `AUTH_URL` (`app/src/lib/session.ts`) `RequireAuth`'s own auto‑OAuth redirect uses. No
-dismiss (`// ponytail:` noted in the component). New i18n keys:
-`reconnectBanner.expiredMessage`, `reconnectBanner.expiringMessage` (`_one`/`_other`),
-`reconnectBanner.reconnect` (en/pt/es). §7 and §19's "not built yet" notes for B01b are now resolved. Prior: Updated to
-reflect the LinkedIn token-refresh backend (task B01a, backlog/B01-linkedin-token-refresh.md): `linkedin/oauth.ts`
-gained `refreshAccessToken`
-(`grant_type=refresh_token`, same log‑real/throw‑sanitized + no‑new‑env discipline as
-`exchangeCodeForTokens`); `linkedin/auth.ts` gained `updateTokens`/`updateTokensHandler` (patches only the three token
-fields, preserves the existing refresh token when LinkedIn's response omits one); new `linkedin/tokenRefresh.ts` (pure
-`isInRefreshWindow` predicate + `getUsersPendingRefresh`
-internalQuery + `refreshExpiringTokens` internalAction, cursor-paginated — mirrors
-`migrations/backfillFeedFields.ts` — so a full sweep of the pre-expiry window never stalls behind rows stuck at the
-front, with per-user failure isolation); `crons.ts` gained the `refresh LinkedIn
+  run, blocking the admin edit path entirely. It now self‑heals — inserts the missing tier‑default row before patching
+  it,
+  the same idempotent `userId === undefined` check `seedPlanLimits` already used, so it still can't duplicate a row or
+  touch a contact per‑user override. The seed values and the read‑side safety‑net (`DEFAULTS` in
+  `lib/planLimits.ts`) were already two hand‑maintained copies of the same numbers (matched, but only by discipline —
+  the
+  backlog doc flagged the drift risk); the new self‑heal insert would have been a third. They're now **one**:
+  `DEFAULTS` plus a new pure helper, `buildTierDefaultRow(tier)`
+  (`{ tier, ...DEFAULTS[tier] }`), that both `seedPlanLimits` and `updateTierDefault` call. New
+  `lib/planLimits.test.ts` unit‑tests the helper (every field present per tier, values match `DEFAULTS`, `userId`
+  never set). `seedPlanLimits` is unchanged in behavior and kept for explicit/bulk re‑seeding — it's just no longer a
+  hard
+  prerequisite for the admin edit path. §9's seed‑values subsection and §12's `updateTierDefault` table row are updated;
+  approach A (adding the seed run to the [[B24]] deploy checklist) was **not** taken. Prior: Updated to reflect the
+  featured‑posts feature (task B07, backlog/B07-featured-posts-feature.md): the feed already boosted featured posts
+  (`lib/feedRank.ts`) and `PostCard`
+  already rendered the "★ Featured" badge, but nothing ever set `isFeatured: true` and the `featuredPostUsage` quota
+  table
+  was unwired — this closes that gap. `planLimits` schema gained `featuredPerMonth: v.optional(v.number())`
+  (widen‑then‑coalesce, no backfill migration); `lib/planLimits.ts`'s `DEFAULTS` and every return path in
+  `getPlanLimitsHelper` now populate it (`row.featuredPerMonth ?? DEFAULTS[tier].featuredPerMonth`), seed values
+  `starter:0, growth:1, pro:3, contact:9999` (9999 = Custom/enterprise sentinel, `UNLIMITED_FEATURED_SENTINEL` in
+  `lib/postLimit.ts`, moved from 999 on 2026-09-05; unlike `interactionsPerPost`/
+  `postsPerWeek`, this field is **not** exposed in the admin per‑user override UI — a contact row always coalesces to
+  9999,
+  and a bespoke featured cap needs a direct DB edit today, see §1/§9); `migrations/seedPlanLimits.ts` seeds the same
+  values. New pure helpers
+  `lib/postLimit.ts:isFeaturedLimitReached` (boundary `usedCount >= featuredPerMonth`) plus `isUnlimitedFeatured`/
+  `UNLIMITED_FEATURED_SENTINEL` (the pill's "unlimited" rule, 2026-09-05) and `currentUtcMonthKey` (UTC
+  `"YYYY-MM"`, so the quota resets at the same instant worldwide, not at each user's local midnight) — both unit‑tested
+  including the UTC month/year rollover boundary. New `posts.featurePost`/`unfeaturePost` mutations (author or admin via
+  the existing `canModifyPost`) and `posts.getFeaturedUsage` query: featuring is quota‑gated against
+  `featuredPostUsage` (keyed by `(userId, month)`), patches `isFeatured`/`featuredAt` **and** recomputes
+  `feedRank`/`inFeed` via the existing `computeFeedFields` helper (never hand‑rolled — see §10/§11), and
+  upserts/increments the usage row in the same mutation; unfeaturing does **not** refund the quota (product decision —
+  featuring permanently consumes a monthly slot). Both mutations short‑circuit as a no‑op when the post is already in
+  the
+  target state — the actual fix for double‑incrementing usage under Convex's OCC retry semantics, not just an
+  optimization (see §10). `jobs/syncPosts.upsertPost` is unchanged (still inserts `isFeatured: false`; the mutation is
+  now the sole
+  writer of `true`). MyPostsPage gained a second usage pill ("N of M featured this month", or "N featured this month ·
+  unlimited" when `isUnlimitedFeatured(featuredPerMonth)` (cap >= 9999) — the raw 9999 sentinel is never shown to the
+  user) next to the existing weekly
+  pill, and each post's action bar gained a Feature/Unfeature toggle (`aria-pressed`, disabled + `title`
+  reason at the cap, reusing the existing `feed.featured` badge when a post is featured) — new `myPosts.*` i18n keys
+  (en/pt/es). `admin.ts`'s plan‑limits UI was deliberately left untouched: it uses its own inline type shapes rather
+  than
+  `lib/planLimits.ts`'s module‑private `PlanLimits` type, so the optional field needed no changes there — an unseeded
+  contact‑override row (e.g. one `admin.setUserTier` auto‑creates on promotion) is exactly the "missing field" case the
+  coalesce already handles. §1's tier table, §9's seed table + lookup precedence, §5's `featuredPostUsage`/`planLimits`
+  table docs, §10's new "Featuring a post" subsection + mutation reference table, §14's MyPostsPage description, and
+  §19's
+  dead‑code/stub entries are all updated. Prior: Updated to reflect post‑visibility controls (task B06,
+  backlog/B06-post-visibility-controls-ui.md): `users` schema gained `defaultVisibilityIndustries`/
+  `defaultVisibilityCountries` (Pro/Contact‑only **user‑default** model — not per‑post; see §5); new
+  `users.setPostVisibility` mutation patches them, gated server‑side to `tier === 'pro' \| 'contact'` and validating
+  each
+  entry against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values, upper‑cases country codes —
+  see
+  §11). All three post writers (`posts.submitPost`, `jobs/processQueue.ts`, `jobs/syncPostsApify.ts`) now copy the
+  author's stored defaults onto `posts.visibilityIndustries`/`visibilityCountries` at insert time instead of hardcoding
+  `[]`; `feed.getFeed`'s enforcement of those fields was already built and is unchanged. SettingsPage's
+  "Coming soon" placeholder is replaced with two chip‑picker fields — `VirtualizedCombobox` (already‑selected options
+  excluded from the list) plus removable `Badge` chips, no new dependency — sharing the same dirty‑flag/Save pattern as
+  the page's other fields (see §14). A downgrade does **not** clear stored defaults or retroactively touch posts already
+  written — only the setter is tier‑gated (see §1, §19). New i18n keys `settings.visibilityIndustries` /
+  `visibilityCountries` / `visibilityAddIndustry` / `visibilityAddCountry` / `visibilityRemove` (en/pt/es);
+  `settings.visibilityComingSoon` removed. Prior: Updated to reflect the LinkedIn reconnect banner (task B01b,
+  backlog/B01-linkedin-token-refresh.md, steps 6-7 — the frontend half; B01a below is the backend half):
+  new `app/src/components/ReconnectBanner.tsx` — a pure, exported `shouldShowReconnect(me, now)` gate
+  (`tokenExpiresAt == null` → "expired"; `tokenExpiresAt < now + 7d`, including already past, → "expiring"
+  with a day count; otherwise renders nothing; no `me` → nothing) plus the presentational banner, mounted in `App.tsx`'s
+  `RequireAuth` alongside `Motd`, authenticated region only. "Reconnect" re‑runs
+  `/auth/linkedin` via the same `AUTH_URL` (`app/src/lib/session.ts`) `RequireAuth`'s own auto‑OAuth redirect uses. No
+  dismiss (`// ponytail:` noted in the component). New i18n keys:
+  `reconnectBanner.expiredMessage`, `reconnectBanner.expiringMessage` (`_one`/`_other`),
+  `reconnectBanner.reconnect` (en/pt/es). §7 and §19's "not built yet" notes for B01b are now resolved. Prior: Updated
+  to
+  reflect the LinkedIn token-refresh backend (task B01a, backlog/B01-linkedin-token-refresh.md): `linkedin/oauth.ts`
+  gained `refreshAccessToken`
+  (`grant_type=refresh_token`, same log‑real/throw‑sanitized + no‑new‑env discipline as
+  `exchangeCodeForTokens`); `linkedin/auth.ts` gained `updateTokens`/`updateTokensHandler` (patches only the three token
+  fields, preserves the existing refresh token when LinkedIn's response omits one); new `linkedin/tokenRefresh.ts` (pure
+  `isInRefreshWindow` predicate + `getUsersPendingRefresh`
+  internalQuery + `refreshExpiringTokens` internalAction, cursor-paginated — mirrors
+  `migrations/backfillFeedFields.ts` — so a full sweep of the pre-expiry window never stalls behind rows stuck at the
+  front, with per-user failure isolation); `crons.ts` gained the `refresh LinkedIn
 tokens` cron (every 6h, ahead of the 24h `enforce data retention` cron); `users.toSafeMe`/`getMe` now keep
-`tokenExpiresAt` (not a secret) instead of stripping it, for the still-unbuilt reconnect banner (task B01b) to consume.
-Ground truth reconfirmed: the app's OIDC Standard-tier scopes mean LinkedIn essentially never issues a `refresh_token`,
-so this backend is correct but dormant for nearly every user — the real mitigation is the reconnect banner, out of scope
-for this change. See §7, §13, §16, §17, §19. Prior: Updated to reflect locale-routed i18n + pt/es legal drafts (Plan 2):
-§15 restructured — added "Locale routing" subsection (middleware flow, root layout, dictionary pattern,
-LanguageSelector, hreflang/per-locale metadata, updated route table with locale prefix, legal content modules with pt/es
-drafts); also updated route table and footer link paths. Prior: Updated to reflect cross-site theme + lang persistence
-(Plan 1 Phase A+B):
-§14B added (cross-site cookie persistence, Mermaid flow, palette unification); §14A updated (cookie-primary theme); §15
-updated (Tailwind v4, light/dark, ThemeToggle); §16 updated (VITE\_COOKIE\_DOMAIN, NEXT\_PUBLIC\_COOKIE\_DOMAIN);
-§2/§3/§4 updated (landing now Tailwind 4); §19 updated (tailwind.config.ts deleted); i18n cookie detector noted. Prior
-history: Generated from a full read of the codebase at branch
-`feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature (commits `d1b40a2` →
-`1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
-(Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`, and `buildEmbedUrl`
-preserves the URN namespace. Also reflects the Profile Enrichment feature (Task 14): Apify-driven LinkedIn profile
-scrape populating `location`, `primaryLocale`, and
-`country` on the `users` table; user-editable `industry`/`country` dropdowns in Settings; admin toggles for the master
-Apify kill-switch and profile scrape; and i18n seeding from
-`me.primaryLocale` on first authenticated load. Also reflects **Privacy & Compliance Phase 1 (Foundations)**: email
-capture from LinkedIn OIDC (stored + forwarded to Stripe), `lastLoginAt` and
-`acknowledgedPolicyVersion` on `users`, the new `consentRecords`/`dataExportRequests`/`auditLogs`
-tables, the `lib/policy.ts`/`lib/audit.ts`/`lib/email.ts` modules, and the `RESEND_API_KEY`/
-`EMAIL_FROM` env vars — see [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance Phase 2a (Backend
-DSR)**: self-service data export (`convex/privacy/export.ts` — rate-limited
-`requestDataExport` mutation + `generateExport` action, 7-day signed download URL) and the 30-day account-deletion
-lifecycle (`convex/privacy/deletion.ts` — `requestAccountDeletion` / `cancelAccountDeletion` /
-`processAccountDeletions` daily cron; feed exclusion via `isAuthorFeedEligible`; `cascadeDeleteUser`
-with auditLog pseudonymization; Stripe subscription cancellation during grace period). The
-`process account deletions` cron is documented in [§13](#13-scheduled-jobs-crons). Also reflects **Privacy & Compliance
-Phase 2b (Frontend DSR)**: the new guarded `/privacy-data` route (`PrivacyDataPage` — export request/status/download +
-delete-with-confirm modal calling
-`api.privacy._`), `CancelDeletionScreen`(grace-window interstitial wired into`RequireAuth`), the updated `RequireAuth`
-interception order (loading → null → isBanned → deletionScheduledAt → app), the **"Privacy"** link added to`Sidebar`,
-and the new `privacy._`i18n namespace (en/pt/es)
-— see [§14](#14-frontend--authenticated-app-app). Also reflects **Privacy & Compliance Phase 3a (Consent +
-Retention/Dormancy + Re-consent Backend)**: append-only`consentRecords`table with`recordConsent`/
-`getConsents`(latest-per-purpose via`latestConsentByPurpose`); `marketing`and`analytics`purposes off by default;
-`acknowledgePolicy`stamping`users.acknowledgedPolicyVersion`
-for Phase 3b re-consent prompts (`getMe`exposes the field); and the new`enforce data retention`
-daily cron (`convex/privacy/retention.ts`) sweeping expired LinkedIn tokens, expiring/purging old export files, purging
-audit logs >24 months, and flagging dormant accounts (24 months inactive, non-subscriber) with
-`deletionScheduledAt='dormancy'`+ warning email — reusing the Phase 2a`processAccountDeletions`
-cascade and`CancelDeletionScreen`for the grace window. See
-[§13](#13-scheduled-jobs-crons) and [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance Phase 3b (
-Consent UI + Re-consent + Cookies Frontend)**:`ConsentToggles`(marketing + analytics toggles, off by default, inside
-`PrivacyDataPage`) and `PolicyUpdateScreen`(full-screen`RequireAuth`
-interstitial when`acknowledgedPolicyVersion !== POLICY_VERSION`, calls
-`acknowledgePolicy`) in the authenticated app — see [§14](#14-frontend--authenticated-app-app);
-`CookiesPage` (`/cookies`route, essential-storage-only policy) and`CookieNotice`(dismissible first-visit banner,
-`localStorage`-persisted, SSR-safe via `useSyncExternalStore`) in the landing site, with `Footer`updated to link
-`/cookies`— see [§15](#15-frontend--landing-site-landing); new i18n keys`privacy.consent._`and`privacy.policyUpdate._`in
-all three locales (en/pt/es). Also reflects **Privacy & Compliance Phase 4 (Legal / Transparency Docs)**: six DRAFT
-compliance documents created under`docs/compliance/` (`DATA-INVENTORY.md`ROPA,`SUBPROCESSORS.md`,
-`RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`, `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`) with an index and consolidated
-human/legal to-do list in `docs/compliance/README.md`; `/privacy`and`/terms`
-landing pages rewritten as full GDPR/LGPD/US-state DRAFT notices (pending legal review); §17 updated with compliance
-documentation table; §15 updated to reflect the rewritten legal pages. Also reflects **new-user consent prompt**
-(`ConsentPromptScreen`+`completeConsentPrompt`+`users.consentPromptedAt`):
-one-time first-login full-screen prompt for Communication & analytics preferences (marketing + analytics toggles, OFF by
-default); `RequireAuth` interception order extended with step 6 (`!consentPromptedAt → ConsentPromptScreen`);
-`consentPromptedAt`field added to the`users`table (§5);`completeConsentPrompt`mutation documented in §13B; new
-`privacy.consentPrompt._` i18n keys in all three locales.\*
+  `tokenExpiresAt` (not a secret) instead of stripping it, for the still-unbuilt reconnect banner (task B01b) to
+  consume.
+  Ground truth reconfirmed: the app's OIDC Standard-tier scopes mean LinkedIn essentially never issues a
+  `refresh_token`,
+  so this backend is correct but dormant for nearly every user — the real mitigation is the reconnect banner, out of
+  scope
+  for this change. See §7, §13, §16, §17, §19. Prior: Updated to reflect locale-routed i18n + pt/es legal drafts (Plan
+  2):
+  §15 restructured — added "Locale routing" subsection (middleware flow, root layout, dictionary pattern,
+  LanguageSelector, hreflang/per-locale metadata, updated route table with locale prefix, legal content modules with
+  pt/es
+  drafts); also updated route table and footer link paths. Prior: Updated to reflect cross-site theme + lang persistence
+  (Plan 1 Phase A+B):
+  §14B added (cross-site cookie persistence, Mermaid flow, palette unification); §14A updated (cookie-primary theme);
+  §15
+  updated (Tailwind v4, light/dark, ThemeToggle); §16 updated (VITE\_COOKIE\_DOMAIN, NEXT\_PUBLIC\_COOKIE\_DOMAIN);
+  §2/§3/§4 updated (landing now Tailwind 4); §19 updated (tailwind.config.ts deleted); i18n cookie detector noted. Prior
+  history: Generated from a full read of the codebase at branch
+  `feat/initial-setup` (HEAD `f9e48dc`). Reflects the LinkedIn iframe + content‑capture feature (commits `d1b40a2` →
+  `1fcc123`): Feed/My Posts render posts via the single shared `LinkedInEmbed`
+  (Option B layout, no raw post text), `submitPost` persists parsed content + structured `mediaUrls`, and
+  `buildEmbedUrl`
+  preserves the URN namespace. Also reflects the Profile Enrichment feature (Task 14): Apify-driven LinkedIn profile
+  scrape populating `location`, `primaryLocale`, and
+  `country` on the `users` table; user-editable `industry`/`country` dropdowns in Settings; admin toggles for the master
+  Apify kill-switch and profile scrape; and i18n seeding from
+  `me.primaryLocale` on first authenticated load. Also reflects **Privacy & Compliance Phase 1 (Foundations)**: email
+  capture from LinkedIn OIDC (stored + forwarded to Stripe), `lastLoginAt` and
+  `acknowledgedPolicyVersion` on `users`, the new `consentRecords`/`dataExportRequests`/`auditLogs`
+  tables, the `lib/policy.ts`/`lib/audit.ts`/`lib/email.ts` modules, and the `RESEND_API_KEY`/
+  `EMAIL_FROM` env vars — see [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance Phase 2a (Backend
+  DSR)**: self-service data export (`convex/privacy/export.ts` — rate-limited
+  `requestDataExport` mutation + `generateExport` action, 7-day signed download URL) and the 30-day account-deletion
+  lifecycle (`convex/privacy/deletion.ts` — `requestAccountDeletion` / `cancelAccountDeletion` /
+  `processAccountDeletions` daily cron; feed exclusion via `isAuthorFeedEligible`; `cascadeDeleteUser`
+  with auditLog pseudonymization; Stripe subscription cancellation during grace period). The
+  `process account deletions` cron is documented in [§13](#13-scheduled-jobs-crons). Also reflects **Privacy &
+  Compliance
+  Phase 2b (Frontend DSR)**: the new guarded `/privacy-data` route (`PrivacyDataPage` — export request/status/download +
+  delete-with-confirm modal calling
+  `api.privacy._`), `CancelDeletionScreen`(grace-window interstitial wired into`RequireAuth`), the updated `RequireAuth`
+  interception order (loading → null → isBanned → deletionScheduledAt → app), the **"Privacy"** link added to`Sidebar`,
+  and the new `privacy._`i18n namespace (en/pt/es)
+  — see [§14](#14-frontend--authenticated-app-app). Also reflects **Privacy & Compliance Phase 3a (Consent +
+  Retention/Dormancy + Re-consent Backend)**: append-only`consentRecords`table with`recordConsent`/
+  `getConsents`(latest-per-purpose via`latestConsentByPurpose`); `marketing`and`analytics`purposes off by default;
+  `acknowledgePolicy`stamping`users.acknowledgedPolicyVersion`
+  for Phase 3b re-consent prompts (`getMe`exposes the field); and the new`enforce data retention`
+  daily cron (`convex/privacy/retention.ts`) sweeping expired LinkedIn tokens, expiring/purging old export files,
+  purging
+  audit logs >24 months, and flagging dormant accounts (24 months inactive, non-subscriber) with
+  `deletionScheduledAt='dormancy'`+ warning email — reusing the Phase 2a`processAccountDeletions`
+  cascade and`CancelDeletionScreen`for the grace window. See
+  [§13](#13-scheduled-jobs-crons) and [§13B](#13b-privacy--compliance). Also reflects **Privacy & Compliance Phase 3b (
+  Consent UI + Re-consent + Cookies Frontend)**:`ConsentToggles`(marketing + analytics toggles, off by default, inside
+  `PrivacyDataPage`) and `PolicyUpdateScreen`(full-screen`RequireAuth`
+  interstitial when`acknowledgedPolicyVersion !== POLICY_VERSION`, calls
+  `acknowledgePolicy`) in the authenticated app — see [§14](#14-frontend--authenticated-app-app);
+  `CookiesPage` (`/cookies`route, essential-storage-only policy) and`CookieNotice`(dismissible first-visit banner,
+  `localStorage`-persisted, SSR-safe via `useSyncExternalStore`) in the landing site, with `Footer`updated to link
+  `/cookies`— see [§15](#15-frontend--landing-site-landing); new i18n keys`privacy.consent._`and`privacy.policyUpdate._`
+  in
+  all three locales (en/pt/es). Also reflects **Privacy & Compliance Phase 4 (Legal / Transparency Docs)**: six DRAFT
+  compliance documents created under`docs/compliance/` (`DATA-INVENTORY.md`ROPA,`SUBPROCESSORS.md`,
+  `RETENTION-POLICY.md`, `GAP-ASSESSMENT.md`, `BREACH-RUNBOOK.md`, `DPA-TEMPLATE.md`) with an index and consolidated
+  human/legal to-do list in `docs/compliance/README.md`; `/privacy`and`/terms`
+  landing pages rewritten as full GDPR/LGPD/US-state DRAFT notices (pending legal review); §17 updated with compliance
+  documentation table; §15 updated to reflect the rewritten legal pages. Also reflects **new-user consent prompt**
+  (`ConsentPromptScreen`+`completeConsentPrompt`+`users.consentPromptedAt`):
+  one-time first-login full-screen prompt for Communication & analytics preferences (marketing + analytics toggles, OFF
+  by
+  default); `RequireAuth` interception order extended with step 6 (`!consentPromptedAt → ConsentPromptScreen`);
+  `consentPromptedAt`field added to the`users`table (§5);`completeConsentPrompt`mutation documented in §13B; new
+  `privacy.consentPrompt._` i18n keys in all three locales.\*

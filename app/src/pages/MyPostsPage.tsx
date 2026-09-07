@@ -14,7 +14,8 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
 import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
-import { friendlyError } from '@/lib/errors'
+import UpgradeAtLimit from '../components/UpgradeAtLimit'
+import { friendlyError, mapLimitError } from '@/lib/errors'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -27,6 +28,9 @@ interface MyPost {
   hidden?: boolean
   isFeatured?: boolean
   sourceUrl?: string
+  // Set when this post's engagement met the author's per-post interaction cap and it left the
+  // feed (convex/posts.ts:439,473,533,567 — Option A, total engagement counts toward the cap).
+  interactionLimitReached?: boolean
 }
 
 // The shape returned by getWeeklyUsage (null when not signed in).
@@ -54,6 +58,10 @@ export default function MyPostsPage() {
   const me = useQuery(api.users.getMe, { sessionToken })
   const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
   const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken }) as FeaturedUsage | null | undefined
+  // Current tier's interaction cap, for the "reached N interactions" badge below — a post's own
+  // cap isn't stored (it's evaluated against the author's tier at write time), so this shows the
+  // CURRENT tier limit, same convention as getFeaturedUsage/getWeeklyUsage above.
+  const tierLimits = useQuery(api.posts.getTierLimits, {})
   const posts = useQuery(api.posts.getMyPosts, { sessionToken }) as unknown as MyPost[] | undefined
   const submitPost = useAction(api.posts.submitPost)
   const setPostHidden = useMutation(api.posts.setPostHidden)
@@ -98,7 +106,7 @@ export default function MyPostsPage() {
         await featurePost({ sessionToken, postId: post._id })
       }
     } catch (err) {
-      setActionError(friendlyError(err, t('myPosts.updateError')))
+      setActionError(mapLimitError(friendlyError(err, t('myPosts.updateError')), t))
     }
   }
 
@@ -181,11 +189,22 @@ export default function MyPostsPage() {
         </div>
       )}
 
+      {/* Upgrade ask at the moment of the featured cap (backlog/R08) — under the pill row, not
+          inside the pill itself, so the pill stays a short badge. Only for a plan that includes
+          featured posts at all: on Starter (0/month) `featuredAtCap` is 0 >= 0 on every visit, and
+          an ask that fires on page load is an interruption, not a limit moment. Starter meets the
+          featured ask where it binds — the Feature button's own disabled state. */}
+      {featuredUsage != null && featuredAtCap && featuredUsage.featuredPerMonth > 0 && (
+        <p className="text-muted-foreground mb-6 text-[13px]">
+          <UpgradeAtLimit limit="featured" />
+        </p>
+      )}
+
       {/* Manual share — copied from the Feed page, re-themed light to match this page.
           Disabled at the weekly limit so we don't trigger a guaranteed-to-fail submit. */}
       <PostComposer
         atLimit={atLimit}
-        limitHint={t('myPosts.weeklyLimitReached')}
+        limitHint={<UpgradeAtLimit limit="weeklyPosts" />}
         onSubmit={handleSubmit}
       />
 
@@ -269,6 +288,21 @@ export default function MyPostsPage() {
                   </Button>
                 </div>
               </div>
+              {/* Interaction cap reached — the post left the feed silently (no toast, no notice on
+                  the next feed visit); this row is the only place it's surfaced. */}
+              {post.interactionLimitReached && me && tierLimits && (
+                <div className="border-border flex flex-wrap items-center gap-2 border-b px-3.5 py-2">
+                  <Badge
+                    variant="warning"
+                    className="rounded-full px-2 py-0.5 text-[11px]"
+                  >
+                    {t('myPosts.interactionCapBadge', { limit: tierLimits[me.tier ?? 'starter'].interactionsPerPost })}
+                  </Badge>
+                  <span className="text-muted-foreground text-[11px]">
+                    <UpgradeAtLimit limit="interactionCap" />
+                  </span>
+                </div>
+              )}
               <LinkedInEmbed
                 urn={post.linkedinPostUrn}
                 footer={

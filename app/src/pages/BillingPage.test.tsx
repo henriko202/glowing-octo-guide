@@ -1,6 +1,7 @@
 // app/src/pages/BillingPage.test.tsx
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 
 // PLAN_PRICE_IDS is read from import.meta.env at BillingPage module scope, and the real values
@@ -23,7 +24,9 @@ vi.mock('../convex', () => ({
       clearBillingNotice: 'users.clearBillingNotice'
     },
     billing: { createPortalSession: 'billing.createPortalSession' },
-    billingNode: { createCheckoutSession: 'billingNode.createCheckoutSession' }
+    billingNode: { createCheckoutSession: 'billingNode.createCheckoutSession' },
+    // CardGateBanner's useOwnPostState (reused for the R07 "post is live" line) reads this.
+    posts: { getMyPosts: 'posts.getMyPosts' }
   }
 }))
 
@@ -37,6 +40,18 @@ vi.mock('convex/react', () => ({
   useMutation: vi.fn(() => vi.fn(async () => {}))
 }))
 
+// useSearchParams is mocked (not the real router) so tests can assert the setter was called and
+// drive the query string directly, the same mockSetSearchParams pattern as AdminPage.test.tsx:59.
+// MemoryRouter is kept as a harmless passthrough so the existing <MemoryRouter> wrapper still works.
+const mockSetSearchParams = vi.fn()
+let mockSearchParams = new URLSearchParams()
+
+vi.mock('react-router-dom', () => ({
+  MemoryRouter: ({ children }: { children: ReactNode }) => children,
+  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
+  useSearchParams: () => [mockSearchParams, mockSetSearchParams]
+}))
+
 // Echo the key plus its interpolation so assertions can see both — except plan names, which
 // resolve to the real localized label. That keeps the "never print a raw tier id" rule testable.
 const PLAN_LABELS: Record<string, string> = {
@@ -46,9 +61,17 @@ const PLAN_LABELS: Record<string, string> = {
   contact: 'Enterprise'
 }
 
+// The R07 celebration/activating copy is asserted by its real English wording (not the raw key),
+// so those two keys resolve to their actual copy here; everything else keeps echoing its key.
+const REAL_COPY: Record<string, string> = {
+  'billing.successTitle': "You're in.",
+  'billing.activating': 'Activating your trial…'
+}
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (k: string, o?: Record<string, unknown>) => {
+      if (REAL_COPY[k]) return REAL_COPY[k]
       const planName = /^billing\.plans\.(\w+)\.name$/.exec(k)
       if (planName) return PLAN_LABELS[planName[1]] ?? k
       return o && !('returnObjects' in o) ? `${k}:${JSON.stringify(o)}` : k
@@ -71,11 +94,21 @@ function renderPage() {
   )
 }
 
+// For the R07 checkout-return tests: drives the mocked useSearchParams from a query string and the
+// mocked getMe from `me`, in one call.
+function renderBilling({ search = '', me = {} }: { search?: string; me?: Record<string, unknown> } = {}) {
+  mockSearchParams = new URLSearchParams(search)
+  setUser(me)
+  return renderPage()
+}
+
 beforeEach(() => {
   sessionStorage.clear()
   sessionStorage.setItem('sessionToken', 'tok')
   mockCheckout.mockClear()
   mockPortal.mockClear()
+  mockSetSearchParams.mockClear()
+  mockSearchParams = new URLSearchParams()
   mockQueryReturns = {
     'users.getSubscriptionInfo': { tier: 'growth', status: 'trialing', cancelAtPeriodEnd: false },
     'users.getTrialProgress': { made: 1, received: 1, combined: 2, threshold: 50, reached: false, nearThreshold: false }
@@ -133,11 +166,8 @@ describe('chosen plan (R03)', () => {
   })
 
   it('follows the ?plan= query parameter', () => {
-    render(
-      <MemoryRouter initialEntries={['/billing?plan=starter']}>
-        <BillingPage />
-      </MemoryRouter>
-    )
+    mockSearchParams = new URLSearchParams('?plan=starter')
+    renderPage()
     expect(screen.getByText(/billing\.chosenPlanLead.*Starter/)).toBeInTheDocument()
   })
 
@@ -157,11 +187,8 @@ describe('chosen plan (R03)', () => {
   it('follows ?interval= the same way as ?plan=, so a direct landing link honours both', () => {
     // The landing's Pricing links pass plan and interval together; a member arriving by direct
     // link (no OAuth stash) must land on the monthly price, not the annual default.
-    render(
-      <MemoryRouter initialEntries={['/billing?plan=pro&interval=monthly']}>
-        <BillingPage />
-      </MemoryRouter>
-    )
+    mockSearchParams = new URLSearchParams('?plan=pro&interval=monthly')
+    renderPage()
     expect(screen.getByText('$50/mo')).toBeInTheDocument()
     expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
   })
@@ -177,6 +204,18 @@ describe('chosen plan (R03)', () => {
     setUser({ subscriptionStatus: 'trialing', tier: 'pro', trialEndsAt: Date.now() + 86400000 })
     renderPage()
     expect(screen.getByText(/billing\.trialBanner.*Pro/)).toBeInTheDocument()
+  })
+
+  // The banner states the trial's terms with the real threshold and the exact end date — never a
+  // typed "50" or a relative "after 7 days" — and no longer links out to the SSI page, which sits
+  // behind Sales Navigator (the sidebar keeps the one qualified link).
+  it('states the threshold and the localized end date, with no SSI link-out', () => {
+    const trialEndsAt = Date.now() + 86400000
+    setUser({ subscriptionStatus: 'trialing', tier: 'pro', trialEndsAt })
+    renderPage()
+    const date = new Date(trialEndsAt).toLocaleDateString('en')
+    expect(screen.getByText(new RegExp(`billing\\.trialBanner:.*"threshold":50.*${date}`))).toBeInTheDocument()
+    expect(document.querySelector('a[href*="linkedin.com/sales/ssi"]')).toBeNull()
   })
 })
 
@@ -286,5 +325,122 @@ describe('duplicate notice', () => {
   it('renders nothing when there is no notice', () => {
     renderPage()
     expect(screen.queryByText('billing.duplicateCanceledNotice')).not.toBeInTheDocument()
+  })
+})
+
+describe('checkout-return celebration (R07)', () => {
+  it('opens the celebration once when returning from checkout with the status already flipped', () => {
+    renderBilling({ search: '?success=true', me: { subscriptionStatus: 'trialing', tier: 'growth' } })
+    expect(screen.getByRole('dialog')).toHaveTextContent(/you're in/i)
+    expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true })
+  })
+
+  it('shows the activating state while the webhook has not landed', () => {
+    renderBilling({ search: '?success=true', me: { subscriptionStatus: 'none' } })
+    expect(screen.getByText(/activating your trial/i)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('changes nothing on a plain visit', () => {
+    renderBilling({ search: '', me: { subscriptionStatus: 'active' } })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  // F3: the webhook can unhide the member's post before this page's own getMyPosts query lands —
+  // hasHiddenPost (the query's already-hidden flag) then reads false on the very first render, so a
+  // per-render latch on it can never recover the "your post is live" line. hasAnyPost doesn't care
+  // whether the post is still hidden at query time, only that they had one, so it survives the race.
+  it('still reports the post as live when it was already unhidden by the time getMyPosts lands', () => {
+    mockQueryReturns['posts.getMyPosts'] = [{ hidden: false }]
+    renderBilling({ search: '?success=true', me: { subscriptionStatus: 'trialing', tier: 'growth' } })
+    expect(screen.getByText('billing.successPostLive')).toBeInTheDocument()
+  })
+
+  // F4: stripping `success=true` on mount (instead of once the celebration has actually fired) lost
+  // the celebration for good if the member refreshed mid-activation — a fresh mount only re-latches
+  // justSubscribed by reading that same param, so an early strip means it's gone before the webhook
+  // ever lands.
+  it('does not strip the URL param while still activating (celebration has not fired yet)', () => {
+    renderBilling({ search: '?success=true', me: { subscriptionStatus: 'none' } })
+    expect(mockSetSearchParams).not.toHaveBeenCalled()
+  })
+
+  // A canceled member re-subscribing sits on `canceled` (not `none`) until the webhook lands, and
+  // the repeat-trial guard (billingNode.ts) lands them on `active`, never `trialing`. So: no
+  // premature "your trial is live" dialog while still canceled, the activating copy says "plan"
+  // (they get no trial), and the real dialog names the plan — never a trial, never a first post
+  // going live (a canceled member's posts were never hidden).
+  it('treats a canceled re-subscriber as activating, then celebrates the plan (not a trial) once active', () => {
+    mockQueryReturns['posts.getMyPosts'] = [{ hidden: false }]
+    const { rerender } = renderBilling({
+      search: '?success=true',
+      me: { subscriptionStatus: 'canceled', tier: 'starter' }
+    })
+    expect(screen.getByText('billing.activatingPlan')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    setUser({ subscriptionStatus: 'active', tier: 'growth' })
+    rerender(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>
+    )
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent(/billing\.successBodyActive/)
+    expect(dialog).not.toHaveTextContent(/billing\.successBody:/)
+    expect(dialog).not.toHaveTextContent('billing.successPostLive')
+  })
+
+  it('strips the URL param once the celebration actually fires, not before', () => {
+    const { rerender } = renderBilling({ search: '?success=true', me: { subscriptionStatus: 'none' } })
+    expect(mockSetSearchParams).not.toHaveBeenCalled()
+
+    setUser({ subscriptionStatus: 'trialing', tier: 'growth' })
+    rerender(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>
+    )
+    expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true })
+  })
+})
+
+// R08: an upgrade-at-the-limit link lands a card holder on /billing?plan=<next>. The plan they came
+// for gets the same "Recommended" highlight a no-card visitor's chosen plan does — but only when the
+// URL names one, never on a plain visit, and never on the plan they already hold.
+describe('plan highlight for card holders (R08)', () => {
+  it('highlights the plan a card holder was sent to by an upgrade link', () => {
+    renderBilling({ search: '?plan=pro', me: { subscriptionStatus: 'active', tier: 'growth' } })
+    expect(screen.getByText('billing.recommended')).toBeInTheDocument()
+  })
+
+  it('highlights nothing for a card holder arriving without a plan in the URL', () => {
+    renderBilling({ search: '', me: { subscriptionStatus: 'active', tier: 'growth' } })
+    expect(screen.queryByText('billing.recommended')).not.toBeInTheDocument()
+  })
+
+  it('never marks the plan a card holder already holds as recommended', () => {
+    renderBilling({ search: '?plan=growth', me: { subscriptionStatus: 'active', tier: 'growth' } })
+    expect(screen.queryByText('billing.recommended')).not.toBeInTheDocument()
+  })
+})
+
+describe('activation timeout (Item B)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows the timeout state once 20s pass with the webhook still not landed', () => {
+    vi.useFakeTimers()
+    renderBilling({ search: '?success=true', me: { subscriptionStatus: 'none' } })
+    expect(screen.getByText(/activating your trial/i)).toBeInTheDocument()
+    expect(screen.queryByText('billing.activatingTimeout')).not.toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(20_000)
+    })
+
+    expect(screen.getByText('billing.activatingTimeout')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'billing.manageSubscription' })).toBeInTheDocument()
   })
 })

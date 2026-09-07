@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { REACTIONS, type Reaction } from '../../../convex/lib/reactions'
+import type { GateSource } from './CardGateDialog'
 import LinkedInEmbed from './LinkedInEmbed'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +41,7 @@ function ReactionButton({
   likeCount,
   onReact,
   gated,
+  onGated,
   loading
 }: {
   postId: Id<'posts'>
@@ -47,6 +49,7 @@ function ReactionButton({
   likeCount: number
   onReact: (postId: Id<'posts'>, reaction: Reaction) => void
   gated?: boolean
+  onGated?: (source: GateSource) => void
   loading?: boolean
 }) {
   const { t } = useTranslation()
@@ -57,9 +60,9 @@ function ReactionButton({
       type="button"
       variant="ghost"
       aria-label={t('reactions.react')}
-      onClick={gated || loading ? undefined : () => onReact(postId, current.value)}
-      disabled={gated || loading}
-      title={gated ? t('feed.cardGate') : t(current.labelKey)}
+      onClick={loading ? undefined : () => (gated ? onGated?.('react') : onReact(postId, current.value))}
+      disabled={loading}
+      title={t(current.labelKey)}
       className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
     >
       {loading ? (
@@ -80,12 +83,14 @@ export default function PostCard({
   onComment,
   onReact,
   gated,
+  onGated,
   reacting
 }: {
   post: PostWithAuthor
   onComment: (postId: Id<'posts'>) => void
   onReact: (postId: Id<'posts'>, reaction: Reaction) => void
   gated?: boolean
+  onGated?: (source: GateSource) => void
   reacting?: boolean
 }) {
   const { t } = useTranslation()
@@ -134,14 +139,13 @@ export default function PostCard({
               likeCount={post.likeCount}
               onReact={onReact}
               gated={gated}
+              onGated={onGated}
               loading={reacting}
             />
             <Button
               type="button"
               variant="ghost"
-              onClick={gated ? undefined : () => onComment(post._id)}
-              disabled={gated}
-              title={gated ? t('feed.cardGate') : undefined}
+              onClick={() => (gated ? onGated?.('comment') : onComment(post._id))}
               className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
             >
               💬 {post.commentCount} {t('feed.comment')}
@@ -149,14 +153,18 @@ export default function PostCard({
 
             {!!post.sourceUrl &&
               (gated ? (
-                <button
-                  type="button"
-                  disabled
-                  title={t('feed.cardGate')}
-                  className="ml-auto cursor-not-allowed text-gold-text opacity-50"
+                <a
+                  href={post.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => {
+                    e.preventDefault()
+                    onGated?.('linkedin')
+                  }}
+                  className="ml-auto text-gold-text no-underline hover:underline"
                 >
                   {t('feed.viewOnLinkedIn')}
-                </button>
+                </a>
               ) : (
                 <a
                   href={post.sourceUrl}

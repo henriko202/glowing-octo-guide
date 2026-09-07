@@ -1,18 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
+import { TRIAL_INTERACTION_THRESHOLD } from '../../../convex/lib/trialMilestone'
+import TrialMeter from '@/components/TrialMeter'
+import { useOwnPostState } from '@/components/CardGateBanner'
+import CheckoutSuccessDialog from '@/components/CheckoutSuccessDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { SUPPORT_EMAIL } from '@/lib/support'
 import { friendlyError } from '@/lib/errors'
+import { captureException } from '@/lib/observability/sentry'
 import { formatPriceLabel } from '../../../convex/lib/billingEmails'
 import { resolveBillingLocale } from '../../../convex/lib/checkoutCopy'
+import { isPlanId, PLAN_IDS, resolveTargetPlan } from '@/lib/targetPlan'
 
-const PLAN_IDS = ['starter', 'growth', 'pro'] as const
+/** How long we give the Stripe webhook to land before the activating state times out (R07). */
+const ACTIVATION_TIMEOUT_MS = 20_000
 
 type Interval = 'monthly' | 'annual'
 
@@ -34,10 +41,6 @@ const PLAN_PRICES: Record<Interval, Record<string, string>> = {
   annual: { starter: '$50/yr', growth: '$150/yr', pro: '$500/yr' }
 }
 
-function isPlanId(p: string | null): p is (typeof PLAN_IDS)[number] {
-  return !!p && (PLAN_IDS as readonly string[]).includes(p)
-}
-
 function isInterval(i: string | null): i is Interval {
   return i === 'monthly' || i === 'annual'
 }
@@ -57,15 +60,78 @@ export default function BillingPage() {
   const createPortal = useAction(api.billing.createPortalSession)
   const clearBillingNotice = useMutation(api.users.clearBillingNotice)
   const [portalLoading, setPortalLoading] = useState(false)
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // R07 — celebrate activation. Stripe redirects here as /billing?success=true. `justSubscribed`
+  // latches that read (adjusting state during render, not an effect — see React's "you might not
+  // need an effect" guidance) so it survives the param being stripped a moment later.
+  const [justSubscribed, setJustSubscribed] = useState(false)
+  if (!justSubscribed && searchParams.get('success') === 'true') {
+    setJustSubscribed(true)
+  }
+  const [celebrationOpen, setCelebrationOpen] = useState(false)
+  const [hasCelebrated, setHasCelebrated] = useState(false)
+  const [activationTimedOut, setActivationTimedOut] = useState(false)
+  // The member's first post is hidden only until the webhook flips their status — by the time the
+  // celebration can show, it may already be unhidden, so `hasHiddenPost` alone can already read
+  // false on the very first render (the query loses the race with the webhook entirely, not just
+  // between renders — a per-render latch on it can't help). `hasAnyPost` doesn't depend on winning
+  // that race: any post they already had is now live, full stop, since every paid status unhides
+  // (F3). Latch it anyway so a fast re-render (e.g. getMyPosts refetching) can't flicker it back off.
+  const { hasAnyPost } = useOwnPostState(justSubscribed)
+  const [hadAnyPost, setHadAnyPost] = useState(false)
+  if (hasAnyPost && !hadAnyPost) {
+    setHadAnyPost(true)
+  }
+
+  // "Activating" = we know a checkout just succeeded but the webhook hasn't flipped the status yet.
+  // getMe is reactive, so this clears itself the moment the row updates — no polling. A `canceled`
+  // member re-subscribing is activating too: their row reads `canceled` (not `none`) until the
+  // webhook lands, and the repeat-trial guard in billingNode.ts sends them straight to `active`.
+  const isResubscribing = me?.subscriptionStatus === 'canceled'
+  const isActivating = justSubscribed && (me?.subscriptionStatus === 'none' || isResubscribing)
+  const activatingKey = activationTimedOut
+    ? 'billing.activatingTimeout'
+    : isResubscribing
+      ? 'billing.activatingPlan'
+      : 'billing.activating'
+
+  useEffect(() => {
+    if (!isActivating) return
+    const timer = window.setTimeout(() => {
+      setActivationTimedOut(true)
+      // A genuinely lost webhook must be visible to us, even though the member never sees the word.
+      captureException(new Error('Checkout activation timed out: subscriptionStatus not card-backed after 20s'))
+    }, ACTIVATION_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
+  }, [isActivating])
+
+  // Open the celebration once, the moment the status becomes card-backed. `hasCelebrated` latches
+  // so dismissing it (celebrationOpen -> false) never lets this reopen it.
+  // Only the two statuses a checkout webhook can land on count as "you're in" — `past_due` is a
+  // failed charge and `canceled` is the re-subscriber's pre-flip state, not an activation.
+  const activated = me?.subscriptionStatus === 'trialing' || me?.subscriptionStatus === 'active'
+  if (!hasCelebrated && justSubscribed && activated) {
+    setHasCelebrated(true)
+    setCelebrationOpen(true)
+  }
+
+  // Strip the URL param only once the celebration has actually fired (F4) — stripping it on mount
+  // instead would lose `success=true` for good if the member refreshes during the activation
+  // window (before hasCelebrated flips): a fresh mount only re-latches `justSubscribed` by reading
+  // that same param, so an early strip means a refresh mid-activation drops the celebration forever.
+  useEffect(() => {
+    if (hasCelebrated && searchParams.get('success') === 'true') {
+      setSearchParams({}, { replace: true })
+    }
+  }, [hasCelebrated, searchParams, setSearchParams])
   // The visitor already chose a plan AND an interval on the landing page (carried through OAuth
   // into sessionStorage by AuthSuccessPage, or passed directly as ?plan=&interval=). Re-asking is
   // re-opening a decision they already made. Both are read the same way — the URL first, then the
   // stash — so a direct link honours both. Growth / annual stay the fallbacks for anyone arriving cold.
-  const planParam = searchParams.get('plan')
-  const stashedPlan = sessionStorage.getItem('chosenPlan')
-  const chosenPlan = isPlanId(planParam) ? planParam : isPlanId(stashedPlan) ? stashedPlan : null
-  const targetPlan = chosenPlan ?? 'growth'
+  const targetPlan = resolveTargetPlan(searchParams)
+  const chosenPlan =
+    isPlanId(searchParams.get('plan')) || isPlanId(sessionStorage.getItem('chosenPlan')) ? targetPlan : null
   // NB: named setBillingInterval (not setInterval) so it doesn't shadow the global timer API.
   const [billingInterval, setBillingInterval] = useState<Interval>(() => {
     const intervalParam = searchParams.get('interval')
@@ -119,7 +185,9 @@ export default function BillingPage() {
   // Renewal/access-end date for the Billing Info Card below — undefined for free/trial users
   // (no Stripe subscription row yet), so there's simply nothing to format.
   const periodEndDate =
-    subscriptionInfo?.currentPeriodEnd != null ? new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString() : null
+    subscriptionInfo?.currentPeriodEnd != null
+      ? new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString(i18n.language)
+      : null
 
   // Derived label shown next to "Current plan:" — lead with X/50 when trialing
   const planLabel = (() => {
@@ -183,6 +251,24 @@ export default function BillingPage() {
         title={t('billing.title')}
         lead={lead}
       />
+
+      {/* R07 — waiting for the webhook after a successful checkout. Never blames the member, never
+          says "webhook"; the Manage button is the escape valve if it never lands. */}
+      {isActivating && (
+        <div className="border-border bg-muted mb-6 rounded-xl border p-4 text-sm">
+          <p className="m-0">{t(activatingKey)}</p>
+          {activationTimedOut && (
+            <Button
+              variant="outline"
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className={`mt-3 text-[13px] ${portalLoading ? 'cursor-wait' : 'cursor-pointer'}`}
+            >
+              {portalLoading ? '...' : t('billing.manageSubscription')}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Billing Info Card — shown to every card holder, so a trialing or past_due member can
           reach the Customer Portal (and cancel) at all. */}
@@ -260,36 +346,14 @@ export default function BillingPage() {
                   plan: t(`billing.plans.${me?.tier ?? 'growth'}.name`),
                   price: chargedPrice
                 })
-              : t('billing.trialBanner', { plan: t(`billing.plans.${me?.tier ?? 'growth'}.name`) })}
+              : t(trialEndsAt ? 'billing.trialBanner' : 'billing.trialBannerNoDate', {
+                  plan: t(`billing.plans.${me?.tier ?? 'growth'}.name`),
+                  threshold: progress?.threshold ?? TRIAL_INTERACTION_THRESHOLD,
+                  date: trialEndsAt ? new Date(trialEndsAt).toLocaleDateString(i18n.language) : undefined
+                })}
           </p>
           {/* X/50 interaction progress meter */}
-          {progress != null && (
-            <div className="mt-3">
-              <p className="text-accent-foreground/80 mb-1.5 text-xs font-medium">
-                {t('billing.trialProgress', {
-                  combined: progress.combined,
-                  threshold: progress.threshold
-                })}
-              </p>
-              <div className="bg-accent-foreground/20 h-2 w-full overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-2 rounded-full transition-[width]"
-                  style={{
-                    width: `${Math.min(100, Math.round((progress.combined / progress.threshold) * 100))}%`
-                  }}
-                />
-              </div>
-            </div>
-          )}
-          {/* SSI link-out */}
-          <a
-            href="https://linkedin.com/sales/ssi"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary mt-3 inline-flex items-center gap-1 text-xs hover:underline"
-          >
-            {t('billing.ssiLink')} ↗
-          </a>
+          {progress != null && <TrialMeter progress={progress} />}
         </div>
       )}
 
@@ -346,8 +410,10 @@ export default function BillingPage() {
           // "Current plan" badge only for a card-backed, non-trialing (i.e. active) subscriber on this tier.
           // Guarding on hasCard stops a brand-new user's default tier from being mislabeled as current.
           const isCurrent = hasCard && me?.tier === planId && me?.subscriptionStatus !== 'trialing'
-          // Nudge new / no-card users toward the plan they chose, without hiding the other plans.
-          const isRecommended = planId === targetPlan && !hasCard
+          // Nudge new / no-card users toward the plan they chose, without hiding the other plans. A card
+          // holder sent here by an upgrade-at-the-limit link (`?plan=` in the URL, R08) gets the same
+          // highlight on the plan they came for — never on the plan they're already on.
+          const isRecommended = planId === targetPlan && !isCurrent && (!hasCard || isPlanId(searchParams.get('plan')))
           const priceId = PLAN_PRICE_IDS[billingInterval][planId]
           const showWhatYouLlMiss = isTrialing && planId === 'starter'
           const features = t(`billing.plans.${planId}.features`, { returnObjects: true }) as unknown as string[]
@@ -435,6 +501,14 @@ export default function BillingPage() {
           {SUPPORT_EMAIL}
         </a>
       </p>
+
+      <CheckoutSuccessDialog
+        open={celebrationOpen}
+        onOpenChange={setCelebrationOpen}
+        plan={me?.tier ?? targetPlan}
+        isTrial={me?.subscriptionStatus === 'trialing'}
+        showPostLive={hadAnyPost && me?.subscriptionStatus === 'trialing'}
+      />
     </div>
   )
 }

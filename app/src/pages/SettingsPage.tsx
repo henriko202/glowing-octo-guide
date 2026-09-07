@@ -10,6 +10,7 @@ import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } 
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import UpgradeAtLimit from '@/components/UpgradeAtLimit'
 import { friendlyError } from '@/lib/errors'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
@@ -439,7 +440,10 @@ export default function SettingsPage() {
         </section>
       ) : (
         <section className="border-border bg-accent rounded-xl border p-5">
-          <p className="text-accent-foreground m-0 text-sm">{t('settings.upgradePrompt')}</p>
+          <UpgradeAtLimit
+            limit="visibility"
+            className="text-accent-foreground text-sm"
+          />
         </section>
       )}
 

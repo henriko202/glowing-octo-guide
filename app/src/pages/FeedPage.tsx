@@ -12,6 +12,9 @@ import CommentBox from '../components/CommentBox'
 import PostComposer from '../components/PostComposer'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { FeedFilterPanel } from '../components/FeedFilterPanel'
+import CardGateBanner, { useOwnPostState } from '../components/CardGateBanner'
+import CardGateDialog, { type GateSource } from '../components/CardGateDialog'
+import EmptyFeed from '../components/EmptyFeed'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useCardGate } from '@/hooks/useCardGate'
@@ -23,6 +26,9 @@ export default function FeedPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const { gated } = useCardGate()
+  // Which control opened the gate dialog — drives its copy/analytics. PostCard reports its own
+  // source per control (react/comment/linkedin).
+  const [gateSource, setGateSource] = useState<GateSource | null>(null)
   // Cursor-paginated feed (convex/feed.ts getFeed over the by_feed_rank index). `results`
   // accumulates loaded pages; `loadMore` advances the cursor on demand.
   const { results, status, loadMore } = usePaginatedQuery(
@@ -30,6 +36,15 @@ export default function FeedPage() {
     { sessionToken },
     { initialNumItems: FEED_PAGE_SIZE }
   )
+  const posts = results as unknown as PostWithAuthor[]
+  // Own-post state backs both the R04 banner (gated + hidden, feed non-empty) and the R05 empty-feed
+  // checklist/banner below — enabled whenever either could render, so a non-gated member sees the
+  // checklist's "shared a first post" step too, not only gated members.
+  const { hasHiddenPost, hasAnyPost } = useOwnPostState(gated || posts.length === 0)
+  // Backs the R05 empty-feed checklist's "reacted to two posts" step (and its trial-reachability
+  // gate, F12) — EmptyFeed only ever renders when the feed is empty, so skip this query the rest of
+  // the time instead of firing it on every feed page load (F14).
+  const progress = useQuery(api.users.getTrialProgress, sessionToken && posts.length === 0 ? { sessionToken } : 'skip')
   // Viewer profile — drives the Pro/Contact feed filter (tier gate + saved industries/countries).
   const me = useQuery(api.users.getMe, { sessionToken }) as
     | {
@@ -53,8 +68,6 @@ export default function FeedPage() {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl: url })
   }
-
-  const posts = results as unknown as PostWithAuthor[]
 
   // ─── Virtualizer ────────────────────────────────────────────────────────────
   // We use useWindowVirtualizer so the page itself scrolls (no nested
@@ -116,6 +129,10 @@ export default function FeedPage() {
     <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
       <PageHeader title={t('feed.title')} />
 
+      {/* One attention point per screen: never stacks with the empty state (Task 5) or the pulsing
+          Billing nav item plus a dialog. */}
+      {gated && hasHiddenPost && posts.length > 0 && <CardGateBanner />}
+
       <PostComposer onSubmit={handlePostSubmit} />
 
       {canFilter && sessionToken && (
@@ -126,11 +143,17 @@ export default function FeedPage() {
         />
       )}
 
-      {posts.length === 0 && (
-        <p className="text-muted-foreground py-8 text-center">
-          {filterActive ? t('feed.emptyFiltered') : t('feed.empty')}
-        </p>
-      )}
+      {posts.length === 0 &&
+        (filterActive ? (
+          <p className="text-muted-foreground py-8 text-center">{t('feed.emptyFiltered')}</p>
+        ) : (
+          <EmptyFeed
+            gated={gated}
+            hasOwnPost={hasAnyPost}
+            made={progress?.made ?? 0}
+            trialStatus={progress?.status}
+          />
+        ))}
 
       {/* Outer list ref used for scrollMargin calculation */}
       <div ref={listRef}>
@@ -189,6 +212,7 @@ export default function FeedPage() {
                       setReactingPostId(null)
                     }}
                     gated={gated}
+                    onGated={setGateSource}
                     reacting={reactingPostId === post._id}
                   />
                   {reactError?.postId === post._id && (
@@ -227,6 +251,12 @@ export default function FeedPage() {
           <LoadingSpinner />
         </div>
       )}
+
+      <CardGateDialog
+        open={gateSource !== null}
+        onOpenChange={open => !open && setGateSource(null)}
+        source={gateSource ?? 'react'}
+      />
     </div>
   )
 }

@@ -42,3 +42,13 @@ export function syncAnalyticsConsent(userId: string | undefined, consents: Conse
     posthog.reset()
   }
 }
+
+/**
+ * Fire a named product event. No-op until initPostHog has run (dev, or prod without a key).
+ * Consent is inherited, not re-checked: syncAnalyticsConsent opts PostHog in and out, and
+ * posthog.capture does nothing while opted out. Props carry no PII — ids and enum-ish strings only.
+ */
+export function captureEvent(name: string, props?: Record<string, string | number | boolean>): void {
+  if (!initialized) return
+  posthog.capture(name, props)
+}

@@ -7,9 +7,14 @@
     "privacy": "Privacidad y datos",
     "signOut": "Cerrar sesión",
     "openMenu": "Abrir menú de usuario",
-    "groups": { "main": "Principal", "manage": "Gestionar" },
+    "groups": {
+      "main": "Principal",
+      "manage": "Gestionar"
+    },
     "primary": "Navegación principal",
-    "viewSsi": "Ver tu SSI en LinkedIn"
+    "viewSsi": "Ver tu SSI en LinkedIn",
+    "viewSsiNote": "Requiere LinkedIn Sales Navigator",
+    "recap": "Resumen"
   },
   "shell": {
     "search": "Buscar publicaciones, personas",
@@ -24,7 +29,14 @@
     "theme": "Cambiar tema",
     "profile": "Perfil y ajustes",
     "openSidebar": "Abrir navegación",
-    "skipToContent": "Saltar al contenido"
+    "skipToContent": "Saltar al contenido",
+    "trialGoal": "Las interacciones forman tu hábito de SSI. Tu plan {{plan}} empieza en {{threshold}} o el {{date}}.",
+    "trialGoalNoDate": "Las interacciones forman tu hábito de SSI. Tu plan {{plan}} empieza en {{threshold}}.",
+    "trialStartsAt": "Tu plan empieza en {{threshold}} interacciones o el {{date}}.",
+    "trialNearEnd": "{{remaining}} más y empieza tu plan {{plan}}.",
+    "trialMadeReceived": "hechas {{made}} · recibidas {{received}}",
+    "trialPill": "{{combined}}/{{threshold}}",
+    "trialPillAriaLabel": "Progreso de la prueba: {{combined}} de {{threshold}} interacciones"
   },
   "onboarding": {
     "firstPost": {
@@ -36,14 +48,32 @@
   "feed": {
     "title": "Tu feed",
     "loading": "Cargando feed...",
-    "empty": "Aún no hay publicaciones. ¡Invita a colegas a unirse a Link Into The SSI!",
+    "emptyTitle": "Tu feed se llena a medida que los miembros publican",
+    "emptyBody": "Las publicaciones de los miembros aparecen aquí a medida que las comparten. La tuya puede ser la primera.",
+    "emptyBodyPosted": "Las publicaciones de otros miembros aparecen aquí a medida que las comparten.",
+    "emptyCta": "Comparte tu primera publicación",
     "loadMore": "Cargar más",
     "featured": "★ Destacada",
     "like": "Me gusta",
     "comment": "Comentar",
     "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar.",
+    "cardGateTitle": "Tu publicación se hace visible y cada reacción cuenta",
+    "cardGateBody": "Iniciar tu prueba pone tus publicaciones frente a todo el feed y hace que cada reacción y comentario cuente para tu hábito de SSI.",
+    "cardGateCta": "Iniciar prueba de 7 días",
+    "cardGateLater": "Ahora no",
+    "cardGateCost": "Gratis por 7 días o {{threshold}} interacciones, después empieza tu plan. Cancela cuando quieras.",
+    "hiddenPostBanner": "Tu primera publicación está guardada y oculta hasta que inicies tu prueba.",
+    "cardGateBodyPastDue": "Tu último pago no se procesó. Actualiza tu método de pago para que tus publicaciones vuelvan a aparecer en el feed.",
+    "cardGatePastDueCta": "Actualizar método de pago",
+    "hiddenPostBannerPastDue": "Tu publicación está oculta hasta que actualices tu método de pago.",
     "viewOnLinkedIn": "Ver en LinkedIn ↗",
     "emptyFiltered": "Ninguna publicación coincide con tu filtro. Ajústalo o bórralo para ver más.",
+    "checklist": {
+      "title": "Primeros pasos",
+      "signedIn": "Iniciaste sesión con LinkedIn",
+      "firstPost": "Comparte una publicación",
+      "reactTwice": "Reacciona a dos publicaciones"
+    },
     "filter": {
       "toggle": "Filtrar feed",
       "note": "Muestra solo publicaciones de las industrias y países que elijas. Déjalo vacío para ver a todos.",
@@ -70,7 +100,6 @@
     "tierPlan": "Plan {{tier}}",
     "weeklyUsageHint": "En los últimos 7 días",
     "weeklyUsage": "{{used}} de {{limit}} publicaciones esta semana",
-    "weeklyLimitReached": "Límite semanal alcanzado",
     "heading": "Tus publicaciones ({{count}})",
     "emptyState": "Comparte tu primera publicación usando el formulario de arriba ↑",
     "hiddenFromFeed": "Oculta del feed",
@@ -80,7 +109,8 @@
     "delete": "Eliminar",
     "deleteConfirm": "¿Eliminar esta publicación? Se eliminará del feed y de Mis Publicaciones. Seguirá contando para tu límite semanal de publicaciones.",
     "updateError": "No se pudo actualizar la publicación.",
-    "deleteError": "No se pudo eliminar la publicación."
+    "deleteError": "No se pudo eliminar la publicación.",
+    "interactionCapBadge": "Alcanzó {{limit}} interacciones y salió del feed"
   },
   "composer": {
     "shareLabel": "Compartir una publicación",
@@ -141,7 +171,6 @@
     "visibilityAddIndustry": "Añadir un sector…",
     "visibilityAddCountry": "Añadir un país…",
     "visibilityRemove": "Quitar {{label}}",
-    "upgradePrompt": "Mejora a Pro para controlar quién ve tus publicaciones.",
     "aiComments": "Comentarios con IA",
     "aiCommentsNote": "Idioma predeterminado de los comentarios generados por IA. Puedes cambiarlo en cada comentario.",
     "commentLanguage": "Idioma predeterminado del comentario"
@@ -167,9 +196,9 @@
     "daysRemaining_other": "{{count}} días restantes",
     "expiredBanner": "Tu suscripción ha finalizado. Elige un plan a continuación para continuar.",
     "none": "Ninguno",
-    "trialBanner": "Estás en una prueba gratuita de {{plan}}. El cobro empieza al llegar a 50 interacciones o después de 7 días, lo que ocurra primero.",
+    "trialBanner": "Estás en una prueba gratuita de {{plan}}. Tu plan empieza al llegar a {{threshold}} interacciones o el {{date}}, lo que ocurra primero.",
+    "trialBannerNoDate": "Estás en una prueba gratuita de {{plan}}. Tu plan empieza al llegar a {{threshold}} interacciones o después de 7 días, lo que ocurra primero.",
     "trialProgress": "{{combined}} / {{threshold}} interacciones",
-    "ssiLink": "Ver tu SSI en LinkedIn",
     "whatYouLlMiss": "Con Starter pierdes el feed filtrado por sector, bajas de 50 a 25 interacciones por publicación y de 2 a 1 publicación por semana.",
     "newUserLead": "Elige un plan abajo — Growth es la mejor relación calidad-precio.",
     "newUserTrialNote": "Todos los planes incluyen una prueba gratuita de 7 días · cancela cuando quieras.",
@@ -188,6 +217,16 @@
     "nearThresholdBanner": "Faltan {{remaining}} interacciones para que empiece tu plan · {{plan}}, {{price}}",
     "duplicateCanceledNotice": "Se creó una suscripción duplicada por error y la cancelamos de inmediato. No se te cobró por ella.",
     "dismiss": "Descartar",
+    "successTitle": "Ya estás dentro.",
+    "successBody": "Tu prueba gratuita de {{plan}} ya está activa.",
+    "successBodyActive": "Tu plan {{plan}} ya está activo.",
+    "successPostLive": "Tu primera publicación ya está en el feed.",
+    "successOutcome": "Cada reacción y comentario desde ahora construye una presencia real en LinkedIn. Esa presencia es lo que hace que las personas correctas te encuentren.",
+    "successCta": "Ir al feed",
+    "successStay": "Quedarme en la suscripción",
+    "activating": "Activando tu prueba…",
+    "activatingPlan": "Activando tu plan…",
+    "activatingTimeout": "Tu pago se procesó; tu plan aparecerá aquí en breve.",
     "plans": {
       "starter": {
         "name": "Starter",
@@ -325,5 +364,18 @@
   },
   "linkedInEmbed": {
     "title": "Publicación de LinkedIn"
+  },
+  "upgrade": {
+    "weeklyPosts": "Alcanzaste el límite semanal de {{used}} publicaciones de tu plan. {{nextPlan}} te da {{next}} por semana, cada una con hasta {{interactions}} interacciones.",
+    "featured": "Usaste todas tus publicaciones destacadas este mes. {{nextPlan}} te da {{next}} por mes.",
+    "interactionCap": "Esta publicación salió del feed al alcanzar su límite de interacciones. {{nextPlan}} aumenta ese límite a {{next}}.",
+    "visibility": "Elegir quién ve tus publicaciones es una función de {{nextPlan}}.",
+    "cta": "Mejorar a {{nextPlan}}",
+    "proContact": "¿Necesitas más de lo que ofrece Pro? Contáctanos para un plan Empresa personalizado.",
+    "contactCustom": "Tu plan ya tiene un límite personalizado. Contáctanos para ajustarlo."
+  },
+  "errors": {
+    "weeklyLimit": "Alcanzaste el límite semanal de {{limit}} publicaciones.",
+    "featuredLimit": "Alcanzaste el límite mensual de {{limit}} publicaciones destacadas."
   }
 }

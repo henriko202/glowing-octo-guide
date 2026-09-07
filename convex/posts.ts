@@ -1,5 +1,5 @@
 // convex/posts.ts
-import { action, internalQuery, mutation, query } from './_generated/server'
+import { action, internalQuery, mutation, query, type QueryCtx } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
@@ -13,7 +13,7 @@ import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPost
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { fetchWithTimeout } from './lib/fetchWithTimeout'
 import { postCreatedHidden } from './lib/access'
-import { getPlanLimitsHelper } from './lib/planLimits'
+import { DEFAULTS, getPlanLimitsHelper, type PlanLimits, type Tier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { currentUtcMonthKey, isFeaturedLimitReached } from './lib/postLimit'
 import { hasReachedInteractionLimit } from './lib/interactionLimit'
@@ -173,6 +173,52 @@ export const getFeaturedUsage = query({
   }
 })
 
+/**
+ * Finds the tier-wide default planLimits row (userId undefined) for `tier`, mirroring
+ * getPlanLimitsHelper's contact branch in lib/planLimits.ts. The userId===undefined check is
+ * pushed into the query itself rather than run JS-side over a bounded `.take` — a contact tier
+ * with more than 20 per-user override rows sharing the by_tier index value used to be able to push
+ * the one true default row past the cap, silently falling back to DEFAULTS[tier] (F11). Split out
+ * of getTierLimits so it's unit-testable with a mock ctx (the query wrapper itself isn't callable
+ * in unit tests) — same pattern as fetchFeedPage in feed.ts.
+ */
+export async function findTierDefaultRow(ctx: QueryCtx, tier: Tier): Promise<Doc<'planLimits'> | null> {
+  const rows = await ctx.db
+    .query('planLimits')
+    .withIndex('by_tier', q => q.eq('tier', tier))
+    .filter(q => q.eq(q.field('userId'), undefined))
+    .take(20)
+  return rows[0] ?? null
+}
+
+/**
+ * Public: tier-default plan limits for every tier, keyed by tier name. Backs the
+ * "upgrade at the limit" prompts (backlog/R08) so their copy always names the
+ * DB-configured number (an admin override in PlanLimitsTab shows up immediately),
+ * never a hardcoded one. Contact's per-user overrides are per-user, not tier-wide,
+ * so this always returns the contact tier's DEFAULT row, not any member's override.
+ */
+export const getTierLimits = query({
+  args: {},
+  handler: async (ctx): Promise<Record<Tier, PlanLimits>> => {
+    const tiers: Tier[] = ['starter', 'growth', 'pro', 'contact']
+    const entries = await Promise.all(
+      tiers.map(async tier => {
+        const row = await findTierDefaultRow(ctx, tier)
+        const limits: PlanLimits = row
+          ? {
+              interactionsPerPost: row.interactionsPerPost,
+              postsPerWeek: row.postsPerWeek,
+              featuredPerMonth: row.featuredPerMonth ?? DEFAULTS[tier].featuredPerMonth
+            }
+          : DEFAULTS[tier]
+        return [tier, limits] as const
+      })
+    )
+    return Object.fromEntries(entries) as Record<Tier, PlanLimits>
+  }
+})
+
 export const submitPost = action({
   args: {
     sessionToken: v.string(),
@@ -230,9 +276,9 @@ export const submitPost = action({
         since: sevenDaysAgo
       })
       if (recentPostCount >= planLimits.postsPerWeek) {
-        throw new ConvexError(
-          `Weekly post limit reached. Your plan allows ${planLimits.postsPerWeek} post${planLimits.postsPerWeek === 1 ? '' : 's'} per week.`
-        )
+        // Prefixed code, not English prose: survives production error redaction and is
+        // localized client-side by lib/errors.ts's mapLimitError (backlog/R08).
+        throw new ConvexError(`WEEKLY_LIMIT:${planLimits.postsPerWeek}`)
       }
     }
 
@@ -519,9 +565,9 @@ export const featurePost = mutation({
       .unique()
     const usedCount = usageRow?.usedCount ?? 0
     if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
-      throw new ConvexError(
-        `Monthly featured-post limit reached. Your plan allows ${limits.featuredPerMonth} featured post${limits.featuredPerMonth === 1 ? '' : 's'} per month.`
-      )
+      // Prefixed code, not English prose: survives production error redaction and is
+      // localized client-side by lib/errors.ts's mapLimitError (backlog/R08).
+      throw new ConvexError(`FEATURED_LIMIT:${limits.featuredPerMonth}`)
     }
 
     // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
