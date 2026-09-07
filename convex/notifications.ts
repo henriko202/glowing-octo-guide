@@ -20,10 +20,11 @@ import {
   formatPriceLabel,
   INTL_TAG,
   planName,
+  trialConvertedEmail,
   trialEndingEmail,
   trialNearEndEmail
 } from './lib/billingEmails'
-import { pickTrialingSubscription, TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
+import { findLiveSubscription, pickTrialingSubscription, TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
 
 function billingUrl(): string {
   return `${process.env.APP_URL ?? 'http://localhost:5173'}/billing`
@@ -115,5 +116,33 @@ export const sendDuplicateCanceled = internalAction({
       c.email,
       duplicateSubscriptionCanceledEmail(locale, { planName: planName(locale, tier), billingUrl: billingUrl() })
     )
+  }
+})
+
+/** Fired by stripe.syncUserSubscription when a row goes trialing → active (backlog/R14). */
+export const sendTrialConverted = internalAction({
+  args: { userId: v.id('users') },
+  handler: async (ctx, { userId }) => {
+    const c = await ctx.runQuery(internal.billing.getBillingContext, { userId })
+    if (!c?.email) return
+    if (c.subscriptionStatus !== 'active') return
+    const sub = findLiveSubscription(c.subscriptions)
+    if (!sub) return
+    // Nothing recorded means nothing to recap — Henriko's call: skip the email at zero.
+    if (c.made + c.received === 0) return
+
+    const locale = resolveBillingLocale(c.language, c.primaryLocale)
+    const m = trialConvertedEmail(locale, {
+      made: c.made,
+      received: c.received,
+      planName: planName(locale, sub.tier),
+      priceLabel: formatPriceLabel(locale, {
+        amount: sub.priceAmount,
+        currency: sub.priceCurrency,
+        interval: sub.priceInterval
+      }),
+      recapUrl: `${process.env.APP_URL ?? 'http://localhost:5173'}/recap`
+    })
+    await deliver('trial_converted', c.email, m)
   }
 })

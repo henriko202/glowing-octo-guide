@@ -12,9 +12,8 @@
       "manage": "Manage"
     },
     "primary": "Primary navigation",
-    "viewSsi": "View your SSI on LinkedIn",
-    "viewSsiNote": "Requires LinkedIn Sales Navigator",
-    "recap": "Recap"
+    "recap": "Recap",
+    "history": "History"
   },
   "shell": {
     "search": "Search posts, people",
@@ -227,6 +226,26 @@
     "activating": "Activating your trial…",
     "activatingPlan": "Activating your plan…",
     "activatingTimeout": "Your payment went through; your plan will show here shortly.",
+    "cancel": {
+      "link": "Cancel plan",
+      "title": "Before you go",
+      "trialBody": "You won't be charged. Your trial ends on {{date}} and your posts leave the feed then.",
+      "trialBodyNoDate": "You won't be charged. Your posts leave the feed when your trial ends.",
+      "body_one": "Your post leaves the feed on {{date}}. In the last 30 days it received {{received}} reactions and comments.",
+      "body_other": "Your {{count}} posts leave the feed on {{date}}. In the last 30 days they received {{received}} reactions and comments.",
+      "bodyNoPosts": "Your plan ends on {{date}}. In the last 30 days your posts received {{received}} reactions and comments.",
+      "bodyNoDate": "Your posts leave the feed at the end of your billing period. In the last 30 days they received {{received}} reactions and comments.",
+      "alternative": "Move to Starter and keep your posts in the feed.",
+      "alternativeCta": "Move to Starter",
+      "question": "What would have made you stay?",
+      "questionPlaceholder": "Optional. One line is enough.",
+      "keep": "Keep my plan",
+      "continue": "Continue to cancel",
+      "resume": "Resume plan",
+      "postsLeave": "Your posts leave the feed on {{date}}.",
+      "resumed": "Your plan continues.",
+      "resumeFailed": "Couldn't resume your plan: {{error}}."
+    },
     "plans": {
       "starter": {
         "name": "Starter",
@@ -369,10 +388,51 @@
     "weeklyPosts": "You've reached your plan's weekly post cap of {{used}}. {{nextPlan}} gives you {{next}} per week, each able to collect up to {{interactions}} interactions.",
     "featured": "You've used all your featured posts this month. {{nextPlan}} gives you {{next}} per month.",
     "interactionCap": "This post left the feed after reaching its interaction cap. {{nextPlan}} raises that cap to {{next}}.",
+    "interactionCapNear": "Your post is at {{total}} of {{cap}} interactions. On {{nextPlan}} it keeps collecting to {{next}}.",
     "visibility": "Choosing who sees your posts is a {{nextPlan}} feature.",
     "cta": "Upgrade to {{nextPlan}}",
     "proContact": "Need more than Pro offers? Contact us for a custom Enterprise plan.",
     "contactCustom": "Your plan already has a custom limit. Contact us to adjust it."
+  },
+  "recap": {
+    "title": "Recap",
+    "lead": "What you made and received here, and how your plan is being used.",
+    "window": {
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "all": "All time"
+    },
+    "made": "You made",
+    "received": "Your posts received",
+    "reactionsCount_one": "{{count}} reaction",
+    "reactionsCount_other": "{{count}} reactions",
+    "commentsCount_one": "{{count}} comment",
+    "commentsCount_other": "{{count}} comments",
+    "postsCount_one": "across {{count}} post",
+    "postsCount_other": "across {{count}} posts",
+    "delta": "{{delta}} vs the previous {{days}} days",
+    "celebrate": "More than the previous {{days}} days. Keep going.",
+    "truncated": "Showing your most recent {{count}} interactions.",
+    "planUsage": "Plan usage",
+    "postUsage": "{{total}} of {{cap}} interactions",
+    "noPosts": "No posts added in this window. Posts you share show up here with their interaction count.",
+    "emptyTitle": "Nothing recorded in the last {{days}} days",
+    "emptyBody": "Your first reaction or comment in the feed shows up here, along with what your posts receive.",
+    "emptyCta": "Go to the feed",
+    "honest": "These are the interactions recorded here. We don't read or predict your SSI.",
+    "salesNav": "Have Sales Navigator? Your SSI is still at",
+    "seeAll": "See every interaction"
+  },
+  "history": {
+    "title": "History",
+    "lead": "Every reaction and comment you recorded here.",
+    "commented": "Commented",
+    "by": "by {{name}}",
+    "removed": "Post removed",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "empty": "No interactions in this window.",
+    "emptyCta": "Go to the feed"
   },
   "errors": {
     "weeklyLimit": "You've reached your weekly post limit of {{limit}}.",

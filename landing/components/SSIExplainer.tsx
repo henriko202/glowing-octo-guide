@@ -1,5 +1,7 @@
 import type { Dictionary } from '@/i18n/getDictionary'
 
+const SSI_SOURCE_URL = 'https://business.linkedin.com/sales-solutions/social-selling'
+
 export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'] }) {
   return (
     <section
@@ -35,20 +37,17 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
           ))}
         </div>
 
-        <div className="rounded-2xl bg-ink-600 px-8 py-12">
-          <div className="grid grid-cols-1 gap-10 text-center md:grid-cols-3 md:gap-0 md:divide-x md:divide-gold/20">
-            {dict.stats.map(stat => (
-              <div
-                key={stat.value}
-                className="px-6"
-              >
-                <p className="font-display text-6xl font-semibold text-gold-text">{stat.value}</p>
-                <p className="mx-auto mt-3 max-w-[180px] text-sm leading-relaxed text-cream/60">{stat.label}</p>
-                <p className="mt-2 text-xs text-cream/50 dark:text-cream/25">{stat.source}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <p className="mx-auto mt-10 max-w-2xl text-center text-xs text-cream/50">
+          {dict.sourceLine}{' '}
+          <a
+            href={SSI_SOURCE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-4 hover:text-cream/80"
+          >
+            {dict.sourceLabel}
+          </a>
+        </p>
       </div>
     </section>
   )

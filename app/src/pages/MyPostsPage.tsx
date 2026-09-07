@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
-import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 import { api } from '../convex'
 
 import { PageHeader } from '@/components/PageHeader'
@@ -14,8 +13,10 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
 import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
+import PlanUsagePills, { type FeaturedUsage, type WeeklyUsage } from '@/components/PlanUsagePills'
 import UpgradeAtLimit from '../components/UpgradeAtLimit'
 import { friendlyError, mapLimitError } from '@/lib/errors'
+import { timeAgo } from '@/lib/relativeDay'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -31,24 +32,6 @@ interface MyPost {
   // Set when this post's engagement met the author's per-post interaction cap and it left the
   // feed (convex/posts.ts:439,473,533,567 — Option A, total engagement counts toward the cap).
   interactionLimitReached?: boolean
-}
-
-// The shape returned by getWeeklyUsage (null when not signed in).
-interface WeeklyUsage {
-  postsThisWeek: number
-  postsPerWeek: number
-}
-
-// The shape returned by getFeaturedUsage (null when not signed in).
-interface FeaturedUsage {
-  usedCount: number
-  featuredPerMonth: number
-}
-
-function timeAgo(ts: number, t: ReturnType<typeof useTranslation>['t']): string {
-  const days = Math.floor((Date.now() - ts) / 86400000)
-  if (days <= 0) return t('myPosts.today')
-  return t('myPosts.daysAgo', { count: days })
 }
 
 export default function MyPostsPage() {
@@ -162,30 +145,10 @@ export default function MyPostsPage() {
               <div className="text-muted-foreground text-xs capitalize">{t('myPosts.tierPlan', { tier: me.tier })}</div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {usage && (
-              <Badge
-                title={t('myPosts.weeklyUsageHint')}
-                variant={atLimit ? 'warning' : 'primary'}
-                className="shrink-0 rounded-full px-3 py-1 text-xs"
-              >
-                {t('myPosts.weeklyUsage', { used: usage.postsThisWeek, limit: usage.postsPerWeek })}
-              </Badge>
-            )}
-            {featuredUsage && (
-              <Badge
-                title={t('myPosts.featuredPillHint')}
-                variant={featuredAtCap ? 'warning' : 'primary'}
-                className="shrink-0 rounded-full px-3 py-1 text-xs"
-              >
-                {/* The contact/enterprise "unlimited" sentinel (convex/lib/postLimit.ts) is
-                    never shown as a raw number. */}
-                {isUnlimitedFeatured(featuredUsage.featuredPerMonth)
-                  ? t('myPosts.featuredPillUnlimited', { used: featuredUsage.usedCount })
-                  : t('myPosts.featuredPill', { used: featuredUsage.usedCount, limit: featuredUsage.featuredPerMonth })}
-              </Badge>
-            )}
-          </div>
+          <PlanUsagePills
+            usage={usage}
+            featuredUsage={featuredUsage}
+          />
         </div>
       )}
 

@@ -4,7 +4,10 @@ import {
   findDuplicateSubscription,
   findLiveSubscription,
   isNearThreshold,
+  isStaleEvent,
+  isTrialConversion,
   pickTrialingSubscription,
+  shouldEndTrialEarly,
   trialEligible,
   TRIAL_INTERACTION_THRESHOLD,
   TRIAL_WARNING_THRESHOLD
@@ -108,5 +111,43 @@ describe('findDuplicateSubscription', () => {
     const dup = { status: 'trialing', stripeCreated: 2, id: 'dup' }
     const gone = { status: 'canceled', stripeCreated: 3, id: 'gone' }
     expect(findDuplicateSubscription([kept, dup, gone])?.id).toBe('dup')
+  })
+})
+
+describe('isTrialConversion', () => {
+  it('is true only for trialing → active', () => {
+    expect(isTrialConversion('trialing', 'active')).toBe(true)
+    expect(isTrialConversion('active', 'active')).toBe(false)
+    expect(isTrialConversion('trialing', 'canceled')).toBe(false)
+    expect(isTrialConversion(undefined, 'active')).toBe(false)
+  })
+})
+
+describe('isStaleEvent', () => {
+  it('rejects an event older than the last one applied to the row', () => {
+    expect(isStaleEvent(2000, 1000)).toBe(true)
+  })
+  it('applies a newer event, and a same-second one in arrival order', () => {
+    expect(isStaleEvent(1000, 2000)).toBe(false)
+    expect(isStaleEvent(1000, 1000)).toBe(false)
+  })
+  it('never rejects when either side has no stamp', () => {
+    expect(isStaleEvent(undefined, 1000)).toBe(false)
+    expect(isStaleEvent(1000, undefined)).toBe(false)
+    expect(isStaleEvent(undefined, undefined)).toBe(false)
+  })
+})
+
+describe('shouldEndTrialEarly', () => {
+  it('ends a live trial that has a Stripe id', () => {
+    expect(shouldEndTrialEarly({ stripeSubscriptionId: 'sub_1' })).toBe(true)
+    expect(shouldEndTrialEarly({ stripeSubscriptionId: 'sub_1', cancelAtPeriodEnd: false })).toBe(true)
+  })
+  it('leaves a cancel-pending trial to run to its promised date', () => {
+    expect(shouldEndTrialEarly({ stripeSubscriptionId: 'sub_1', cancelAtPeriodEnd: true })).toBe(false)
+  })
+  it('does nothing without a row or a Stripe id', () => {
+    expect(shouldEndTrialEarly(undefined)).toBe(false)
+    expect(shouldEndTrialEarly({ stripeSubscriptionId: undefined })).toBe(false)
   })
 })

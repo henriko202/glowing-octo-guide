@@ -50,7 +50,7 @@
     "eyebrow": "Por qué el SSI",
     "headlineLine1": "La puntuación que decide",
     "headlineLine2": "quién te encuentra",
-    "intro": "Tu Social Selling Index es la propia métrica 0–100 de LinkedIn sobre qué tan visible eres para reclutadores, clientes y colegas. Cuatro pilares, 25 puntos cada uno. El engagement es el más rápido de mover.",
+    "intro": "Tu Social Selling Index es la propia métrica 0–100 de LinkedIn sobre qué tan fácil es encontrarte, ya sea para reclutadores, clientes o colegas. Cuatro áreas, 25 puntos cada una. El engagement es la que controlas todos los días.",
     "pillars": [
       {
         "icon": "🏆",
@@ -77,23 +77,8 @@
         "pts": 25
       }
     ],
-    "stats": [
-      {
-        "value": "45%",
-        "label": "más oportunidades para líderes en SSI vs. puntuaciones bajas",
-        "source": "Datos de LinkedIn"
-      },
-      {
-        "value": "5×",
-        "label": "más visitas al perfil en el cuartil superior de SSI",
-        "source": "Datos de LinkedIn"
-      },
-      {
-        "value": "+51%",
-        "label": "más probabilidades de ser contactado por un reclutador con SSI superior a 70",
-        "source": "Datos de LinkedIn"
-      }
-    ]
+    "sourceLine": "Cuatro áreas, 25 puntos cada una, recalculadas a diario.",
+    "sourceLabel": "Fuente: LinkedIn"
   },
   "proof": {
     "eyebrow": "Sin exageraciones",
@@ -103,8 +88,8 @@
     "founderRole": "Fundador · Especialista en Frontend (7+ años)",
     "founderMessage": "Soy Henriko, especialista en frontend con más de 7 años de experiencia. Construí Link Into The SSI porque los buenos profesionales permanecen invisibles en LinkedIn mientras el algoritmo premia la actividad. Lanzamos recientemente, así que no encontrarás números inflados aquí. Solo el mecanismo, crecimiento real en tu SSI y una invitación honesta a ser de los primeros.",
     "proofCardHeadline": "La única prueba que importa es la tuya.",
-    "proofCardBody": "Ve el crecimiento real en tu SSI desde el primer día, medido en el propio LinkedIn, no por nosotros.",
-    "proofCardLink": "Revisa tu SSI actual en LinkedIn",
+    "proofCardBody": "Tu resumen muestra cada interacción que haces y recibes, semana a semana. Ninguna puntuación inventada por nosotros, ningún número inflado.",
+    "proofCardNote": "¿Tienes Sales Navigator? Tu SSI sigue en LinkedIn.",
     "earlyAccess": "Sé uno de los primeros. Hazlo valer."
   },
   "features": {
@@ -212,7 +197,7 @@
       },
       {
         "q": "¿Qué es el SSI y qué tan rápido cambiará?",
-        "a": "Tu Social Selling Index es la métrica 0–100 de LinkedIn sobre qué tan visible eres. Puedes revisar tu puntuación real en LinkedIn en cualquier momento. La mayoría de los miembros ve un cambio en 1 a 2 semanas de engagement constante. Los resultados varían según tu actividad y punto de partida."
+        "a": "Tu Social Selling Index es la puntuación 0–100 de LinkedIn en cuatro áreas: marca profesional, las personas correctas, insights y relaciones. LinkedIn la recalcula a diario. No la leemos ni la predecimos, y no prometemos plazos. Lo que te damos es un feed donde el engagement real es fácil y un resumen de cada interacción que haces y recibes. Desde agosto de 2026 la página del SSI es una función de Sales Navigator; los miembros gratuitos y Premium ya no la ven."
       },
       {
         "q": "¿Necesito estar activo todos los días?",
@@ -220,14 +205,14 @@
       },
       {
         "q": "¿Puedo cancelar cuando quiera?",
-        "a": "Sí. Sin contratos, sin permanencia, sin cargos por cancelación. Cancela desde la configuración de tu cuenta con un clic; el acceso dura hasta el final del período actual."
+        "a": "Sí. Sin contratos, sin permanencia, sin cargos por cancelación. Cancela desde tu página de suscripción cuando quieras; el acceso dura hasta el final del período actual."
       }
     ]
   },
   "finalCta": {
     "headlineLine1": "¿Listo para dejar de perseguir?",
     "headlineLine2": "Haz que te encuentren.",
-    "subheadline": "Siete días para verlo funcionar. Construye SSI real desde el primer día.",
+    "subheadline": "Siete días gratis. Engagement real desde el primer día.",
     "cta": "Empezar mi prueba de 7 días con LinkedIn",
     "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo nombre, foto y correo · Nada se publica por ti",
     "earlyAccess": "Sé uno de los primeros. Hazlo valer."

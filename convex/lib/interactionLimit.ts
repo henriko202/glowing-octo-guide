@@ -17,3 +17,12 @@ export function shouldFlipInteractionLimit(
 ): boolean {
   return hasReachedInteractionLimit(likeCount, commentCount, interactionsPerPost) && !alreadyReached
 }
+
+/** From this share of the cap a post is "near" it — the recap shows the upgrade ask (backlog/R15). */
+export const UPGRADE_NUDGE_RATIO = 0.8
+
+export function isNearInteractionLimit(likeCount: number, commentCount: number, interactionsPerPost: number): boolean {
+  if (interactionsPerPost <= 0) return false
+  const total = likeCount + commentCount
+  return total >= Math.ceil(interactionsPerPost * UPGRADE_NUDGE_RATIO) && total < interactionsPerPost
+}

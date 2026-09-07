@@ -85,10 +85,11 @@ describe('Sidebar trial card (R06)', () => {
     expect(screen.getByTestId('trial-progress-card')).toHaveAttribute('data-near', 'true')
   })
 
-  it('keeps the SSI link with its Sales Navigator note and adds the recap entry', () => {
+  it('drops the SSI link-out and routes Recap and History to their own pages', () => {
     renderSidebar()
-    expect(screen.getByRole('link', { name: /ssi/i })).toHaveAttribute('href', 'https://linkedin.com/sales/ssi')
-    expect(screen.getByRole('link', { name: /recap/i })).toHaveAttribute('href', '/feed')
+    expect(screen.queryByRole('link', { name: /ssi/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Recap' })).toHaveAttribute('href', '/recap')
+    expect(screen.getByRole('link', { name: 'History' })).toHaveAttribute('href', '/history')
   })
 })
 

@@ -18,7 +18,16 @@ export type LimitKind = 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibil
  * gets the Enterprise contact line, contact (already on a custom limit) gets the custom-limit
  * line — both mailto, following BillingPage.tsx's Enterprise section.
  */
-export default function UpgradeAtLimit({ limit, className }: { limit: LimitKind; className?: string }) {
+export default function UpgradeAtLimit({
+  limit,
+  nearCap,
+  className
+}: {
+  limit: LimitKind
+  /** Recap-only: the post is inside the 80% band, not capped yet (backlog/R15). */
+  nearCap?: { total: number; cap: number }
+  className?: string
+}) {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
@@ -65,7 +74,7 @@ export default function UpgradeAtLimit({ limit, className }: { limit: LimitKind;
         <a
           href={`mailto:${SUPPORT_EMAIL}`}
           className="text-primary hover:underline"
-          onClick={() => captureEvent('upgrade_at_limit_clicked', { limit, plan: tier })}
+          onClick={() => captureEvent('upgrade_at_limit_clicked', { limit, plan: tier, near: nearCap !== undefined })}
         >
           {SUPPORT_EMAIL}
         </a>
@@ -97,7 +106,14 @@ export default function UpgradeAtLimit({ limit, className }: { limit: LimitKind;
         if (isUnlimitedFeatured(nextLimits.featuredPerMonth)) return t('upgrade.contactCustom')
         return t('upgrade.featured', { nextPlan, next: nextLimits.featuredPerMonth })
       case 'interactionCap':
-        return t('upgrade.interactionCap', { nextPlan, next: nextLimits.interactionsPerPost })
+        return nearCap
+          ? t('upgrade.interactionCapNear', {
+              total: nearCap.total,
+              cap: nearCap.cap,
+              nextPlan,
+              next: nextLimits.interactionsPerPost
+            })
+          : t('upgrade.interactionCap', { nextPlan, next: nextLimits.interactionsPerPost })
       case 'visibility':
         return t('upgrade.visibility', { nextPlan })
     }
@@ -109,7 +125,7 @@ export default function UpgradeAtLimit({ limit, className }: { limit: LimitKind;
       <Link
         to={`/billing?plan=${next}&interval=${chargedInterval}`}
         className="text-primary hover:underline"
-        onClick={() => captureEvent('upgrade_at_limit_clicked', { limit, plan: next })}
+        onClick={() => captureEvent('upgrade_at_limit_clicked', { limit, plan: next, near: nearCap !== undefined })}
       >
         {t('upgrade.cta', { nextPlan })}
       </Link>

@@ -50,7 +50,7 @@
     "eyebrow": "Why SSI",
     "headlineLine1": "The score that decides",
     "headlineLine2": "who finds you",
-    "intro": "Your Social Selling Index is LinkedIn's own 0–100 measure of how findable you are to recruiters, clients and peers. Four pillars, 25 points each. Engagement is the fastest one to move.",
+    "intro": "Your Social Selling Index is LinkedIn's own 0–100 measure of how findable you are, whether by recruiters, clients or peers. Four areas, 25 points each. Engagement is the one you control every day.",
     "pillars": [
       {
         "icon": "🏆",
@@ -77,23 +77,8 @@
         "pts": 25
       }
     ],
-    "stats": [
-      {
-        "value": "45%",
-        "label": "more opportunities for SSI leaders vs. low-scorers",
-        "source": "LinkedIn data"
-      },
-      {
-        "value": "5×",
-        "label": "more profile views in the top SSI quartile",
-        "source": "LinkedIn data"
-      },
-      {
-        "value": "+51%",
-        "label": "more likely to be contacted by a recruiter with SSI above 70",
-        "source": "LinkedIn data"
-      }
-    ]
+    "sourceLine": "Four areas, 25 points each, recalculated daily.",
+    "sourceLabel": "Source: LinkedIn"
   },
   "proof": {
     "eyebrow": "No hype",
@@ -103,8 +88,8 @@
     "founderRole": "Founder · Frontend Specialist (7+ years)",
     "founderMessage": "I'm Henriko, a frontend specialist with 7+ years in the industry. I built Link Into The SSI because good people stay invisible on LinkedIn while the algorithm rewards activity. We launched recently, so you won't find inflated numbers here. Just the mechanism, real growth in your own SSI, and an honest invitation to be early.",
     "proofCardHeadline": "The only proof that matters is your own.",
-    "proofCardBody": "See real growth in your SSI number from day one, measured on LinkedIn itself, not by us.",
-    "proofCardLink": "Check your current SSI on LinkedIn",
+    "proofCardBody": "Your recap shows every interaction you make and receive, week by week. No score invented by us, no inflated numbers.",
+    "proofCardNote": "Have Sales Navigator? Your SSI is still on LinkedIn.",
     "earlyAccess": "Be one of the first in. Make it count."
   },
   "features": {
@@ -212,7 +197,7 @@
       },
       {
         "q": "What is SSI, and how fast will it move?",
-        "a": "Your Social Selling Index is LinkedIn's 0–100 measure of how findable you are. You can check your real score on LinkedIn anytime. Most members see it move within 1–2 weeks of consistent engagement. Results vary with how active you are and where you start."
+        "a": "Your Social Selling Index is LinkedIn's 0–100 score across four areas: professional brand, the right people, insights and relationships. LinkedIn recalculates it daily. We don't read or predict that score and we don't promise a timeline. What we give you is a feed where real engagement is easy and a recap of every interaction you make and receive. Since August 2026 the SSI page is a Sales Navigator feature; free and Premium members no longer see it."
       },
       {
         "q": "Do I need to be active every day?",
@@ -220,14 +205,14 @@
       },
       {
         "q": "Can I cancel anytime?",
-        "a": "Yes. No contracts, no lock-in, no cancellation fees. Cancel from your account settings in one click; access lasts until the end of the current period."
+        "a": "Yes. No contracts, no lock-in, no cancellation fees. Cancel from your subscription page whenever you like; access lasts until the end of the current period."
       }
     ]
   },
   "finalCta": {
     "headlineLine1": "Ready to stop chasing?",
-    "headlineLine2": "Let it find you.",
-    "subheadline": "Seven days to see it work. Build real SSI from day one.",
+    "headlineLine2": "Let them find you.",
+    "subheadline": "Seven days free. Real engagement from day one.",
     "cta": "Start my 7-day trial with LinkedIn",
     "ctaTrust": "Official LinkedIn sign-in · Name, photo and email only · Nothing posted for you",
     "earlyAccess": "Be one of the first in. Make it count."

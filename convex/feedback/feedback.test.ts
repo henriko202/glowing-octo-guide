@@ -21,7 +21,7 @@ describe('validateFeedbackMessage', () => {
 })
 
 describe('FEEDBACK_CATEGORIES', () => {
-  it('lists the 8 categories', () => {
+  it('lists the 9 categories', () => {
     expect(FEEDBACK_CATEGORIES).toEqual([
       'feature_request',
       'bug',
@@ -30,7 +30,8 @@ describe('FEEDBACK_CATEGORIES', () => {
       'praise',
       'question',
       'suggestion',
-      'other'
+      'other',
+      'cancellation'
     ])
   })
 })

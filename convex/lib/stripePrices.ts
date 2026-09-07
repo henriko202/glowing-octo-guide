@@ -32,3 +32,8 @@ export const ALLOWED_PRICE_IDS = new Set(Object.keys(PRICE_MAP))
 export function getTierFromPriceId(priceId: string): Tier {
   return resolveTier(PRICE_MAP, priceId)
 }
+
+/** Starter price for the downgrade portal flow (backlog/R09): annual stays annual. */
+export function starterPriceIdFor(env: Env, interval: string | undefined): string | undefined {
+  return interval === 'year' ? env.STRIPE_STARTER_ANNUAL_PRICE_ID : env.STRIPE_STARTER_PRICE_ID
+}

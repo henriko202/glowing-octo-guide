@@ -38,19 +38,11 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
             <p className="text-base leading-relaxed text-cream/70">{dict.founderMessage}</p>
           </div>
 
-          {/* SSI proof: link out to LinkedIn's own SSI page in a new tab. We don't display the score (LinkedIn
-              doesn't expose it via API); we point users to the source of truth. */}
+          {/* No link-out: the SSI page is a Sales Navigator feature since Aug 2026 (backlog/R10). */}
           <div className="flex flex-col justify-center rounded-2xl border border-gold/20 bg-gold/[0.04] p-8">
             <p className="font-display text-2xl font-semibold text-cream">{dict.proofCardHeadline}</p>
             <p className="mt-3 text-sm leading-relaxed text-cream/60">{dict.proofCardBody}</p>
-            <a
-              href="https://www.linkedin.com/sales/ssi"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 text-sm text-gold-text underline underline-offset-4 hover:text-gold-light"
-            >
-              {dict.proofCardLink} →
-            </a>
+            <p className="mt-4 text-xs text-cream/40">{dict.proofCardNote}</p>
           </div>
         </div>
 

@@ -133,8 +133,12 @@ http.route({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
 type StripeEvent = any
 
-// syncUserSubscription's args for a Stripe subscription object — shared by created + updated.
-function syncArgs(sub: StripeEvent) {
+// Stripe's `created` of the EVENT itself (ms): the ordering stamp behind subscriptions.lastEventAt.
+const eventCreatedMs = (event: StripeEvent) => (typeof event.created === 'number' ? event.created * 1000 : undefined)
+
+// syncUserSubscription's args for a subscription event — shared by created + updated.
+function syncArgs(event: StripeEvent) {
+  const sub = event.data.object
   const price = sub.items?.data?.[0]?.price
   return {
     stripeCustomerId: String(sub.customer),
@@ -149,7 +153,8 @@ function syncArgs(sub: StripeEvent) {
     priceInterval: price?.recurring?.interval ?? undefined,
     cancelAtPeriodEnd: sub.cancel_at_period_end === true,
     // Stripe's own creation instant: the duplicate guard voids the newest by this, not by arrival.
-    stripeCreated: typeof sub.created === 'number' ? sub.created * 1000 : undefined
+    stripeCreated: typeof sub.created === 'number' ? sub.created * 1000 : undefined,
+    eventCreated: eventCreatedMs(event)
   }
 }
 
@@ -162,7 +167,7 @@ registerRoutes(http, components.stripe, {
       // transaction, whether this member now holds a duplicate and which row is the newer one. Only
       // `created` acts on it — Stripe emits `updated` for the duplicate right after, and acting there
       // too would void (and notify) twice.
-      const duplicate = await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event.data.object))
+      const duplicate = await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))
       if (duplicate) {
         await ctx.scheduler.runAfter(0, internal.billingNode.cancelDuplicateSubscription, {
           userId: duplicate.userId,
@@ -172,7 +177,7 @@ registerRoutes(http, components.stripe, {
       }
     },
     'customer.subscription.updated': async (ctx: StripeEvent, event: StripeEvent) => {
-      await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event.data.object))
+      await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))
     },
     'customer.subscription.deleted': async (ctx: StripeEvent, event: StripeEvent) => {
       const sub = event.data.object
@@ -196,7 +201,8 @@ registerRoutes(http, components.stripe, {
       if (invoice.subscription && invoice.customer) {
         await ctx.runMutation(internal.stripe.markPastDue, {
           stripeCustomerId: String(invoice.customer),
-          stripeSubscriptionId: String(invoice.subscription)
+          stripeSubscriptionId: String(invoice.subscription),
+          eventCreated: eventCreatedMs(event)
         })
       }
     }

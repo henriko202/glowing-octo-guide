@@ -71,22 +71,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="border-sidebar-border border-t p-3">
-        <a
-          href="https://linkedin.com/sales/ssi"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-3 py-1.5 text-[13px] text-gold-text hover:underline"
-        >
-          {t('nav.viewSsi')} ↗
-        </a>
-        <p className="text-muted-foreground mb-1 px-3 text-[11px]">{t('nav.viewSsiNote')}</p>
-        <Link
-          to="/feed"
-          onClick={onNavigate}
-          className="text-sidebar-foreground/80 hover:bg-sidebar-accent/60 mb-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] no-underline"
-        >
-          {t('nav.recap')}
-        </Link>
         <UserMenu />
       </div>
     </div>

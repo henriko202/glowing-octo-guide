@@ -148,3 +148,41 @@ export function duplicateSubscriptionCanceledEmail(
     html: `<p>${c.body}</p><p>${c.link} <a href="${a.billingUrl}">${a.billingUrl}</a></p>`
   }
 }
+
+export interface ConvertedArgs {
+  made: number
+  received: number
+  planName: string
+  priceLabel: string
+  recapUrl: string
+}
+
+/** Day-7 conversion notice (backlog/R14): the charge and the recorded counts, one link. Not sent at 0+0. */
+export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): EmailContent {
+  const copy: Record<BillingLocale, { subject: string; lead: string; term: string; link: string }> = {
+    en: {
+      subject: `Your ${a.planName} plan started today`,
+      lead: `During your trial you made ${a.made} interactions and your posts received ${a.received}.`,
+      term: `Your ${a.planName} plan (${a.priceLabel}) is now active.`,
+      link: 'See your recap:'
+    },
+    pt: {
+      subject: `Seu plano ${a.planName} começou hoje`,
+      lead: `Durante o seu teste você fez ${a.made} interações e suas publicações receberam ${a.received}.`,
+      term: `Seu plano ${a.planName} (${a.priceLabel}) está ativo.`,
+      link: 'Veja seu resumo:'
+    },
+    es: {
+      subject: `Tu plan ${a.planName} comenzó hoy`,
+      lead: `Durante tu prueba hiciste ${a.made} interacciones y tus publicaciones recibieron ${a.received}.`,
+      term: `Tu plan ${a.planName} (${a.priceLabel}) ya está activo.`,
+      link: 'Mira tu resumen:'
+    }
+  }
+  const c = copy[locale]
+  return {
+    subject: c.subject,
+    text: `${c.lead}\n\n${c.term}\n\n${c.link} ${a.recapUrl}`,
+    html: `<p>${c.lead}</p><p>${c.term}</p><p>${c.link} <a href="${a.recapUrl}">${a.recapUrl}</a></p>`
+  }
+}

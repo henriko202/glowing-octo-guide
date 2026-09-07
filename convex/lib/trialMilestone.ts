@@ -35,6 +35,16 @@ export function pickTrialingSubscription<T extends { status: string }>(rows: rea
 }
 
 /**
+ * Whether the 50-interaction milestone may end this trial early. A cancel-pending trial has nothing
+ * to convert — it runs to the date the cancel dialog promised (the trial emails skip it the same way).
+ */
+export function shouldEndTrialEarly<T extends { stripeSubscriptionId?: string; cancelAtPeriodEnd?: boolean }>(
+  sub: T | undefined
+): sub is T & { stripeSubscriptionId: string } {
+  return Boolean(sub?.stripeSubscriptionId) && !sub?.cancelAtPeriodEnd
+}
+
+/**
  * One trial per user, forever. Keyed on the subscription-row COUNT rather than user.trialEndsAt,
  * because syncUserSubscription (convex/stripe.ts) overwrites trialEndsAt with undefined for a
  * non-trial subscription — a marker that erases itself would hand a returning user a second trial.
@@ -55,4 +65,21 @@ export function findDuplicateSubscription<T extends { status: string; stripeCrea
   const live = rows.filter(r => LIVE_SUBSCRIPTION_STATUSES.includes(r.status))
   if (live.length < 2) return undefined
   return live.reduce((a, b) => ((b.stripeCreated ?? 0) > (a.stripeCreated ?? 0) ? b : a))
+}
+
+/** trialing → active on the same subscription row = the trial converted (backlog/R14 email). */
+export function isTrialConversion(prev: string | undefined, next: string): boolean {
+  return prev === 'trialing' && next === 'active'
+}
+
+/**
+ * Stripe does not deliver webhook events in order. An event whose `created` is strictly older than
+ * the newest one applied to the row (`subscriptions.lastEventAt`) must not be applied: it would
+ * rewind status — a retried `trialing` update landing after the trial converted makes the next
+ * `active` event look like a second conversion. Stripe stamps events at second resolution, so equal
+ * stamps apply in arrival order (the checkout `created` and its sibling `updated` share a second).
+ * Either stamp missing ⇒ never stale: rows and events that predate the stamp keep today's behavior.
+ */
+export function isStaleEvent(lastEventAt: number | undefined, eventCreated: number | undefined): boolean {
+  return lastEventAt !== undefined && eventCreated !== undefined && eventCreated < lastEventAt
 }

@@ -1,5 +1,5 @@
 // app/src/pages/BillingPage.test.tsx
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -24,7 +24,13 @@ vi.mock('../convex', () => ({
       clearBillingNotice: 'users.clearBillingNotice'
     },
     billing: { createPortalSession: 'billing.createPortalSession' },
-    billingNode: { createCheckoutSession: 'billingNode.createCheckoutSession' },
+    billingNode: {
+      createCheckoutSession: 'billingNode.createCheckoutSession',
+      createCancelFlowSession: 'billingNode.createCancelFlowSession',
+      resumeSubscription: 'billingNode.resumeSubscription'
+    },
+    interactions: { getRecap: 'interactions.getRecap' },
+    feedback: { feedback: { submitFeedback: 'feedback.feedback.submitFeedback' } },
     // CardGateBanner's useOwnPostState (reused for the R07 "post is live" line) reads this.
     posts: { getMyPosts: 'posts.getMyPosts' }
   }
@@ -33,12 +39,20 @@ vi.mock('../convex', () => ({
 let mockQueryReturns: Record<string, unknown> = {}
 const mockCheckout = vi.fn(async () => ({ url: '' }))
 const mockPortal = vi.fn(async () => ({ url: '' }))
+const mockResume = vi.fn(async () => null)
+const mockCancelFlow = vi.fn(async () => ({ url: '' }))
+const ACTIONS: Record<string, unknown> = {
+  'billing.createPortalSession': mockPortal,
+  'billingNode.resumeSubscription': mockResume,
+  'billingNode.createCancelFlowSession': mockCancelFlow
+}
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
-  useAction: vi.fn((ref: string) => (ref === 'billing.createPortalSession' ? mockPortal : mockCheckout)),
+  useAction: vi.fn((ref: string) => ACTIONS[ref] ?? mockCheckout),
   useMutation: vi.fn(() => vi.fn(async () => {}))
 }))
+vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 
 // useSearchParams is mocked (not the real router) so tests can assert the setter was called and
 // drive the query string directly, the same mockSetSearchParams pattern as AdminPage.test.tsx:59.
@@ -80,26 +94,40 @@ vi.mock('react-i18next', () => ({
   })
 }))
 
+import { captureEvent } from '@/lib/observability/analytics'
 import BillingPage from './BillingPage'
 
 function setUser(over: Record<string, unknown> = {}) {
   mockQueryReturns['users.getMe'] = { _id: 'u1', tier: 'growth', subscriptionStatus: 'none', ...over }
 }
 
-function renderPage() {
-  return render(
+// `strict` renders under React.StrictMode — the same wrapper app/src/main.tsx puts around the real
+// app — so a run-once effect guard (e.g. cancelTrackedRef) is actually exercised: StrictMode
+// double-invokes effects on mount, so a guard that isn't a genuine "already ran" latch shows up as a
+// second call (I1).
+function renderPage({ strict = false }: { strict?: boolean } = {}) {
+  const tree = (
     <MemoryRouter>
       <BillingPage />
     </MemoryRouter>
   )
+  return render(strict ? <StrictMode>{tree}</StrictMode> : tree)
 }
 
 // For the R07 checkout-return tests: drives the mocked useSearchParams from a query string and the
 // mocked getMe from `me`, in one call.
-function renderBilling({ search = '', me = {} }: { search?: string; me?: Record<string, unknown> } = {}) {
+function renderBilling({
+  search = '',
+  me = {},
+  strict = false
+}: {
+  search?: string
+  me?: Record<string, unknown>
+  strict?: boolean
+} = {}) {
   mockSearchParams = new URLSearchParams(search)
   setUser(me)
-  return renderPage()
+  return renderPage({ strict })
 }
 
 beforeEach(() => {
@@ -107,6 +135,9 @@ beforeEach(() => {
   sessionStorage.setItem('sessionToken', 'tok')
   mockCheckout.mockClear()
   mockPortal.mockClear()
+  mockResume.mockClear()
+  mockCancelFlow.mockClear()
+  vi.mocked(captureEvent).mockClear()
   mockSetSearchParams.mockClear()
   mockSearchParams = new URLSearchParams()
   mockQueryReturns = {
@@ -442,5 +473,56 @@ describe('activation timeout (Item B)', () => {
 
     expect(screen.getByText('billing.activatingTimeout')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'billing.manageSubscription' })).toBeInTheDocument()
+  })
+})
+
+describe('cancel + resume (R09)', () => {
+  it('shows the cancel link for a card holder with nothing pending, and opens the interstitial only on click', () => {
+    setUser({ subscriptionStatus: 'active' })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'billing.cancel.link' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'billing.cancel.resume' })).not.toBeInTheDocument()
+    expect(screen.queryByText('billing.cancel.title')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'billing.cancel.link' }))
+    expect(screen.getByText('billing.cancel.title')).toBeInTheDocument()
+  })
+
+  it('swaps the link for Resume once a cancellation is pending and calls the action', async () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = {
+      tier: 'growth',
+      status: 'active',
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: Date.now() + 5 * 86_400_000
+    }
+    setUser({ subscriptionStatus: 'active' })
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'billing.cancel.link' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'billing.cancel.resume' }))
+    await waitFor(() => expect(mockResume).toHaveBeenCalledWith({ sessionToken: 'tok' }))
+    expect(screen.getByText(/billing\.cancel\.postsLeave/)).toBeInTheDocument()
+  })
+
+  it('?canceled=true fires cancel_completed exactly once under StrictMode, and strips the param once', async () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = { tier: 'growth', status: 'active', cancelAtPeriodEnd: true }
+    renderBilling({
+      search: 'canceled=true',
+      me: { subscriptionStatus: 'active', tier: 'growth' },
+      strict: true
+    })
+    await waitFor(() => expect(captureEvent).toHaveBeenCalledWith('cancel_completed', { plan: 'growth' }))
+    expect(captureEvent).toHaveBeenCalledTimes(1)
+    expect(mockSetSearchParams).toHaveBeenCalledTimes(1)
+    expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true })
+  })
+
+  // M-1: getMe can still be undefined (loading) on the render where cancelAtPeriodEnd first flips
+  // true. The guard must not latch cancelTrackedRef on that render, or the corrected re-fire once
+  // getMe lands is blocked for good.
+  it('does not fire cancel_completed while getMe is still loading', () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = { tier: 'growth', status: 'active', cancelAtPeriodEnd: true }
+    mockQueryReturns['users.getMe'] = undefined
+    mockSearchParams = new URLSearchParams('canceled=true')
+    renderPage()
+    expect(captureEvent).not.toHaveBeenCalled()
   })
 })

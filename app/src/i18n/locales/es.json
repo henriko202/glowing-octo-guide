@@ -12,9 +12,8 @@
       "manage": "Gestionar"
     },
     "primary": "Navegación principal",
-    "viewSsi": "Ver tu SSI en LinkedIn",
-    "viewSsiNote": "Requiere LinkedIn Sales Navigator",
-    "recap": "Resumen"
+    "recap": "Resumen",
+    "history": "Historial"
   },
   "shell": {
     "search": "Buscar publicaciones, personas",
@@ -227,6 +226,26 @@
     "activating": "Activando tu prueba…",
     "activatingPlan": "Activando tu plan…",
     "activatingTimeout": "Tu pago se procesó; tu plan aparecerá aquí en breve.",
+    "cancel": {
+      "link": "Cancelar plan",
+      "title": "Antes de irte",
+      "trialBody": "No se te cobrará. Tu prueba termina el {{date}} y tus publicaciones salen del feed ese día.",
+      "trialBodyNoDate": "No se te cobrará. Tus publicaciones salen del feed cuando termine tu prueba.",
+      "body_one": "Tu publicación sale del feed el {{date}}. En los últimos 30 días recibió {{received}} reacciones y comentarios.",
+      "body_other": "Tus {{count}} publicaciones salen del feed el {{date}}. En los últimos 30 días recibieron {{received}} reacciones y comentarios.",
+      "bodyNoPosts": "Tu plan termina el {{date}}. En los últimos 30 días tus publicaciones recibieron {{received}} reacciones y comentarios.",
+      "bodyNoDate": "Tus publicaciones salen del feed al final de tu período de facturación. En los últimos 30 días recibieron {{received}} reacciones y comentarios.",
+      "alternative": "Pasa a Starter y mantén tus publicaciones en el feed.",
+      "alternativeCta": "Pasar a Starter",
+      "question": "¿Qué te habría hecho quedarte?",
+      "questionPlaceholder": "Opcional. Con una línea basta.",
+      "keep": "Mantener mi plan",
+      "continue": "Continuar y cancelar",
+      "resume": "Reanudar plan",
+      "postsLeave": "Tus publicaciones salen del feed el {{date}}.",
+      "resumed": "Tu plan continúa.",
+      "resumeFailed": "No se pudo reanudar tu plan: {{error}}."
+    },
     "plans": {
       "starter": {
         "name": "Starter",
@@ -369,10 +388,51 @@
     "weeklyPosts": "Alcanzaste el límite semanal de {{used}} publicaciones de tu plan. {{nextPlan}} te da {{next}} por semana, cada una con hasta {{interactions}} interacciones.",
     "featured": "Usaste todas tus publicaciones destacadas este mes. {{nextPlan}} te da {{next}} por mes.",
     "interactionCap": "Esta publicación salió del feed al alcanzar su límite de interacciones. {{nextPlan}} aumenta ese límite a {{next}}.",
+    "interactionCapNear": "Tu publicación está en {{total}} de {{cap}} interacciones. En {{nextPlan}} sigue acumulando hasta {{next}}.",
     "visibility": "Elegir quién ve tus publicaciones es una función de {{nextPlan}}.",
     "cta": "Mejorar a {{nextPlan}}",
     "proContact": "¿Necesitas más de lo que ofrece Pro? Contáctanos para un plan Empresa personalizado.",
     "contactCustom": "Tu plan ya tiene un límite personalizado. Contáctanos para ajustarlo."
+  },
+  "recap": {
+    "title": "Resumen",
+    "lead": "Lo que hiciste y recibiste aquí, y cómo se está usando tu plan.",
+    "window": {
+      "7d": "Últimos 7 días",
+      "30d": "Últimos 30 días",
+      "all": "Desde el inicio"
+    },
+    "made": "Hiciste",
+    "received": "Tus publicaciones recibieron",
+    "reactionsCount_one": "{{count}} reacción",
+    "reactionsCount_other": "{{count}} reacciones",
+    "commentsCount_one": "{{count}} comentario",
+    "commentsCount_other": "{{count}} comentarios",
+    "postsCount_one": "en {{count}} publicación",
+    "postsCount_other": "en {{count}} publicaciones",
+    "delta": "{{delta}} frente a los {{days}} días anteriores",
+    "celebrate": "Más que en los {{days}} días anteriores. Sigue así.",
+    "truncated": "Mostrando tus {{count}} interacciones más recientes.",
+    "planUsage": "Uso del plan",
+    "postUsage": "{{total}} de {{cap}} interacciones",
+    "noPosts": "No agregaste publicaciones en este período. Las publicaciones que compartes aparecen aquí con su conteo de interacciones.",
+    "emptyTitle": "Nada registrado en los últimos {{days}} días",
+    "emptyBody": "Tu primera reacción o comentario en el feed aparece aquí, junto con lo que reciben tus publicaciones.",
+    "emptyCta": "Ir al feed",
+    "honest": "Estas son las interacciones registradas aquí. No leemos ni predecimos tu SSI.",
+    "salesNav": "¿Tienes Sales Navigator? Tu SSI sigue en",
+    "seeAll": "Ver todas las interacciones"
+  },
+  "history": {
+    "title": "Historial",
+    "lead": "Cada reacción y comentario que registraste aquí.",
+    "commented": "Comentaste",
+    "by": "de {{name}}",
+    "removed": "Publicación eliminada",
+    "showMore": "Mostrar más",
+    "showLess": "Mostrar menos",
+    "empty": "No hay interacciones en este período.",
+    "emptyCta": "Ir al feed"
   },
   "errors": {
     "weeklyLimit": "Alcanzaste el límite semanal de {{limit}} publicaciones.",

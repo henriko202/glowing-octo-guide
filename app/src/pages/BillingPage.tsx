@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -8,12 +8,14 @@ import { TRIAL_INTERACTION_THRESHOLD } from '../../../convex/lib/trialMilestone'
 import TrialMeter from '@/components/TrialMeter'
 import { useOwnPostState } from '@/components/CardGateBanner'
 import CheckoutSuccessDialog from '@/components/CheckoutSuccessDialog'
+import CancelInterstitial from '@/components/CancelInterstitial'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { SUPPORT_EMAIL } from '@/lib/support'
 import { friendlyError } from '@/lib/errors'
 import { captureException } from '@/lib/observability/sentry'
+import { captureEvent } from '@/lib/observability/analytics'
 import { formatPriceLabel } from '../../../convex/lib/billingEmails'
 import { resolveBillingLocale } from '../../../convex/lib/checkoutCopy'
 import { isPlanId, PLAN_IDS, resolveTargetPlan } from '@/lib/targetPlan'
@@ -59,6 +61,9 @@ export default function BillingPage() {
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
   const clearBillingNotice = useMutation(api.users.clearBillingNotice)
+  const resumeSubscription = useAction(api.billingNode.resumeSubscription)
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [resumeLoading, setResumeLoading] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -69,6 +74,23 @@ export default function BillingPage() {
   if (!justSubscribed && searchParams.get('success') === 'true') {
     setJustSubscribed(true)
   }
+
+  // R09 — Stripe's cancel flow returns here as /billing?canceled=true. Same latch pattern as
+  // justSubscribed; the event fires once the webhook has flipped cancelAtPeriodEnd. The "already
+  // fired" guard is a ref (not state): it only gates a side effect, never render output, and a
+  // useState setter called synchronously in this effect trips react-hooks/set-state-in-effect.
+  const [justCanceled, setJustCanceled] = useState(false)
+  if (!justCanceled && searchParams.get('canceled') === 'true') {
+    setJustCanceled(true)
+  }
+  const cancelTrackedRef = useRef(false)
+  useEffect(() => {
+    if (!justCanceled || !me || cancelTrackedRef.current || !subscriptionInfo?.cancelAtPeriodEnd) return
+    cancelTrackedRef.current = true
+    captureEvent('cancel_completed', { plan: me.tier ?? 'starter' })
+    setSearchParams({}, { replace: true })
+  }, [justCanceled, subscriptionInfo?.cancelAtPeriodEnd, me, setSearchParams])
+
   const [celebrationOpen, setCelebrationOpen] = useState(false)
   const [hasCelebrated, setHasCelebrated] = useState(false)
   const [activationTimedOut, setActivationTimedOut] = useState(false)
@@ -243,6 +265,19 @@ export default function BillingPage() {
     }
   }
 
+  async function handleResume() {
+    if (!sessionToken) return
+    setResumeLoading(true)
+    try {
+      await resumeSubscription({ sessionToken })
+      toast(t('billing.cancel.resumed'))
+    } catch (err: unknown) {
+      toast(t('billing.cancel.resumeFailed', { error: friendlyError(err, String(err)) }))
+    } finally {
+      setResumeLoading(false)
+    }
+  }
+
   const lead = `${t('billing.currentPlan')}: ${planLabel}`
 
   return (
@@ -301,14 +336,39 @@ export default function BillingPage() {
               </div>
             )}
           </div>
-          <Button
-            variant="outline"
-            onClick={handleManageSubscription}
-            disabled={portalLoading}
-            className={`mt-4 text-[13px] ${portalLoading ? 'cursor-wait' : 'cursor-pointer'}`}
-          >
-            {portalLoading ? '...' : t('billing.manageSubscription')}
-          </Button>
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <Button
+              variant="outline"
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className={`text-[13px] ${portalLoading ? 'cursor-wait' : 'cursor-pointer'}`}
+            >
+              {portalLoading ? '...' : t('billing.manageSubscription')}
+            </Button>
+            {subscriptionInfo.cancelAtPeriodEnd ? (
+              <Button
+                onClick={handleResume}
+                disabled={resumeLoading}
+                aria-busy={resumeLoading}
+                className="cursor-pointer text-[13px]"
+              >
+                {resumeLoading ? '...' : t('billing.cancel.resume')}
+              </Button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCancelOpen(true)}
+                className="text-muted-foreground min-h-10 text-[13px] underline-offset-4 hover:underline"
+              >
+                {t('billing.cancel.link')}
+              </button>
+            )}
+          </div>
+          {subscriptionInfo.cancelAtPeriodEnd && periodEndDate && (
+            <p className="text-muted-foreground mt-2 mb-0 text-xs">
+              {t('billing.cancel.postsLeave', { date: periodEndDate })}
+            </p>
+          )}
         </div>
       )}
 
@@ -508,6 +568,14 @@ export default function BillingPage() {
         plan={me?.tier ?? targetPlan}
         isTrial={me?.subscriptionStatus === 'trialing'}
         showPostLive={hadAnyPost && me?.subscriptionStatus === 'trialing'}
+      />
+
+      <CancelInterstitial
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        tier={me?.tier ?? 'starter'}
+        isTrialing={isTrialing}
+        periodEndDate={periodEndDate}
       />
     </div>
   )

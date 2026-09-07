@@ -3,6 +3,7 @@ import {
   duplicateSubscriptionCanceledEmail,
   formatPriceLabel,
   planName,
+  trialConvertedEmail,
   trialEndingEmail,
   trialNearEndEmail
 } from './billingEmails'
@@ -10,6 +11,7 @@ import type { BillingLocale } from './checkoutCopy'
 
 const LOCALES: BillingLocale[] = ['en', 'pt', 'es']
 const BILLING_URL = 'https://app.example.com/billing'
+const RECAP_URL = 'https://app.example/recap'
 const PRICE = { amount: 15000, currency: 'usd', interval: 'year' }
 
 describe('formatPriceLabel', () => {
@@ -78,6 +80,40 @@ describe('duplicateSubscriptionCanceledEmail', () => {
   })
 })
 
+describe('trialConvertedEmail', () => {
+  it('trialConvertedEmail states the counts, the plan and links the recap', () => {
+    const m = trialConvertedEmail('en', {
+      made: 3,
+      received: 2,
+      planName: 'Growth',
+      priceLabel: '$9/month',
+      recapUrl: RECAP_URL
+    })
+    expect(m.subject).toBe('Your Growth plan started today')
+    expect(m.text).toContain('you made 3 interactions and your posts received 2')
+    expect(m.text).toContain('Your Growth plan ($9/month) is now active.')
+    expect(m.text).toContain(RECAP_URL)
+    expect(m.html).toContain(`href="${RECAP_URL}"`)
+  })
+  it('carries the counts, the plan, the price and the recap link in every language', () => {
+    for (const l of LOCALES) {
+      const m = trialConvertedEmail(l, {
+        made: 3,
+        received: 2,
+        planName: 'Growth',
+        priceLabel: '$9/month',
+        recapUrl: RECAP_URL
+      })
+      expect(m.subject).toContain('Growth')
+      expect(m.text).toContain('3')
+      expect(m.text).toContain('2')
+      expect(m.text).toContain('$9/month')
+      expect(m.text).toContain(RECAP_URL)
+      expect(m.html).toContain(`href="${RECAP_URL}"`)
+    }
+  })
+})
+
 describe('billing emails stay transactional', () => {
   it('carries no marketing verbs and no urgency theatrics', () => {
     const all = [
@@ -94,7 +130,10 @@ describe('billing emails stay transactional', () => {
       ...LOCALES.map(l =>
         trialEndingEmail(l, { endsOn: 'x', planName: 'Growth', priceLabel: 'x', billingUrl: BILLING_URL })
       ),
-      ...LOCALES.map(l => duplicateSubscriptionCanceledEmail(l, { planName: 'Growth', billingUrl: BILLING_URL }))
+      ...LOCALES.map(l => duplicateSubscriptionCanceledEmail(l, { planName: 'Growth', billingUrl: BILLING_URL })),
+      ...LOCALES.map(l =>
+        trialConvertedEmail(l, { made: 3, received: 2, planName: 'Growth', priceLabel: 'x', recapUrl: RECAP_URL })
+      )
     ]
     for (const m of all) {
       const body = `${m.subject} ${m.text}`.toLowerCase()

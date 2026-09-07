@@ -11,7 +11,7 @@ import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
 import { canEngage } from './lib/access'
 import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
-import { findDuplicateSubscription, findLiveSubscription } from './lib/trialMilestone'
+import { findDuplicateSubscription, findLiveSubscription, isStaleEvent, isTrialConversion } from './lib/trialMilestone'
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
 // any status that does not clearly grant access (incomplete, unpaid, paused, unknown)
@@ -64,7 +64,9 @@ export const syncUserSubscription = internalMutation({
     priceCurrency: v.optional(v.string()),
     priceInterval: v.optional(v.string()),
     cancelAtPeriodEnd: v.optional(v.boolean()),
-    stripeCreated: v.optional(v.number())
+    stripeCreated: v.optional(v.number()),
+    // Stripe `created` of the EVENT (ms), not of the subscription — see schema: subscriptions.lastEventAt.
+    eventCreated: v.optional(v.number())
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -87,24 +89,37 @@ export const syncUserSubscription = internalMutation({
       console.warn(`syncUserSubscription: ignoring stale ${args.status} event for a canceled subscription`)
       return null
     }
-    const fields = {
-      tier: args.tier,
-      status: args.status,
-      currentPeriodEnd: args.currentPeriodEnd,
-      priceAmount: args.priceAmount,
-      priceCurrency: args.priceCurrency,
-      priceInterval: args.priceInterval,
-      cancelAtPeriodEnd: args.cancelAtPeriodEnd,
-      stripeCreated: args.stripeCreated ?? existing?.stripeCreated
-    }
-    if (existing) {
-      await ctx.db.patch(existing._id, fields)
+    // Stripe does not deliver events in order. An event older than the last one applied to this row
+    // would rewind status (a late `trialing` update after the trial converted makes the next `active`
+    // event look like a second conversion and email the member twice), so the row, the user doc and
+    // the emails are all left alone. Only the duplicate decision below still runs, on the rows as
+    // they are, so a retried two-tab `created` can still void its duplicate.
+    const stale = isStaleEvent(existing?.lastEventAt, args.eventCreated)
+    // trialing → active on this row = the trial converted (backlog/R14). Decided before the patch.
+    const converted = !stale && isTrialConversion(existing?.status, args.status)
+    if (stale) {
+      console.warn(`syncUserSubscription: ignoring out-of-order ${args.status} event for ${args.stripeSubscriptionId}`)
     } else {
-      await ctx.db.insert('subscriptions', {
-        userId: user._id,
-        stripeSubscriptionId: args.stripeSubscriptionId,
-        ...fields
-      })
+      const fields = {
+        tier: args.tier,
+        status: args.status,
+        currentPeriodEnd: args.currentPeriodEnd,
+        priceAmount: args.priceAmount,
+        priceCurrency: args.priceCurrency,
+        priceInterval: args.priceInterval,
+        cancelAtPeriodEnd: args.cancelAtPeriodEnd,
+        stripeCreated: args.stripeCreated ?? existing?.stripeCreated,
+        lastEventAt: args.eventCreated ?? existing?.lastEventAt
+      }
+      if (existing) {
+        await ctx.db.patch(existing._id, fields)
+      } else {
+        await ctx.db.insert('subscriptions', {
+          userId: user._id,
+          stripeSubscriptionId: args.stripeSubscriptionId,
+          ...fields
+        })
+      }
     }
 
     // Every row this member holds, including the write above. Two live rows is the two-tab
@@ -121,6 +136,8 @@ export const syncUserSubscription = internalMutation({
       duplicate && defining
         ? { userId: user._id, stripeSubscriptionId: duplicate.stripeSubscriptionId, keepTier: defining.tier }
         : null
+    // A stale event changed nothing above: the newer one already set the member's state.
+    if (stale) return result
     // Another row defines the member (this one is the duplicate, or a non-live event for a row they
     // no longer rely on): leave the user doc alone.
     if (defining && defining.stripeSubscriptionId !== args.stripeSubscriptionId) return result
@@ -135,6 +152,10 @@ export const syncUserSubscription = internalMutation({
       // Paid-through instant — a canceled author's posts stay in the feed until this passes.
       subscriptionEndsAt: args.currentPeriodEnd
     })
+
+    if (converted) {
+      await ctx.scheduler.runAfter(0, internal.notifications.sendTrialConverted, { userId: user._id })
+    }
 
     // Re-stamp authorTierRank + feed fields on all this user's posts, and reveal any created hidden
     // while they had no card (e.g. an onboarding first post) as soon as they gain one — trialing
@@ -198,20 +219,34 @@ export const cancelUserSubscription = internalMutation({
 export const markPastDue = internalMutation({
   args: {
     stripeCustomerId: v.string(),
-    stripeSubscriptionId: v.string()
+    stripeSubscriptionId: v.string(),
+    eventCreated: v.optional(v.number())
   },
-  handler: async (ctx, { stripeCustomerId, stripeSubscriptionId }) => {
+  handler: async (ctx, { stripeCustomerId, stripeSubscriptionId, eventCreated }) => {
     const user = await ctx.db
       .query('users')
       .withIndex('by_stripe_customer', q => q.eq('stripeCustomerId', stripeCustomerId))
       .first()
     if (!user) return
-    // A failed payment blocks engaging until it clears (canEngage rejects 'past_due'). Tier unchanged.
-    await ctx.db.patch(user._id, { subscriptionStatus: 'past_due' })
     const sub = await ctx.db
       .query('subscriptions')
       .withIndex('by_stripe_id', q => q.eq('stripeSubscriptionId', stripeSubscriptionId))
       .first()
-    if (sub) await ctx.db.patch(sub._id, { status: 'past_due' })
+    // Same ordering guard as syncUserSubscription: a retried failure landing after the payment
+    // cleared must not block the member again.
+    if (isStaleEvent(sub?.lastEventAt, eventCreated)) {
+      console.warn(`markPastDue: ignoring out-of-order event for ${stripeSubscriptionId}`)
+      return
+    }
+    // Stripe's dunning end delivers the final failure and the `deleted` in either order, and the
+    // `deleted` does not stamp: a failure applied to a voided row would leave the member past_due
+    // for good (nothing later ever touches that row). Same invariant as syncUserSubscription.
+    if (sub?.status === 'canceled') {
+      console.warn(`markPastDue: ignoring payment failure for canceled ${stripeSubscriptionId}`)
+      return
+    }
+    // A failed payment blocks engaging until it clears (canEngage rejects 'past_due'). Tier unchanged.
+    await ctx.db.patch(user._id, { subscriptionStatus: 'past_due' })
+    if (sub) await ctx.db.patch(sub._id, { status: 'past_due', lastEventAt: eventCreated ?? sub.lastEventAt })
   }
 })

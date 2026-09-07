@@ -198,7 +198,11 @@ export default defineSchema({
     cancelAtPeriodEnd: v.optional(v.boolean()),
     // Stripe's own `created` (ms). The duplicate-subscription guard voids the NEWEST live row by
     // this stamp, never by webhook arrival order, which Stripe does not guarantee.
-    stripeCreated: v.optional(v.number())
+    stripeCreated: v.optional(v.number()),
+    // Stripe `created` (ms) of the newest webhook EVENT applied to this row. Stripe does not deliver
+    // events in order: syncUserSubscription and markPastDue skip an event older than this stamp, so
+    // it can never rewind status (or re-fire the trial-converted email). See lib/trialMilestone.
+    lastEventAt: v.optional(v.number())
   })
     .index('by_user', ['userId'])
     .index('by_stripe_id', ['stripeSubscriptionId']),
@@ -332,7 +336,8 @@ export default defineSchema({
       v.literal('praise'),
       v.literal('question'),
       v.literal('suggestion'),
-      v.literal('other')
+      v.literal('other'),
+      v.literal('cancellation')
     ),
     message: v.string(),
     status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
@@ -365,21 +370,27 @@ export default defineSchema({
     updatedAt: v.number()
   }).index('by_enabled_and_created', ['enabled', 'createdAt']),
 
-  // Per-user engagement log: one row per reaction or comment the user made on a post. Powers the
-  // DSR export (user data request) and a future admin dashboard. Distinct from the aggregate
-  // posts.likeCount/commentCount. `reaction` is set when kind==='reaction'; `comment` when 'comment'.
+  // Per-user engagement log: one row per reaction or comment the user made on a post, written in
+  // the SAME transaction as the post counter bump (interactions.ts incrementLikeCount /
+  // incrementCommentCount) so counts and log never drift. Powers the recap + history pages, the
+  // DSR export and the trial-conversion email. `authorId` is the post's author at write time (rows
+  // written before 2026-09-07 lack it and are ignored by "received" counts).
+  // `reaction` is set when kind==='reaction'; `comment` when 'comment'.
   userInteractions: defineTable({
     userId: v.id('users'),
     postId: v.id('posts'),
+    authorId: v.optional(v.id('users')),
     kind: v.union(v.literal('reaction'), v.literal('comment')),
     reaction: v.optional(reactionValidator),
     comment: v.optional(v.string()),
     createdAt: v.number()
   })
-    .index('by_user', ['userId']) // DSR export + a user's activity
+    .index('by_user', ['userId']) // DSR export + a user's activity + history page
     // Locate rows referencing a given post so account erasure can delete OTHER users' interactions
     // on the deleted user's posts (they aren't caught by the by_user drain). See privacy/deletion.ts.
-    .index('by_post', ['postId']),
+    .index('by_post', ['postId'])
+    // "Received" side of the recap: everything anyone did on this author's posts.
+    .index('by_author', ['authorId']),
 
   // Per-(user, post) engagement state. One lazily-created row per user+post — distinct from the
   // append-only userInteractions LOG above. Holds CURRENT state: `reactedAt` (set on the user's

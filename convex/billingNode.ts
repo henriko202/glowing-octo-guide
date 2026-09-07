@@ -5,7 +5,7 @@ import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
 import { requireAuthAction } from './lib/auth'
-import { ALLOWED_PRICE_IDS } from './lib/stripePrices'
+import { ALLOWED_PRICE_IDS, starterPriceIdFor } from './lib/stripePrices'
 import { findLiveSubscription, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
@@ -116,5 +116,76 @@ export const cancelDuplicateSubscription = internalAction({
     console.error('[billing] voided duplicate subscription', scrubError({ stripeSubscriptionId }))
     await ctx.runMutation(internal.users.setBillingNotice, { userId, notice: 'duplicate_canceled' })
     await ctx.scheduler.runAfter(0, internal.notifications.sendDuplicateCanceled, { userId, tier })
+  }
+})
+
+// ── Cancel / downgrade / resume (backlog/R09) ──────────────────────────────────────────────────
+// Stripe's hosted portal owns the confirmation UI; we only deep-link into the right flow. The
+// @convex-dev/stripe component's createCustomerPortalSession cannot set flow_data, so this uses
+// the SDK directly (same pattern as createCheckoutSession). Sync lands via the existing webhook.
+export const createCancelFlowSession = action({
+  args: { sessionToken: v.string(), flow: v.union(v.literal('cancel'), v.literal('downgrade')) },
+  handler: async (ctx, { sessionToken, flow }): Promise<{ url: string }> => {
+    const user = await requireAuthAction(ctx, sessionToken)
+    const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
+    const live = findLiveSubscription(subscriptions)
+    if (!live) throw new ConvexError('NO_LIVE_SUBSCRIPTION')
+
+    const customer = await stripeComponent.getOrCreateCustomer(ctx, {
+      userId: user._id,
+      email: user.email,
+      name: user.name
+    })
+    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+
+    let flowData: Stripe.BillingPortal.SessionCreateParams.FlowData
+    if (flow === 'cancel') {
+      flowData = {
+        type: 'subscription_cancel',
+        subscription_cancel: { subscription: live.stripeSubscriptionId },
+        after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?canceled=true` } }
+      }
+    } else {
+      if (live.tier === 'starter') throw new ConvexError('ALREADY_STARTER')
+      const sub = await stripe().subscriptions.retrieve(live.stripeSubscriptionId)
+      const item = sub.items.data[0]
+      if (!item) throw new ConvexError('Subscription has no item')
+      // The retrieved item carries the authoritative interval; our snapshot (optional) is the fallback.
+      const stripeInterval = item.price.recurring?.interval
+      const interval = stripeInterval === 'month' || stripeInterval === 'year' ? stripeInterval : live.priceInterval
+      const price = starterPriceIdFor(process.env, interval)
+      if (!price) throw new ConvexError('Starter price not configured')
+      flowData = {
+        type: 'subscription_update_confirm',
+        subscription_update_confirm: {
+          subscription: live.stripeSubscriptionId,
+          items: [{ id: item.id, price, quantity: 1 }]
+        },
+        after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?downgraded=true` } }
+      }
+    }
+
+    const session = await stripe().billingPortal.sessions.create({
+      customer: customer.customerId,
+      return_url: `${appUrl}/billing`,
+      flow_data: flowData
+    })
+    return { url: session.url }
+  }
+})
+
+// Undo a pending period-end cancellation. The webhook's customer.subscription.updated clears
+// cancelAtPeriodEnd on our row; the page reacts to that, so nothing is returned. Idempotent: a
+// subscription that is already not cancelling (stale tab, double tap) is a silent success.
+export const resumeSubscription = action({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }): Promise<null> => {
+    const user = await requireAuthAction(ctx, sessionToken)
+    const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
+    const live = findLiveSubscription(subscriptions)
+    if (!live) throw new ConvexError('NO_LIVE_SUBSCRIPTION')
+    if (!live.cancelAtPeriodEnd) return null
+    await stripe().subscriptions.update(live.stripeSubscriptionId, { cancel_at_period_end: false })
+    return null
   }
 })

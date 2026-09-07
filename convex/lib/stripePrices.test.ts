@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPriceMap, resolveTier } from './stripePrices'
+import { buildPriceMap, resolveTier, starterPriceIdFor } from './stripePrices'
 
 const ENV = {
   STRIPE_STARTER_PRICE_ID: 'price_s_m',
@@ -28,5 +28,14 @@ describe('stripePrices', () => {
     const map = buildPriceMap({ STRIPE_GROWTH_PRICE_ID: 'price_g_m' })
     expect(Object.keys(map)).toEqual(['price_g_m'])
     expect(map['']).toBeUndefined()
+  })
+})
+
+describe('starterPriceIdFor', () => {
+  it('picks the annual Starter price only for year, monthly otherwise', () => {
+    expect(starterPriceIdFor(ENV, 'year')).toBe('price_s_y')
+    expect(starterPriceIdFor(ENV, 'month')).toBe('price_s_m')
+    expect(starterPriceIdFor(ENV, undefined)).toBe('price_s_m')
+    expect(starterPriceIdFor({}, 'year')).toBeUndefined()
   })
 })

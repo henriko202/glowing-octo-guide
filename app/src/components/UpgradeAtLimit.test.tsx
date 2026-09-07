@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 import { useQuery } from 'convex/react'
@@ -7,8 +7,10 @@ import { MemoryRouter } from 'react-router-dom'
 vi.mock('convex/react', () => ({
   useQuery: vi.fn()
 }))
+vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 
 import UpgradeAtLimit from './UpgradeAtLimit'
+import { captureEvent } from '@/lib/observability/analytics'
 
 // getTierLimits result — matches the shape convex/posts.ts's getTierLimits returns.
 const TIER_LIMITS = {
@@ -31,10 +33,16 @@ function routeQueries() {
   })
 }
 
-function renderComponent(limit: 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibility') {
+function renderComponent(
+  limit: 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibility',
+  nearCap?: { total: number; cap: number }
+) {
   return render(
     <MemoryRouter>
-      <UpgradeAtLimit limit={limit} />
+      <UpgradeAtLimit
+        limit={limit}
+        nearCap={nearCap}
+      />
     </MemoryRouter>
   )
 }
@@ -93,5 +101,29 @@ describe('UpgradeAtLimit', () => {
     renderComponent('featured')
     expect(screen.getByRole('link', { name: /update payment method/i })).toHaveAttribute('href', '/billing?plan=growth')
     expect(screen.queryByText(/used all your featured posts/i)).not.toBeInTheDocument()
+  })
+
+  // R15: Recap shows the upgrade ask inside the 80% band, before the post is actually capped —
+  // both numbers (not just the plan's own cap) distinguish it from the plain interactionCap copy.
+  it('renders the near-cap copy with both numbers and tags the event near=true', () => {
+    renderComponent('interactionCap', { total: 20, cap: 25 })
+    expect(screen.getByText(/20 of 25 interactions/)).toBeInTheDocument()
+    expect(screen.getByText(/keeps collecting to 50/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link'))
+    expect(captureEvent).toHaveBeenCalledWith('upgrade_at_limit_clicked', {
+      limit: 'interactionCap',
+      plan: 'growth',
+      near: true
+    })
+  })
+
+  it('tags the plain cap event near=false', () => {
+    renderComponent('interactionCap')
+    fireEvent.click(screen.getByRole('link'))
+    expect(captureEvent).toHaveBeenCalledWith('upgrade_at_limit_clicked', {
+      limit: 'interactionCap',
+      plan: 'growth',
+      near: false
+    })
   })
 })
