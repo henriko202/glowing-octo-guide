@@ -154,6 +154,7 @@ describe('EmptyFeed', () => {
       />
     )
     expect(screen.getByText(/hidden until you subscribe/i)).toBeInTheDocument()
+    expect(screen.getByText(/the growth plan is \$15\/mo or \$150\/yr/i)).toBeInTheDocument()
     expect(screen.queryByText(/trial/i)).not.toBeInTheDocument()
   })
 

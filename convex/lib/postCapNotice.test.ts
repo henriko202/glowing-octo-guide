@@ -44,6 +44,12 @@ describe('billingIntervalParam', () => {
   it('maps the Stripe interval onto the billing page query param', () => {
     expect(billingIntervalParam('year')).toBe('annual')
     expect(billingIntervalParam('month')).toBe('monthly')
-    expect(billingIntervalParam(undefined)).toBe('monthly')
+  })
+
+  it("falls back to annual, the billing page's own default, when the interval is unknown", () => {
+    // A monthly fallback here would send a member whose row has not caught up to a different price
+    // than the in-app upgrade link and the page's toggle offer them.
+    expect(billingIntervalParam(undefined)).toBe('annual')
+    expect(billingIntervalParam('week')).toBe('annual')
   })
 })

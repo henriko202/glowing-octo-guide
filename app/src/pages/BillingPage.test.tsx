@@ -27,6 +27,7 @@ vi.mock('../convex', () => ({
     billingNode: {
       createCheckoutSession: 'billingNode.createCheckoutSession',
       createCancelFlowSession: 'billingNode.createCancelFlowSession',
+      createPlanSwitchSession: 'billingNode.createPlanSwitchSession',
       resumeSubscription: 'billingNode.resumeSubscription'
     },
     interactions: { getRecap: 'interactions.getRecap' },
@@ -41,10 +42,12 @@ const mockCheckout = vi.fn(async () => ({ url: '' }))
 const mockPortal = vi.fn(async () => ({ url: '' }))
 const mockResume = vi.fn(async () => null)
 const mockCancelFlow = vi.fn(async () => ({ url: '' }))
+const mockSwitch = vi.fn(async () => ({ url: '' }))
 const ACTIONS: Record<string, unknown> = {
   'billing.createPortalSession': mockPortal,
   'billingNode.resumeSubscription': mockResume,
-  'billingNode.createCancelFlowSession': mockCancelFlow
+  'billingNode.createCancelFlowSession': mockCancelFlow,
+  'billingNode.createPlanSwitchSession': mockSwitch
 }
 
 vi.mock('convex/react', () => ({
@@ -137,6 +140,7 @@ beforeEach(() => {
   mockPortal.mockClear()
   mockResume.mockClear()
   mockCancelFlow.mockClear()
+  mockSwitch.mockClear()
   vi.mocked(captureEvent).mockClear()
   mockSetSearchParams.mockClear()
   mockSearchParams = new URLSearchParams()
@@ -161,12 +165,31 @@ describe('plan click routing (R01)', () => {
     expect(mockPortal).not.toHaveBeenCalled()
   })
 
-  it('sends a trialing card holder to the portal instead of a second checkout', async () => {
+  it('deep-links a trialing card holder into the portal confirm flow for the price they clicked, never a second checkout', async () => {
+    setUser({ subscriptionStatus: 'trialing' })
+    renderPage()
+    // A trialing member has no "current" card, so the first switch button is the first plan: starter.
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalledWith({ sessionToken: 'tok', priceId: 'price_starter_year' }))
+    expect(mockCheckout).not.toHaveBeenCalled()
+    expect(mockPortal).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the portal home when the deep link is refused', async () => {
+    mockSwitch.mockRejectedValueOnce(new Error('ALREADY_ON_PLAN'))
     setUser({ subscriptionStatus: 'trialing' })
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
-    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+    await waitFor(() => expect(mockPortal).toHaveBeenCalledWith({ sessionToken: 'tok' }))
     expect(mockCheckout).not.toHaveBeenCalled()
+  })
+
+  // R20: the cap email's link names the next plan and the member's charged interval; the confirm
+  // flow must target exactly that price, not the page's annual default.
+  it('targets the plan and interval the cap email named', async () => {
+    renderBilling({ search: 'plan=pro&interval=monthly&src=cap_email', me: { subscriptionStatus: 'active' } })
+    fireEvent.click(screen.getByRole('button', { name: /billing\.switchPlan.*Pro/ }))
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalledWith({ sessionToken: 'tok', priceId: 'price_pro_month' }))
   })
 
   it('opens the portal when the server refuses with ALREADY_SUBSCRIBED', async () => {
@@ -220,6 +243,61 @@ describe('chosen plan (R03)', () => {
     // link (no OAuth stash) must land on the monthly price, not the annual default.
     mockSearchParams = new URLSearchParams('?plan=pro&interval=monthly')
     renderPage()
+    expect(screen.getByText('$50/mo')).toBeInTheDocument()
+    expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
+  })
+
+  it('seeds the toggle from the interval the member is already billed on', async () => {
+    // A monthly Growth member comparing plans sees monthly prices, and "Switch to Pro" aims at the
+    // monthly Pro price — not the annual default the toggle starts on for a cold arrival.
+    setUser({ subscriptionStatus: 'active' })
+    mockQueryReturns['users.getSubscriptionInfo'] = {
+      tier: 'growth',
+      status: 'active',
+      cancelAtPeriodEnd: false,
+      priceInterval: 'month'
+    }
+    renderPage()
+    expect(screen.getByText('$50/mo')).toBeInTheDocument()
+    expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /billing\.switchPlan.*Pro/ }))
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalledWith({ sessionToken: 'tok', priceId: 'price_pro_month' }))
+  })
+
+  it('lets a URL interval win over the billed one', () => {
+    // The cap email and the upgrade link name an interval on purpose; the row never overrides it.
+    setUser({ subscriptionStatus: 'active' })
+    mockQueryReturns['users.getSubscriptionInfo'] = {
+      tier: 'growth',
+      status: 'active',
+      cancelAtPeriodEnd: false,
+      priceInterval: 'month'
+    }
+    mockSearchParams = new URLSearchParams('?plan=pro&interval=annual')
+    renderPage()
+    expect(screen.getByText('$500/yr')).toBeInTheDocument()
+    expect(screen.queryByText('$50/mo')).not.toBeInTheDocument()
+  })
+
+  it('keeps a click made before the subscription row arrives', () => {
+    // The row loads after first paint; a member who already tapped Monthly is not flipped back
+    // to their annual row when it lands (the toggle is derived from the pick first, the row second).
+    setUser({ subscriptionStatus: 'active' })
+    mockQueryReturns['users.getSubscriptionInfo'] = undefined
+    const { rerender } = renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'billing.monthly' }))
+    expect(screen.getByText('$50/mo')).toBeInTheDocument()
+    mockQueryReturns['users.getSubscriptionInfo'] = {
+      tier: 'growth',
+      status: 'active',
+      cancelAtPeriodEnd: false,
+      priceInterval: 'year'
+    }
+    rerender(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>
+    )
     expect(screen.getByText('$50/mo')).toBeInTheDocument()
     expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
   })
@@ -542,7 +620,7 @@ describe('checkout_started (R18)', () => {
     setUser({ subscriptionStatus: 'trialing' })
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
-    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalled())
     expect(captureEvent).not.toHaveBeenCalledWith('checkout_started', expect.anything())
   })
 })
@@ -554,7 +632,7 @@ describe('plan_switch_opened', () => {
     setUser({ subscriptionStatus: 'trialing' })
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
-    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalled())
     // A trialing member has no "current" card, so the first switch button is the first plan: starter.
     expect(captureEvent).toHaveBeenCalledWith('plan_switch_opened', { plan: 'starter', source: 'billing' })
   })
@@ -562,8 +640,98 @@ describe('plan_switch_opened', () => {
   it('tags the source "cap_email" when the post-cap email brought them here', async () => {
     renderBilling({ search: 'plan=growth&interval=annual&src=cap_email', me: { subscriptionStatus: 'active' } })
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
-    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalled())
     expect(captureEvent).toHaveBeenCalledWith('plan_switch_opened', expect.objectContaining({ source: 'cap_email' }))
+  })
+})
+
+// R08 / R20: the return leg of the plan-switch deep link. The page waits for the webhook to move the
+// tier (the URL alone proves nothing), then names the plan and fires the funnel's last step exactly
+// once. A card-less member's default tier must never "complete" a switch that never happened.
+describe('plan switch landing (R08 / R20)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows the switching state while the webhook has not moved the tier, and fires nothing', () => {
+    renderBilling({ search: 'switched=pro', me: { subscriptionStatus: 'active', tier: 'growth' } })
+    expect(screen.getByText(/billing\.switching:.*Pro/)).toBeInTheDocument()
+    expect(screen.queryByText(/billing\.switched:/)).not.toBeInTheDocument()
+    expect(captureEvent).not.toHaveBeenCalled()
+    expect(mockSetSearchParams).not.toHaveBeenCalled()
+  })
+
+  it('fires plan_switch_completed exactly once under StrictMode once the tier matches, and strips the param', async () => {
+    renderBilling({ search: 'switched=pro', me: { subscriptionStatus: 'active', tier: 'pro' }, strict: true })
+    await waitFor(() => expect(captureEvent).toHaveBeenCalledWith('plan_switch_completed', { plan: 'pro' }))
+    expect(captureEvent).toHaveBeenCalledTimes(1)
+    expect(mockSetSearchParams).toHaveBeenCalledTimes(1)
+    expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true })
+    expect(screen.getByText(/billing\.switched:.*Pro/)).toBeInTheDocument()
+  })
+
+  it('flips from switching to switched when the webhook lands', async () => {
+    const { rerender } = renderBilling({ search: 'switched=pro', me: { subscriptionStatus: 'active', tier: 'growth' } })
+    expect(screen.getByText(/billing\.switching:/)).toBeInTheDocument()
+
+    setUser({ subscriptionStatus: 'active', tier: 'pro' })
+    rerender(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByText(/billing\.switched:.*Pro/)).toBeInTheDocument()
+    await waitFor(() => expect(captureEvent).toHaveBeenCalledWith('plan_switch_completed', { plan: 'pro' }))
+  })
+
+  it('ignores the marker for a member without a card', () => {
+    renderBilling({ search: 'switched=growth', me: { subscriptionStatus: 'none', tier: 'growth' } })
+    expect(screen.queryByText(/billing\.switch(ing|ed):/)).not.toBeInTheDocument()
+    expect(captureEvent).not.toHaveBeenCalled()
+  })
+
+  // R09: the cancel interstitial's "Move to Starter" returns as ?downgraded=<tier left behind> and
+  // lands the same way — same copy, its own event, so the interstitial's save rate is one funnel
+  // (cancel_alternative_taken → cancel_alternative_completed) that grid switches never touch.
+  it('lands the Starter downgrade the same way and fires cancel_alternative_completed with the tier left behind', async () => {
+    const { rerender } = renderBilling({
+      search: 'downgraded=growth',
+      me: { subscriptionStatus: 'active', tier: 'growth' }
+    })
+    expect(screen.getByText(/billing\.switching:.*Starter/)).toBeInTheDocument()
+    expect(captureEvent).not.toHaveBeenCalled()
+
+    setUser({ subscriptionStatus: 'active', tier: 'starter' })
+    rerender(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByText(/billing\.switched:.*Starter/)).toBeInTheDocument()
+    await waitFor(() => expect(captureEvent).toHaveBeenCalledWith('cancel_alternative_completed', { from: 'growth' }))
+    expect(captureEvent).not.toHaveBeenCalledWith('plan_switch_completed', expect.anything())
+    expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true })
+  })
+
+  it('ignores a downgrade marker that names no plan', () => {
+    renderBilling({ search: 'downgraded=true', me: { subscriptionStatus: 'active', tier: 'starter' } })
+    expect(screen.queryByText(/billing\.switch(ing|ed):/)).not.toBeInTheDocument()
+    expect(captureEvent).not.toHaveBeenCalled()
+  })
+
+  it('offers the portal after 20s if the tier never moves', () => {
+    vi.useFakeTimers()
+    // No Billing Info Card, so the only Manage button on the page is the notice's escape valve.
+    mockQueryReturns['users.getSubscriptionInfo'] = undefined
+    renderBilling({ search: 'switched=pro', me: { subscriptionStatus: 'active', tier: 'growth' } })
+    expect(screen.queryByText(/billing\.switchTimeout/)).not.toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(20_000)
+    })
+
+    expect(screen.getByText(/billing\.switchTimeout/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'billing.manageSubscription' })).toBeInTheDocument()
   })
 })
 

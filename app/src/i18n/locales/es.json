@@ -67,6 +67,7 @@
     "hiddenPostBannerPastDue": "Tu publicación está oculta hasta que actualices tu método de pago.",
     "cardGateBodyNoTrial": "Tus publicaciones se ponen frente a todo el feed y cada reacción y comentario cuenta para tu hábito de SSI.",
     "hiddenPostBannerNoTrial": "Tu primera publicación está guardada y oculta hasta que te suscribas.",
+    "cardGatePriceNoTrial": "El plan {{plan}} cuesta {{monthly}} o {{annual}}.",
     "viewOnLinkedIn": "Ver en LinkedIn ↗",
     "emptyFiltered": "Ninguna publicación coincide con tu filtro. Ajústalo o bórralo para ver más.",
     "doneReacted": "Reaccionaste",
@@ -251,6 +252,9 @@
     "activating": "Activando tu prueba…",
     "activatingPlan": "Activando tu plan…",
     "activatingTimeout": "Tu pago se procesó; tu plan aparecerá aquí en breve.",
+    "switching": "Cambiando tu plan a {{plan}}…",
+    "switched": "Ahora estás en {{plan}}.",
+    "switchTimeout": "El cambio de plan se confirmó; aparecerá aquí en breve.",
     "cancel": {
       "link": "Cancelar plan",
       "title": "Antes de irte",

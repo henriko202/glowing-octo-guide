@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { captureEvent } from '@/lib/observability/analytics'
 import { resolveTargetPlan } from '@/lib/targetPlan'
+import { PLAN_PRICES } from '@/lib/planPrices'
 import { useCardGate } from '@/hooks/useCardGate'
 import { TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 
@@ -65,6 +66,18 @@ export default function CardGateBanner({ className }: { className?: string }) {
               : t('billing.noTrialCta', { plan: t(`billing.plans.${plan}.name`) })}
         </Link>
       </Button>
+      {/* M6 — "Subscribe to Growth" with no trial is an ask to pay, so the amount is named here, not
+          one page later. Both intervals: the link carries `?plan=` but no interval. The trial twin
+          has no cost line on the banner (the dialog carries it), so this is no-trial only. */}
+      {!pastDue && !canTrial && (
+        <p className="text-muted-foreground mt-2 mb-0 text-xs">
+          {t('feed.cardGatePriceNoTrial', {
+            plan: t(`billing.plans.${plan}.name`),
+            monthly: PLAN_PRICES.monthly[plan],
+            annual: PLAN_PRICES.annual[plan]
+          })}
+        </p>
+      )}
     </div>
   )
 }

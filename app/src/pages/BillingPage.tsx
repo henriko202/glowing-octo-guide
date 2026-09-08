@@ -18,12 +18,11 @@ import { captureException } from '@/lib/observability/sentry'
 import { captureEvent } from '@/lib/observability/analytics'
 import { formatPriceLabel } from '../../../convex/lib/billingEmails'
 import { resolveBillingLocale } from '../../../convex/lib/checkoutCopy'
-import { isPlanId, PLAN_IDS, resolveTargetPlan } from '@/lib/targetPlan'
+import { isPlanId, PLAN_IDS, resolveTargetPlan, type PlanId } from '@/lib/targetPlan'
+import { isInterval, PLAN_PRICES, type Interval } from '@/lib/planPrices'
 
 /** How long we give the Stripe webhook to land before the activating state times out (R07). */
 const ACTIVATION_TIMEOUT_MS = 20_000
-
-type Interval = 'monthly' | 'annual'
 
 const PLAN_PRICE_IDS: Record<Interval, Record<string, string | undefined>> = {
   monthly: {
@@ -36,15 +35,6 @@ const PLAN_PRICE_IDS: Record<Interval, Record<string, string | undefined>> = {
     growth: import.meta.env.VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID as string | undefined,
     pro: import.meta.env.VITE_STRIPE_PRO_ANNUAL_PRICE_ID as string | undefined
   }
-}
-
-const PLAN_PRICES: Record<Interval, Record<string, string>> = {
-  monthly: { starter: '$5/mo', growth: '$15/mo', pro: '$50/mo' },
-  annual: { starter: '$50/yr', growth: '$150/yr', pro: '$500/yr' }
-}
-
-function isInterval(i: string | null): i is Interval {
-  return i === 'monthly' || i === 'annual'
 }
 
 function getTrialDaysRemaining(trialEndsAt: number | undefined): number {
@@ -62,6 +52,7 @@ export default function BillingPage() {
   const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
+  const createPlanSwitch = useAction(api.billingNode.createPlanSwitchSession)
   const clearBillingNotice = useMutation(api.users.clearBillingNotice)
   const resumeSubscription = useAction(api.billingNode.resumeSubscription)
   const [cancelOpen, setCancelOpen] = useState(false)
@@ -165,24 +156,30 @@ export default function BillingPage() {
   const targetPlan = resolveTargetPlan(searchParams)
   const chosenPlan =
     isPlanId(searchParams.get('plan')) || isPlanId(sessionStorage.getItem('chosenPlan')) ? targetPlan : null
-  // NB: named setBillingInterval (not setInterval) so it doesn't shadow the global timer API.
-  const [billingInterval, setBillingInterval] = useState<Interval>(() => {
+  // `null` = nothing picked yet, so the grid can follow the interval the member is already billed on.
+  const [pickedInterval, setPickedInterval] = useState<Interval | null>(() => {
     const intervalParam = searchParams.get('interval')
     const stashedInterval = sessionStorage.getItem('chosenInterval')
-    return isInterval(intervalParam) ? intervalParam : isInterval(stashedInterval) ? stashedInterval : 'annual'
+    return isInterval(intervalParam) ? intervalParam : isInterval(stashedInterval) ? stashedInterval : null
   })
   const [showAllPlans, setShowAllPlans] = useState(false)
 
-  // What Stripe will really bill this member, from the price snapshot on their subscription row.
-  // `billingInterval` above is only the plan-grid toggle (browser-local, defaults to 'annual'),
-  // so it must never be the source for a pre-charge amount. Falls back to the toggle if the
-  // webhook row has not caught up yet.
-  const chargedInterval: Interval =
+  // The interval Stripe really bills this member on, off the price snapshot on their subscription
+  // row; null until the webhook row has caught up, and for anyone without one.
+  const liveInterval: Interval | null =
     subscriptionInfo?.priceInterval === 'month'
       ? 'monthly'
       : subscriptionInfo?.priceInterval === 'year'
         ? 'annual'
-        : billingInterval
+        : null
+  // The plan-grid toggle: what the member picked (URL, landing stash, or a click), else the interval
+  // they are billed on — a monthly member comparing plans must not be quoted annual prices — else
+  // annual for anyone arriving cold. Derived, not synced, so a click made before the row arrives is
+  // never overwritten by it.
+  const billingInterval: Interval = pickedInterval ?? liveInterval ?? 'annual'
+  // What Stripe will really bill: the row, never the toggle (which is only where the member is
+  // looking). Falls back to the toggle only while the row has not caught up.
+  const chargedInterval: Interval = liveInterval ?? billingInterval
   // The amount itself is Stripe's own, off the same snapshot; the client table is only the fallback
   // until the webhook row has caught up.
   const chargedPrice =
@@ -223,6 +220,45 @@ export default function BillingPage() {
   // the same rule checkout enforces. Optimistic while `me` loads — the majority case is a new
   // visitor, and this whole block already renders on the same optimistic assumption.
   const canTrial = me?.trialEligible !== false
+
+  // R08 / R20 / R09 — back from a portal confirm flow: /billing?switched=<tier> (the grid's "Switch
+  // to X", the tier the server resolved from the price) or /billing?downgraded=<tier left behind>
+  // (the cancel interstitial's "Move to Starter", which always lands on Starter). Latched during
+  // render like `justSubscribed`, so it survives the param being stripped. "Switching" until the
+  // webhook moves `me.tier` onto the plan; then the event fires once (a ref latch, StrictMode-safe,
+  // like cancel_completed) and the param is stripped — only then, so a refresh mid-wait re-latches
+  // from the URL (F4). A card-less member ignores both markers: their default tier could otherwise
+  // "complete" a switch that never happened.
+  const [landing, setLanding] = useState<{ to: PlanId; from?: PlanId } | null>(null)
+  const switchedParam = searchParams.get('switched')
+  const downgradedParam = searchParams.get('downgraded')
+  if (!landing && isPlanId(switchedParam)) {
+    setLanding({ to: switchedParam })
+  } else if (!landing && isPlanId(downgradedParam)) {
+    setLanding({ to: 'starter', from: downgradedParam })
+  }
+  const switchedTo = landing?.to ?? null
+  const isSwitching = !!switchedTo && hasCard && me?.tier !== switchedTo
+  const switched = !!switchedTo && hasCard && me?.tier === switchedTo
+  const [switchTimedOut, setSwitchTimedOut] = useState(false)
+  useEffect(() => {
+    if (!isSwitching) return
+    const timer = window.setTimeout(() => {
+      setSwitchTimedOut(true)
+      captureException(new Error('Plan switch timed out: tier not updated after 20s'))
+    }, ACTIVATION_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
+  }, [isSwitching])
+  const switchTrackedRef = useRef(false)
+  useEffect(() => {
+    if (!landing || !switched || switchTrackedRef.current) return
+    switchTrackedRef.current = true
+    // The downgrade pairs with cancel_alternative_taken { from }, so the interstitial's save rate is
+    // one funnel; the grid's switch keeps its own event.
+    if (landing.from) captureEvent('cancel_alternative_completed', { from: landing.from })
+    else captureEvent('plan_switch_completed', { plan: landing.to })
+    setSearchParams({}, { replace: true })
+  }, [switched, landing, setSearchParams])
 
   // Renewal/access-end date for the Billing Info Card below — undefined for free/trial users
   // (no Stripe subscription row yet), so there's simply nothing to format.
@@ -278,7 +314,7 @@ export default function BillingPage() {
         plan: planId,
         source: searchParams.get('src') === 'cap_email' ? 'cap_email' : 'billing'
       })
-      return void handleManageSubscription()
+      return void handlePlanSwitch(priceId)
     }
     return void handleUpgrade(planId, priceId)
   }
@@ -292,6 +328,24 @@ export default function BillingPage() {
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
       toast(t('billing.portalFailed', { error: friendlyError(err, String(err)) }))
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  // Lands the member on Stripe's confirmation for the price on the button they clicked (R08, and the
+  // R20 email's landing). Whatever stops the deep link — the price not yet allowed in the Customer
+  // Portal, the plan they are already on — still opens the portal home, where every plan is one more
+  // click away: a door, never a dead end. The refusal itself is logged server-side.
+  async function handlePlanSwitch(priceId: string) {
+    if (!sessionToken) return
+    setPortalLoading(true)
+    try {
+      const result = await createPlanSwitch({ sessionToken, priceId })
+      // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
+      if (result?.url) window.location.href = result.url
+    } catch {
+      await handleManageSubscription()
     } finally {
       setPortalLoading(false)
     }
@@ -312,6 +366,18 @@ export default function BillingPage() {
 
   const lead = `${t('billing.currentPlan')}: ${planLabel}`
 
+  // The escape valve under a webhook-wait notice (R07 activation, R08 plan switch) if it never lands.
+  const manageButton = (
+    <Button
+      variant="outline"
+      onClick={handleManageSubscription}
+      disabled={portalLoading}
+      className={`mt-3 text-[13px] ${portalLoading ? 'cursor-wait' : 'cursor-pointer'}`}
+    >
+      {portalLoading ? '...' : t('billing.manageSubscription')}
+    </Button>
+  )
+
   return (
     <div className="mx-auto max-w-[900px] px-4 py-8 font-sans">
       <PageHeader
@@ -324,16 +390,24 @@ export default function BillingPage() {
       {isActivating && (
         <div className="border-border bg-muted mb-6 rounded-xl border p-4 text-sm">
           <p className="m-0">{t(activatingKey)}</p>
-          {activationTimedOut && (
-            <Button
-              variant="outline"
-              onClick={handleManageSubscription}
-              disabled={portalLoading}
-              className={`mt-3 text-[13px] ${portalLoading ? 'cursor-wait' : 'cursor-pointer'}`}
-            >
-              {portalLoading ? '...' : t('billing.manageSubscription')}
-            </Button>
-          )}
+          {activationTimedOut && manageButton}
+        </div>
+      )}
+
+      {/* R08 / R20 — back from the plan-switch confirm flow. One line while the webhook moves the
+          tier, one line naming the plan once it has; the Manage button is the escape valve. */}
+      {switchedTo && (isSwitching || switched) && (
+        <div
+          className={`mb-6 rounded-xl border p-4 text-sm ${
+            switched ? 'border-primary bg-accent text-accent-foreground' : 'border-border bg-muted'
+          }`}
+        >
+          <p className="m-0">
+            {t(switched ? 'billing.switched' : switchTimedOut ? 'billing.switchTimeout' : 'billing.switching', {
+              plan: t(`billing.plans.${switchedTo}.name`)
+            })}
+          </p>
+          {isSwitching && switchTimedOut && manageButton}
         </div>
       )}
 
@@ -484,13 +558,13 @@ export default function BillingPage() {
       {/* Monthly / Annual toggle — always visible */}
       <div className="mb-4 inline-flex items-center gap-2 rounded-full border p-1 text-sm">
         <button
-          onClick={() => setBillingInterval('annual')}
+          onClick={() => setPickedInterval('annual')}
           className={`rounded-full px-3 py-1 ${billingInterval === 'annual' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
         >
           {t('billing.annual')}
         </button>
         <button
-          onClick={() => setBillingInterval('monthly')}
+          onClick={() => setPickedInterval('monthly')}
           className={`rounded-full px-3 py-1 ${billingInterval === 'monthly' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
         >
           {t('billing.monthly')}
@@ -570,7 +644,7 @@ export default function BillingPage() {
               ) : (
                 <Button
                   onClick={() => priceId && handlePlanClick(planId, priceId)}
-                  disabled={!priceId}
+                  disabled={!priceId || portalLoading}
                   className={`mt-auto w-full text-[13px] ${priceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
                 >
                   {hasCard

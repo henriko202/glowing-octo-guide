@@ -33,7 +33,12 @@ export function shouldSendCapNotice(c: {
   return !c.cancelAtPeriodEnd
 }
 
-/** Stripe stores `year` / `month`; the billing page reads `?interval=annual|monthly`. */
+/**
+ * Stripe stores `year` / `month`; the billing page reads `?interval=annual|monthly`. Anything else
+ * (no webhook row yet, an interval Stripe adds later) falls back to annual — the billing page's own
+ * cold default, shared with the in-app upgrade link (`UpgradeAtLimit`), so the email and the app
+ * never point the same member at different prices.
+ */
 export function billingIntervalParam(priceInterval: string | undefined): 'annual' | 'monthly' {
-  return priceInterval === 'year' ? 'annual' : 'monthly'
+  return priceInterval === 'month' ? 'monthly' : 'annual'
 }

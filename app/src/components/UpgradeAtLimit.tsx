@@ -4,12 +4,14 @@ import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 import { nextTier } from '../../../convex/lib/planLimits'
+import { billingIntervalParam } from '../../../convex/lib/postCapNotice'
 import { TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 import { api } from '../convex'
 import { SUPPORT_EMAIL } from '@/lib/support'
 import { captureEvent } from '@/lib/observability/analytics'
 import { useCardGate } from '@/hooks/useCardGate'
 import { resolveTargetPlan } from '@/lib/targetPlan'
+import { PLAN_PRICES } from '@/lib/planPrices'
 
 export type LimitKind = 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibility'
 
@@ -50,6 +52,17 @@ export default function UpgradeAtLimit({
     return (
       <span className={className}>
         {t(pastDue ? 'feed.cardGateBodyPastDue' : canTrial ? 'feed.cardGateBody' : 'feed.cardGateBodyNoTrial')}{' '}
+        {/* M6 — with no trial the link is an ask to pay, so the amount comes before it (both
+            intervals: the link carries no interval). */}
+        {!pastDue && !canTrial && (
+          <>
+            {t('feed.cardGatePriceNoTrial', {
+              plan: t(`billing.plans.${plan}.name`),
+              monthly: PLAN_PRICES.monthly[plan],
+              annual: PLAN_PRICES.annual[plan]
+            })}{' '}
+          </>
+        )}
         <Link
           to={`/billing?plan=${plan}`}
           className="text-primary hover:underline"
@@ -88,10 +101,11 @@ export default function UpgradeAtLimit({
     )
   }
 
-  // What Stripe actually bills a card holder, off the same webhook snapshot BillingPage.tsx reads;
-  // falls back to 'annual' otherwise (BillingPage's own toggle default) — never re-derives hasCard,
-  // the /billing link lands on the same page whose handlePlanClick already makes that decision.
-  const chargedInterval = subscriptionInfo?.priceInterval === 'month' ? 'monthly' : 'annual'
+  // What Stripe actually bills a card holder, off the same webhook snapshot BillingPage.tsx reads,
+  // through the same mapper the cap email uses (annual when unknown, BillingPage's own cold default)
+  // so the two links never disagree — never re-derives hasCard, the /billing link lands on the same
+  // page whose handlePlanClick already makes that decision.
+  const chargedInterval = billingIntervalParam(subscriptionInfo?.priceInterval)
   const ownLimits = tierLimits[tier]
   const nextLimits = tierLimits[next]
   const nextPlan = t(`billing.plans.${next}.name`)

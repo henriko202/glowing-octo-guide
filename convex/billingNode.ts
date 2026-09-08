@@ -1,11 +1,12 @@
 'use node'
 import Stripe from 'stripe'
-import { action, internalAction } from './_generated/server'
+import { action, internalAction, type ActionCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
 import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
 import { requireAuthAction } from './lib/auth'
-import { ALLOWED_PRICE_IDS, starterPriceIdFor } from './lib/stripePrices'
+import { ALLOWED_PRICE_IDS, getTierFromPriceId, starterPriceIdFor } from './lib/stripePrices'
 import { findLiveSubscription, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
@@ -118,58 +119,105 @@ export const cancelDuplicateSubscription = internalAction({
   }
 })
 
-// ── Cancel / downgrade / resume (backlog/R09) ──────────────────────────────────────────────────
+// ── Customer Portal deep links (backlog/R09 cancel + downgrade, R08/R20 plan switch) ───────────
 // Stripe's hosted portal owns the confirmation UI; we only deep-link into the right flow. The
 // @convex-dev/stripe component's createCustomerPortalSession cannot set flow_data, so this uses
 // the SDK directly (same pattern as createCheckoutSession). Sync lands via the existing webhook.
+type FlowData = Stripe.BillingPortal.SessionCreateParams.FlowData
+
+// Every flow shares the same frame: the member's live subscription, their portal customer, and the
+// session itself. `buildFlow` gets the live row plus the app origin for its after-completion URL.
+async function portalFlowSession(
+  ctx: ActionCtx,
+  sessionToken: string,
+  buildFlow: (live: Doc<'subscriptions'>, appUrl: string) => Promise<FlowData>
+): Promise<{ url: string }> {
+  const user = await requireAuthAction(ctx, sessionToken)
+  const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
+  const live = findLiveSubscription(subscriptions)
+  if (!live) throw new ConvexError('NO_LIVE_SUBSCRIPTION')
+
+  const customer = await stripeComponent.getOrCreateCustomer(ctx, {
+    userId: user._id,
+    email: user.email,
+    name: user.name
+  })
+  const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+
+  const session = await stripe().billingPortal.sessions.create({
+    customer: customer.customerId,
+    return_url: `${appUrl}/billing`,
+    flow_data: await buildFlow(live, appUrl)
+  })
+  return { url: session.url }
+}
+
+// subscription_update_confirm swaps a subscription ITEM, so it needs Stripe's copy of the row.
+async function singleItem(stripeSubscriptionId: string): Promise<Stripe.SubscriptionItem> {
+  const sub = await stripe().subscriptions.retrieve(stripeSubscriptionId)
+  const item = sub.items.data[0]
+  if (!item) throw new ConvexError('Subscription has no item')
+  return item
+}
+
 export const createCancelFlowSession = action({
   args: { sessionToken: v.string(), flow: v.union(v.literal('cancel'), v.literal('downgrade')) },
-  handler: async (ctx, { sessionToken, flow }): Promise<{ url: string }> => {
-    const user = await requireAuthAction(ctx, sessionToken)
-    const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
-    const live = findLiveSubscription(subscriptions)
-    if (!live) throw new ConvexError('NO_LIVE_SUBSCRIPTION')
-
-    const customer = await stripeComponent.getOrCreateCustomer(ctx, {
-      userId: user._id,
-      email: user.email,
-      name: user.name
-    })
-    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
-
-    let flowData: Stripe.BillingPortal.SessionCreateParams.FlowData
-    if (flow === 'cancel') {
-      flowData = {
-        type: 'subscription_cancel',
-        subscription_cancel: { subscription: live.stripeSubscriptionId },
-        after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?canceled=true` } }
+  handler: (ctx, { sessionToken, flow }): Promise<{ url: string }> =>
+    portalFlowSession(ctx, sessionToken, async (live, appUrl) => {
+      if (flow === 'cancel') {
+        return {
+          type: 'subscription_cancel',
+          subscription_cancel: { subscription: live.stripeSubscriptionId },
+          after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?canceled=true` } }
+        }
       }
-    } else {
       if (live.tier === 'starter') throw new ConvexError('ALREADY_STARTER')
-      const sub = await stripe().subscriptions.retrieve(live.stripeSubscriptionId)
-      const item = sub.items.data[0]
-      if (!item) throw new ConvexError('Subscription has no item')
+      const item = await singleItem(live.stripeSubscriptionId)
       // The retrieved item carries the authoritative interval; our snapshot (optional) is the fallback.
       const stripeInterval = item.price.recurring?.interval
       const interval = stripeInterval === 'month' || stripeInterval === 'year' ? stripeInterval : live.priceInterval
       const price = starterPriceIdFor(process.env, interval)
       if (!price) throw new ConvexError('Starter price not configured')
-      flowData = {
+      return {
         type: 'subscription_update_confirm',
         subscription_update_confirm: {
           subscription: live.stripeSubscriptionId,
           items: [{ id: item.id, price, quantity: 1 }]
         },
-        after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?downgraded=true` } }
+        // BillingPage lands this like the plan switch: "Switching you to Starter…", then
+        // cancel_alternative_completed { from } once the webhook has moved the tier.
+        after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?downgraded=${live.tier}` } }
       }
-    }
-
-    const session = await stripe().billingPortal.sessions.create({
-      customer: customer.customerId,
-      return_url: `${appUrl}/billing`,
-      flow_data: flowData
     })
-    return { url: session.url }
+})
+
+// A card holder's "Switch to <plan>" (the plan grid, and the post-cap email's landing): the same
+// confirm flow as the downgrade, aimed at the price the member was looking at, so they land on
+// Stripe's confirmation for THAT plan — never on the portal home, four clicks away from it. The
+// price id is client-chosen, so it is checked against our own list first, as checkout does.
+export const createPlanSwitchSession = action({
+  args: { sessionToken: v.string(), priceId: v.string() },
+  handler: (ctx, { sessionToken, priceId }): Promise<{ url: string }> => {
+    if (!ALLOWED_PRICE_IDS.has(priceId)) throw new ConvexError('Invalid price ID')
+    return portalFlowSession(ctx, sessionToken, async (live, appUrl) => {
+      const item = await singleItem(live.stripeSubscriptionId)
+      // Nothing to confirm. A trialing member sees a Switch button for their own plan (no "current"
+      // badge during a trial), so name it; the client falls back to the portal home.
+      if (item.price.id === priceId) throw new ConvexError('ALREADY_ON_PLAN')
+      return {
+        type: 'subscription_update_confirm',
+        subscription_update_confirm: {
+          subscription: live.stripeSubscriptionId,
+          items: [{ id: item.id, price: priceId, quantity: 1 }]
+        },
+        // BillingPage reads the tier back: "Switching you to X…" until the webhook moves `me.tier`,
+        // then "You're on X now." and plan_switch_completed, once (the downgrade above lands the same way).
+        after_completion: {
+          type: 'redirect',
+          redirect: { return_url: `${appUrl}/billing?switched=${getTierFromPriceId(priceId)}` }
+        }
+      }
+    })
   }
 })
 

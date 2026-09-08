@@ -306,8 +306,8 @@ export const getSubscriptionInfo = query({
         // (the component doesn't store it). Undefined only if our row hasn't caught up yet.
         currentPeriodEnd: ourSub?.currentPeriodEnd,
         // The interval Stripe will actually bill on, off the webhook price snapshot. The page's
-        // own `billingInterval` is a browser-local toggle defaulting to 'annual', so it must
-        // never be used to tell a member what they are about to be charged.
+        // own `billingInterval` toggle is seeded from this but browser-local and clickable, so it
+        // must never be used to tell a member what they are about to be charged.
         priceInterval: ourSub?.priceInterval,
         priceAmount: ourSub?.priceAmount,
         priceCurrency: ourSub?.priceCurrency

@@ -106,6 +106,7 @@ describe('UpgradeAtLimit', () => {
     mockMe = { tier: 'starter', subscriptionStatus: 'none', trialEligible: false }
     renderComponent('weeklyPosts')
     expect(screen.getByRole('link', { name: /subscribe to growth/i })).toHaveAttribute('href', '/billing?plan=growth')
+    expect(screen.getByText(/the growth plan is \$15\/mo or \$150\/yr/i)).toBeInTheDocument()
     expect(screen.queryByText(/trial/i)).not.toBeInTheDocument()
   })
 

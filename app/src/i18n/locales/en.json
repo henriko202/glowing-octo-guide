@@ -67,6 +67,7 @@
     "hiddenPostBannerPastDue": "Your post is hidden until you update your payment method.",
     "cardGateBodyNoTrial": "Your posts go in front of the whole feed, and every reaction and comment counts toward your SSI habit.",
     "hiddenPostBannerNoTrial": "Your first post is saved and hidden until you subscribe.",
+    "cardGatePriceNoTrial": "The {{plan}} plan is {{monthly}} or {{annual}}.",
     "viewOnLinkedIn": "View on LinkedIn ↗",
     "emptyFiltered": "No posts match your filter yet. Adjust it or clear it to see more.",
     "doneReacted": "Reacted",
@@ -251,6 +252,9 @@
     "activating": "Activating your trial…",
     "activatingPlan": "Activating your plan…",
     "activatingTimeout": "Your payment went through; your plan will show here shortly.",
+    "switching": "Switching you to {{plan}}…",
+    "switched": "You're on {{plan}} now.",
+    "switchTimeout": "Your plan change went through; it will show here shortly.",
     "cancel": {
       "link": "Cancel plan",
       "title": "Before you go",
