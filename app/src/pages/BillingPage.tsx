@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
-import { TRIAL_INTERACTION_THRESHOLD } from '../../../convex/lib/trialMilestone'
+import { TRIAL_INTERACTION_THRESHOLD, TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 import TrialMeter from '@/components/TrialMeter'
 import { useOwnPostState } from '@/components/CardGateBanner'
 import CheckoutSuccessDialog from '@/components/CheckoutSuccessDialog'
@@ -58,6 +58,8 @@ export default function BillingPage() {
   const me = useQuery(api.users.getMe, { sessionToken })
   const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, sessionToken ? { sessionToken } : 'skip')
   const progress = useQuery(api.users.getTrialProgress, sessionToken ? { sessionToken } : 'skip')
+  // backlog/R19 — invited members get 14 days; every "7-day" string reads this instead.
+  const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
   const createPortal = useAction(api.billing.createPortalSession)
   const clearBillingNotice = useMutation(api.users.clearBillingNotice)
@@ -90,6 +92,15 @@ export default function BillingPage() {
     captureEvent('cancel_completed', { plan: me.tier ?? 'starter' })
     setSearchParams({}, { replace: true })
   }, [justCanceled, subscriptionInfo?.cancelAtPeriodEnd, me, setSearchParams])
+
+  // R20 — the cap email's one link lands here as /billing?plan=…&interval=…&src=cap_email. Same
+  // ref latch as cancel_completed: one event per landing, not one per StrictMode double effect.
+  const capEmailTrackedRef = useRef(false)
+  useEffect(() => {
+    if (searchParams.get('src') !== 'cap_email' || capEmailTrackedRef.current) return
+    capEmailTrackedRef.current = true
+    captureEvent('cap_email_billing_opened', { plan: resolveTargetPlan(searchParams) })
+  }, [searchParams])
 
   const [celebrationOpen, setCelebrationOpen] = useState(false)
   const [hasCelebrated, setHasCelebrated] = useState(false)
@@ -186,8 +197,10 @@ export default function BillingPage() {
   const isTrialing = me?.subscriptionStatus === 'trialing'
   const trialEndsAt = me?.trialEndsAt
   // Date.now() in render is intentional: a trial-expiry comparison that is stale by at most one
-  // render. (react-hooks/purity no longer flags it here, so the disable directive it used to need
-  // was removed — ESLint fails the build on unused directives. Re-add it if the rule fires again.)
+  // render. The directive below comes and goes with whether the React Compiler manages to analyze
+  // this component at all (R18's `planId` closure was enough to flip it back on) — and ESLint fails
+  // the build on unused directives, so if lint ever calls it unused, delete it again.
+  // eslint-disable-next-line react-hooks/purity -- intentional: stale-by-one-render expiry check
   const isTrialExpired = isTrialing && !!trialEndsAt && trialEndsAt <= Date.now()
   const isExpired = me?.subscriptionStatus === 'canceled' || me?.subscriptionStatus === 'none' || isTrialExpired
   // "Ended" = a subscription that actually stopped (canceled or trial ran out). Excludes brand-new users
@@ -203,6 +216,13 @@ export default function BillingPage() {
     me?.subscriptionStatus === 'trialing' ||
     me?.subscriptionStatus === 'active' ||
     me?.subscriptionStatus === 'past_due'
+
+  // One trial per account, forever (billingNode.createCheckoutSession). `!hasCard` covers BOTH a
+  // brand-new visitor and a returning member who already spent theirs, so every trial promise on
+  // this page has to ask the server, not the status: getMe answers from the subscription-row count,
+  // the same rule checkout enforces. Optimistic while `me` loads — the majority case is a new
+  // visitor, and this whole block already renders on the same optimistic assumption.
+  const canTrial = me?.trialEligible !== false
 
   // Renewal/access-end date for the Billing Info Card below — undefined for free/trial users
   // (no Stripe subscription row yet), so there's simply nothing to format.
@@ -224,14 +244,17 @@ export default function BillingPage() {
     return '...'
   })()
 
-  async function handleUpgrade(priceId: string) {
+  async function handleUpgrade(planId: string, priceId: string) {
     try {
       if (!sessionToken) throw new Error(t('auth.notSignedIn'))
+      // R18: the card-entry step, so the survival panel can tell a card-gate leak from an activation leak.
+      captureEvent('checkout_started', { plan: planId, interval: billingInterval })
       const result = await createCheckout({ priceId, sessionToken, locale: i18n.language.slice(0, 2) })
       if (result?.url) {
         // Consume the landing's choice so a later visit in this tab does not re-nudge.
         sessionStorage.removeItem('chosenPlan')
         sessionStorage.removeItem('chosenInterval')
+        // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
         window.location.href = result.url
       }
     } catch (err: unknown) {
@@ -247,9 +270,17 @@ export default function BillingPage() {
   }
 
   // Card holders switch plans in the portal; everyone else checks out.
-  function handlePlanClick(priceId: string) {
-    if (hasCard) return void handleManageSubscription()
-    return void handleUpgrade(priceId)
+  function handlePlanClick(planId: string, priceId: string) {
+    if (hasCard) {
+      // The portal path never fires checkout_started, so this is the card holder's click — the step
+      // after the R20 email's landing, tagged with where they came from.
+      captureEvent('plan_switch_opened', {
+        plan: planId,
+        source: searchParams.get('src') === 'cap_email' ? 'cap_email' : 'billing'
+      })
+      return void handleManageSubscription()
+    }
+    return void handleUpgrade(planId, priceId)
   }
 
   async function handleManageSubscription() {
@@ -257,6 +288,7 @@ export default function BillingPage() {
     setPortalLoading(true)
     try {
       const result = await createPortal({ sessionToken })
+      // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
       if (result?.url) window.location.href = result.url
     } catch (err: unknown) {
       toast(t('billing.portalFailed', { error: friendlyError(err, String(err)) }))
@@ -409,6 +441,7 @@ export default function BillingPage() {
               : t(trialEndsAt ? 'billing.trialBanner' : 'billing.trialBannerNoDate', {
                   plan: t(`billing.plans.${me?.tier ?? 'growth'}.name`),
                   threshold: progress?.threshold ?? TRIAL_INTERACTION_THRESHOLD,
+                  days: trialDays,
                   date: trialEndsAt ? new Date(trialEndsAt).toLocaleDateString(i18n.language) : undefined
                 })}
           </p>
@@ -428,11 +461,23 @@ export default function BillingPage() {
       {!hasCard && (
         <div className="mb-4">
           <p className="text-foreground text-base font-semibold">
-            {chosenPlan
-              ? t('billing.chosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`) })
-              : t('billing.newUserLead')}
+            {!chosenPlan
+              ? t('billing.newUserLead')
+              : canTrial
+                ? t('billing.chosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`), days: trialDays })
+                : t('billing.noTrialChosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`) })}
           </p>
-          <p className="text-muted-foreground mt-1 text-[13px]">{t('billing.newUserTrialNote')}</p>
+          <p className="text-muted-foreground mt-1 text-[13px]">
+            {canTrial ? t('billing.newUserTrialNote', { days: trialDays }) : t('billing.noTrialNote')}
+          </p>
+          {/* backlog/R19 — a statement of fact, not a CTA: they were given a longer trial, and this
+              says so without claiming it has already started. Gated on `canTrial` like every other
+              trial promise on this page: the gift is only true while a trial is still coming. */}
+          {me?.inviterName && canTrial && (
+            <p className="text-muted-foreground mt-1 text-[13px]">
+              {t('billing.giftFrom', { name: me.inviterName, days: trialDays, base: TRIAL_PERIOD_DAYS })}
+            </p>
+          )}
         </div>
       )}
 
@@ -524,13 +569,15 @@ export default function BillingPage() {
                 </div>
               ) : (
                 <Button
-                  onClick={() => priceId && handlePlanClick(priceId)}
+                  onClick={() => priceId && handlePlanClick(planId, priceId)}
                   disabled={!priceId}
                   className={`mt-auto w-full text-[13px] ${priceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
                 >
                   {hasCard
                     ? t('billing.switchPlan', { plan: t(`billing.plans.${planId}.name`) })
-                    : t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`) })}
+                    : canTrial
+                      ? t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`), days: trialDays })
+                      : t('billing.noTrialCta', { plan: t(`billing.plans.${planId}.name`) })}
                 </Button>
               )}
             </div>

@@ -86,12 +86,13 @@ export default function En({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Free trial.</strong> New accounts start with a{' '}
-          <strong className="text-cream">7-day free trial</strong> and a payment method is required to begin it. The
-          trial ends — and billing starts — as soon as you reach <strong className="text-cream">50 interactions</strong>{' '}
-          (made plus received) or after <strong className="text-cream">7 days</strong>, whichever comes first. We notify
-          you by email before the first charge. You may cancel at any time before the trial ends from the Subscription
-          page in your account, and you will not be charged. One free trial is available per account; if you subscribe
-          again after cancelling, billing starts immediately and this is stated at checkout.
+          <strong className="text-cream">7-day free trial</strong> (14 days when you join through a member&apos;s invite
+          link) and a payment method is required to begin it. The trial ends — and billing starts — as soon as you reach{' '}
+          <strong className="text-cream">50 interactions</strong> (made plus received) or when the trial period ends,
+          whichever comes first. We notify you by email before the first charge. You may cancel at any time before the
+          trial ends from the Subscription page in your account, and you will not be charged. One free trial is
+          available per account; if you subscribe again after cancelling, billing starts immediately and this is stated
+          at checkout.
         </p>
         <p>
           <strong className="text-cream">Cancellation.</strong> You may cancel your subscription at any time through

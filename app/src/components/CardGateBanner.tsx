@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { captureEvent } from '@/lib/observability/analytics'
 import { resolveTargetPlan } from '@/lib/targetPlan'
 import { useCardGate } from '@/hooks/useCardGate'
+import { TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 
 /**
  * Own-post state for a card-gated member, off the same query MyPostsPage already uses: whether
@@ -32,15 +33,23 @@ export default function CardGateBanner({ className }: { className?: string }) {
   const [searchParams] = useSearchParams()
   const plan = resolveTargetPlan(searchParams)
   // A past_due member already has a card and already had a trial — "start your trial" copy is
-  // wrong for them (F5); they need to fix a failed payment, not sign up.
-  const { status } = useCardGate()
+  // wrong for them (F5); they need to fix a failed payment, not sign up. `canTrial` catches the
+  // quieter version: a member on 'none' who still has subscription rows (incomplete/paused, or an
+  // admin status reset) gets no trial at checkout either.
+  const { status, me, canTrial } = useCardGate()
   const pastDue = status === 'past_due'
+  // backlog/R19 — an invited member has a 14-day trial; say so. Fallback while `me` loads.
+  const days = me?.trialDays ?? TRIAL_PERIOD_DAYS
 
   return (
     <div
       className={cn('border-primary bg-accent text-accent-foreground mb-4 rounded-xl border p-4 text-sm', className)}
     >
-      <p className="m-0">{t(pastDue ? 'feed.hiddenPostBannerPastDue' : 'feed.hiddenPostBanner')}</p>
+      <p className="m-0">
+        {t(
+          pastDue ? 'feed.hiddenPostBannerPastDue' : canTrial ? 'feed.hiddenPostBanner' : 'feed.hiddenPostBannerNoTrial'
+        )}
+      </p>
       <Button
         asChild
         className="mt-3"
@@ -49,7 +58,11 @@ export default function CardGateBanner({ className }: { className?: string }) {
           to={`/billing?plan=${plan}`}
           onClick={() => captureEvent('card_gate_cta_clicked', { plan })}
         >
-          {t(pastDue ? 'feed.cardGatePastDueCta' : 'feed.cardGateCta')}
+          {pastDue
+            ? t('feed.cardGatePastDueCta')
+            : canTrial
+              ? t('feed.cardGateCta', { days })
+              : t('billing.noTrialCta', { plan: t(`billing.plans.${plan}.name`) })}
         </Link>
       </Button>
     </div>

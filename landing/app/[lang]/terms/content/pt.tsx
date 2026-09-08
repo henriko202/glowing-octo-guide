@@ -88,13 +88,13 @@ export default function Pt({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Teste grátis.</strong> Novas contas começam com um{' '}
-          <strong className="text-cream">teste grátis de 7 dias</strong> e é necessário informar um método de pagamento
-          para iniciá-lo. O teste termina — e a cobrança começa — assim que você atingir{' '}
-          <strong className="text-cream">50 interações</strong> (feitas e recebidas) ou depois de{' '}
-          <strong className="text-cream">7 dias</strong>, o que vier primeiro. Avisamos você por e-mail antes da
-          primeira cobrança. Você pode cancelar a qualquer momento antes do fim do teste, na página Assinatura da sua
-          conta, e nada será cobrado. Há um teste grátis por conta; se você assinar novamente após cancelar, a cobrança
-          começa imediatamente e isso é informado no checkout.
+          <strong className="text-cream">teste grátis de 7 dias</strong> (14 dias quando você entra pelo link de convite
+          de um membro) e é necessário informar um método de pagamento para iniciá-lo. O teste termina — e a cobrança
+          começa — assim que você atingir <strong className="text-cream">50 interações</strong> (feitas e recebidas) ou
+          quando o período de teste terminar, o que vier primeiro. Avisamos você por e-mail antes da primeira cobrança.
+          Você pode cancelar a qualquer momento antes do fim do teste, na página Assinatura da sua conta, e nada será
+          cobrado. Há um teste grátis por conta; se você assinar novamente após cancelar, a cobrança começa
+          imediatamente e isso é informado no checkout.
         </p>
         <p>
           <strong className="text-cream">Cancelamento.</strong> Você pode cancelar sua assinatura a qualquer momento

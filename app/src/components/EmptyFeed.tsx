@@ -1,5 +1,6 @@
 // app/src/components/EmptyFeed.tsx
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import CardGateBanner from './CardGateBanner'
 
@@ -23,14 +24,39 @@ export default function EmptyFeed({
   gated,
   hasOwnPost,
   made,
-  trialStatus
+  trialStatus,
+  caughtUp
 }: {
   gated: boolean
   hasOwnPost: boolean
   made: number
   trialStatus?: string
+  /** backlog/R21 — the member interacted in the last 24 h and every handled post aged out. */
+  caughtUp?: boolean
 }) {
   const { t } = useTranslation()
+  // backlog/R21 — nothing to activate here: they used the feed and cleared it. A gated member keeps
+  // the gate (they cannot have interacted recently anyway, so this rarely competes).
+  if (caughtUp && !gated) {
+    return (
+      <div
+        className="py-8 text-center"
+        data-testid="caught-up"
+      >
+        <h2 className="text-foreground mt-0 mb-2 text-lg font-semibold">{t('feed.caughtUpTitle')}</h2>
+        <p className="text-muted-foreground mb-0 text-sm">{t('feed.caughtUpBody')}</p>
+        {/* backlog/R19 — nothing left to do here is exactly when the invite ask is welcome. */}
+        <p className="text-muted-foreground mt-3 mb-0 text-sm">
+          <Link
+            to="/settings#invite"
+            className="text-primary hover:underline"
+          >
+            {t('feed.inviteLink')}
+          </Link>
+        </p>
+      </div>
+    )
+  }
   const done = { signedIn: true, firstPost: hasOwnPost, reactTwice: made >= 2 }
   const doneCount = CHECKLIST_STEPS.filter(step => done[step]).length
   const allDone = doneCount === CHECKLIST_STEPS.length

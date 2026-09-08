@@ -20,6 +20,7 @@ import {
   type RecapCounts,
   type RecapWindow
 } from '../../../convex/lib/recap'
+import { INVITED_TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 
 const WINDOWS = ['7d', '30d'] as const
 
@@ -259,6 +260,18 @@ export default function RecapPage() {
                 {t('recap.seeAll')}
               </Link>
             </p>
+            {/* backlog/R19 — only when people are finding them: an ask made from strength, not need. */}
+            {recap.received.current.total > 0 && (
+              <p className="m-0">
+                {t('recap.inviteLine', { days: INVITED_TRIAL_PERIOD_DAYS })}{' '}
+                <Link
+                  to="/settings#invite"
+                  className="text-primary hover:underline"
+                >
+                  {t('feed.inviteLink')}
+                </Link>
+              </p>
+            )}
           </footer>
         </>
       )}

@@ -211,3 +211,78 @@ describe('PostCard', () => {
     expect(onGated).not.toHaveBeenCalled()
   })
 })
+
+// backlog/R21 — a post the viewer already handled shows what they did, keeps only the action they
+// have not taken yet, says when it leaves their feed, and offers Hide now.
+describe('PostCard done footer (R21)', () => {
+  const inFiveHours = Date.now() + 5 * 3_600_000
+
+  it('names what was done, keeps the remaining action and says when the post leaves', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: true, commented: false, hidesAt: inFiveHours } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByText(/reacted/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
+    expect(screen.getByText(/leaves your feed within 5 h/i)).toBeInTheDocument()
+  })
+
+  it('drops both actions and names both once the viewer reacted and commented', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: true, commented: true, hidesAt: inFiveHours } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByText(/reacted · commented/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /comment/i })).not.toBeInTheDocument()
+  })
+
+  it('rounds the remaining time up so it never says 0 h', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: false, commented: true, hidesAt: Date.now() + 1000 } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByText(/leaves your feed within 1 h/i)).toBeInTheDocument()
+  })
+
+  it('calls onHide from the Hide now button', () => {
+    const onHide = vi.fn()
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: true, commented: false, hidesAt: inFiveHours } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={onHide}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /hide now/i }))
+    expect(onHide).toHaveBeenCalledOnce()
+  })
+
+  it('renders the normal footer, with no Hide now, for an untouched post', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: null }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByRole('button', { name: /react/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /hide now/i })).not.toBeInTheDocument()
+  })
+})

@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useQuery } from 'convex/react'
 import EmptyFeed from './EmptyFeed'
 
 // EmptyFeed's CTA focuses the real composer input by id (no ref plumbing) — stand in for it here
@@ -24,6 +25,8 @@ vi.mock('convex/react', () => ({
 }))
 
 beforeEach(() => {
+  // Default: getMe still loading, so CardGateBanner takes its optimistic trial copy.
+  vi.mocked(useQuery).mockReturnValue(undefined as never)
   const input = document.createElement('input')
   input.id = 'post-url-input'
   document.body.appendChild(input)
@@ -44,6 +47,9 @@ describe('EmptyFeed', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /share your first post/i }))
     expect(document.activeElement).toBe(document.getElementById('post-url-input'))
+    // backlog/R19 — the invite ask belongs to the caught-up state only; the R05 empty state keeps
+    // its single composer action.
+    expect(screen.queryByRole('link', { name: /invite a peer/i })).not.toBeInTheDocument()
   })
 
   it('opens the checklist at 1 of 3', () => {
@@ -133,5 +139,52 @@ describe('EmptyFeed', () => {
     )
     expect(screen.getByText(/saved and hidden/i)).toBeInTheDocument()
     expect(screen.queryByTestId('activation-checklist')).not.toBeInTheDocument()
+  })
+
+  // The banner's own no-trial twin: `hiddenPostBannerNoTrial` says the post is hidden until they
+  // subscribe, not "until you start your trial" — a member on 'none' with subscription rows on file
+  // (Stripe incomplete/paused, or an admin reset) has no trial to start.
+  it('drops the trial promise from the banner when the member has no trial left', () => {
+    vi.mocked(useQuery).mockReturnValue({ subscriptionStatus: 'none', trialEligible: false } as never)
+    render(
+      <EmptyFeed
+        gated
+        hasOwnPost
+        made={0}
+      />
+    )
+    expect(screen.getByText(/hidden until you subscribe/i)).toBeInTheDocument()
+    expect(screen.queryByText(/trial/i)).not.toBeInTheDocument()
+  })
+
+  // backlog/R21 — everything the member handled aged out: say so, no checklist, no "share first".
+  it('renders the caught-up state instead of the checklist', () => {
+    render(
+      <EmptyFeed
+        gated={false}
+        hasOwnPost
+        made={0}
+        trialStatus="trialing"
+        caughtUp
+      />
+    )
+    expect(screen.getByText(/you.re caught up/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('activation-checklist')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /share your first post/i })).not.toBeInTheDocument()
+    // backlog/R19 — nothing left to do here is exactly when the invite ask is welcome.
+    expect(screen.getByRole('link', { name: /invite a peer/i })).toHaveAttribute('href', '/settings#invite')
+  })
+
+  it('keeps the card gate ahead of the caught-up state for a gated member', () => {
+    render(
+      <EmptyFeed
+        gated
+        hasOwnPost
+        made={0}
+        caughtUp
+      />
+    )
+    expect(screen.getByText(/saved and hidden/i)).toBeInTheDocument()
+    expect(screen.queryByText(/you.re caught up/i)).not.toBeInTheDocument()
   })
 })

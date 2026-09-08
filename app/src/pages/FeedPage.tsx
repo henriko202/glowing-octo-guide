@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useAction, usePaginatedQuery, useQuery } from 'convex/react'
+import { useAction, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -19,8 +19,13 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useCardGate } from '@/hooks/useCardGate'
 import { friendlyError } from '@/lib/errors'
+import { INTERACTED_TTL_MS } from '../../../convex/lib/feedHygiene'
+import { captureEvent } from '@/lib/observability/analytics'
 
 const FEED_PAGE_SIZE = 20
+// backlog/R21 — how many empty pages to auto-load before trusting that the feed is empty.
+// ponytail: 5 auto-loads (100 posts) then the manual Load more button takes over.
+const MAX_EMPTY_LOADS = 5
 
 export default function FeedPage() {
   const { t } = useTranslation()
@@ -59,6 +64,7 @@ export default function FeedPage() {
   const filterCountries = me?.feedFilterCountries ?? []
   const filterActive = filterIndustries.length + filterCountries.length > 0
   const react = useAction(api.interactions.reactToPost)
+  const hidePost = useMutation(api.interactions.hidePost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
   const [reactingPostId, setReactingPostId] = useState<Id<'posts'> | null>(null)
@@ -114,6 +120,25 @@ export default function FeedPage() {
     }
   }, [virtualItems, posts.length, status])
 
+  // ─── backlog/R21: keep loading while pages come back empty ──────────────────
+  // fetchFeedPage drops posts the viewer already handled (24 h window / Hide now), so a page can
+  // come back empty while more exist. Load a few more before showing any empty state.
+  const [emptyLoads, setEmptyLoads] = useState(0)
+  const autoLoading = posts.length === 0 && status === 'CanLoadMore' && emptyLoads < MAX_EMPTY_LOADS
+  useEffect(() => {
+    // The budget covers one RUN of empty pages, so a page that comes back with posts starts it
+    // over — otherwise a session that burned all five once shows the empty state next to a "Load
+    // more" button the next time the feed legitimately empties (the viewer hides their last cards).
+    // The two cases never overlap: autoLoading already requires posts.length === 0.
+    if (posts.length === 0 && !autoLoading) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: bound the auto-load loop, and reset it on a non-empty page
+    setEmptyLoads(n => (posts.length > 0 ? 0 : n + 1))
+    if (autoLoading) loadMoreRef.current(FEED_PAGE_SIZE)
+  }, [autoLoading, posts.length])
+  // Only read while the feed is really empty — tells the R05 empty state and the R21 caught-up
+  // state apart.
+  const caughtUp = useQuery(api.feed.getCaughtUp, sessionToken && posts.length === 0 ? { sessionToken } : 'skip')
+
   // ─── Re-measure when comment box toggles ────────────────────────────────────
   const handleToggleComment = useCallback((id: Id<'posts'>) => {
     setCommentingOn(prev => (prev === id ? null : id))
@@ -143,7 +168,11 @@ export default function FeedPage() {
         />
       )}
 
+      {/* Only an exhausted feed gets an empty state. While pages can still load — the auto-load chase,
+          or its budget spent with the manual button showing — nothing sits above that button, so
+          "You're caught up" never renders next to "Load more". */}
       {posts.length === 0 &&
+        status === 'Exhausted' &&
         (filterActive ? (
           <p className="text-muted-foreground py-8 text-center">{t('feed.emptyFiltered')}</p>
         ) : (
@@ -152,6 +181,7 @@ export default function FeedPage() {
             hasOwnPost={hasAnyPost}
             made={progress?.made ?? 0}
             trialStatus={progress?.status}
+            caughtUp={caughtUp?.caughtUp ?? false}
           />
         ))}
 
@@ -214,6 +244,23 @@ export default function FeedPage() {
                     gated={gated}
                     onGated={setGateSource}
                     reacting={reactingPostId === post._id}
+                    onHide={async () => {
+                      const state = post.viewerState
+                      if (!state) return
+                      try {
+                        await hidePost({ sessionToken: sessionToken ?? '', postId: post._id })
+                        // How long after the interaction they hid it — the only number R21 wants.
+                        captureEvent('post_hidden', {
+                          after: Math.round((INTERACTED_TTL_MS - (state.hidesAt - Date.now())) / 3_600_000)
+                        })
+                      } catch (err: unknown) {
+                        // NOT_INTERACTED means the viewer's row for this post is gone (an author
+                        // erasure cascade beat the tap), so the card leaves on the next feed
+                        // update either way — a raw backend code in a toast helps nobody.
+                        const msg = friendlyError(err, String(err))
+                        if (msg !== 'NOT_INTERACTED') toast(msg)
+                      }
+                    }}
                   />
                   {reactError?.postId === post._id && (
                     <p className="text-destructive px-1 pt-1 text-xs">{reactError.msg}</p>

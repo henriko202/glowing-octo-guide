@@ -165,3 +165,16 @@ describe('RecapPage', () => {
     expect(screen.getByRole('link', { name: 'See every interaction' })).toHaveAttribute('href', '/history')
   })
 })
+
+describe('RecapPage invite line (R19)', () => {
+  it('links to Settings › Invite when the member received interactions', () => {
+    renderPage()
+    expect(screen.getByRole('link', { name: /invite a peer/i })).toHaveAttribute('href', '/settings#invite')
+  })
+
+  it('stays quiet when nobody interacted with them yet', () => {
+    mockQueryReturns['interactions.getRecap'] = EMPTY
+    renderPage()
+    expect(screen.queryByRole('link', { name: /invite a peer/i })).not.toBeInTheDocument()
+  })
+})

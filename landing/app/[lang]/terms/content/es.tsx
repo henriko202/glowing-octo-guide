@@ -86,13 +86,13 @@ export default function Es({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Prueba gratuita.</strong> Las cuentas nuevas comienzan con una{' '}
-          <strong className="text-cream">prueba gratuita de 7 días</strong> y se requiere un método de pago para
-          iniciarla. La prueba termina —y la facturación comienza— en cuanto alcanza{' '}
-          <strong className="text-cream">50 interacciones</strong> (hechas y recibidas) o a los{' '}
-          <strong className="text-cream">7 días</strong>, lo que ocurra primero. Le avisamos por correo antes del primer
-          cobro. Puede cancelar en cualquier momento antes de que termine la prueba desde la página Suscripción de su
-          cuenta, y no se le cobrará. Hay una prueba gratuita por cuenta; si se suscribe de nuevo tras cancelar, el
-          cobro comienza de inmediato y se indica en el checkout.
+          <strong className="text-cream">prueba gratuita de 7 días</strong> (14 días cuando se une mediante el enlace de
+          invitación de un miembro) y se requiere un método de pago para iniciarla. La prueba termina —y la facturación
+          comienza— en cuanto alcanza <strong className="text-cream">50 interacciones</strong> (hechas y recibidas) o
+          cuando termina el período de prueba, lo que ocurra primero. Le avisamos por correo antes del primer cobro.
+          Puede cancelar en cualquier momento antes de que termine la prueba desde la página Suscripción de su cuenta, y
+          no se le cobrará. Hay una prueba gratuita por cuenta; si se suscribe de nuevo tras cancelar, el cobro comienza
+          de inmediato y se indica en el checkout.
         </p>
         <p>
           <strong className="text-cream">Cancelación.</strong> Puede cancelar su suscripción en cualquier momento desde

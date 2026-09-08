@@ -20,7 +20,10 @@ const TIER_LIMITS = {
   contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 9999 }
 }
 
-let mockMe: { tier: string; subscriptionStatus?: string } = { tier: 'starter', subscriptionStatus: 'active' }
+let mockMe: { tier: string; subscriptionStatus?: string; trialEligible?: boolean } = {
+  tier: 'starter',
+  subscriptionStatus: 'active'
+}
 let mockSubscriptionInfo: { priceInterval?: string } | null = { priceInterval: 'year' }
 
 function routeQueries() {
@@ -94,6 +97,16 @@ describe('UpgradeAtLimit', () => {
     renderComponent('weeklyPosts')
     expect(screen.getByRole('link', { name: /start 7-day trial/i })).toHaveAttribute('href', '/billing?plan=growth')
     expect(screen.queryByText(/weekly post cap/i)).not.toBeInTheDocument()
+  })
+
+  // Same 'none' status, opposite offer: this member already has subscription rows (incomplete/
+  // paused, or an admin reset), so checkout gives them no trial and the gated ask must not promise
+  // one. Only `getMe.trialEligible` separates them from the member above.
+  it('asks a gated member with no trial left to subscribe, never to start a trial', () => {
+    mockMe = { tier: 'starter', subscriptionStatus: 'none', trialEligible: false }
+    renderComponent('weeklyPosts')
+    expect(screen.getByRole('link', { name: /subscribe to growth/i })).toHaveAttribute('href', '/billing?plan=growth')
+    expect(screen.queryByText(/trial/i)).not.toBeInTheDocument()
   })
 
   it('asks a past_due member to update payment instead of pitching an upgrade', () => {

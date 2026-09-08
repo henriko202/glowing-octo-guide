@@ -20,11 +20,16 @@ import {
   formatPriceLabel,
   INTL_TAG,
   planName,
+  postCapReachedEmail,
   trialConvertedEmail,
   trialEndingEmail,
   trialNearEndEmail
 } from './lib/billingEmails'
 import { findLiveSubscription, pickTrialingSubscription, TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
+import { billingIntervalParam, capNoticeMode, shouldSendCapNotice } from './lib/postCapNotice'
+import { nextTier, type Tier } from './lib/planLimits'
+import { excerpt } from './lib/recap'
+import { SUPPORT_EMAIL } from './lib/support'
 
 function billingUrl(): string {
   return `${process.env.APP_URL ?? 'http://localhost:5173'}/billing`
@@ -144,5 +149,63 @@ export const sendTrialConverted = internalAction({
       recapUrl: `${process.env.APP_URL ?? 'http://localhost:5173'}/recap`
     })
     await deliver('trial_converted', c.email, m)
+  }
+})
+
+/**
+ * backlog/R20 — the author's post reached its interaction cap and left the feed. Scheduled by
+ * `interactions.flipCapIfReached`, so it runs at most once per post. Everything that could make
+ * the email wrong is re-checked at send time: the post must still be capped and not deleted, the
+ * author must have an email and a live plan that is not cancelling, and the caps are read fresh.
+ * Pro and contact get the support line; Starter/Growth get one checkout deep link.
+ */
+export const sendPostCapReached = internalAction({
+  args: { postId: v.id('posts') },
+  handler: async (ctx, { postId }) => {
+    const post = await ctx.runQuery(internal.interactions.getPost, { postId })
+    if (!post || !post.interactionLimitReached || post.deletedAt !== undefined) return
+    const c = await ctx.runQuery(internal.billing.getBillingContext, { userId: post.authorId })
+    if (!c) return
+    const live = findLiveSubscription(c.subscriptions)
+    const to = c.email
+    if (
+      !to ||
+      !shouldSendCapNotice({
+        email: to,
+        subscriptionStatus: c.subscriptionStatus,
+        cancelAtPeriodEnd: live?.cancelAtPeriodEnd
+      })
+    ) {
+      return
+    }
+
+    const tier: Tier = c.tier ?? 'starter'
+    const limits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId: post.authorId, tier })
+    const next = nextTier(tier)
+    const nextLimits = next
+      ? await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId: post.authorId, tier: next })
+      : null
+    const mode = capNoticeMode(tier, limits.interactionsPerPost, nextLimits?.interactionsPerPost)
+    const locale = resolveBillingLocale(c.language, c.primaryLocale)
+    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+
+    const m = postCapReachedEmail(locale, {
+      excerpt: excerpt(post.content),
+      // The post's own number for the subject line. It can exceed the cap — a Growth → Starter
+      // downgrade drops the cap under what the post already collected — and the subject must not
+      // claim the post has fewer interactions than it does.
+      total: post.likeCount + post.commentCount,
+      cap: limits.interactionsPerPost,
+      planName: planName(locale, tier),
+      mode,
+      nextPlanName: next ? planName(locale, next) : undefined,
+      nextCap: nextLimits?.interactionsPerPost,
+      upgradeUrl: next
+        ? `${appUrl}/billing?plan=${next}&interval=${billingIntervalParam(live?.priceInterval)}&src=cap_email`
+        : undefined,
+      myPostsUrl: `${appUrl}/my-posts`,
+      supportEmail: SUPPORT_EMAIL
+    })
+    await deliver('post_cap_reached', to, m)
   }
 })

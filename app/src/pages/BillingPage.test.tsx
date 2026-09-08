@@ -526,3 +526,119 @@ describe('cancel + resume (R09)', () => {
     expect(captureEvent).not.toHaveBeenCalled()
   })
 })
+
+// R18: one consent-gated event per checkout attempt, carrying the plan and the interval the price
+// belongs to, fired right before the checkout call — never on the portal path.
+describe('checkout_started (R18)', () => {
+  it('fires once with the plan and the interval before checkout', async () => {
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0])
+    await waitFor(() => expect(mockCheckout).toHaveBeenCalled())
+    expect(captureEvent).toHaveBeenCalledWith('checkout_started', { plan: 'growth', interval: 'annual' })
+    expect(captureEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fire when a card holder is routed to the portal', async () => {
+    setUser({ subscriptionStatus: 'trialing' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+    expect(captureEvent).not.toHaveBeenCalledWith('checkout_started', expect.anything())
+  })
+})
+
+// R20 review: a card holder's click is the funnel step after the email's landing, and the portal
+// path fires nothing else — without this the cap-email funnel ended at `cap_email_billing_opened`.
+describe('plan_switch_opened', () => {
+  it('fires with the plan and source "billing" when a card holder opens the portal from the page', async () => {
+    setUser({ subscriptionStatus: 'trialing' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+    // A trialing member has no "current" card, so the first switch button is the first plan: starter.
+    expect(captureEvent).toHaveBeenCalledWith('plan_switch_opened', { plan: 'starter', source: 'billing' })
+  })
+
+  it('tags the source "cap_email" when the post-cap email brought them here', async () => {
+    renderBilling({ search: 'plan=growth&interval=annual&src=cap_email', me: { subscriptionStatus: 'active' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+    expect(captureEvent).toHaveBeenCalledWith('plan_switch_opened', expect.objectContaining({ source: 'cap_email' }))
+  })
+})
+
+describe('cap email landing (R20)', () => {
+  it('fires cap_email_billing_opened exactly once under StrictMode, tagged with the plan in the link', () => {
+    renderBilling({ search: 'plan=growth&interval=annual&src=cap_email', strict: true })
+    expect(captureEvent).toHaveBeenCalledTimes(1)
+    expect(captureEvent).toHaveBeenCalledWith('cap_email_billing_opened', { plan: 'growth' })
+  })
+
+  it('fires nothing on a plain ?plan= visit', () => {
+    renderBilling({ search: 'plan=growth' })
+    expect(captureEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('BillingPage invited member (R19)', () => {
+  it('renders the gift line and 14-day copy for a member who joined through an invite', () => {
+    setUser({ trialDays: 14, inviterName: 'Ana' })
+    renderPage()
+    expect(screen.getByText(/billing\.giftFrom:.*"name":"Ana".*"days":14/)).toBeInTheDocument()
+    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":14\}/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /billing\.startTrialCta:.*"days":14/ }).length).toBeGreaterThan(0)
+  })
+
+  it('says 7 days and shows no gift line for a plain signup', () => {
+    renderPage()
+    expect(screen.queryByText(/billing\.giftFrom/)).not.toBeInTheDocument()
+    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7\}/)).toBeInTheDocument()
+  })
+
+  // A referred member who trialed, canceled and came back is still !hasCard, but getMe reports
+  // trialEligible:false (one trial per account) — so the gift line would be a lie.
+  it('hides the gift line for a referred member who already used their trial and canceled', () => {
+    setUser({ trialDays: 14, inviterName: 'Ana', subscriptionStatus: 'canceled', trialEligible: false })
+    renderPage()
+    expect(screen.queryByText(/billing\.giftFrom/)).not.toBeInTheDocument()
+  })
+})
+
+// One trial per account, forever (billingNode.createCheckoutSession keys it on the subscription-row
+// COUNT). A member who already spent theirs is still !hasCard, so they land in the same pre-card
+// block as a brand-new visitor — and every trial promise in it has to go, or the page contradicts
+// the message Stripe puts under its own pay button (convex/lib/checkoutCopy NO_TRIAL_MESSAGE).
+describe('BillingPage member with no trial left', () => {
+  it('replaces the note and the plan CTA with the no-trial copy', () => {
+    setUser({ subscriptionStatus: 'canceled', trialEligible: false })
+    renderPage()
+    expect(screen.queryByText(/billing\.newUserTrialNote/)).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: /billing\.startTrialCta/ })).toHaveLength(0)
+    expect(screen.getByText(/billing\.noTrialNote/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /billing\.noTrialCta:.*"plan":"Growth"/ }).length).toBeGreaterThan(0)
+  })
+
+  // Arriving from a landing pricing CTA takes the chosenPlanLead branch, which promised the trial too.
+  it('drops the trial from the chosen-plan lead', () => {
+    renderBilling({ search: 'plan=pro', me: { subscriptionStatus: 'canceled', trialEligible: false } })
+    expect(screen.queryByText(/billing\.chosenPlanLead/)).not.toBeInTheDocument()
+    expect(screen.getByText(/billing\.noTrialChosenPlanLead:.*"plan":"Pro"/)).toBeInTheDocument()
+  })
+
+  // 'canceled' is not the whole set: convex/stripe.ts toSubscriptionStatus maps an incomplete or
+  // paused Stripe subscription to 'none' with the row already inserted, and an admin can set 'none'
+  // back on a member who has rows. Both are ineligible. The client asks the server, never the status.
+  it('trusts the server flag over a "none" status', () => {
+    setUser({ subscriptionStatus: 'none', trialEligible: false })
+    renderPage()
+    expect(screen.queryByText(/billing\.newUserTrialNote/)).not.toBeInTheDocument()
+    expect(screen.getByText(/billing\.noTrialNote/)).toBeInTheDocument()
+  })
+
+  it('still promises the trial to an eligible member', () => {
+    setUser({ trialEligible: true })
+    renderPage()
+    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7\}/)).toBeInTheDocument()
+    expect(screen.queryByText(/billing\.noTrialNote/)).not.toBeInTheDocument()
+  })
+})

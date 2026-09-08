@@ -30,7 +30,7 @@ describe('stripeCheckoutLocale', () => {
 describe('checkoutSubmitMessage', () => {
   it('states the 50-or-7-days rule in every language on the trial path', () => {
     for (const l of LOCALES) {
-      const msg = checkoutSubmitMessage(l, { trial: true })
+      const msg = checkoutSubmitMessage(l, { trial: true, days: 7 })
       expect(msg).toContain('50')
       expect(msg).toContain('7')
       expect(msg.length).toBeGreaterThan(40)
@@ -38,7 +38,7 @@ describe('checkoutSubmitMessage', () => {
   })
   it('states that billing is today on the no-trial path', () => {
     for (const l of LOCALES) {
-      const msg = checkoutSubmitMessage(l, { trial: false })
+      const msg = checkoutSubmitMessage(l, { trial: false, days: 7 })
       expect(msg).not.toContain('50')
       expect(msg.length).toBeGreaterThan(20)
     }
@@ -46,7 +46,7 @@ describe('checkoutSubmitMessage', () => {
   it('never hedges — the rule is deterministic, not "may"', () => {
     for (const l of LOCALES) {
       for (const trial of [true, false]) {
-        const msg = checkoutSubmitMessage(l, { trial }).toLowerCase()
+        const msg = checkoutSubmitMessage(l, { trial, days: 7 }).toLowerCase()
         expect(msg).not.toContain('may end')
         expect(msg).not.toContain('pode terminar')
         expect(msg).not.toContain('puede terminar')
@@ -56,8 +56,17 @@ describe('checkoutSubmitMessage', () => {
   it('fits Stripe custom_text limit of 1200 characters', () => {
     for (const l of LOCALES) {
       for (const trial of [true, false]) {
-        expect(checkoutSubmitMessage(l, { trial }).length).toBeLessThanOrEqual(1200)
+        expect(checkoutSubmitMessage(l, { trial, days: 7 }).length).toBeLessThanOrEqual(1200)
       }
+    }
+  })
+  // backlog/R19 — an invited member's checkout states the 14-day trial they actually get.
+  it('states the invited 14-day trial when asked', () => {
+    for (const l of LOCALES) {
+      const msg = checkoutSubmitMessage(l, { trial: true, days: 14 })
+      expect(msg).toContain('14')
+      expect(msg).toContain('50')
+      expect(msg).not.toMatch(/\b7\b/)
     }
   })
 })

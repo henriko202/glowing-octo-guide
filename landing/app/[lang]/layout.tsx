@@ -4,6 +4,7 @@ import '../globals.css'
 import { getDictionary } from '@/i18n/getDictionary'
 import { i18n, type Locale } from '@/i18n/config'
 import CookieNotice from '@/components/CookieNotice'
+import RefCarrier from '@/components/RefCarrier'
 
 // Self-hosted at build time → served from 'self', so the tight CSP needs no font/style host.
 const display = Cormorant_Garamond({
@@ -75,6 +76,7 @@ export default async function RootLayout({
           dict={dict.cookieNotice}
           lang={lang}
         />
+        <RefCarrier />
       </body>
     </html>
   )

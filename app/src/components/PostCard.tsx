@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next'
+import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { REACTIONS, type Reaction } from '../../../convex/lib/reactions'
+import type { FeedViewerState } from '../../../convex/lib/feedHygiene'
 import type { GateSource } from './CardGateDialog'
 import LinkedInEmbed from './LinkedInEmbed'
 import { Avatar } from '@/components/ui/avatar'
@@ -25,6 +27,8 @@ export type PostWithAuthor = {
   } | null
   sourceUrl: string
   suggestedReaction?: Reaction
+  /** backlog/R21 — set by feed.getFeed when the viewer already reacted/commented; absent elsewhere. */
+  viewerState?: FeedViewerState | null
 }
 
 /**
@@ -84,7 +88,8 @@ export default function PostCard({
   onReact,
   gated,
   onGated,
-  reacting
+  reacting,
+  onHide
 }: {
   post: PostWithAuthor
   onComment: (postId: Id<'posts'>) => void
@@ -92,8 +97,17 @@ export default function PostCard({
   gated?: boolean
   onGated?: (source: GateSource) => void
   reacting?: boolean
+  /** backlog/R21 — "Hide now" on a post the viewer already handled. */
+  onHide?: () => void
 }) {
   const { t } = useTranslation()
+  // backlog/R21 — the done footer. `now` is fixed at mount (react-hooks/purity): the label is
+  // "leaves in N h", a live countdown would be noise.
+  const [now] = useState(() => Date.now())
+  const done = post.viewerState ?? null
+  const hoursLeft = done ? Math.max(1, Math.ceil((done.hidesAt - now) / 3_600_000)) : 0
+  const doneLabel =
+    done?.reacted && done.commented ? 'feed.doneBoth' : done?.reacted ? 'feed.doneReacted' : 'feed.doneCommented'
 
   return (
     <div className="border-border bg-card overflow-hidden rounded-xl border font-sans">
@@ -132,24 +146,33 @@ export default function PostCard({
       <LinkedInEmbed
         urn={post.linkedinPostUrn}
         footer={
-          <div className="border-border bg-card flex h-[52px] items-center gap-4 border-t px-4">
-            <ReactionButton
-              postId={post._id}
-              suggested={post.suggestedReaction ?? 'LIKE'}
-              likeCount={post.likeCount}
-              onReact={onReact}
-              gated={gated}
-              onGated={onGated}
-              loading={reacting}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => (gated ? onGated?.('comment') : onComment(post._id))}
-              className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
-            >
-              💬 {post.commentCount} {t('feed.comment')}
-            </Button>
+          <div className="border-border bg-card flex min-h-[52px] flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-1.5">
+            {done && (
+              <span className="text-muted-foreground text-[13px]">
+                <span aria-hidden="true">✓</span> {t(doneLabel)}
+              </span>
+            )}
+            {!done?.reacted && (
+              <ReactionButton
+                postId={post._id}
+                suggested={post.suggestedReaction ?? 'LIKE'}
+                likeCount={post.likeCount}
+                onReact={onReact}
+                gated={gated}
+                onGated={onGated}
+                loading={reacting}
+              />
+            )}
+            {!done?.commented && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => (gated ? onGated?.('comment') : onComment(post._id))}
+                className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
+              >
+                💬 {post.commentCount} {t('feed.comment')}
+              </Button>
+            )}
 
             {!!post.sourceUrl &&
               (gated ? (
@@ -175,6 +198,23 @@ export default function PostCard({
                   {t('feed.viewOnLinkedIn')}
                 </a>
               ))}
+
+            {done && (
+              // No ml-auto here: the LinkedIn link above already carries one, and two of them
+              // split the free space and strand the link mid-row.
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground text-xs">{t('feed.leavesIn', { hours: hoursLeft })}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onHide}
+                  className="text-muted-foreground h-7 min-h-11 cursor-pointer px-2 text-xs sm:min-h-0"
+                >
+                  {t('feed.hideNow')}
+                </Button>
+              </span>
+            )}
           </div>
         }
       />

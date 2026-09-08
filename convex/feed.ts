@@ -3,7 +3,8 @@ import { query, type QueryCtx } from './_generated/server'
 import { ConvexError, type Infer, v } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
 import type { Doc } from './_generated/dataModel'
-import { requireAuth } from './lib/auth'
+import { requireAuth, resolveSession } from './lib/auth'
+import { INTERACTED_TTL_MS, toFeedViewerState, viewerPostStatus } from './lib/feedHygiene'
 
 type FeedFilterParams = {
   tier?: string
@@ -205,12 +206,28 @@ export async function fetchFeedPage(
   const authors = await Promise.all(uniqueAuthorIds.map(id => ctx.db.get(id)))
   const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
 
+  // backlog/R21 — the viewer's own state per post (one indexed point read each, ≤ numItems): a
+  // post they handled stays for 24 h as a "done" card, then leaves their feed; "Hide now" makes it
+  // leave at once. Per viewer only — nothing global changes, and the author still sees the post.
+  const states = await Promise.all(
+    result.page.map(p =>
+      ctx.db
+        .query('userPostState')
+        .withIndex('by_user_and_post', q => q.eq('userId', viewer._id).eq('postId', p._id))
+        .unique()
+    )
+  )
+
   // Viewer-/author-dependent filters that can't live in the global index (plan §3c): the viewer's
   // own posts + visibility allowlists + author eligibility (shared with search via
-  // isPostVisibleToViewer), then the viewer's tier-based industry/country filter. Pages may come
-  // back short when these drop posts — `usePaginatedQuery` just loads more.
+  // isPostVisibleToViewer), then the viewer's tier-based industry/country filter, then the
+  // per-viewer hygiene above. Pages may come back short (even empty) when these drop posts, while
+  // `isDone` and the cursor still describe the unfiltered walk. The client contract: keep calling
+  // `loadMore` while the page is empty and the status is CanLoadMore — an all-filtered page yields
+  // no rows to scroll, so an auto-load keyed on the last rendered item never fires.
   const enriched = result.page
-    .filter(post => {
+    .map((post, i) => ({ post, state: states[i] }))
+    .filter(({ post, state }) => {
       const author = authorMap.get(post.authorId) ?? null
       if (!isPostVisibleToViewer(post, viewer, author, now)) return false
       if (filter.applyIndustry && filter.industries.length > 0) {
@@ -219,13 +236,36 @@ export async function fetchFeedPage(
       if (filter.applyCountry && filter.countries.length > 0) {
         if (!author?.country || !filter.countries.includes(author.country)) return false
       }
-      return true
+      return viewerPostStatus(state, now) !== 'gone'
     })
-    .map(post => {
+    .map(({ post, state }) => {
       const author = authorMap.get(post.authorId)
-      return author ? { ...post, author: toFeedAuthor(author) } : { ...post, author: null }
+      const viewerState = toFeedViewerState(state)
+      return author ? { ...post, author: toFeedAuthor(author), viewerState } : { ...post, author: null, viewerState }
     })
 
   // Preserve isDone + continueCursor from the index walk; only `page` is filtered/enriched.
   return { ...result, page: enriched }
 }
+
+/**
+ * backlog/R21 — an empty feed page means one of two things: nothing exists yet (the R05 empty
+ * state) or the viewer handled everything and it aged out (the caught-up state). "Interacted with
+ * something in the last 24 h" tells them apart: older interactions have already left the feed and
+ * prove nothing about today. Read by FeedPage only while the feed is empty.
+ */
+export const getCaughtUp = query({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const viewer = await resolveSession(ctx, sessionToken)
+    // A banned viewer gets EMPTY_PAGE from getFeed, so "caught up" would be a lie about a feed
+    // they are not being shown at all.
+    if (!viewer || viewer.isBanned) return { caughtUp: false }
+    const latest = await ctx.db
+      .query('userInteractions')
+      .withIndex('by_user', q => q.eq('userId', viewer._id))
+      .order('desc')
+      .first()
+    return { caughtUp: latest !== null && Date.now() - latest.createdAt < INTERACTED_TTL_MS }
+  }
+})

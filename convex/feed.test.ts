@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { assertPostEngageable, buildFeedFilter, fetchFeedPage, isAuthorFeedEligible, toFeedAuthor } from './feed'
 import { computeFeedFields } from './lib/feedRank'
+import { INTERACTED_TTL_MS } from './lib/feedHygiene'
 import type { Doc, Id } from './_generated/dataModel'
 
 const NOW = 1_000_000
@@ -23,13 +24,28 @@ const post = (id: string, authorId: string, over: Record<string, unknown> = {}) 
 const user = (id: string, over: Record<string, unknown> = {}) =>
   ({ _id: id, name: id, subscriptionStatus: 'active', ...over }) as unknown as Doc<'users'>
 
-// Minimal QueryCtx mock: the by_feed_rank page walk returns `page`, and get() resolves authors.
-function feedCtx(page: Doc<'posts'>[], authors: Doc<'users'>[]) {
+// Minimal QueryCtx mock: the by_feed_rank page walk returns `page`, get() resolves authors, and the
+// per-post userPostState lookup (backlog/R21) answers from `states` keyed by post id.
+function feedCtx(page: Doc<'posts'>[], authors: Doc<'users'>[], states: Record<string, unknown> = {}) {
   const byId = new Map(authors.map(a => [a._id, a]))
   return {
     db: {
-      query: () => ({
-        withIndex: () => ({ order: () => ({ paginate: async () => ({ page, isDone: true, continueCursor: 'END' }) }) })
+      query: (table: string) => ({
+        withIndex: (_name: string, fn?: (q: any) => any) => {
+          if (table === 'userPostState') {
+            let postId = ''
+            fn?.({
+              eq: (_field: string, _value: string) => ({
+                eq: (_f2: string, v2: string) => {
+                  postId = v2
+                  return null
+                }
+              })
+            })
+            return { unique: async () => states[postId] ?? null }
+          }
+          return { order: () => ({ paginate: async () => ({ page, isDone: true, continueCursor: 'END' }) }) }
+        }
       }),
       get: async (id: Id<'users'>) => byId.get(id) ?? null
     }
@@ -399,5 +415,35 @@ describe('fetchFeedPage — seeded feed-state parity', () => {
     for (const kept of ['zara-banned', 'elena-lapsed', 'tom-deleting']) {
       expect(staged).toContain(kept)
     }
+  })
+})
+
+describe('fetchFeedPage — per-viewer hygiene (R21)', () => {
+  const viewer = user('viewer', { tier: 'starter' })
+  const author = user('a1', { subscriptionStatus: 'active' })
+  const page = [post('p1', 'a1'), post('p2', 'a1'), post('p3', 'a1'), post('p4', 'a1')]
+  const filter = buildFeedFilter({ tier: 'starter' })
+
+  it('attaches viewerState and drops posts that are hidden or past the 24 h window', async () => {
+    const ctx = feedCtx(page, [author], {
+      p1: { reactedAt: NOW - 1000 },
+      p2: { reactedAt: NOW - INTERACTED_TTL_MS - 1 },
+      p3: { commentedAt: NOW - 1000, hiddenAt: NOW - 500 }
+    })
+    const result = await fetchFeedPage(ctx, viewer, opts(filter))
+    expect(result.page.map(p => p._id)).toEqual(['p1', 'p4'])
+    expect(result.page[0].viewerState).toEqual({
+      reacted: true,
+      commented: false,
+      hidesAt: NOW - 1000 + INTERACTED_TTL_MS
+    })
+    expect(result.page[1].viewerState).toBeNull()
+  })
+
+  it('treats a row that only holds a comment draft as untouched', async () => {
+    const ctx = feedCtx([post('p1', 'a1')], [author], { p1: { commentDraft: 'hello' } })
+    const result = await fetchFeedPage(ctx, viewer, opts(filter))
+    expect(result.page).toHaveLength(1)
+    expect(result.page[0].viewerState).toBeNull()
   })
 })

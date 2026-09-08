@@ -116,8 +116,11 @@ see [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
 
 **One trial per account, forever.** `createCheckoutSession` grants `trial_period_days` only to a member who has never
 held a `subscriptions` row, and refuses a second _live_ subscription outright (`ALREADY_SUBSCRIBED` → the Customer
-Portal). A returning subscriber checks out **without** a trial and is billed on day one — stated under the pay button
-before the card, not discovered on the statement. Members are warned before the first charge on both paths (at 40 of 50
+Portal). A returning subscriber checks out **without** a trial and is billed on day one — stated on the Billing page
+_before_ the checkout (`getMe.trialEligible` swaps every trial promise on the Billing page **and on the card gate** for
+its honest twin, §14) and again under
+Stripe's pay button, not discovered on the statement. Members are warned before the first charge on both paths (at 40 of
+50
 interactions, and 3 days before day 7). See [§8](#8-subscriptions--billing).
 
 ---
@@ -340,6 +343,10 @@ erDiagram
     }
 ```
 
+**R19 adds no table and no relationship line:** `users.referredByCode` → `users.inviteCode` is a self‑reference resolved
+by the `by_invite_code` / `by_referred_by_code` indexes on **string codes**, not a `v.id('users')` foreign key — so an
+inviter's erasure leaves the invitee's stamp behind as an inert code that resolves to nobody.
+
 ### Table reference
 
 #### `users` — central identity / subscription / OAuth / admin record
@@ -386,6 +393,8 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `acknowledgedPolicyVersion`   | string                                                 |  –  | Privacy-policy version string the user last accepted. Drives the re-consent prompt when it diverges from the current policy version.                                                                                                                                                                                                                                                                                |
 | `consentPromptedAt`           | number                                                 |  –  | When the user completed the one-time consent prompt (ms). Unset ⇒ `ConsentPromptScreen` is shown on next login.                                                                                                                                                                                                                                                                                                     |
 | `firstPostPromptedAt`         | number                                                 |  –  | When the first‑post onboarding step was resolved (ms) — set once by submitting any post (`posts.submitPost` → `users.markFirstPostPrompted`) or skipping (`users.dismissFirstPostPrompt`). Unset ⇒ `FirstPostPromptScreen` is shown after the consent gate (to every new member; the onboarding post is created hidden for no-card members, and everyone — card or not — lands on the feed afterward, per **R04**). |
+| `inviteCode`                  | string                                                 |  –  | **R19** — the member's own invite code: 8 characters of `[a-z0-9]`, minted lazily by `users.getOrCreateInviteCode` on the first visit to Settings › Invite and **never reissued** (links people already shared must keep working). Unique by construction — the minting mutation checks `by_invite_code`, retries a collision once, then throws `ConvexError('INVITE_CODE_RETRY')`.                                 |
+| `referredByCode`              | string                                                 |  –  | **R19** — the inviter's code this member joined through. Stamped **insert‑only** by `linkedin/auth.upsertUserHandler`, after a `by_invite_code` lookup proves the code belongs to a real member who is **not banned**; an unknown or banned‑inviter code is dropped, never stored, and an existing member logging in with a `ref` is unchanged. Drives `trialDaysFor` (14 days, not 7) and the Billing gift line.   |
 | `createdAt`                   | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                                                                                                                                            |
 
 Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
@@ -393,7 +402,9 @@ Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`,
 `by_token_expiry [tokenExpiresAt]` (retention cron targets expired tokens directly),
 `by_deletion_and_last_login [deletionScheduledAt, lastLoginAt]` (compound — serves both the hard-delete sweep, ranging
 the leading field, and the dormancy sweep, `eq(deletionScheduledAt,
-undefined)` + range on `lastLoginAt`).
+undefined)` + range on `lastLoginAt`), `by_invite_code [inviteCode]` (**R19** — inviter lookup at
+signup attribution and for `getMe`'s gift line), `by_referred_by_code [referredByCode]` (**R19** — the
+"N joined through your link" count, bounded at `.take(101)`).
 
 #### `posts` — the shared feed
 
@@ -509,7 +520,7 @@ after its last use. `SESSION_TTL_MS` in `convex/sessions.ts` is the single sourc
 #### `oauthStates` — CSRF nonces
 
 Single‑use OAuth `state` values; ~10‑minute TTL; deleted on validation. The row also carries the plan-selection the user
-made on the landing page, so it survives the OAuth redirect round-trip.
+made on the landing page — and, since **R19**, the inviter's code — so both survive the OAuth redirect round-trip.
 
 | Field       | Type                         | Req | Meaning                                                                                                                                        |
 |-------------|------------------------------|:---:|------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -517,6 +528,7 @@ made on the landing page, so it survives the OAuth redirect round-trip.
 | `expiresAt` | number                       | ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron.                                                                     |
 | `plan`      | `'starter'\|'growth'\|'pro'` |  –  | Tier chosen on the landing Pricing page before starting OAuth. Absent when OAuth is initiated without a plan selection (e.g. direct app link). |
 | `interval`  | `'monthly'\|'annual'`        |  –  | Billing interval chosen alongside `plan`. Absent when `plan` is absent.                                                                        |
+| `ref`       | string                       |  –  | **R19** — invite code from the landing `?ref=`, checked by `isInviteCode` in `http.ts` before storing. See [§7](#7-authentication--identity).  |
 
 #### Rate‑limit counters — the `@convex-dev/rate-limiter` component
 
@@ -684,17 +696,26 @@ Indexes: `by_user [userId]` (DSR export, a user's activity, the history page), `
 
 One lazily-created row per (user, post), distinct from the append-only `userInteractions` log. Holds **current** state:
 `reactedAt` (set on the user's first reaction so a repeat doesn't double-count / double-bill — a member holds at most
-one reaction per post) and `commentDraft` (the last AI-generated comment for the post, reloaded into `CommentBox` for
-reuse/regeneration). Per-user data: included in the DSR export and deleted in the erasure cascade (§13B).
+one reaction per post), `commentedAt` / `hiddenAt` (the **R21** 24-hour feed-hygiene stamps, see
+[§11](#11-feed--engagement)) and `commentDraft` (the last AI-generated comment for the post, reloaded into `CommentBox`
+for reuse/regeneration). Per-user data: included in the DSR export and deleted in the erasure cascade (§13B).
 
 | Field          | Type          | Req | Meaning                                                        |
 |----------------|---------------|:---:|----------------------------------------------------------------|
 | `userId`       | `id('users')` | ✓  | Owner of the state row.                                        |
 | `postId`       | `id('posts')` | ✓  | The target post.                                               |
 | `reactedAt`    | number        |  –  | Set on the first reaction; presence = already counted (dedup). |
+| `commentedAt`  | number        |  –  | **R21** — set by `incrementCommentCount` on the Comment tap.   |
+| `hiddenAt`     | number        |  –  | **R21** — set by `interactions.hidePost`. No unhide.           |
 | `commentDraft` | string        |  –  | Last AI-generated comment for the post (reuse/regenerate).     |
 
-Index: `by_user_and_post [userId, postId]` — the dedup/draft lookups and the by-user DSR/erasure scan.
+`commentedAt` and `hiddenAt` are **widen-only, with no backfill**: rows written before 2026‑09‑07 have neither, so a
+pre-existing reaction shows the R21 done footer only because `reactedAt` was already there, and comments recorded
+before that date do not.
+
+Indexes: `by_user_and_post [userId, postId]` — the dedup/draft lookups, the per-page R21 viewer-state read, and the
+by-user DSR/erasure scan; `by_post [postId]` — erasure of other members' state on a deleted member's posts
+(`privacy/deletion.ts`).
 
 ---
 
@@ -821,25 +842,37 @@ OAuth the app uses its **own opaque session tokens**.
 
 ### OAuth login flow
 
-The `/auth/linkedin` start handler reads optional `plan` and `interval` query parameters from the URL (appended by the
-landing Pricing page CTAs). The `plan` value is validated against the allowed tier list (`starter|growth|pro`) and,
-together with `interval`, is stored on the `oauthStates` row so it survives the LinkedIn redirect round-trip.
+The `/auth/linkedin` start handler reads optional `plan`, `interval` and `ref` query parameters from the URL (appended
+by the landing Pricing page CTAs, and — for `ref` — by `RefCarrier`, see [§15](#15-frontend--landing-site-landing)).
+The `plan` value is validated against the allowed tier list (`starter|growth|pro`); `ref` is kept only when
+`isInviteCode(ref)` matches `/^[a-z0-9]{8}$/` (`lib/invite.ts`). All three are stored on the `oauthStates` row via
+`sessions.createOAuthState`, so they survive the LinkedIn redirect round-trip.
+
+**Referral attribution (R19)** is a four-hop chain, and every hop can drop the code without failing the login:
+
+1. The landing's `RefCarrier` appends `?ref=<code>` to every `/auth/linkedin` href.
+2. `http.ts` keeps it only when the **shape** matches; anything else becomes `undefined`.
+3. The callback passes `referredByCode: oauthState.ref` to `upsertUser`.
+4. `upsertUserHandler` stamps it **on insert only**, and only after a `by_invite_code` lookup proves the code belongs to
+   a real member who is **not banned** — a banned member's link mints nothing. An **existing** member who signs in
+   through someone's link is untouched: attribution is a property of the account's creation, not of a session.
 
 ```mermaid
 sequenceDiagram
     participant U as User (browser)
-    participant LP as Landing (Pricing CTA)
+    participant LP as Landing (Pricing CTA / RefCarrier)
     participant CV as Convex .site (http.ts)
     participant LI as LinkedIn
     participant DB as Convex DB
     participant A as App (React)
-    LP ->> CV: /auth/linkedin?plan=growth&interval=annual
-    Note over LP, CV: plan/interval optional — absent on direct app link
-    CV ->> DB: createOAuthState(state, +10min, plan?, interval?)
+    LP ->> CV: /auth/linkedin?plan=growth&interval=annual&ref=k3p9x2ab
+    Note over LP, CV: plan/interval/ref all optional — absent on direct app link
+    CV ->> CV: isInviteCode(ref) ? ref : undefined
+    CV ->> DB: createOAuthState(state, +10min, plan?, interval?, ref?)
     CV -->> U: 302 → LinkedIn authorize?scope=…&state
     U ->> LI: authenticate & consent
     LI -->> CV: 302 /auth/linkedin/callback?code&state
-    CV ->> DB: validateAndConsumeOAuthState(state) → { valid, plan?, interval? }
+    CV ->> DB: validateAndConsumeOAuthState(state) → { valid, plan?, interval?, ref? }
     alt invalid / expired state
         CV -->> U: 302 → APP_URL/?error=oauth_failed
     else valid
@@ -847,10 +880,11 @@ sequenceDiagram
         LI -->> CV: access_token, refresh_token, expires_in
         CV ->> LI: GET /v2/userinfo
         LI -->> CV: sub, name, picture
-        CV ->> DB: upsertUser(...) → userId (tokens stored server-side)
+        CV ->> DB: upsertUser(…, referredByCode: ref?) → userId (tokens stored server-side)
+        Note over CV, DB: insert only, and only if by_invite_code finds a non-banned member
         CV ->> DB: sessions.create(token=UUID, userId, +15d sliding)
         CV -->> U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual
-        Note over CV, U: plan/interval omitted from hash when absent
+        Note over CV, U: plan/interval omitted from hash when absent; ref is never echoed back
         U ->> A: /auth/success reads hash → stores token + plan/interval → navigate /feed
     end
 ```
@@ -868,32 +902,34 @@ flowchart TD
 
 ### Identity / user functions (`convex/users.ts`, `linkedin/auth.ts`, `sessions.ts`)
 
-| Function                                                                 | Kind                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                   |
-|--------------------------------------------------------------------------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedin.auth.upsertUser`                                               | internalMutation               | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. `headline` is patched **only when provided** — OIDC login carries none, so a manually-set/scraped headline survives every login instead of being unset. Never writes `isAdmin`.                                                                                                     |
-| `users.getMe`                                                            | query (public)                 | Safe profile via `resolveSession` + `toSafeMe` (strips token **values** + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`; **keeps `tokenExpiresAt`** — not a secret, drives the client's reconnect‑before‑expiry banner).                                                                                                                        |
-| `linkedin.oauth.refreshAccessToken`                                      | function (server‑only)         | `grant_type=refresh_token` call to the token endpoint. Same log‑real/throw‑sanitized discipline as `exchangeCodeForTokens`; never logs the token value. Called only by the refresh cron below.                                                                                                                                                                                            |
-| `linkedin.auth.updateTokens`                                             | internalMutation               | Patches `linkedinAccessToken`/`tokenExpiresAt` (always) + `linkedinRefreshToken` (only when LinkedIn returns a new one — a non‑rotating provider's omitted `refresh_token` leaves the stored value untouched instead of clearing it). Never writes `isAdmin`, mirroring `upsertUser`.                                                                                                     |
-| `linkedin.tokenRefresh.getUsersPendingRefresh` / `refreshExpiringTokens` | internalQuery / internalAction | Refresh-cron pair — see [§13](#13-scheduled-jobs-crons).                                                                                                                                                                                                                                                                                                                                  |
-| `users.getWithTokens`                                                    | internalQuery                  | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                                                                               |
-| `users.getActiveSubscribers`                                             | internalQuery                  | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                                                                                             |
-| `users.getSubscriptionInfo`                                              | query (public)                 | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                                                                                            |
-| `users.getTrialProgress`                                                 | query (public)                 | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern.                                                                |
-| `users.setDerivedPublicIdentifier`                                       | mutation (internal)            | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                                                                                |
-| `users.dismissFirstPostPrompt`                                           | mutation (public)              | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                                                                                    |
-| `users.markFirstPostPrompted`                                            | mutation (internal)            | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                                                                                              |
-| `users.updateProfile`                                                    | mutation (public)              | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at `MAX_HEADLINE_LENGTH` (65) chars — rejected if longer; empty string clears any of them.                                                                                                                                          |
-| `users.setPostVisibility`                                                | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets `defaultVisibilityIndustries`/`defaultVisibilityCountries`; each entry validated against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values), countries upper-cased. Empty arrays are valid (⇒ everyone). Applies to future posts only — see [§11](#11-feed--engagement).                       |
-| `users.setFeedFilter`                                                    | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets the viewer's own feed filter `feedFilterIndustries`/`feedFilterCountries`; same validation as `setPostVisibility` (canonical lists, countries upper-cased). Empty arrays clear the filter. `feed.getFeed` reads these off the viewer doc, so saving re-filters the feed reactively — see [§11](#11-feed--engagement). |
-| `users.refreshProfileFromLinkedIn`                                       | mutation (public)              | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                                                                                          |
-| `users.isProfileRefreshEnabled`                                          | query (public)                 | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                                                                                        |
-| `users.applyScrapedProfile`                                              | internalMutation               | Writes scraped fields: `country` + `headline` **fill-when-empty** (scraped headline trimmed + truncated to the `MAX_HEADLINE_LENGTH` cap, never rejected); `location`/`primaryLocale` always refresh.                                                                                                                                                                                     |
-| `users.logout`                                                           | mutation (public)              | Deletes the current session token.                                                                                                                                                                                                                                                                                                                                                        |
-| `users.forceLogoutAll`                                                   | mutation (public)              | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                                                                                              |
-| `sessions.create` / `getByToken` / `deleteByToken`                       | internal                       | Session lifecycle.                                                                                                                                                                                                                                                                                                                                                                        |
-| `sessions.deleteAllForUser`                                              | internalMutation               | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                                                                                |
-| `sessions.createOAuthState` / `validateAndConsumeOAuthState`             | internalMutation               | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval? }` so the callback can forward the chosen tier to the app.                                                                                                                                        |
-| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates`            | internalMutation               | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                                                                                            |
+| Function                                                                 | Kind                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|--------------------------------------------------------------------------|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedin.auth.upsertUser`                                               | internalMutation               | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. `headline` is patched **only when provided** — OIDC login carries none, so a manually-set/scraped headline survives every login instead of being unset. Never writes `isAdmin`.                                                                                                                                                                                                                                                                                                                     |
+| `users.getMe`                                                            | query (public)                 | Safe profile via `resolveSession` + `toSafeMe` (strips token **values** + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`; **keeps `tokenExpiresAt`** — not a secret, drives the client's reconnect‑before‑expiry banner). **R19** adds `trialDays` (`trialDaysFor(user)`: 14 or 7) and `inviterName` (first name only, never stored). Also adds **`trialEligible`** — `trialEligible(rowCount)` over the member's `subscriptions` rows (`by_user`), the same rule checkout enforces, so no client has to guess trial eligibility from `subscriptionStatus` (§8). |
+| `linkedin.oauth.refreshAccessToken`                                      | function (server‑only)         | `grant_type=refresh_token` call to the token endpoint. Same log‑real/throw‑sanitized discipline as `exchangeCodeForTokens`; never logs the token value. Called only by the refresh cron below.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `linkedin.auth.updateTokens`                                             | internalMutation               | Patches `linkedinAccessToken`/`tokenExpiresAt` (always) + `linkedinRefreshToken` (only when LinkedIn returns a new one — a non‑rotating provider's omitted `refresh_token` leaves the stored value untouched instead of clearing it). Never writes `isAdmin`, mirroring `upsertUser`.                                                                                                                                                                                                                                                                                                                     |
+| `linkedin.tokenRefresh.getUsersPendingRefresh` / `refreshExpiringTokens` | internalQuery / internalAction | Refresh-cron pair — see [§13](#13-scheduled-jobs-crons).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `users.getWithTokens`                                                    | internalQuery                  | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `users.getActiveSubscribers`                                             | internalQuery                  | All users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers, not the whole table).                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `users.getSubscriptionInfo`                                              | query (public)                 | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `users.getTrialProgress`                                                 | query (public)                 | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received`; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern.                                                                                                                                                                                                                                                                                |
+| `users.getOrCreateInviteCode`                                            | mutation (public)              | **R19** — returns the member's `inviteCode`, minting it on the first call (Settings › Invite). Idempotent afterwards; codes are never reissued. On a `by_invite_code` collision it retries once, then throws `ConvexError('INVITE_CODE_RETRY')`.                                                                                                                                                                                                                                                                                                                                                          |
+| `users.getInviteSummary`                                                 | query (public)                 | **R19** — `{ inviteCode: string \| null; joined: number }`, or `null` when unauthenticated. `inviteCode` is `null` until the mutation above mints it. `joined` counts members carrying the code via `by_referred_by_code` with `.take(101)`, so the read is bounded and the UI can render "100+" past the ceiling.                                                                                                                                                                                                                                                                                        |
+| `users.setDerivedPublicIdentifier`                                       | mutation (internal)            | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `users.dismissFirstPostPrompt`                                           | mutation (public)              | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `users.markFirstPostPrompted`                                            | mutation (internal)            | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `users.updateProfile`                                                    | mutation (public)              | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at `MAX_HEADLINE_LENGTH` (65) chars — rejected if longer; empty string clears any of them.                                                                                                                                                                                                                                                                                                                                                          |
+| `users.setPostVisibility`                                                | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets `defaultVisibilityIndustries`/`defaultVisibilityCountries`; each entry validated against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values), countries upper-cased. Empty arrays are valid (⇒ everyone). Applies to future posts only — see [§11](#11-feed--engagement).                                                                                                                                                                                                                                       |
+| `users.setFeedFilter`                                                    | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets the viewer's own feed filter `feedFilterIndustries`/`feedFilterCountries`; same validation as `setPostVisibility` (canonical lists, countries upper-cased). Empty arrays clear the filter. `feed.getFeed` reads these off the viewer doc, so saving re-filters the feed reactively — see [§11](#11-feed--engagement).                                                                                                                                                                                                                 |
+| `users.refreshProfileFromLinkedIn`                                       | mutation (public)              | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `users.isProfileRefreshEnabled`                                          | query (public)                 | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `users.applyScrapedProfile`                                              | internalMutation               | Writes scraped fields: `country` + `headline` **fill-when-empty** (scraped headline trimmed + truncated to the `MAX_HEADLINE_LENGTH` cap, never rejected); `location`/`primaryLocale` always refresh.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `users.logout`                                                           | mutation (public)              | Deletes the current session token.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `users.forceLogoutAll`                                                   | mutation (public)              | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `sessions.create` / `getByToken` / `deleteByToken`                       | internal                       | Session lifecycle.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `sessions.deleteAllForUser`                                              | internalMutation               | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `sessions.createOAuthState` / `validateAndConsumeOAuthState`             | internalMutation               | CSRF nonce lifecycle. `createOAuthState` accepts optional `plan`/`interval`/`ref` and stores them on the `oauthStates` row. `validateAndConsumeOAuthState` returns `{ valid, plan?, interval?, ref? }` so the callback can forward the chosen tier **and the R19 invite code** to `upsertUser`.                                                                                                                                                                                                                                                                                                           |
+| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates`            | internalMutation               | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### Token lifecycle: issue → refresh window → reconnect fallback
 
@@ -968,17 +1004,23 @@ sync**; `billing.ts` retains only
 
 Key checkout parameters:
 
-- `trial_period_days: 7` — **conditional**, not unconditional: set only when `trialEligible(rows.length)`
-  (`lib/trialMilestone.ts`) is true, i.e. the member has never held a subscription row. See "One live subscription, one
-  trial" below.
+- `trial_period_days: trialDaysFor(user)` — **conditional**, not unconditional: set only when
+  `trialEligible(rows.length)` (`lib/trialMilestone.ts`) is true, i.e. the member has never held a subscription row. See
+  "One live subscription, one trial" below. The length is `TRIAL_PERIOD_DAYS` (**7**) normally and
+  `INVITED_TRIAL_PERIOD_DAYS` (**14**) when `users.referredByCode` is set (**R19**); both constants and `trialDaysFor`
+  live in `lib/trialMilestone.ts` — the hard-coded `TRIAL_PERIOD_DAYS` that used to sit in `billingNode.ts` is gone, so
+  backend and UI read one source. **The R01 repeat-trial rule still wins:** a member who has already held a subscription
+  gets no trial at all, referral or not — a referral lengthens a trial, it never re-grants one.
 - `payment_method_collection: 'always'` — card required even during the trial (no free-ride signups).
 - `allow_promotion_codes: true` — enables Henriko's manual free-month promotion-code campaign on Stripe hosted checkout.
   No coupons are created or auto-applied in code.
 - `locale: stripeCheckoutLocale(billingLocale)` (`lib/checkoutCopy.ts`) — the hosted page renders in the member's own
   language. Stripe's codes are not ours: our `pt` maps onto Stripe's `pt-BR`.
-- `custom_text.submit.message: checkoutSubmitMessage(billingLocale, { trial })` — the early-charge rule, stated under
-  the pay button, **before** the card. Two deterministic variants (trial / no trial) × three languages, pure and
-  unit-tested. Never "may end early" — the rule is a fact, not a hedge — and Stripe caps the field at 1200 characters.
+- `custom_text.submit.message: checkoutSubmitMessage(billingLocale, { trial, days })` — the early-charge rule, stated
+  under the pay button, **before** the card. Two deterministic variants (trial / no trial) × three languages, pure and
+  unit-tested. `days` is the trial length actually granted, so an invited member reads "after 14 days" on the same
+  screen where they are about to enter a card. Never "may end early" — the rule is a fact, not a hedge — and Stripe caps
+  the field at 1200 characters.
 
 #### One live subscription, one trial
 
@@ -996,6 +1038,14 @@ Two pure guards run before the session is created, both reading `internal.billin
   `undefined` for a non-trial subscription: a marker that erases itself would hand a returning member a second free
   trial. A returning subscriber is billed on day one and is told so in `custom_text` before entering the card, never
   discovered on the statement.
+- **The same answer reaches the client, from the server (`getMe.trialEligible`).** The UI must never re-derive
+  eligibility from `users.subscriptionStatus`: that field is not the rule. `canceled` is only the _common_ ineligible
+  state — `toSubscriptionStatus` (`stripe.ts`) maps Stripe's `incomplete`, `incomplete_expired` and `paused` to **
+  `'none'`** with the `subscriptions` row already inserted, and `admin.setUserSubscriptionStatus` can patch a member
+  with rows back to `'none'` too. Both are ineligible while reading as a brand-new member. `getMe` therefore returns
+  the row-count answer itself, and **every** trial promise in the app renders behind it: `BillingPage`'s pre-card block
+  and, since 2026‑09‑07, the three **card-gate** surfaces, which are gated on exactly the statuses (`'none'` /
+  `past_due`) where this trap lives — `useCardGate().canTrial` (§14).
 
 **Language.** `createCheckoutSession` takes an optional `locale` argument (the app passes `i18n.language`) and persists
 the resolved value to `users.language` through `internal.users.setLanguage`. The member's UI language otherwise lives
@@ -1010,18 +1060,24 @@ sequenceDiagram
     participant DB as Convex DB
     participant SC as Stripe component
     participant S as Stripe Checkout
+    A ->> A: captureEvent('checkout_started', { plan, interval })
     A ->> B: createCheckoutSession(priceId, sessionToken, locale)
     B ->> B: validate priceId ∈ ALLOWED_PRICE_IDS
     B ->> B: requireAuthAction(sessionToken)
     B ->> DB: internal.billing.listUserSubscriptions(userId)
     B -->> A: findLiveSubscription? → ConvexError ALREADY_SUBSCRIBED (client opens the portal)
-    B ->> B: trial = trialEligible(rows.length); billingLocale = resolveBillingLocale(...)
+    B ->> B: trial = trialEligible(rows.length); days = trialDaysFor(user); billingLocale = resolveBillingLocale(...)
     B ->> SC: getOrCreateCustomer(userId, email, name)
-B ->> S: checkout.sessions.create(trial? 7d, card-required, promo-codes, locale, custom_text)
+B ->> S: checkout.sessions.create(trial? days, card-required, promo-codes, locale, custom_text)
 B ->> DB: setStripeCustomerId (if unset) + users.setLanguage (if changed)
 B -->> A: { url }
 A ->> S: window.location = url
 ```
+
+**`checkout_started` (R18).** `BillingPage.handleUpgrade` fires `captureEvent('checkout_started', { plan, interval })`
+immediately before `createCheckoutSession`, so the survival panel's funnel can separate a member who never reached the
+card from one who reached it and bounced. It fires only on the checkout branch — a card holder clicking a plan is routed
+to the Customer Portal and fires nothing. See [§17](#17-security-posture).
 
 `createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an existing
 `stripeCustomerId`).
@@ -1089,14 +1145,16 @@ Two trial-end paths exist, and they must never both warn about the same event:
 - **50 interactions** — `endTrialEarly` sets `trial_end: 'now'`, so Stripe emits **no** `trial_will_end`. Ours is the
   only warning, and it fires earlier, at **40 of 50** (`TRIAL_WARNING_THRESHOLD`, 80% of the threshold), scheduled from
   `bumpTrialInteraction` through the same `crossesThreshold` helper — so it fires exactly once per member.
-- **7 elapsed days** — Stripe emits `customer.subscription.trial_will_end` three days ahead; `http.ts` schedules
+- **The elapsed-days side** (7 days, or 14 for an invited member — **R19**, see "Checkout (subscribe) flow") — Stripe
+  emits `customer.subscription.trial_will_end` three days ahead; `http.ts` schedules
   `internal.notifications.sendTrialEnding`. Stripe's own built-in trial-ending email stays **OFF** in the Dashboard (see
-  "Stripe Dashboard setup" below), so exactly one warning reaches the member.
+  "Stripe Dashboard setup" below), so exactly one warning reaches the member. Nothing here reads the trial **length**:
+  the warning is driven by Stripe's own event and by the stored `trial_end`, so a 14-day trial needs no extra branch.
 
 | Event                              | Channel                                         | Sender                                                |
 |------------------------------------|-------------------------------------------------|-------------------------------------------------------|
 | 40 of 50 combined interactions     | Email + emphasised in-app banner on `/billing`  | Ours — `internal.notifications.sendTrialNearEnd`      |
-| 3 days before the 7-day trial ends | Email                                           | Ours — `internal.notifications.sendTrialEnding`       |
+| 3 days before the trial's last day | Email                                           | Ours — `internal.notifications.sendTrialEnding`       |
 | Trial converted: trialing → active | Email                                           | Ours — `internal.notifications.sendTrialConverted`    |
 | First successful charge            | Email receipt                                   | **Stripe** (Dashboard setting, kept ON)               |
 | Duplicate subscription voided      | Email + dismissible in-app notice on `/billing` | Ours — `internal.notifications.sendDuplicateCanceled` |
@@ -1115,8 +1173,9 @@ timing, accepted for launch (2026‑09‑07):** the trigger is `trialing → act
 trial that converts via `past_due → active` (first charge failed, retry succeeded) gets no email. Revisit after launch —
 a first‑paid‑invoice trigger (`invoice.paid`) or a row flag for the first `active` after a `trialing`.
 
-`convex/notifications.ts` is I/O only. Every string comes from the pure `lib/billingEmails.ts` — four builders
-(`trialNearEndEmail`, `trialEndingEmail`, `trialConvertedEmail`, `duplicateSubscriptionCanceledEmail`) plus
+`convex/notifications.ts` is I/O only. Every string comes from the pure `lib/billingEmails.ts` — five builders
+(`trialNearEndEmail`, `trialEndingEmail`, `trialConvertedEmail`, `duplicateSubscriptionCanceledEmail` and
+`postCapReachedEmail`, the last one **not** a trial notice — see "Post-cap email (R20)" below) plus
 `formatPriceLabel`, the `INTL_TAG` map and `planName(locale, tier)` — and every branch from `lib/trialMilestone.ts`, so
 the copy and the rules are unit-tested without a database. **Plan names are localized:** `planName` mirrors
 `billing.plans.*.name` in the app
@@ -1145,8 +1204,97 @@ fails loudly; there is no retry loop, because the in-app banner is the durable c
 
 **Erasure resets the trial.** A member who deletes their account ([§13B](#13b-privacy--compliance)) and signs in again
 is a **new** `users` row with a new Stripe customer and no `subscriptions` rows, so `trialEligible` grants a fresh
-7-day trial. This is accepted deliberately: the alternative — retaining an identifier of an erased person purely to deny
+trial (7 days, or 14 if they sign up again through an invite link). This is accepted deliberately: the alternative —
+retaining an identifier of an erased person purely to deny
 them a future trial — would sit badly against the erasure right the same section implements.
+
+### Post-cap email (R20)
+
+When a post reaches its author's plan cap it leaves the feed (`interactionLimitReached` → `inFeed: false`). Before R20
+that was silent unless the author happened to open My Posts; now they get **one email, once per post**, in their own
+language. It is a **state notice, not a broadcast**: the event already happened, and the closing line is the single
+thing the author's tier can actually do about it.
+
+```mermaid
+flowchart TD
+    T["reactToPost / recordComment"] --> INC["incrementLikeCount<br/>incrementCommentCount"]
+    INC --> CAP{"flipCapIfReached:<br/>shouldFlipInteractionLimit(likes, comments, cap)"}
+    CAP -->|" not yet "| STOP["nothing"]
+    CAP -->|" reached "| FLIP["patch interactionLimitReached + computeFeedFields<br/>(post leaves the feed)"]
+    FLIP --> SCHED["scheduler.runAfter(0, internal.notifications.sendPostCapReached)"]
+    SCHED --> RR["re-read: interactions.getPost · billing.getBillingContext · lib.planLimits.getPlanLimits"]
+    RR --> G1{"post still capped<br/>and not soft-deleted?"}
+    G1 -->|" no "| DROP["silent"]
+    G1 -->|" yes "| G2{"shouldSendCapNotice:<br/>email + trialing/active + no scheduled cancel"}
+    G2 -->|" no "| DROP
+    G2 -->|" yes "| MODE{"capNoticeMode(tier, cap, nextCap)"}
+    MODE -->|" upgrade "| UP["one link: /billing?plan=next&interval=…&src=cap_email"]
+    MODE -->|" proContact "| SUP["My Posts link + SUPPORT_EMAIL address"]
+    MODE -->|" contactCustom "| SUP
+    UP --> DEL["deliver('post_cap_reached', …)"]
+    SUP --> DEL
+```
+
+**The subject reports the post's own total, the body reports the plan's cap.** `postCapReachedEmail` takes both
+`total` (the post's `likeCount + commentCount`, passed by `sendPostCapReached`) and `cap`. At the flip the two usually
+agree, but after a **Growth → Starter downgrade** a post already sitting at 41 flips against a cap of 25 — so the
+subject ("your post reached **41** interactions and left the feed") uses the total, and only the body sentence that is
+genuinely about the plan quotes the cap ("it reached the Starter cap of **25** interactions").
+
+**The upgrade line promises the author's *next* posts, never this one coming back.** Nothing ever un-flips
+`interactionLimitReached`: no writer sets it `false`, `computeFeedFields` (`lib/feedRank.ts`) preserves it through the
+tier restamp, and `syncPosts.applyEngagementCounts` is one-way. A capped post therefore stays out of the feed even
+after the author upgrades, so the line reads *"On {nextPlan}, your next posts collect up to {nextCap} each:"* (and the
+pt-BR / es equivalents) rather than anything suggesting the post keeps collecting. It is still the email's one
+actionable line and still the only link. A locale-wide unit test bans the old "keeps collecting" / "continua recebendo"
+/ "sigue recibiendo" phrasings, because that promise sits directly in front of a charge.
+
+**One flip, one email.** Both `incrementLikeCount` and `incrementCommentCount` now call a single helper,
+`flipCapIfReached` (`convex/interactions.ts`), instead of duplicating the cap check. It patches
+`interactionLimitReached` together with the recomputed `computeFeedFields`, then schedules
+`internal.notifications.sendPostCapReached({ postId })` at 0 ms. Because both callers return early when the post is
+**already** capped, the flip happens exactly once in the post's life — so the schedule, and therefore the email, cannot
+repeat. There is no dedupe flag on the post: the flip *is* the dedupe.
+
+**Everything that could make the email wrong is re-checked at send time.** The action re-reads the post
+(`internal.interactions.getPost`), the author's billing context (`internal.billing.getBillingContext`) and the effective
+limits (`internal.lib.planLimits.getPlanLimits`, for the author's tier and for `nextTier(tier)`), and drops silently
+when the post is gone, no longer capped, or soft-deleted. `shouldSendCapNotice` (`lib/postCapNotice.ts`) then requires
+an address on file **and** a `trialing`/`active` status **and** no `cancelAtPeriodEnd` on the live subscription row
+(`findLiveSubscription`). `none`, `past_due` and `canceled` members see the card-gate or expired banners in the app
+instead, and a member who has already scheduled a cancel gets nothing — mailing them would read as a retention push,
+which R20 forbids.
+
+**`capNoticeMode(tier, cap, nextCap)`** picks the closing line — one pure function rather than the two the spec
+imagined:
+
+| Mode            | When                                                                 | Closing line                                                                   |
+|-----------------|----------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| `upgrade`       | Starter/Growth **and** the next tier's cap is genuinely higher       | Checkout link: `/billing?plan=<next>&interval=<annual\|monthly>&src=cap_email` |
+| `proContact`    | Pro, **or** `nextCap` is missing or not greater than the current cap | `SUPPORT_EMAIL`, plain text — "need a higher cap? write to …"                  |
+| `contactCustom` | The `contact` tier, whose cap is bespoke                             | The same address, saying the cap is custom                                     |
+
+The `nextCap <= cap` fallback matters: plan limits are admin-editable ([§9](#9-plan-limits-system)), so a
+misconfiguration that makes the next tier no better must not produce an email selling it. `interval` comes from the live
+subscription's stored `priceInterval` through `billingIntervalParam` (Stripe's `year` → `annual`, everything else →
+`monthly`), so the link lands on the interval the member is already paying.
+
+**Exactly one link per email.** In `upgrade` mode the checkout link is the only one and the "it stays on My Posts" line
+is dropped; in the other two modes the My Posts link is the only link and the support address closes as **plain text,
+not a `mailto:`**. `postCapReachedEmail(locale, args)` in `lib/billingEmails.ts` builds the subject (which quotes the
+post's **own**
+interaction total, never the plan's cap — a downgrade can leave the cap below it) and the body in en/pt/es, quotes the
+post's `excerpt(post.content)` (`lib/recap`) so the author knows which post
+it is, and is enumerated in the existing "billing emails stay transactional" guard test alongside the trial mailers.
+`SUPPORT_EMAIL` moved to **`convex/lib/support.ts`**, and `app/src/lib/support.ts` is now a re-export of it, so the
+email, the banned screen and the upgrade-at-limit mailto cannot drift apart.
+
+Delivery uses the same `deliver()` seam as the trial mailers, so an unconfigured mailer logs
+`console.error('[billing] notification skipped — email not configured', …)` rather than failing quietly.
+
+**The billing page knows where the click came from.** The deep link carries `src=cap_email`, and `BillingPage` fires
+`cap_email_billing_opened { plan }` once per landing (ref-latched against StrictMode's double effect) —
+see [§17](#17-security-posture).
 
 ### Webhook‑driven subscription sync
 
@@ -1486,6 +1634,11 @@ the four moments a member can actually hit a cap (weekly post cap, featured cap,
 budget, and the Pro/Contact‑gated visibility setting) — see [§14](#14-frontend--authenticated-app-app) for the
 component and its placements, and [§11](#11-feed--engagement) for the interaction‑cap moment specifically.
 
+**Two doors, one checkout (R20).** The post-cap email ([§8](#8-subscriptions--billing)) deep-links to the same
+`/billing?plan=<next>` surface, tagged `src=cap_email`, and it picks its next tier with the same `nextTier` ladder and
+the same "only if the next cap is actually higher" rule. The in-app `UpgradeAtLimit` and the email are therefore two
+doors onto one checkout, not two upgrade paths that can disagree.
+
 ---
 
 ## 10. Posts & Content Pipeline
@@ -1799,9 +1952,32 @@ flowchart TD
     F2 --> F3["viewer industry filter (growth/pro)"]
     F3 --> F4["viewer country filter (pro)"]
     F4 --> F5["drop posts whose author is pending deletion"]
-    F5 --> ENR["enrich page with author (strip tokens)"]
+    F5 --> F6["R21: drop posts where viewerPostStatus(state, now) === 'gone'<br/>(hidden, or interacted &gt; 24 h ago)"]
+    F6 --> ENR["enrich page with author (strip tokens) + viewerState"]
     ENR --> RET["return { ...result, page: enriched } — cursor preserved"]
 ```
+
+**Per-viewer hygiene (R21).** Before enriching, `fetchFeedPage` reads the viewer's own `userPostState` row for each item
+on the page — one `by_user_and_post` `.unique()` point read per item, so at most `numItems` extra indexed reads per
+page — and then:
+
+- **drops** every post whose `viewerPostStatus(state, now)` is `'gone'`: hidden through "Hide now", or last interacted
+  with more than `INTERACTED_TTL_MS` (**24 h**) ago;
+- **attaches** `viewerState: { reacted, commented, hidesAt } | null` (`toFeedViewerState`) to each surviving item, which
+  is what the card's done footer renders.
+
+Everything else is untouched: sort order, `inFeed`, the like/comment counts, the interaction cap, `search`, the refresh
+cron and the author's own My Posts all behave exactly as before. This is **presentation for one viewer**, never a global
+state — the author still sees their post, and so does everyone who has not handled it.
+
+`now` is the query's own `Date.now()` (the same convention `getFeed` and `getRecap` already use), so a tab left open
+past the 24-hour mark keeps showing the card until the query re-runs. That is deliberate: a card that vanishes under the
+reader's cursor is worse than one that lingers a few minutes.
+
+Because this filter can empty a whole page while the index walk still reports `CanLoadMore`, the client contract
+changed: `FeedPage` keeps calling `loadMore` while the page is empty and the status is `CanLoadMore` (bounded — see
+"24-hour feed hygiene" below). An auto-load keyed on the last rendered item would never fire, because an all-filtered
+page renders no items to scroll to.
 
 > `getFeed` walks the `by_feed_rank` index with `.paginate()`: `inFeed === true` pre-encodes the
 > hidden / interaction-limit / soft-delete filters, and descending `feedRank` (featured → author
@@ -1891,18 +2067,23 @@ import and re‑evaluated on the Apify refresh, and blocks an already‑over‑c
 `interactionsPerPost`
 bullet under [§9](#9-plan-limits-system).
 
-**Author‑facing post‑cap state (R08).** `interactionLimitReached` is silent on the viewer side (the post just stops
-appearing in the feed) but is surfaced to its **author** in My Posts: a spent‑budget post gets a `Badge
+**Author‑facing post‑cap state (R08 + R20).** `interactionLimitReached` is silent on the viewer side (the post just
+stops appearing in the feed) but is surfaced to its **author** in My Posts: a spent‑budget post gets a `Badge
 variant="warning"` reading `myPosts.interactionCapBadge` ("Reached {{limit}} interactions and left the feed") plus the
-shared `UpgradeAtLimit limit="interactionCap"` naming the next tier's higher cap. This is a **passive, in‑page** state
-only — deliberately no toast and no notice surfaced on the next feed visit, so a member who never revisits My Posts is
-never interrupted elsewhere. See [§14](#14-frontend--authenticated-app-app) (`MyPostsPage`) for the full placement and
+shared `UpgradeAtLimit limit="interactionCap"` naming the next tier's higher cap. **In-app that is still the whole
+story** — deliberately no toast and no notice surfaced on the next feed visit, so a member who never revisits My Posts
+is never interrupted elsewhere. What **R20** added is out of band: the author gets **one email at the moment of the
+flip** (`interactions.flipCapIfReached` → `notifications.sendPostCapReached`), because a post leaving the feed is a
+thing that happened to their account, not an in-page state they can be expected to go looking for. See
+[§8 "Post-cap email (R20)"](#post-cap-email-r20) for the send rules and the copy,
+[§14](#14-frontend--authenticated-app-app) (`MyPostsPage`) for the in-app placement, and
 [§9](#9-plan-limits-system) for `UpgradeAtLimit` itself.
 
 | Action                                             | Validation                                                                 | Rate limit | Effect (no LinkedIn call)                |
 |----------------------------------------------------|----------------------------------------------------------------------------|------------|------------------------------------------|
 | `commentOnPost(postId, commentText, sessionToken)` | text ≤ 3000 chars                                                          | 20/hour    | count + `userInteractions` row (one txn) |
 | `reactToPost(postId, reactionType, sessionToken)`  | `reactionType ∈ {LIKE,PRAISE,EMPATHY,INTEREST,APPRECIATION,ENTERTAINMENT}` | 30/hour    | same, deduped — repeat tap is a no-op    |
+| `hidePost(postId, sessionToken)`                   | `canHide` — the viewer must have reacted/commented                         | –          | **R21** — stamps `hiddenAt`; idempotent  |
 
 > The feed's reaction control is a **single button** that *displays* the AI‑suggested reaction
 > (`posts.suggestedReaction`, default `LIKE`) + count as a visual cue (reaction name in its tooltip)
@@ -1928,6 +2109,59 @@ sequenceDiagram
     I -->> A: { success: true } (reactive feed updates everywhere)
     Note over A, LI: user performs the real reaction/comment on LinkedIn
 ```
+
+### 24-hour feed hygiene (R21)
+
+A post the viewer has already handled is done work. It stays on screen for **24 hours** as a "done" card — so the tap
+has a visible result, and so a mis-tap is still recoverable in context — and then leaves *that viewer's* feed.
+"Hide now" makes it leave immediately. All of it is per-viewer: nothing about the post, its counts, its cap or the
+author's view of it changes.
+
+```mermaid
+flowchart TD
+    TAP["viewer taps React or Comment"] --> ST["userPostState: reactedAt / commentedAt<br/>(commentedAt is written inside incrementCommentCount,<br/>same transaction as the userInteractions row)"]
+    ST --> DONE["done footer: ✓ Reacted / Commented / Reacted · commented<br/>+ the remaining action + View on LinkedIn<br/>+ 'Leaves your feed in N h' + Hide now"]
+    DONE --> W{"viewerPostStatus(state, now)"}
+    W -->|" &lt; 24 h "| DONE
+    W -->|" ≥ 24 h "| GONE["'gone' — the next feed query drops it"]
+    DONE -->|" Hide now "| HIDE["interactions.hidePost → hiddenAt<br/>(ConvexError NOT_INTERACTED unless canHide)"]
+    HIDE --> GONE
+    GONE --> EMPTY{"page empty after ≤ 5 auto-loads?"}
+    EMPTY -->|" no "| FEED["normal feed"]
+    EMPTY -->|" yes "| CU{"feed.getCaughtUp"}
+    CU -->|" caughtUp "| CAUGHT["caught-up state (+ invite link)"]
+    CU -->|" not "| R05["R05 EmptyFeed checklist"]
+```
+
+**The stamps.** `reactedAt` was already there (it is the reaction dedupe). R21 adds `commentedAt`, written by
+`incrementCommentCount` **in the same transaction as the log row**, so the moment the viewer tapped Comment is recorded
+exactly once and cannot drift from the interaction log. `lastInteractedAt(row)` takes the later of the two — carefully,
+without a `?? 0` sentinel, which `Math.max` would otherwise floor at zero and swallow the missing side.
+
+**The three states** come from one pure module, `convex/lib/feedHygiene.ts`:
+
+- `viewerPostStatus(row, now)` → `'fresh'` (no row, or a row with neither stamp — the normal card), `'done'`
+  (interacted, inside `INTERACTED_TTL_MS` = 24 h), `'gone'` (hidden, or the window elapsed).
+- `canHide(row)` — Hide exists **only** on a post the viewer interacted with. It is not a way to curate untouched posts,
+  so `interactions.hidePost` throws `ConvexError('NOT_INTERACTED')` otherwise. Hiding is idempotent (a second call
+  changes nothing) and there is **no unhide** — `/history` keeps the record either way.
+- `toFeedViewerState(row)` — the `{ reacted, commented, hidesAt }` the card renders. It deliberately takes **no `now`**:
+  `hidesAt` is an absolute instant (`lastInteractedAt + INTERACTED_TTL_MS`), and the client turns it into "in N h".
+
+The card's remaining action stays live: a viewer who reacted still sees the Comment button, and vice versa. Hiding is
+reactive — Convex removes the card without a reload.
+
+**`feed.getCaughtUp({ sessionToken })` → `{ caughtUp }`** answers the question an empty page cannot: *did I clear the
+feed, or is there nothing here?* It is `true` when the viewer's newest `userInteractions` row (`by_user`, descending,
+`.first()`) is younger than 24 h — older interactions have already left the feed and prove nothing about today. A banned
+viewer is always `false`, because `getFeed` hands them an empty page regardless and "caught up" would be a lie about a
+feed they are not being shown. `FeedPage` subscribes to it **only** while the feed is empty, after auto-loading up to
+`MAX_EMPTY_LOADS` (**5**) further pages that also came back empty — a budget per *run* of empty pages, reset whenever a
+page comes back with posts. Empty because everything was handled → the caught-up state (which carries the R19 invite
+link); empty because nothing exists → the R05 `EmptyFeed` checklist.
+
+`post_hidden { after }` — hours between the interaction and the tap on Hide now — is the only event R21 emits; see
+[§17](#17-security-posture).
 
 ### Reading the log back — recap & history (R15 / R16)
 
@@ -2178,31 +2412,93 @@ code writes it. Every admin function calls `assertAdmin(user)` after
 
 ### Admin functions (`convex/admin.ts`)
 
-| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                             |
-|--------------------------------------------------------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                               |
-| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                                          |
-| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                                         |
-| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                           |
-| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                                 |
-| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                               |
-| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                         |
-| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                             |
-| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                    |
-| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                             |
-| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                            |
-| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                                                                 |
-| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                                  |
-| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                                    |
-| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Self‑heals (backlog/B27): inserts the row from `buildTierDefaultRow` first if the tier was never seeded, instead of throwing. Backend‑only (no UI). |
-| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                                         |
-| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                                 |
-| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                                         |
-| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                               |
-| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                            |
+| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                              |
+|--------------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                                |
+| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                                           |
+| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                                          |
+| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                            |
+| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                                  |
+| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule a post sync for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                                |
+| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                          |
+| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                              |
+| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                     |
+| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                              |
+| `survivalMetrics(days: 7\|28)`                                           | query    | **R18** — the Survival panel's only data source: `{ days, since, generatedAt, cohort, payingByTier }`, from the database alone. No PostHog, no new table, no snapshot cron. Cohort maths lives in `lib/survival.ts`. |
+| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                             |
+| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                                                                  |
+| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                                   |
+| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                                     |
+| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Self‑heals (backlog/B27): inserts the row from `buildTierDefaultRow` first if the tier was never seeded, instead of throwing. Backend‑only (no UI).  |
+| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                                          |
+| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                                  |
+| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                                          |
+| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                                |
+| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                             |
 
 `validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`. `effectiveContactLimits`
 (pure, unit‑tested) resolves a contact user's display limits as `override ?? contact default ?? hardcoded`.
+
+### Survival panel (R18)
+
+`admin.survivalMetrics({ sessionToken, days: 7 | 28 })` answers one question — *who survives the first week* — and
+answers it **from the database only**. Every number is one an admin could re-derive by hand from `users`,
+`subscriptions` and `userInteractions`; nothing is read from PostHog, and no survival event is emitted anywhere. There
+is **no new table and no snapshot cron**: the panel is a live query and tolerates being a few minutes stale.
+
+**Read budget.** `users` is walked once — `.order('desc').take(1000)`, the same newest-1000 slice `listUsers` reads —
+and filtered in memory to `createdAt >= since`. Since the list is newest-first, a 7- or 28-day cohort is always inside
+that window. Then, **per cohort member, four indexed reads**: the `subscriptions` rows (`by_user`, `.order('desc')`,
+`.take(5)`), the member's *oldest* `userInteractions` row (`by_user`, `.first()` — `by_user` is ordered by
+`_creationTime`, so `.first()` is the earliest), and one range read for each return window. Those ranges need **no new
+index**: they bound the `_creationTime` tail Convex appends to `userInteractions.by_user`, and `createdAt` and
+`_creationTime` are written in the same mutation. A `ponytail:` comment in `admin.ts` marks the ceiling — precompute
+nightly if a 28-day cohort ever passes ~1500 members.
+
+**Cohort definitions**, exactly as `summarizeCohort` (`convex/lib/survival.ts`) implements them:
+
+| Metric                            | Definition                                                                                                        |
+|-----------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `signups`                         | Members whose `createdAt` falls inside the window.                                                                |
+| `startedTrial`                    | The member has **any** `subscriptions` row.                                                                       |
+| `activated`                       | Their first interaction is less than **24 h** after `createdAt` (`ACTIVATION_WINDOW_MS`).                         |
+| `medianMinutesToFirstInteraction` | Whole minutes, over the members who have a first interaction at all; `null` when nobody does.                     |
+| `returnedDay1`                    | Any interaction in the half-open window `[createdAt + 24 h, createdAt + 48 h)`.                                   |
+| `returnedDays2to7`                | Any interaction in `[createdAt + 24 h, createdAt + 8 d)` — it **contains** day 1, it is not disjoint from it.     |
+| `trialsEnded`                     | Started a trial **and** `subscriptionStatus` is `active`, `canceled` or `past_due` (i.e. it left `trialing`).     |
+| `converted`                       | Started a trial **and** `subscriptionStatus` is `active`.                                                         |
+| `canceled`                        | `subscriptionStatus === 'canceled'`, **or** the live subscription row has `cancelAtPeriodEnd` — over all signups. |
+
+Because `returnedDays2to7` contains day 1, the panel labels it **"Returned days 1–7"** — the window is the useful
+signal (*did they come back at all after the first day*), and renaming the field would silently break comparability
+with numbers already read, so only the label changed.
+
+**Eligible denominators — why `summarizeCohort` takes a `now`.** Alongside the counts, the summary returns
+`activatedEligible` (rows with `createdAt + ACTIVATION_WINDOW_MS <= now`), `returnedDay1Eligible` (`createdAt + 48 h <=
+now`) and `returnedDays2to7Eligible` (`createdAt + 8 d <= now`) — the rows whose window has actually **closed**. The UI
+divides each count by its own eligible base, never by `signups`. Dividing by `signups` right-censors the metric: it
+counts every member still *inside* a window as a miss, so in a 7-day cohort — where nobody is 8 days old — "returned"
+would read **0 %** however those members behaved, and a cohort that all signed up yesterday would report 0 % across the
+board. Each windowed **count** is taken over the same closed rows as its base, so a share can never pass 100 %: a member
+who signed up an hour ago and already tapped has activated in fact, but they join the count and the base together the
+moment their 24 h window closes, never the count alone (which would print "3 of 1 · 300%"). `signups`, `startedTrial`,
+`trialsEnded`, `converted` and `canceled` need no such base, because nothing about them is pending. When a base is `0`,
+`share()` renders **"–"**,
+never "0 %" — "not enough data yet" and "nobody did it" are opposite answers, and this panel exists to tell the founder
+whether anyone reaches value at all.
+
+**Why the trial metrics are keyed on the subscription row, not on a date.** `stripe.syncUserSubscription` erases
+`users.trialEndsAt` once a subscription becomes active — a marker that deletes itself the moment it would prove a
+conversion. A date-based definition of "trial ended" or "converted" could therefore never count a single conversion, so
+the panel reads the **subscription row's status** instead. This is the same reasoning that makes `trialEligible` count
+rows rather than read `trialEndsAt` ([§8](#8-subscriptions--billing)).
+
+`payingByTier` is deliberately **not** cohort-scoped: it counts `subscriptionStatus === 'active'` members per tier
+across the whole newest-1000 window, so the panel shows the current book of business next to the window's funnel. A
+paying member with no `tier` counts as `starter`, the app's default. Its heading says **"newest 1000 members"** rather
+than "all members", because the `.take(1000)` slice is exactly what it is computed over.
+
+The UI is `SurvivalTab` — see [§14](#14-frontend--authenticated-app-app).
 
 ### Manual Apify sync triggers
 
@@ -2487,6 +2783,30 @@ flowchart TD
   personal data: **none beyond what already exists** — `users.language` records a UI-language choice so the notice is
   written in the member's own language, and the price snapshot on `subscriptions` is contract data returned by Stripe.
   Delivery is not written to `auditLogs`; a skipped send (email not configured) is logged as a backend error instead.
+- **Post-cap notice (R20).** A fourth transactional notice joins the three above: one email per post when it reaches the
+  plan's interaction cap and leaves the feed (see [§8](#8-subscriptions--billing)). Same legal basis — **performance of
+  a contract**, a factual notice about the member's own account, not marketing — same `billingEmails.ts` module, same
+  transactional-copy guard test, and likewise not gated on the `marketing` consent purpose. **New personal data: none.**
+  It reads `users.email`, the member's own post and their own plan limits; nothing new is stored, and the recipient's
+  address never leaves the existing Resend path.
+- **New personal-data fields (R19 / R21).** Four optional fields were added, all covered by the **existing** row-level
+  DSR export and erasure cascade with **no new code path** (they live on `users` and `userPostState`, both already
+  gathered table-by-table and both already cascaded — the privacy tests stay green as written):
+    - `users.inviteCode` — an opaque 8-character code the member generates for themselves. It identifies a link, not a
+      person, and it is only ever shown to the member who owns it.
+    - `users.referredByCode` — the code the member joined through. It is **another member's opaque code, not an
+      identifier of that person**: the inviter's *name* is never stored on the invitee's row. `getMe` resolves the
+      inviter's **first name only**, at render time, for the one-line gift notice on Billing.
+    - `userPostState.commentedAt` / `hiddenAt` — per-viewer engagement timestamps of exactly the same kind as the
+      `reactedAt` already in that table, used only for the 24-hour feed-hygiene window ([§11](#11-feed--engagement)).
+- **The landing stores the invite code in `sessionStorage['ref']`** for the life of the tab (`RefCarrier`, see
+  [§15](#15-frontend--landing-site-landing)), so a language switch — which drops the query string — does not lose it.
+  This is **functional storage, not tracking**: one self-supplied code, no identifier, no cross-site read, cleared when
+  the tab closes. **No change to the cookie banner or the consent model.**
+- **Terms §5 trial clause updated (R19).** The free-trial paragraph now reads "7-day free trial (14 days when you join
+  through a member's invite link)" and ends the term at "or when the trial period ends, whichever comes first", in
+  en/pt/es. Like the rest of the legal pages these remain **drafts pending legal review** (see
+  [§15](#15-frontend--landing-site-landing)).
 - **Apify stays disabled at launch.** The LinkedIn scrape (post sync + profile enrichment) remains **off in production**
   (kill‑switches in `appSettings`; `APIFY_*` env vars unset). It is therefore **not** disclosed as a processing
   activity. **Hard gate:** the day Apify is switched on in production, the privacy‑policy disclosure, the legal basis,
@@ -2844,7 +3164,25 @@ sync with the compliance docs and live support inbox.
   (`useOwnPostState(gated || posts.length === 0)` — one `getMyPosts` subscription, enabled whenever the R04 banner or
   the R05 checklist could need it); any gated tap on a `PostCard`
   (`onGated`) opens a shared **`CardGateDialog`** naming the benefit instead of a disabled control — see
-  [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c) for the full R04 flow.
+  [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c) for the full R04 flow. **R21 (24-hour feed hygiene)** adds three things
+  here: each `PostCard` receives the server's `post.viewerState` and an `onHide` handler calling
+  `interactions.hidePost` (a `NOT_INTERACTED` error is swallowed — the viewer's row is already gone, so the card leaves
+  on the next update anyway — and any other error is toasted through `friendlyError`), and the tap fires
+  `post_hidden { after }` with the whole hours since the interaction; an **auto-load loop** keeps calling `loadMore`
+  while the page is empty and the status is `CanLoadMore`, bounded at `MAX_EMPTY_LOADS` (**5**, ≈100 posts) before the
+  manual **Load more** button takes over, because the per-viewer filter can empty a page the index walk still considers
+  full — the budget covers one *run* of empty pages, so any page that comes back with posts resets the counter to `0`,
+  otherwise a session that spent all five once would show the empty state beside a **Load more** button the next time
+  the feed legitimately empties (the viewer hides their last remaining cards) instead of settling into the caught-up
+  state; and an empty state renders **only when the status is `Exhausted`** — while pages can still load (the auto-load
+  chase, or its budget spent with the manual **Load more** showing) nothing renders above that button, so the checklist
+  never flashes between two empty pages and "You're caught up" never sits next to "Load more".
+  `feed.getCaughtUp` is subscribed to only while `posts.length === 0`, and its answer picks between the R21 caught-up
+  state and the R05 checklist inside `EmptyFeed`: a new `caughtUp?: boolean` prop returns early with
+  `feed.caughtUpTitle` / `feed.caughtUpBody` (`data-testid="caught-up"`) plus the **R19** `/settings#invite` link —
+  having nothing left to do is exactly when an invite ask is welcome — while the R05 checklist keeps its single
+  composer action and carries **no** invite link. The early return is guarded by `caughtUp && !gated`, so a gated
+  member keeps the card gate: an empty feed they cannot engage with is not "caught up".
 - **MyPostsPage** — `getMe` + `getWeeklyUsage` + `getFeaturedUsage` + `getTierLimits` + `getMyPosts` + `submitPost` +
   `setPostHidden` + `deletePost` + `featurePost` + `unfeaturePost`. Two usage pills next to the profile header — weekly
   ("N of M posts this week") and monthly featured ("N of M featured this month") — both fully localized via the
@@ -2888,8 +3226,15 @@ sync with the compliance docs and live support inbox.
       conditional ("Have Sales Navigator? Your SSI is still at" → `linkedin.com/sales/ssi`) because LinkedIn moved the
       SSI
       page behind Sales Navigator in August 2026 — and a link to `/history`.
-    - Fires `recap_viewed { window, nearCap }` once per **loaded window**, latched on a `useRef` holding the last
-      reported `recap.window` (StrictMode-safe, and a 7d↔30d toggle reports each side once).
+    - **The invite line (R19)**, last in the footer and **only when `recap.received.current.total > 0`**:
+      `recap.inviteLine` ("People are finding you. Invite a peer who needs that too: they start with a
+      {{days}}-day trial", `days` = the `INVITED_TRIAL_PERIOD_DAYS` constant) plus a link to **`/settings#invite`**,
+      where
+      the code actually lives. The condition is the point — the ask is made from
+      strength, in the one moment the member has just seen proof it works, and a member whose posts got nothing this
+      window is never asked to recruit.
+        - Fires `recap_viewed { window, nearCap }` once per **loaded window**, latched on a `useRef` holding the last
+          reported `recap.window` (StrictMode-safe, and a 7d↔30d toggle reports each side once).
 - **HistoryPage** (`/history`, R16) — every recorded interaction, newest first, via `usePaginatedQuery` on
   `interactions.listMyInteractions` with **20 per page** and a `feed.loadMore` button. The `WindowToggle` here offers
   **7d / 30d / all** (default 30d); `all` passes `since: 0` and the other two reuse `windowBounds` over the same
@@ -2915,7 +3260,22 @@ sync with the compliance docs and live support inbox.
   model). Starter/growth instead see the shared `UpgradeAtLimit limit="visibility"` (R08) naming the next tier. Below
   it, Pro/contact also see a mirror **"What you see in your feed"** card — same two chip pickers + Save, writing
   `feedFilterIndustries`/`feedFilterCountries` via
-  `setFeedFilter` (the same fields the Feed-page `FeedFilterPanel` writes, so the two stay in sync).
+  `setFeedFilter` (the same fields the Feed-page `FeedFilterPanel` writes, so the two stay in sync). Last on the page,
+  for **every** tier, the **Invite a peer** section (**R19**) at the stable anchor **`id="invite"`** — this is the one
+  place the invite link exists, and the recap footer and the caught-up feed state both deep-link to **
+  `/settings#invite`**, which a `useLocation()` effect scrolls into view (keyed on `hash` *and* `me`, because the
+  section does not exist until the page renders past its loading spinner). It reads `users.getInviteSummary` and, on the
+  **first visit only**, calls `users.getOrCreateInviteCode` to mint the code — guarded by a `useRef` so StrictMode's
+  double effect and a slow round-trip still mint once; an `INVITE_CODE_RETRY` failure clears the guard and shows the
+  error inline (`settings.inviteError`, localized) rather than leaving a dead button. The link is rendered read-only as
+  **`${LANDING_URL}/${lang}?ref=<code>`** (any trailing slash on `VITE_LANDING_URL` is stripped — this is the first
+  place that appends a path to it), selects itself on focus, and **Copy link** writes it to the clipboard, reads "Link
+  copied" for two seconds (one feedback, on the button the eye is already on — no toast), and fires **`invite_copied`**.
+  When there is no Clipboard API — LinkedIn's in-app webview, any non-secure context, or a
+  denied permission — it falls back to selecting the text and saying so (`settings.inviteCopyManual`); that fallback
+  fires **no event**. Underneath, the joined count: `settings.inviteNone`, the `_one`/`_other` plural, or
+  `settings.inviteJoinedMany` ("100+") once the query's bounded `.take(101)` is exceeded. No skeleton input renders
+  while the code mints — an empty box reads as broken, so the button carries the waiting state.
 - **BillingPage** — `getMe` + `getSubscriptionInfo` + `getTrialProgress` + `createCheckoutSession` +
   `createPortalSession` + `users.clearBillingNotice`. `getTrialProgress` returns
   `{ made, received, combined, threshold, reached, nearThreshold, status, trialEndsAt }` (see §8/§11).
@@ -2938,87 +3298,135 @@ sync with the compliance docs and live support inbox.
       member sees **one primary card** for that plan with a **"See all plans"** toggle that reveals the full grid; card
       holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead` when
       the plan came from the URL or the stash and `billing.newUserLead` otherwise, and every pre-card CTA follows the
-      same "Start 7-day {{plan}} trial" pattern. `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
+      same "Start {{days}}-day {{plan}} trial" pattern — **unless the member has no trial left**, see the next bullet.
+      `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
       a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle (annual
       default) and the Enterprise card stay visible in every layout.
-    - **Reused by `UpgradeAtLimit` (R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
-      [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
-      `/billing?plan=${nextTier}&interval=${chargedInterval}` — the same `?plan=`/`?interval=` deep link this page
-      already reads via `resolveTargetPlan`/the interval toggle above, so it needs no bespoke routing. It never
-      re‑derives `hasCard` itself: landing on this page with a card already on file still routes the click through
-      `handlePlanClick`'s existing portal‑switch branch (above), so a card holder always ends up in the Customer
-      Portal regardless of which cap sent them here.
-    - **Trial banner, tier-aware and exact.** `billing.trialBanner` interpolates the member's **real** plan name
-      (`billing.plans.<tier>.name`), the real threshold (`progress.threshold`, falling back to
-      `TRIAL_INTERACTION_THRESHOLD` while the query loads) and the trial's end **date** (`me.trialEndsAt`, localized via
-      `i18n.language`; `billing.trialBannerNoDate` when the row has no date) — "your {{plan}} plan starts at
-      {{threshold}} interactions or on {{date}}", the same promise `shell.trialGoal` and `feed.cardGateCost` make, never
-      a typed "50" or a relative "after 7 days" that is stale from day two. It sits above the X/50 progress meter. The
-      banner's SSI link‑out (`billing.ssiLink`) was removed 2026‑09‑06, and the sidebar's SSI link‑out followed on
-      2026‑09‑07: the whole app now holds **exactly one** SSI link, the qualified Sales Navigator line in the recap
-      footer (`recap.salesNav`, R15). From 40 of 50 (`progress.nearThreshold`,
-      §8) it swaps to `billing.nearThresholdBanner` —
-      "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour token
-      in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
+    - **How long the trial is, everywhere on the page (R19).** `const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS` —
+      the server's own answer (`getMe` → `toSafeMe.trialDays`, itself `trialDaysFor(user)`, §8), with the 7-day
+      constant only as the pre-load fallback. Every trial string on the page interpolates it as `{{days}}`
+      (`billing.chosenPlanLead`, `billing.newUserTrialNote`, `billing.startTrialCta`, `billing.trialBanner` /
+      `billing.trialBannerNoDate`), so an invited member is quoted **14** from the first paint and no copy anywhere
+      hard-codes a trial length. Directly under the pre-card lead, an invited member also gets the gift line
+      `billing.giftFrom` — "{{name}} invited you, so your trial runs {{days}} days instead of {{base}}" — rendered only
+      when `me.inviterName` is set (`getMe` resolves the inviter's **first name only** through
+      `by_invite_code`, §7), only inside the `!hasCard` block, **and** only while `canTrial` (below): it is a statement
+      of fact about the offer, so it disappears the moment there is a card, and it never claims the trial has started.
+    - **No trial left ⇒ no trial promise (`canTrial`).** `const canTrial = me?.trialEligible !== false` — the server's
+      own row-count answer (§8), never a status guess. `!hasCard` is `trialing || active || past_due` inverted, so it
+      covers a **canceled** member re-subscribing _and_ a member whose Stripe subscription went `incomplete`/`paused`
+      (both read as `'none'` with a row on file), and one trial per account means checkout gives all of them nothing.
+      Each of the three trial promises in the pre-card block therefore has an honest twin, swapped on `canTrial`:
+      `billing.chosenPlanLead` → **`billing.noTrialChosenPlanLead`**, `billing.newUserTrialNote` → **
+      `billing.noTrialNote`**, and the plan-card CTA `billing.startTrialCta` → **`billing.noTrialCta`**
+      ("Subscribe to {{plan}}"). None of the three carries `{{days}}` — there is no trial length to quote. The copy
+      deliberately mirrors `NO_TRIAL_MESSAGE` in `convex/lib/checkoutCopy.ts`, the line Stripe prints under its own pay
+      button two clicks later, so the page and the checkout never contradict each other. `billing.newUserLead` needs no
+      twin: "select a plan below" is true either way. The default is optimistic (`!== false`) because `me` is
+      `undefined` for one render and the majority case is a genuinely new visitor.
+        - **Reused by `UpgradeAtLimit` (R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
+          [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
+          `/billing?plan=${nextTier}&interval=${chargedInterval}` — the same `?plan=`/`?interval=` deep link this page
+          already reads via `resolveTargetPlan`/the interval toggle above, so it needs no bespoke routing. It never
+          re‑derives `hasCard` itself: landing on this page with a card already on file still routes the click through
+          `handlePlanClick`'s existing portal‑switch branch (above), so a card holder always ends up in the Customer
+          Portal regardless of which cap sent them here.
+        - **Trial banner, tier-aware and exact.** `billing.trialBanner` interpolates the member's **real** plan name
+          (`billing.plans.<tier>.name`), the real threshold (`progress.threshold`, falling back to
+          `TRIAL_INTERACTION_THRESHOLD` while the query loads) and the trial's end **date** (`me.trialEndsAt`, localized
+          via
+          `i18n.language`; `billing.trialBannerNoDate` when the row has no date) — "your {{plan}} plan starts at
+          {{threshold}} interactions or on {{date}}", the same promise `shell.trialGoal` and `feed.cardGateCost` make,
+          never
+          a typed "50" or a relative "after 7 days" that is stale from day two. It sits above the X/50 progress meter.
+          The
+          banner's SSI link‑out (`billing.ssiLink`) was removed 2026‑09‑06, and the sidebar's SSI link‑out followed on
+          2026‑09‑07: the whole app now holds **exactly one** SSI link, the qualified Sales Navigator line in the recap
+          footer (`recap.salesNav`, R15). From 40 of 50 (`progress.nearThreshold`,
+          §8) it swaps to `billing.nearThresholdBanner` —
+          "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour
+          token
+          in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
       text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses (the `Badge` `warning` variant
-      itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system).
-        - **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible notice
-          renders
-          above the plans; **Dismiss** calls `users.clearBillingNotice`.
-        - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely ended
-          subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing block still
-          appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own tier,
-          and
-          the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id); the
-          "Renews on {date}" / "Access until {date}" line still comes from `getSubscriptionInfo.currentPeriodEnd`
-          ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
-          (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
-        - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via the
-          `SUPPORT_EMAIL` constant).
-    - **Checkout return (R07 — celebrate activation; see §8 for the full flow).** A `?success=true` redirect latches
-      `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true and
-      `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
-      `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
-      `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the status
-      becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
-      `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your {{plan}}
-      plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a post
-      (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were never
-      hidden); then `billing.successOutcome` (the outcome the member bought, spec §6 as amended 2026‑09‑06: a real
-      LinkedIn
-      presence that gets the right people to find them — never "the next role" or "a client", per the R11 one‑ICP
-      rule that what arrives is never named); then the plan's own description. A card holder who arrives via an
-      upgrade‑at‑the‑limit link (`?plan=` in the URL, R08) sees the same "Recommended" highlight on that plan a no‑card
-      visitor's chosen plan
-      gets — never on the plan they already hold, never on a plain visit.
-    - **Cancel, downgrade and resume (R09 — see [§8](#8-subscriptions--billing) for the backend).** The subscription
-      card carries exactly one of two controls, chosen on `subscriptionInfo.cancelAtPeriodEnd`: **"Cancel plan"**
-      (`billing.cancel.link`) opens the single `CancelInterstitial` dialog, or — once the cancel is pending — **"Resume
-      plan"** (`billing.cancel.resume`) calls `billingNode.resumeSubscription` and toasts
-      `billing.cancel.resumed` / `billing.cancel.resumeFailed`. A pending cancel also swaps the date line to
-      `billing.cancelsOn` (styled `text-destructive`) and adds `billing.cancel.postsLeave` naming the day the member's
-      posts leave the feed. Nothing here polls: `getSubscriptionInfo` is reactive, so the webhook flip re-renders the
-      card on its own.
-    - **The `?canceled=true` return.** Stripe's hosted cancel flow redirects back to `/billing?canceled=true`. The page
-      latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh can't lose
-      it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state, so it is
-      StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so the event
-      records a confirmed cancel rather than a visit to the URL. The param is stripped with
-      `setSearchParams({}, { replace: true })` in the same effect. `?downgraded=true` (the Starter-downgrade flow's
-      return URL) is deliberately **inert** — a marker for anyone reading the URL, with no event and no banner behind
-      it: the tier change arrives through the webhook like any other.
-    - Covered by `app/src/pages/BillingPage.test.tsx` (34 tests: plan-click routing, `ALREADY_SUBSCRIBED` → portal,
+          itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system).
+            - **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible notice
+              renders
+              above the plans; **Dismiss** calls `users.clearBillingNotice`.
+            - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely
+              ended
+              subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing block
+              still
+              appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own
+              tier,
+              and
+              the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id); the
+              "Renews on {date}" / "Access until {date}" line still comes from `getSubscriptionInfo.currentPeriodEnd`
+              ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
+              (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
+            - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via
+              the
+              `SUPPORT_EMAIL` constant).
+        - **Checkout return (R07 — celebrate activation; see §8 for the full flow).** A `?success=true` redirect latches
+          `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true and
+          `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
+          `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
+          `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the status
+          becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
+          `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your
+          {{plan}}
+          plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a post
+          (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were never
+          hidden); then `billing.successOutcome` (the outcome the member bought, spec §6 as amended 2026‑09‑06: a real
+          LinkedIn
+          presence that gets the right people to find them — never "the next role" or "a client", per the R11 one‑ICP
+          rule that what arrives is never named); then the plan's own description. A card holder who arrives via an
+          upgrade‑at‑the‑limit link (`?plan=` in the URL, R08) sees the same "Recommended" highlight on that plan a
+          no‑card
+          visitor's chosen plan
+          gets — never on the plan they already hold, never on a plain visit.
+        - **Cancel, downgrade and resume (R09 — see [§8](#8-subscriptions--billing) for the backend).** The subscription
+          card carries exactly one of two controls, chosen on `subscriptionInfo.cancelAtPeriodEnd`: **"Cancel plan"**
+          (`billing.cancel.link`) opens the single `CancelInterstitial` dialog, or — once the cancel is pending — **"
+          Resume
+          plan"** (`billing.cancel.resume`) calls `billingNode.resumeSubscription` and toasts
+          `billing.cancel.resumed` / `billing.cancel.resumeFailed`. A pending cancel also swaps the date line to
+          `billing.cancelsOn` (styled `text-destructive`) and adds `billing.cancel.postsLeave` naming the day the
+          member's
+          posts leave the feed. Nothing here polls: `getSubscriptionInfo` is reactive, so the webhook flip re-renders
+          the
+          card on its own.
+        - **The `?canceled=true` return.** Stripe's hosted cancel flow redirects back to `/billing?canceled=true`. The
+          page
+          latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh can't lose
+          it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state, so it is
+          StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so the
+          event
+          records a confirmed cancel rather than a visit to the URL. The param is stripped with
+          `setSearchParams({}, { replace: true })` in the same effect. `?downgraded=true` (the Starter-downgrade flow's
+          return URL) is deliberately **inert** — a marker for anyone reading the URL, with no event and no banner
+          behind
+          it: the tier change arrives through the webhook like any other.
+    - **The two funnel events (R18/R20).** `handleUpgrade` fires **`checkout_started { plan, interval }`** before it
+      calls `createCheckoutSession`, marking the card-entry step so the survival panel's signup → trial gap can be read
+      as a card-gate leak rather than an activation leak. Separately, the post-cap email's single link lands here as
+      `/billing?plan=…&interval=…&src=cap_email` ([§8](#8-subscriptions--billing)); a `useRef`-latched effect — the same
+      StrictMode-safe pattern as `cancel_completed` above — fires **`cap_email_billing_opened { plan }`** once per
+      landing, resolving the plan through the same `resolveTargetPlan(searchParams)`. `src` is read, never stripped: it
+      is inert for routing, and leaving it lets a refresh stay identifiable in the URL.
+    - Covered by `app/src/pages/BillingPage.test.tsx` (41 tests: plan-click routing, `ALREADY_SUBSCRIBED` → portal,
       Manage-button visibility, chosen-plan and chosen-interval resolution order, the localized current-plan label,
       the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice, the R07
       checkout-return celebration/activating states incl. the canceled re‑subscriber path, the R08 card‑holder
-      plan highlight, and the R09 cancel/resume swap plus the `?canceled=true` latch).
+      plan highlight, the R09 cancel/resume swap plus the `?canceled=true` latch, the R19 `{{days}}` trial length and
+      gift line, and the R20 `src=cap_email` event).
 - **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
   `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
   directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
   admin JSX rendered before the redirect took effect). This is a **UX nicety only**: `checkIsAdmin` soft‑fails to
   `false` and every `api.admin.*` function independently enforces `assertAdmin` server‑side (§12), so a stale or
   bypassed client redirect can't grant access. `/admin` is **intentionally URL‑only** (see routing table above) — a
-  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Four tabs:
+  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Six tabs (the `TabsList` is
+  `overflow-x-auto`, so the row scrolls instead of wrapping on a narrow screen):
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync status), **Plan
   Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's effective limits, with an "override"
   tag), **Users** (`UsersTab` — per‑user row actions:
@@ -3027,7 +3435,27 @@ sync with the compliance docs and live support inbox.
   per‑row actions **Respond…** (opens `RespondFeedbackModal` — sends an email reply via
   `api.feedback.feedback.respondToFeedback`; Respond button and textarea are disabled with a warning when the submitter
   has no email on file), **Archive**
-  (`archiveFeedback`), **Reopen** (`reopenFeedback`)).
+  (`archiveFeedback`), **Reopen** (`reopenFeedback`)), **MOTD** (`MotdTab` — authoring the in-app banner; see
+  [§12B](#12b-message-of-the-day-motd)), and **Survival** (`SurvivalTab`, **R18**).
+    - **Survival** (`/admin?tab=survival`) is the funnel panel: a 7-day / 28-day toggle over one
+      `admin.survivalMetrics` query ([§12](#12-admin--moderation)), then a single table of **count + "Of" + share** per
+      step — signups, started trial, activated, median minutes to first interaction, returned day 1, returned days 1–7,
+      trials ended, converted, canceled — each row header carrying its definition in a `title` tooltip — followed by
+      **paying members by tier (newest 1000 members)**. An empty cohort renders **"No signups in the last N days."** in
+      place of the funnel table (the tier table is not cohort-bound, so it stays), and the footer prints the window's
+      two edges (`since` – `generatedAt` as `YYYY-MM-DD HH:MM` UTC) so its "UTC" note refers to something visible. The
+      **"Of"**
+      column is the denominator that row's share actually used, so the percentage is interpretable: the three
+      time-windowed rows divide by their **eligible** base (`activatedEligible` / `returnedDay1Eligible` /
+      `returnedDays2to7Eligible` — the members whose window has closed, §12; count and base come from the same rows,
+      so a share never exceeds 100 %), `converted` divides by `trialsEnded`, and
+      the rest by `signups`. Shares come from the exported pure `share(part, base)` helper, which renders **"–"** when
+      the base is `0` — never "0 %" and never `NaN%`, because an empty base means *not enough data yet* rather than
+      *nobody did it*; it is exported so the zero-base case is unit-testable without rendering the tab. A
+      `<LoadingSpinner>` is the **only** non-data state — `useQuery` has no error channel, so there is nothing to
+      render an error state from, and an empty cohort is a real answer rather than a failure. The footer states the
+      reading rules that the numbers are meaningless without: **UTC**, cohort = members who signed up in the window,
+      newest 1000 members, and what "Of" counts.
 - **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b
     - 3b). Three sections: (1) **Consent preferences** (`ConsentToggles` — see below) — marketing and analytics toggles,
       OFF by default, reading `api.privacy.consent.getConsents` and writing
@@ -3083,7 +3511,10 @@ on file; calls `respondToFeedback`),
 `ChangeTierModal` / `ChangeStatusModal` (admin `setUserTier` / `setUserSubscriptionStatus`),
 `ContactLimitsModal` (per‑user contact `setContactUserLimit`/`removeContactUserLimit`, prefilled from
 `listPlanLimits`), `PlanLimitsTab` (**read‑only**: tier defaults + contact users via
-`listContactUsersWithLimits`), `RowActionsMenu`, `LoadingSpinner`,
+`listContactUsersWithLimits`),
+`SurvivalTab` (R18 — the admin funnel table over `admin.survivalMetrics`; see the AdminPage entry above and
+[§12](#12-admin--moderation). Exports its `share(part, base)` helper so the zero-base case is testable on its own),
+`RowActionsMenu`, `LoadingSpinner`,
 `CancelDeletionScreen` (grace‑window full‑screen interstitial shown by `RequireAuth` when
 `me.deletionScheduledAt` is set; "Keep my account" button calls
 `api.privacy.deletion.cancelAccountDeletion` then `window.location.reload()`; also offers a Sign out link — mirrors the
@@ -3153,7 +3584,16 @@ entry above and [§8](#8-subscriptions--billing)), plus the two LinkedIn‑embed
   `onComment`/navigating) — no disabled control, no dead click. "View on LinkedIn ↗" stays the same `<a>`
   in both branches (same `href`/`target`/`rel`); the gated branch just adds `preventDefault` + `onGated('linkedin')`.
   `FeedPage` renders a single shared `CardGateDialog` for whichever control fired `onGated`, driven by the source it
-  reported.
+  reported. **R21** adds a `viewerState?: FeedViewerState | null` prop (the server's `{ reacted, commented, hidesAt }`,
+  attached per post by `feed.getFeed` — [§11](#11-feed--engagement)) and an `onHide?: () => void`. When it is present
+  the card renders its **done footer**: a "✓ you reacted / commented / both" line (`feed.doneReacted` /
+  `feed.doneCommented` / `feed.doneBoth`), `feed.leavesIn` with the whole hours left (rounded up, so the copy says
+  "within"), and a ghost **Hide now**
+  button. The already-taken action's control is removed rather than disabled — `!done?.reacted` gates
+  `ReactionButton`, `!done?.commented` gates the Comment button — so a viewer who reacted can still comment, and
+  neither can be double-counted from the card. `hoursLeft` is computed from a `now` captured **once at mount** and
+  floored at 1: the label is a fact ("leaves in 3 h"), not a live countdown, and a per-second ticking card would be
+  noise on every post in the list.
 
 > As of `1fcc123`, `MyPostsPage` uses this shared `LinkedInEmbed` directly (its old local
 > `buildEmbedUrl` that force‑normalized to `activity` was removed, eliminating the previous
@@ -3191,17 +3631,53 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   (`GateSource = 'react' | 'comment' | 'linkedin' | 'aiDraft'`; each `PostCard` control reports its own source —
   `'aiDraft'` is reserved for `CommentBox`'s AI-draft control, which is structurally unreachable while gated and
   untouched by R04) only tags the `card_gate_opened` PostHog event, not the copy. Its
-  primary CTA is "Start 7-day trial" — **never** "Add a payment method" — linking to
+  primary CTA is `feed.cardGateCta` ("Start {{days}}-day trial") — **never** "Add a payment method" — linking to
   `/billing?plan={{resolveTargetPlan()}}` and firing `card_gate_cta_clicked`; a secondary "Not now" closes it.
   (`captureEvent`, consent-gated, no-op pre-init.) Under the footer, one muted line says what the CTA costs
-  (`feed.cardGateCost` — "Free for 7 days or {{threshold}} interactions, then your plan starts. Cancel anytime.", the
+  (`feed.cardGateCost` — "Free for {{days}} days or {{threshold}} interactions, then your plan starts. Cancel
+  anytime.", the
   threshold interpolated from `TRIAL_INTERACTION_THRESHOLD`, never typed into the copy; R04's "the line under it says
   what it costs"). Covered by `app/src/components/CardGateDialog.test.tsx` (event fired once with the tap source, CTA
-  href + cost line, `past_due` swap with no cost line). When the gating reason is `status === 'past_due'` — a member who
+  href + cost line, `past_due` swap with no cost line, `trialEligible: false` swap with no trial promise at all).
+  When the gating reason is `status === 'past_due'` — a member who
   already has a card on file but whose charge failed — both `CardGateDialog` and `CardGateBanner` (below) swap in a
   `PastDue`-suffixed copy pair (`feed.cardGateBodyPastDue`/`hiddenPostBannerPastDue`, `feed.cardGatePastDueCta`)
-  pointing at "Update payment" instead of "Start 7-day trial": that member already trialed, so re-offering a trial
+  pointing at "Update payment" instead of the trial CTA: that member already trialed, so re-offering a trial
   they've already used would be wrong (fixed 2026‑09‑06).
+- **No trial left ⇒ no trial promise, on the gate too (`canTrial`, 2026‑09‑07).** `past_due` is only the _visible_
+  half of the problem above: `'none'` is **not** proof of trial eligibility either. `toSubscriptionStatus` maps Stripe's
+  `incomplete`/`incomplete_expired`/`paused` to `'none'` with the `subscriptions` row already inserted, and
+  `admin.setUserSubscriptionStatus` can patch a member with rows back to `'none'` — both are `trialEligible === false`
+  at checkout ([§8](#8-subscriptions--billing)) while reading to the client as brand-new members, so they were shown
+  trial copy and then charged immediately. **`useCardGate()` therefore returns `canTrial`
+  (`me?.trialEligible !== false`, the same name and predicate `BillingPage` uses) — derived once in the hook, never
+  re-derived by the three surfaces
+  that consume it**, so `CardGateDialog`, `CardGateBanner` and `UpgradeAtLimit`'s gated branch cannot drift apart.
+  Four strings swap behind it, two of them **reusing the `billing.*` twins that already exist** rather than minting
+  feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
+
+  | Trial copy              | `canTrial === false` twin            | Surface                   |
+      | ----------------------- | ------------------------------------ | ------------------------- |
+  | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)     | Dialog + `UpgradeAtLimit` |
+  | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new) | `CardGateBanner`          |
+  | `feed.cardGateCta`      | `billing.noTrialCta` (reused)        | all three                 |
+  | `feed.cardGateCost`     | `billing.noTrialNote` (reused)       | Dialog cost line          |
+
+  Neither new key carries `{{days}}`: with no trial there is no length to quote. The cost line matters most — it is
+  the disclosure the member is billed against one click later, and `{!pastDue && …}` meant a no-trial member read
+  "Free for 7 days" directly under a button that charges them. `past_due` still wins the branch where it applies (that
+  member is fixing a card, not subscribing). The default is optimistic (`!== false`), because `me` is `undefined` for
+  one render and the majority case is a genuinely new member. Covered by `CardGateDialog.test.tsx`,
+  `UpgradeAtLimit.test.tsx` and `EmptyFeed.test.tsx` (the banner's own twin).
+- **The trial length is never typed into copy (R19).** Every gate surface reads the same
+  `me.trialDays ?? TRIAL_PERIOD_DAYS` — `CardGateDialog`, `CardGateBanner` and `UpgradeAtLimit`'s gated branch all
+  derive it locally from their own `getMe`, and `BillingPage` does the same (§14 above) — and interpolates it as
+  `{{days}}`. Six strings carry it: `feed.cardGateCta`, `feed.cardGateCost`, `billing.chosenPlanLead`,
+  `billing.newUserTrialNote`, `billing.startTrialCta` and `billing.trialBannerNoDate` (plus `billing.giftFrom` and
+  `recap.inviteLine`, which are R19's own). `billing.trialBanner` stays on the exact `{{date}}` — a real end date beats
+  a duration whenever the row has one. `TRIAL_PERIOD_DAYS` is imported from `convex/lib/trialMilestone.ts` purely as
+  the pre-load fallback, so an **invited** member (14 days, §8) is quoted their real length on every one of these
+  surfaces without a second copy variant existing anywhere.
 - A gated member whose own onboarding post was created hidden (`postCreatedHidden`) sees a **`CardGateBanner`** above
   the composer, driven by the shared **`useOwnPostState(enabled)`** hook (`CardGateBanner.tsx`) — one
   `api.posts.getMyPosts` subscription, `'skip'`ped unless `enabled`, exposing `{ hasHiddenPost, hasAnyPost }`. The
@@ -3410,10 +3886,41 @@ two loose keys, and removed two:
 - **Removed: `nav.viewSsi` and `nav.viewSsiNote`**, together with the sidebar footer link they labelled (see "Gated
   Billing nav accent" above).
 
-**State the counting method with the number.** All three files hold **347 keys with arrays counted once** — the same
-files are **357 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
-pt and es show **zero drift** under a recursive key-diff in either counting mode. There is still no automated parity
-test, so the diff is run by hand whenever keys change.
+**R21 / R19 keys (2026-09-07):** feed hygiene and invite-a-peer added **20** keys and removed none:
+
+- **R21 — 7 `feed.*` keys.** The done footer (`doneReacted`, `doneCommented`, `doneBoth` — three separate sentences
+  rather than one string with a conditional clause, because the three read naturally only when written out),
+  `leavesIn` (`{{hours}}`), `hideNow`, and the caught-up empty state (`caughtUpTitle`, `caughtUpBody`).
+- **R19 — 14 keys.** `settings.invite*` (11: `inviteTitle`, `inviteBody`, `inviteLinkLabel`, `inviteCopy`,
+  `inviteCopied`, `inviteCopyManual`, the `inviteJoined_one`/`_other` plural pair, `inviteJoinedMany` for the "100+"
+  ceiling, `inviteNone`, and `inviteError` for a failed mint), the shared `feed.inviteLink` label reused by both deep
+  links, `billing.giftFrom`, and `recap.inviteLine`. `inviteBody` and `inviteLine` name the niche — "a peer from your
+  industry" (pt-BR "um colega da sua área", es "un colega de tu sector") — per R19's invite-by-niche rule.
+- **No new keys for R18 or R20.** The admin console is deliberately English-only ([[B17]] above), and the post-cap
+  email is built server-side in `convex/lib/billingEmails.ts` with its own three-language copy — Convex actions have
+  no i18next instance ([§8](#8-subscriptions--billing)).
+- **Six existing values gained a `{{days}}` placeholder** rather than new keys, so the trial length is never typed
+  into copy — see "Trial UI (Plan 2C)" above for the list.
+
+**No-trial-left keys (2026-09-07):** three `billing.*` keys were added so the pre-card block stops promising a trial
+to a member who has already used theirs — `noTrialNote`, `noTrialCta` and `noTrialChosenPlanLead`, each the honest twin
+of an existing key, each swapped on `getMe.trialEligible` (§8, §14). None carries `{{days}}`: with no trial there is no
+length to quote, which is also why they are twins rather than plural/conditional variants of the originals. No keys
+were removed.
+
+**Card-gate no-trial keys (2026-09-07):** the same fix reached the card gate, and needed only **two** new keys —
+`feed.cardGateBodyNoTrial` and `feed.hiddenPostBannerNoTrial`. The gate's other two trial promises (`feed.cardGateCta`
+and the `feed.cardGateCost` disclosure line) reuse `billing.noTrialCta` and `billing.noTrialNote` above rather than
+minting `feed.*` copies of sentences that already exist in all three locales: a second copy of a **billing disclosure**
+is a second thing to keep in sync with `NO_TRIAL_MESSAGE`, and the gate contradicting the checkout is exactly the bug
+being fixed. Cross-namespace `t()` is already the pattern here — `UpgradeAtLimit` reads `billing.plans.*.name`. Neither
+new key carries `{{days}}`, for the same reason as the three above. No keys were removed.
+
+**State the counting method with the number.** All three files hold **372 keys with arrays counted once** — the same
+files are **382 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
+pt and es show **zero drift** under a recursive key-diff in either counting mode, and the same diff compares the
+`{{placeholder}}` set of every leaf — a translated string that drops or renames one is a runtime hole no key-diff
+alone would catch. There is still no automated parity test, so both are run by hand whenever keys change.
 
 ---
 
@@ -3630,16 +4137,27 @@ as an internal status — translation does not constitute legal sign-off.
 ### Free-trial clause (Terms §5)
 
 All three locale modules of `/terms` now state the trial explicitly inside the existing "Subscriptions & Billing"
-section: a **7-day free trial** on a new account, a **payment method required to start it**, billing beginning at **50
-interactions (made plus received) or 7 days, whichever comes first**, an **email before the first charge**,
+section: a **7-day free trial** on a new account — **"(14 days when you join through a member's invite link)"** —
+a **payment method required to start it**, billing beginning at **50
+interactions (made plus received) or when the trial period ends, whichever comes first**, an **email before the first
+charge**,
 cancellation at any time before the trial ends from the Subscription page, and **one free trial per account** — a
 repeat subscription is billed immediately, which is also stated at checkout. The same paragraph corrects the billing
 basis from "monthly" to **"monthly or annually, according to the plan and interval you choose"**, which is what the six
 Stripe prices have actually offered since the annual interval shipped.
 
+**Updated 2026-09-07 for R19.** Two changes, both in all three locales: the parenthetical naming the invited length,
+and the second half of the milestone sentence, which used to read "or after **7 days**" and now reads "or **when the
+trial period ends**". A referral gift that made the Terms silently wrong for the invited half of new accounts would be
+the worst kind of stale legal copy, and the length-agnostic phrasing means the clause survives any future change to
+either constant. Only the length is gifted — **one free trial per account** still binds, and the invited member is
+still charged at 50 interactions if they get there first.
+
 The wording deliberately matches the Stripe `custom_text` under the pay button and the billing emails
-([§8](#8-subscriptions--billing)) — one rule, three surfaces, no drift. Like the rest of the legal pages it remains a
-**draft pending legal review**.
+([§8](#8-subscriptions--billing)) — one rule, three surfaces, no drift; the `custom_text` builder
+(`convex/lib/checkoutCopy.ts`) takes the day count as an argument for exactly this reason. Like the rest of the legal
+pages it remains a **draft pending legal review**, and this clause in particular is new wording that has not been
+reviewed.
 
 ### CookieNotice (Phase 3b)
 
@@ -3681,6 +4199,45 @@ app's `#session=…&plan=…&interval=…` hash, `AuthSuccessPage` stashes them 
 resolves its single primary plan card from `?plan=` → `sessionStorage.chosenPlan` → Growth (see
 [§14](#14-frontend--authenticated-app-app)). A visitor who picked Pro on the Pricing table is offered Pro, not Growth —
 the decision they already made is not re-opened.
+
+#### `RefCarrier` — carrying an invite code onto the CTAs (R19)
+
+`landing/components/RefCarrier.tsx` is a client component mounted once in `landing/app/[lang]/layout.tsx` (beside
+`CookieNotice`) that **renders nothing**. Its only job is to move an invite code from the URL a member shared —
+`https://<landing>/<lang>?ref=<code>` — onto whichever sign-in CTA the visitor eventually clicks, so
+`convex/http.ts` can read `ref` at the OAuth start and attribute the new account ([§7](#7-authentication--identity)).
+There is no invite landing page and no interstitial: the referred visitor sees the ordinary marketing site.
+
+- **`window.location.search`, not `useSearchParams`.** This site is a **static export**; `useSearchParams` forces a
+  Suspense boundary and reads nothing useful at build time, so the component reads the live URL after mount.
+- **The regex is duplicated on purpose.** `INVITE_CODE_RE = /^[a-z0-9]{8}$/` is a copy of the one in
+  `convex/lib/invite.ts`, because the landing bundle must not import from `convex/`. **Keep the two in sync** — a
+  comment in each file says so. Validating on the way in means a hand-typed or mangled `?ref=` never reaches the
+  backend as anything but "absent".
+- **`sessionStorage['ref']` survives the locale switch.** The language menu navigates to a different `/[lang]` path
+  and drops the query, as does any internal `<Link>`. A valid code from the URL is therefore stored once and read
+  back on later mounts, so the attribution survives a visitor who lands in `en`, switches to `pt`, reads the pricing
+  and then signs in. It is scoped to the tab and never leaves the browser except as the `ref` parameter on the
+  sign-in URL — see [§13B](#13b-privacy--compliance) for why this is functional storage and does not
+  change the consent banner.
+- **Two passes, because Pricing rebuilds its hrefs.** An eager pass on every mount and `usePathname()` change stamps
+  the code onto every `a[href*="/auth/linkedin"]` with `URL.searchParams.set`, which **preserves the existing
+  `plan`/`interval`** rather than replacing the query. But the `Pricing` cards recompute their `href` from local
+  `annual` state on each Monthly/Annual toggle, and that state change does not touch `pathname` — React's re-render
+  silently drops the stamp. A **capture-phase `click` listener on `document`** therefore re-stamps the anchor
+  immediately before the click is handled. The eager pass is still needed: it is the only one a middle-click or a
+  "copy link address" ever sees, since neither fires an ordinary `click`.
+- **An origin check guards both passes.** `href*="/auth/linkedin"` is a loose substring selector and the click
+  listener is document-wide, so `stamp` parses the resolved `href` and returns unless its origin equals
+  `new URL(SIGN_IN_URL).origin`. When `NEXT_PUBLIC_CONVEX_SITE` is unset, `SIGN_IN_URL` is the app root and nothing
+  matches — the component is inert rather than wrong. A malformed `href` is left exactly as it was.
+- **`middleware.ts` keeps the query.** The locale redirect uses `request.nextUrl.clone()` and only rewrites
+  `pathname`, so `/?ref=<code>` arrives at `/en?ref=<code>` with the parameter intact.
+- **The CTA labels still say "7-day".** The landing dictionaries are not aware of the referral — an invited visitor
+  reads "Start 7-day trial" on the button and is told about the 14 days *after* sign-in, on the Billing page
+  (`billing.giftFrom`, [§14](#14-frontend--authenticated-app-app)) and in the Terms clause above. This is deliberate:
+  a static page cannot know at build time whether a given visitor was invited, and promising 14 days in a
+  cached-and-shared marketing string would be a promise the site cannot keep for everyone who reads it.
 
 **CTA inventory** (labels are R12 — every one names the trial length, the plan cards also name the plan, and no CTA
 says "Start free" in any locale):
@@ -3737,7 +4294,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `LINKEDIN_CLIENT_ID`             |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client id (authorize URL + token exchange **and** the token-refresh call — no separate var).                                                                                                                                                                                                                                                                                                                                        |
 | `LINKEDIN_CLIENT_SECRET`         |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client secret (server‑side token exchange **and** refresh — `refreshAccessToken` reuses the same env pair, nothing new was added for the refresh cron).                                                                                                                                                                                                                                                                             |
 | `LINKEDIN_REDIRECT_URI`          |                   ✓                    | `linkedin/oauth.ts`                                 | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                                                                                                                                                                                                                                                              |
-| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing.ts`, `billingNode.ts`           | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                                                                                                                                                                                                                                                           |
+| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing*.ts`, `notifications.ts`        | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                                                                                                                                                                                                                                                           |
 | `STRIPE_STARTER_PRICE_ID`        |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                                                                                                                                                                                                                                                   |
 | `STRIPE_GROWTH_PRICE_ID`         |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `growth` tier.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `STRIPE_PRO_PRICE_ID`            |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `pro` tier.                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -3947,7 +4504,7 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
 - **The complete event list.** Every product event goes through the one `captureEvent(name, props)` helper, so all of
   them inherit the consent gate above and every one is a **no‑op until `initPostHog` has run** (i.e. silent in dev and
   in prod without a key). Props are ids and enum‑ish strings only — never a name, email or post body. As of
-  2026‑09‑07 there are eight, and this is all of them:
+  2026‑09‑07 there are thirteen, and this is all of them:
     - `card_gate_opened` — `CardGateDialog` on open. Props: `source` (which tap opened it).
     - `card_gate_cta_clicked` — `CardGateBanner`, `CardGateDialog`, and a **gated** `UpgradeAtLimit`. Props: `plan`,
       plus `source` from `UpgradeAtLimit` only. Pairs with the event above as the single gate funnel across all three
@@ -3961,9 +4518,29 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
     - `cancel_alternative_taken` — `CancelInterstitial`'s "Move to Starter" (R09). Props: `from` (the tier left behind).
     - `cancel_completed` — `BillingPage`, on the `?canceled=true` return **after** `cancelAtPeriodEnd` has actually
       flipped, latched to fire once (R09). Props: `plan`.
+    - `checkout_started` — `BillingPage.handleUpgrade`, immediately before `createCheckoutSession` (**R18**). Props:
+      `plan`, `interval`. This is the card-entry step, so the survival panel's signup → started-trial gap can be read
+      as a card-gate leak rather than an activation leak.
+    - `cap_email_billing_opened` — `BillingPage`, when the post-cap email's link lands with `?src=cap_email`
+      (**R20**), `useRef`-latched to fire once per landing. Props: `plan` (from the same `resolveTargetPlan`).
+    - `plan_switch_opened` — `BillingPage.handlePlanClick`, on a **card holder's** plan click, right before the Customer
+      Portal opens (the portal path never fires `checkout_started`). Props: `plan`, and `source` — `cap_email` when
+      the landing carried `?src=cap_email`, otherwise `billing`. The step after `cap_email_billing_opened`, so the R20
+      funnel no longer ends at the landing.
+    - `post_hidden` — `FeedPage`, after `interactions.hidePost` resolves (**R21**). Props: **`after`** — whole hours
+      between the interaction and the tap, derived from `INTERACTED_TTL_MS - (hidesAt - now)`. The one number R21
+      wants: whether people clear a handled post immediately or leave it to age out.
+    - `invite_copied` — `SettingsPage`, after the invite link reaches the clipboard (**R19**). **No props** — the code
+      itself would be a user identifier, and the count is the whole signal. It fires on the Clipboard-API path only:
+      the manual-selection fallback (no Clipboard API, non-secure context, denied permission) is not a copy that
+      happened, so it stays silent rather than inflating the number.
 
   `HistoryPage` fires **nothing**, by design: reviewing one's own log is not a funnel step. There is no
-  `cancel_alternative_completed` either — the downgrade's completion is a Stripe webhook, not a client event.
+  `cancel_alternative_completed` either — the downgrade's completion is a Stripe webhook, not a client event. And the
+  **survival panel reads the database, not PostHog** ([§12](#12-admin--moderation)): its cohort maths runs over `users`,
+  `subscriptions` and `userInteractions`, so it is complete for every member — including the analytics-consent
+  refusers PostHog never sees — and it works with no analytics key configured at all. The events above answer *why* a
+  step leaked; the panel answers *how many*.
 - **Backend `console.error` redaction (`scrubError`):** the backend catch seams route their logged context through
   `convex/lib/scrubError.ts`, a pure, dependency‑free helper (no Convex function, no codegen). It **default‑denies**
   any key name containing `token`/`access`/`refresh`/`secret`/`authorization`/`email`/`apikey` (case‑insensitive
@@ -4184,12 +4761,16 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                               |
 | Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                         | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                          | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                              |
+| Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `notifications.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                       | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                |
+| Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/RefCarrier.tsx`)                                                                                                                | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                |
 | Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                              |
 | Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                            |
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                    |
+| 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `EmptyFeed.tsx`)                                                                                                                | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                  |
 | Recap & History (`convex/lib/recap.ts`, `convex/lib/history.ts`, `interactions.getRecap` / `listMyInteractions`, `app/src/pages/RecapPage.tsx`, `app/src/pages/HistoryPage.tsx`)                                                                            | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                  |
 | Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                                            |
 | Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                             |
+| Survival panel (`lib/survival.ts`, `admin.survivalMetrics`, `app/src/components/SurvivalTab.tsx`)                                                                                                                                                           | [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app)                                 |
 | Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                            | [§12A](#12a-feedback)                                                                                    |
 | MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                                     |
 | App UI (`app/src/**`)                                                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                               |
@@ -4206,7 +4787,74 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑09‑07. **Recap, History, the cancel flow, landing proof and the conversion email (R15 / R16 / R09 /
+_Last updated: 2026‑09‑07. **Survival panel, the post-cap email, 24-hour feed hygiene and invite-a-peer (R18 / R20 /
+R21 / R19).** One theme across four features: see where members actually fall out, then close the three leaks that were
+costing the most — a spent post nobody was told about, a feed that kept showing work already done, and growth that had
+no channel at all. **The panel (R18).** `convex/lib/survival.ts` is pure cohort maths — `returnWindows`,
+`summarizeCohort`, `payingByTier` — behind one admin query, `admin.survivalMetrics({ days: 7 | 28 })`, rendered by the
+new `SurvivalTab` (`/admin?tab=survival`) as count + "Of" + share per step. The trial metrics are keyed on the **
+`subscriptions` row**, not on `users.trialEndsAt`, because `stripe.syncUserSubscription` erases that field the
+moment a subscription goes active — a cohort built on it would under-count every conversion it is meant to measure.
+The query costs roughly **four indexed reads per cohort member** over the newest 1000 members, with a `ponytail:`
+comment naming the precompute-nightly upgrade path if a 28-day cohort ever passes ~1500 (§12, §14). One new client
+event, `checkout_started`, marks the card-entry step so a card-gate leak reads differently from an activation leak.
+**The post-cap email (R20).** Both counters now flip the cap through one shared `flipCapIfReached`, which patches
+`interactionLimitReached`, recomputes the feed fields and schedules `notifications.sendPostCapReached` — **one flip,
+one email**, because the flip is the edge and a post can only cross it once. The action re-reads everything at send
+time (`convex/lib/postCapNotice.ts`: `shouldSendCapNotice` needs an email, `trialing`/`active`, and no pending cancel;
+`capNoticeMode` picks `upgrade` / `proContact` / `contactCustom`), and every mode sends **exactly one link** — the
+upgrade mode drops the My Posts line rather than offer a second door, and the non-upgrade modes close with a
+plain-text support address, not a `mailto:`. `SUPPORT_EMAIL` moved to `convex/lib/support.ts` so the backend email
+and the app can share one constant, with `app/src/lib/support.ts` now a re-export (§8, §9, §11). **Feed hygiene (R21).**
+`userPostState` gained `commentedAt` and `hiddenAt` (widen-only, no backfill), and `convex/lib/feedHygiene.ts`
+turns them into three pure answers: `viewerPostStatus` (`fresh` / `done` / `gone` at `INTERACTED_TTL_MS` = 24 h),
+`canHide`, and `toFeedViewerState`. `feed.getFeed` reads the viewer's row per page item, drops `gone`, and attaches
+`viewerState` so `PostCard` can render a done footer with "leaves in N h" and a **Hide now** button
+(`interactions.hidePost`). Because the per-viewer filter can empty a page the index walk still considers full,
+`FeedPage` auto-loads up to `MAX_EMPTY_LOADS` (5) pages before handing back to the manual button, shows **no** empty
+state while it is settling, and asks the new `feed.getCaughtUp` which empty state is the true one (§5, §11, §14).
+**Invite a peer (R19).** No invites table and no counters — `users` is the log: `inviteCode` and `referredByCode` with
+a `by_invite_code` / `by_referred_by_code` index pair, plus `oauthStates.ref` to carry the code across the OAuth
+round-trip. `landing/components/RefCarrier.tsx` stamps `?ref=<code>` onto the sign-in CTAs (origin-checked, with a
+capture-phase click pass because Pricing rebuilds its hrefs on the interval toggle), `http.ts` validates it against
+`INVITE_CODE_RE` and passes it into the OAuth state, and `upsertUserHandler` stamps `referredByCode` **on insert
+only** — and only when the inviter exists and is **not banned**. The gift is length, not money:
+`trialDaysFor(user)` returns `INVITED_TRIAL_PERIOD_DAYS` (14) instead of `TRIAL_PERIOD_DAYS` (7), feeding Stripe's
+`trial_period_days`, the checkout `custom_text`, and every `{{days}}` string in the app — six existing keys gained the
+placeholder rather than a second copy variant. One free trial per account still binds, and the Terms §5 clause was
+updated in all three locales to say so (§5, §7, §8, §13B, §14, §15). **Deviations worth knowing.**
+`users.getInviteSummary` returns `{ inviteCode, joined }` — the inviter's own code and the count, **not** an
+`invited` figure; `trialDaysFor` takes the **user object**, not a code string; the banned-inviter check is a real
+guard, not an implied one; and the admin console has **six** tabs, not four — MOTD was already shipped and simply
+never listed here. Locale counts, always with the method: app en/pt/es **373 keys with arrays counted once** (383
+string leaves, after the three `billing.noTrial*` keys, the two `feed.*NoTrial` keys and `settings.inviteError`), zero
+drift under a recursive key-diff and identical `{{placeholder}}` sets per key, still no automated parity test; the
+landing dictionaries are untouched by this batch. **§16 needs no new environment variable** — the only change there is
+`notifications.ts`
+joining `APP_URL`'s "Used by" list. **Final review, six corrections, all honesty bugs.** `summarizeCohort` now takes a
+`now` and returns three **eligible denominators**, so the panel's shares stop being right-censored — a 7-day cohort no
+longer reports 0 % returned for a reason that is not about behaviour — and a base of `0` reads "–", not "0 %"; the
+post-cap email's upgrade line now promises the author's **next** posts (nothing un-flips `interactionLimitReached`, so
+"keeps collecting" was a false promise sitting in front of a charge) and its subject quotes the post's **own** total
+rather than the plan's cap, which a downgrade can drop below it; the R19 gift line is gated on `getMe.trialEligible`
+(the subscription-row count, the same rule checkout enforces) so a canceled re-subscriber — or anyone else who already
+spent their trial — is not told about a trial they cannot have; two admin
+labels now describe what they show ("Returned days 1–7", "newest 1000 members"); and `FeedPage`'s empty-page budget
+resets on a non-empty page. **Post-review wave** (a code reviewer and a Revenue-Centric-Design reviewer over the whole
+uncommitted tree; every Important item fixed, one deferred to a decision): `summarizeCohort` takes every windowed
+**count** over the same closed rows as its base, so a share can never pass 100 % (a fresh signup who already tapped no
+longer prints "3 of 1 · 300%"); `getMe` answers `trialEligible` from a `.take(1)`, not a `.collect()`; the Survival rows
+carry their definitions in `title` tooltips, an empty cohort says "No signups in the last N days." instead of printing
+zeros, and the footer shows the window it means; a thirteenth event, `plan_switch_opened { plan, source }`, closes the
+cap-email funnel for card holders (§17); the R19 copy names the niche ("a peer from your industry"); `FeedPage` renders
+an empty state only when the feed is `Exhausted`, so "You're caught up" never sits next to **Load more**; Copy link
+gives one feedback (the button label, no toast); the invite-mint error is localized (`settings.inviteError`); and
+`feed.leavesIn` says "within". **Deferred to a decision:** a card holder's "Switch to X" still opens the Customer
+Portal **home** (no `subscription_update_confirm` flow), four clicks from the plan the cap email named — pre-existing
+R08 behaviour that also depends on the open Customer Portal rows in [§8](#8-subscriptions--billing). Sections updated:
+§5, §7, §8, §9, §11, §12, §13B, §14, §15, §16, §17, §21. Gates: convex 458/458, app 382/382, `pnpm verify` exit 0.
+**R17 (buy a featured post) is deliberately still TODO**, held until R13 settles the ladder math. Prior:
+2026‑09‑07 — **Recap, History, the cancel flow, landing proof and the conversion email (R15 / R16 / R09 /
 R10 / R14).** One theme across five features: show a member what their engagement actually did, give them an honest way
 out, and stop making claims the product cannot back. **The log (R15).** `userInteractions` gained an optional
 `authorId` and a `by_author` index, and the row is now written **inside** `incrementLikeCount` /

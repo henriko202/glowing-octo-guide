@@ -9,8 +9,11 @@ import {
   pickTrialingSubscription,
   shouldEndTrialEarly,
   trialEligible,
+  trialDaysFor,
   TRIAL_INTERACTION_THRESHOLD,
-  TRIAL_WARNING_THRESHOLD
+  TRIAL_PERIOD_DAYS,
+  TRIAL_WARNING_THRESHOLD,
+  INVITED_TRIAL_PERIOD_DAYS
 } from './trialMilestone'
 
 describe('trialMilestone', () => {
@@ -149,5 +152,16 @@ describe('shouldEndTrialEarly', () => {
   it('does nothing without a row or a Stripe id', () => {
     expect(shouldEndTrialEarly(undefined)).toBe(false)
     expect(shouldEndTrialEarly({ stripeSubscriptionId: undefined })).toBe(false)
+  })
+})
+
+// backlog/R19 — the invited peer's gift is a longer trial; the interaction threshold is unchanged.
+describe('trialDaysFor', () => {
+  it('is 7 for a plain signup and 14 for a member who joined through an invite', () => {
+    expect(TRIAL_PERIOD_DAYS).toBe(7)
+    expect(INVITED_TRIAL_PERIOD_DAYS).toBe(14)
+    expect(trialDaysFor({})).toBe(7)
+    expect(trialDaysFor({ referredByCode: undefined })).toBe(7)
+    expect(trialDaysFor({ referredByCode: 'abc12345' })).toBe(14)
   })
 })

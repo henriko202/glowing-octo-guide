@@ -25,11 +25,12 @@ export function stripeCheckoutLocale(locale: BillingLocale): 'en' | 'pt-BR' | 'e
   return locale === 'pt' ? 'pt-BR' : locale
 }
 
-const TRIAL_MESSAGE: Record<BillingLocale, string> = {
-  en: 'Your free trial ends as soon as you reach 50 interactions (made plus received), or after 7 days — whichever comes first. Billing starts then. Cancel before that from Subscription and you pay nothing.',
-  pt: 'Seu teste grátis termina assim que você atingir 50 interações (feitas e recebidas) ou depois de 7 dias — o que vier primeiro. A cobrança começa nesse momento. Cancele antes disso em Assinatura e você não paga nada.',
-  es: 'Tu prueba gratuita termina en cuanto alcances 50 interacciones (hechas y recibidas) o a los 7 días, lo que ocurra primero. La facturación comienza en ese momento. Cancela antes desde Suscripción y no pagas nada.'
-}
+// `days` is the Stripe trial length actually granted (7, or 14 for an invited member — backlog/R19).
+const trialMessage = (days: number): Record<BillingLocale, string> => ({
+  en: `Your free trial ends as soon as you reach 50 interactions (made plus received), or after ${days} days — whichever comes first. Billing starts then. Cancel before that from Subscription and you pay nothing.`,
+  pt: `Seu teste grátis termina assim que você atingir 50 interações (feitas e recebidas) ou depois de ${days} dias — o que vier primeiro. A cobrança começa nesse momento. Cancele antes disso em Assinatura e você não paga nada.`,
+  es: `Tu prueba gratuita termina en cuanto alcances 50 interacciones (hechas y recibidas) o a los ${days} días, lo que ocurra primero. La facturación comienza en ese momento. Cancela antes desde Suscripción y no pagas nada.`
+})
 
 const NO_TRIAL_MESSAGE: Record<BillingLocale, string> = {
   en: 'No trial this time — you have already used yours. You are billed today and your plan starts immediately. Cancel anytime from Subscription.',
@@ -38,6 +39,6 @@ const NO_TRIAL_MESSAGE: Record<BillingLocale, string> = {
 }
 
 /** The line under Stripe's pay button. Stripe caps custom_text.submit.message at 1200 chars. */
-export function checkoutSubmitMessage(locale: BillingLocale, opts: { trial: boolean }): string {
-  return opts.trial ? TRIAL_MESSAGE[locale] : NO_TRIAL_MESSAGE[locale]
+export function checkoutSubmitMessage(locale: BillingLocale, opts: { trial: boolean; days: number }): string {
+  return opts.trial ? trialMessage(opts.days)[locale] : NO_TRIAL_MESSAGE[locale]
 }

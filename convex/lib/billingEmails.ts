@@ -6,6 +6,8 @@
 // amount, the date and how to cancel), never marketing: no promotional copy, no countdown, no
 // urgency. Each one leads with what the member DID, then the term, then one link to cancel.
 import type { BillingLocale } from './checkoutCopy'
+import type { CapNoticeMode } from './postCapNotice'
+import { escapeHtml } from '../feedback/emails'
 import type { EmailContent } from './email'
 import { TRIAL_INTERACTION_THRESHOLD } from './trialMilestone'
 
@@ -184,5 +186,77 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
     subject: c.subject,
     text: `${c.lead}\n\n${c.term}\n\n${c.link} ${a.recapUrl}`,
     html: `<p>${c.lead}</p><p>${c.term}</p><p>${c.link} <a href="${a.recapUrl}">${a.recapUrl}</a></p>`
+  }
+}
+
+export interface CapReachedArgs {
+  /** The post's first characters (lib/recap `excerpt`), quoted so the author knows which post. */
+  excerpt: string
+  /**
+   * What the post actually collected (likeCount + commentCount). Never the same sentence as `cap`:
+   * after a downgrade a post sitting at 41 flips against a cap of 25, and the subject must report
+   * the post's own number. At the flip the total is always >= the cap, so they usually agree.
+   */
+  total: number
+  cap: number
+  planName: string
+  mode: CapNoticeMode
+  nextPlanName?: string
+  nextCap?: number
+  upgradeUrl?: string
+  myPostsUrl: string
+  supportEmail: string
+}
+
+/**
+ * Sent once per post when it reaches the plan's interaction cap and leaves the feed (backlog/R20).
+ * The event first, then where the post still lives, then the one line the tier can act on. No
+ * urgency and no second link — the transactional guard test enforces the words.
+ */
+export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): EmailContent {
+  const copy: Record<
+    BillingLocale,
+    { subject: string; body: string; stays: string; upgrade: string; proContact: string; contactCustom: string }
+  > = {
+    en: {
+      subject: `Your post reached ${a.total} interactions and left the feed`,
+      body: `It reached the ${a.planName} cap of ${a.cap} interactions and left the feed so members see the rest.`,
+      stays: 'It stays on My Posts:',
+      // Future tense on purpose: nothing ever un-flips `interactionLimitReached`, so upgrading does
+      // NOT put this post back in the feed. Promising that ahead of a charge would be a lie.
+      upgrade: `On ${a.nextPlanName}, your next posts collect up to ${a.nextCap} each:`,
+      proContact: `Need a higher cap? Write to ${a.supportEmail}.`,
+      contactCustom: `Your plan has a custom cap. Write to ${a.supportEmail} to adjust it.`
+    },
+    pt: {
+      subject: `Sua publicação chegou a ${a.total} interações e saiu do feed`,
+      body: `Ela atingiu o limite do plano ${a.planName}, de ${a.cap} interações, e saiu do feed para que os membros vejam as demais.`,
+      stays: 'Ela continua em Minhas publicações:',
+      upgrade: `No ${a.nextPlanName}, suas próximas publicações recebem até ${a.nextCap} cada uma:`,
+      proContact: `Precisa de um limite maior? Escreva para ${a.supportEmail}.`,
+      contactCustom: `Seu plano tem um limite personalizado. Escreva para ${a.supportEmail} para ajustá-lo.`
+    },
+    es: {
+      subject: `Tu publicación llegó a ${a.total} interacciones y salió del feed`,
+      body: `Alcanzó el límite del plan ${a.planName}, de ${a.cap} interacciones, y salió del feed para que los miembros vean las demás.`,
+      stays: 'Sigue en Mis publicaciones:',
+      upgrade: `En ${a.nextPlanName}, tus próximas publicaciones reciben hasta ${a.nextCap} cada una:`,
+      proContact: `¿Necesitas un límite mayor? Escribe a ${a.supportEmail}.`,
+      contactCustom: `Tu plan tiene un límite personalizado. Escribe a ${a.supportEmail} para ajustarlo.`
+    }
+  }
+  const c = copy[locale]
+  const closing =
+    a.mode === 'upgrade' ? `${c.upgrade} ${a.upgradeUrl}` : a.mode === 'proContact' ? c.proContact : c.contactCustom
+  const closingHtml =
+    a.mode === 'upgrade' ? `${c.upgrade} <a href="${a.upgradeUrl}">${a.upgradeUrl}</a>` : escapeHtml(closing)
+  // One link per email. In upgrade mode the checkout link is the one the member can act on, so the
+  // My Posts line steps aside; the other modes close with a support address, which is not a link.
+  const stays = a.mode === 'upgrade' ? '' : `${c.stays} ${a.myPostsUrl}\n\n`
+  const staysHtml = a.mode === 'upgrade' ? '' : `<p>${c.stays} <a href="${a.myPostsUrl}">${a.myPostsUrl}</a></p>`
+  return {
+    subject: c.subject,
+    text: `“${a.excerpt}”\n\n${c.body}\n\n${stays}${closing}`,
+    html: `<p>“${escapeHtml(a.excerpt)}”</p><p>${c.body}</p>${staysHtml}<p>${closingHtml}</p>`
   }
 }

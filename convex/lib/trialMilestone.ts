@@ -83,3 +83,12 @@ export function isTrialConversion(prev: string | undefined, next: string): boole
 export function isStaleEvent(lastEventAt: number | undefined, eventCreated: number | undefined): boolean {
   return lastEventAt !== undefined && eventCreated !== undefined && eventCreated < lastEventAt
 }
+
+/** Stripe trial_period_days for a plain signup — the 7-day side of "50 OR 7 days". */
+export const TRIAL_PERIOD_DAYS = 7
+/** backlog/R19 — a member who joined through another member's invite link starts with two weeks. */
+export const INVITED_TRIAL_PERIOD_DAYS = 14
+
+export function trialDaysFor(user: { referredByCode?: string }): number {
+  return user.referredByCode ? INVITED_TRIAL_PERIOD_DAYS : TRIAL_PERIOD_DAYS
+}

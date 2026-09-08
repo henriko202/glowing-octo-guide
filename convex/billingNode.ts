@@ -6,7 +6,7 @@ import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
 import { requireAuthAction } from './lib/auth'
 import { ALLOWED_PRICE_IDS, starterPriceIdFor } from './lib/stripePrices'
-import { findLiveSubscription, trialEligible } from './lib/trialMilestone'
+import { findLiveSubscription, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
 
@@ -18,11 +18,9 @@ function stripe(): Stripe {
   return new Stripe(key)
 }
 
-const TRIAL_PERIOD_DAYS = 7
-
-// Card-required 7-day trial checkout. The component's createCheckoutSession can't set a
-// trial / card-collection / promo codes, so we call the Stripe SDK directly here. The
-// component still owns the customer record and webhook sync.
+// Card-required trial checkout (7 days, 14 for an invited member — lib/trialMilestone.trialDaysFor).
+// The component's createCheckoutSession can't set a trial / card-collection / promo codes, so we
+// call the Stripe SDK directly here. The component still owns the customer record and webhook sync.
 export const createCheckoutSession = action({
   args: { priceId: v.string(), sessionToken: v.string(), locale: v.optional(v.string()) },
   handler: async (ctx, { priceId, sessionToken, locale }) => {
@@ -44,6 +42,7 @@ export const createCheckoutSession = action({
     // One trial per user, forever. A returning subscriber checks out without a trial and is told
     // so under the pay button, before the card — never discovered on the statement.
     const trial = trialEligible(subscriptions.length)
+    const trialDays = trialDaysFor(user)
     const billingLocale = resolveBillingLocale(locale ?? user.language, user.primaryLocale)
 
     const customer = await stripeComponent.getOrCreateCustomer(ctx, {
@@ -59,14 +58,14 @@ export const createCheckoutSession = action({
       customer: customer.customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        ...(trial ? { trial_period_days: TRIAL_PERIOD_DAYS } : {}),
+        ...(trial ? { trial_period_days: trialDays } : {}),
         metadata: { convexUserId: user._id }
       },
       payment_method_collection: 'always', // card required even during the trial
       allow_promotion_codes: true, // manual free-month campaign codes (Henriko-managed)
       locale: stripeCheckoutLocale(billingLocale),
       // The rule the member is agreeing to, two centimetres from the pay button.
-      custom_text: { submit: { message: checkoutSubmitMessage(billingLocale, { trial }) } },
+      custom_text: { submit: { message: checkoutSubmitMessage(billingLocale, { trial, days: trialDays }) } },
       success_url: `${appUrl}/billing?success=true`,
       cancel_url: `${appUrl}/billing`
     })

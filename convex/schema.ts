@@ -99,6 +99,11 @@ export default defineSchema({
     // When the first-post onboarding step was resolved — set once, either by submitting any post
     // (server-side in posts.submitPost) or by skipping the prompt. Unset ⇒ show FirstPostPromptScreen.
     firstPostPromptedAt: v.optional(v.number()),
+    // backlog/R19 — the member's own invite code (minted on first visit to Settings › Invite, never
+    // reissued: shared links must keep working) and the code they joined through (stamped at insert
+    // only, after verifying it belongs to a member — see linkedin/auth.upsertUserHandler).
+    inviteCode: v.optional(v.string()),
+    referredByCode: v.optional(v.string()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
@@ -115,6 +120,9 @@ export default defineSchema({
     // Because flagging a dormant user SETS deletionScheduledAt, that row immediately leaves
     // the dormancy range — so the retention cron can self-reschedule without re-reading it.
     .index('by_deletion_and_last_login', ['deletionScheduledAt', 'lastLoginAt'])
+    // backlog/R19 — inviter lookup (getMe's gift line, upsert verification) + the "N joined" count.
+    .index('by_invite_code', ['inviteCode'])
+    .index('by_referred_by_code', ['referredByCode'])
     // Full-text people search for the ⌘K command palette (convex/search.ts). Results are
     // projected through toSearchPerson (safe display fields only — never tokens/PII).
     .searchIndex('search_name', { searchField: 'name' }),
@@ -248,7 +256,9 @@ export default defineSchema({
     state: v.string(),
     expiresAt: v.number(),
     plan: v.optional(v.string()),
-    interval: v.optional(v.string())
+    interval: v.optional(v.string()),
+    // backlog/R19 — the inviter's code from the landing's ?ref=, carried through the OAuth round-trip.
+    ref: v.optional(v.string())
   })
     .index('by_state', ['state'])
     // Indexed range for the expired-OAuth-state cleanup cron — replaces a full-table .filter() scan.
@@ -402,6 +412,11 @@ export default defineSchema({
     userId: v.id('users'),
     postId: v.id('posts'),
     reactedAt: v.optional(v.number()),
+    // backlog/R21 — set when the viewer records a comment; with reactedAt it starts the 24 h window
+    // after which the post leaves THIS viewer's feed. Never read by counts, caps or the author.
+    commentedAt: v.optional(v.number()),
+    // backlog/R21 — "Hide now": the post leaves this viewer's feed at once. No unhide (history has it).
+    hiddenAt: v.optional(v.number()),
     commentDraft: v.optional(v.string())
   })
     .index('by_user_and_post', ['userId', 'postId'])

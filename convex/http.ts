@@ -7,6 +7,7 @@ import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
 import { getTierFromPriceId } from './lib/stripePrices'
 import { scrubError } from './lib/scrubError'
+import { isInviteCode } from './lib/invite'
 
 const http = httpRouter()
 
@@ -27,9 +28,13 @@ http.route({
     const VALID_INTERVALS = new Set(['monthly', 'annual'])
     const plan = rawPlan !== undefined && VALID_PLANS.has(rawPlan) ? rawPlan : undefined
     const interval = rawInterval !== undefined && VALID_INTERVALS.has(rawInterval) ? rawInterval : undefined
+    // backlog/R19 — the inviter's code from the landing's ?ref=. Shape-checked here; whether it
+    // belongs to a member is checked at upsert, where an unknown code is dropped.
+    const rawRef = reqUrl.searchParams.get('ref')
+    const ref = isInviteCode(rawRef) ? rawRef : undefined
 
     // Persist state server-side before redirecting — validated on callback (CSRF protection).
-    await ctx.runMutation(internal.sessions.createOAuthState, { state, plan, interval })
+    await ctx.runMutation(internal.sessions.createOAuthState, { state, plan, interval, ref })
     const url = buildAuthUrl(state)
     return new Response(null, { status: 302, headers: { Location: url } })
   })
@@ -92,7 +97,8 @@ http.route({
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         tokenExpiresAt,
-        email: userInfo.email
+        email: userInfo.email,
+        referredByCode: oauthState.ref
       })
 
       // Issue a cryptographically random session token — never expose the raw userId.

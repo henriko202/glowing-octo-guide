@@ -11,7 +11,7 @@ vi.mock('convex/react', () => ({ useQuery: vi.fn() }))
 vi.mock('../convex', () => ({ api: { users: { getMe: 'users.getMe' } } }))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 
-let mockMe: { subscriptionStatus: string }
+let mockMe: { subscriptionStatus: string; trialDays?: number; trialEligible?: boolean }
 
 function renderDialog(search = '') {
   return render(
@@ -57,5 +57,28 @@ describe('CardGateDialog', () => {
     renderDialog()
     expect(screen.getByRole('link', { name: /update payment method/i })).toBeInTheDocument()
     expect(screen.queryByText(/cancel anytime/i)).not.toBeInTheDocument()
+  })
+
+  // backlog/R19 — an invited member's gate names the trial they actually get (14 days), not the default.
+  it('names the invited 14-day trial when the member joined through an invite', () => {
+    mockMe = { subscriptionStatus: 'none', trialDays: 14 }
+    renderDialog('?plan=pro')
+    expect(screen.getByRole('link', { name: /start 14-day trial/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(new RegExp(`free for 14 days or ${TRIAL_INTERACTION_THRESHOLD} interactions`, 'i'))
+    ).toBeInTheDocument()
+  })
+
+  // A member on 'none' who already holds subscription rows (Stripe incomplete/paused, or an admin
+  // status reset) is gated but gets NO trial at checkout: `getMe.trialEligible` is the row-count
+  // truth, `subscriptionStatus` is not. All three promises have to go — the cost line included,
+  // because that one is the disclosure they are billed against the moment they click.
+  it('drops every trial promise when the member has no trial left', () => {
+    mockMe = { subscriptionStatus: 'none', trialEligible: false }
+    renderDialog('?plan=pro')
+    expect(screen.getByRole('link', { name: /subscribe to pro/i })).toHaveAttribute('href', '/billing?plan=pro')
+    expect(screen.getByText(/no trial this time/i)).toBeInTheDocument()
+    expect(screen.queryByText(/free for/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/starting your trial/i)).not.toBeInTheDocument()
   })
 })

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 import { nextTier } from '../../../convex/lib/planLimits'
+import { TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 import { api } from '../convex'
 import { SUPPORT_EMAIL } from '@/lib/support'
 import { captureEvent } from '@/lib/observability/analytics'
@@ -34,7 +35,7 @@ export default function UpgradeAtLimit({
   const tierLimits = useQuery(api.posts.getTierLimits, {})
   const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, sessionToken ? { sessionToken } : 'skip')
   const [searchParams] = useSearchParams()
-  const { gated, status } = useCardGate()
+  const { gated, status, canTrial } = useCardGate()
 
   // Render nothing while any query is loading, or when signed out — there is no tier to upgrade from.
   if (me === undefined || tierLimits === undefined || subscriptionInfo === undefined || !me) return null
@@ -42,19 +43,24 @@ export default function UpgradeAtLimit({
   // A card-gated member (never started a trial, or a lapsed payment) can't meaningfully "upgrade"
   // past a tier they were never actually engaging on — a checkout link for the next tier is the
   // wrong ask. Point them at the same trial/payment-fix ask CardGateBanner/CardGateDialog use
-  // instead (F2), branching on past_due the same way those do (F5).
+  // instead (F2), branching on past_due -- and on canTrial -- the same way those do (F5).
   if (gated) {
     const plan = resolveTargetPlan(searchParams)
     const pastDue = status === 'past_due'
     return (
       <span className={className}>
-        {t(pastDue ? 'feed.cardGateBodyPastDue' : 'feed.cardGateBody')}{' '}
+        {t(pastDue ? 'feed.cardGateBodyPastDue' : canTrial ? 'feed.cardGateBody' : 'feed.cardGateBodyNoTrial')}{' '}
         <Link
           to={`/billing?plan=${plan}`}
           className="text-primary hover:underline"
           onClick={() => captureEvent('card_gate_cta_clicked', { plan, source: limit })}
         >
-          {t(pastDue ? 'feed.cardGatePastDueCta' : 'feed.cardGateCta')}
+          {/* backlog/R19 — an invited member has a 14-day trial; say so. */}
+          {pastDue
+            ? t('feed.cardGatePastDueCta')
+            : canTrial
+              ? t('feed.cardGateCta', { days: me.trialDays ?? TRIAL_PERIOD_DAYS })
+              : t('billing.noTrialCta', { plan: t(`billing.plans.${plan}.name`) })}
         </Link>
       </span>
     )

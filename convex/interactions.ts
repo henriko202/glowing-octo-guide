@@ -1,5 +1,5 @@
 // convex/interactions.ts
-import { action, internalMutation, internalQuery, query } from './_generated/server'
+import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
@@ -11,6 +11,7 @@ import { assertPostEngageable } from './feed'
 import { getPlanLimitsHelper, nextTier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { shouldFlipInteractionLimit } from './lib/interactionLimit'
+import { canHide } from './lib/feedHygiene'
 import {
   crossesThreshold,
   pickTrialingSubscription,
@@ -114,6 +115,36 @@ export const saveCommentDraft = internalMutation({
   }
 })
 
+/**
+ * Flip `interactionLimitReached` the moment a post reaches its plan cap, recompute the feed fields
+ * (the post leaves the feed) and — once per post — tell the author by email (backlog/R20). The
+ * email is scheduled only from inside the flip, and both callers bail earlier when the post is
+ * already capped, so a second email for the same post cannot happen.
+ */
+async function flipCapIfReached(
+  ctx: MutationCtx,
+  post: Doc<'posts'>,
+  likeCount: number,
+  commentCount: number
+): Promise<void> {
+  const author = await ctx.db.get(post.authorId)
+  if (!author) return
+  const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
+  // The callers already returned when the post was capped, so it's provably not-yet-reached here.
+  if (!shouldFlipInteractionLimit(likeCount, commentCount, limits.interactionsPerPost, false)) return
+  // Hitting the interaction limit removes the post from the feed — refresh feed fields.
+  const feed = computeFeedFields({
+    isFeatured: post.isFeatured,
+    publishedAt: post.publishedAt,
+    authorTierRank: post.authorTierRank,
+    hidden: post.hidden,
+    interactionLimitReached: true,
+    deletedAt: post.deletedAt
+  })
+  await ctx.db.patch(post._id, { interactionLimitReached: true, ...feed })
+  await ctx.scheduler.runAfter(0, internal.notifications.sendPostCapReached, { postId: post._id })
+}
+
 // Internal mutation to increment comment count
 export const incrementCommentCount = internalMutation({
   args: { postId: v.id('posts'), actorId: v.id('users'), comment: v.string() },
@@ -125,6 +156,7 @@ export const incrementCommentCount = internalMutation({
     // featurePost's `if (post.isFeatured) return`). getEngageablePost gates the happy path; this
     // closes the race window.
     if (post.interactionLimitReached) return
+    const now = Date.now()
     const newCommentCount = post.commentCount + 1
     await ctx.db.patch(postId, { commentCount: newCommentCount })
 
@@ -135,37 +167,23 @@ export const incrementCommentCount = internalMutation({
       authorId: post.authorId,
       kind: 'comment',
       comment,
-      createdAt: Date.now()
+      createdAt: now
     })
+
+    // backlog/R21 — the per-viewer state that starts the 24 h "done" window. Upsert like
+    // saveCommentDraft: the row may already hold a draft or a reaction.
+    const state = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', actorId).eq('postId', postId))
+      .unique()
+    if (state) await ctx.db.patch(state._id, { commentedAt: now })
+    else await ctx.db.insert('userPostState', { userId: actorId, postId, commentedAt: now })
 
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
 
     // Check if combined interactions have reached the author's limit
-    const author = await ctx.db.get(post.authorId)
-    if (author) {
-      const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
-      if (
-        shouldFlipInteractionLimit(
-          post.likeCount,
-          newCommentCount,
-          limits.interactionsPerPost,
-          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
-          false
-        )
-      ) {
-        // Hitting the interaction limit removes the post from the feed — refresh feed fields.
-        const feed = computeFeedFields({
-          isFeatured: post.isFeatured,
-          publishedAt: post.publishedAt,
-          authorTierRank: post.authorTierRank,
-          hidden: post.hidden,
-          interactionLimitReached: true,
-          deletedAt: post.deletedAt
-        })
-        await ctx.db.patch(postId, { interactionLimitReached: true, ...feed })
-      }
-    }
+    await flipCapIfReached(ctx, post, post.likeCount, newCommentCount)
   }
 })
 
@@ -208,31 +226,27 @@ export const incrementLikeCount = internalMutation({
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
 
     // Check if combined interactions have reached the author's limit
-    const author = await ctx.db.get(post.authorId)
-    if (author) {
-      const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
-      if (
-        shouldFlipInteractionLimit(
-          newLikeCount,
-          post.commentCount,
-          limits.interactionsPerPost,
-          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
-          false
-        )
-      ) {
-        // Hitting the interaction limit removes the post from the feed — refresh feed fields.
-        const feed = computeFeedFields({
-          isFeatured: post.isFeatured,
-          publishedAt: post.publishedAt,
-          authorTierRank: post.authorTierRank,
-          hidden: post.hidden,
-          interactionLimitReached: true,
-          deletedAt: post.deletedAt
-        })
-        await ctx.db.patch(postId, { interactionLimitReached: true, ...feed })
-      }
-    }
+    await flipCapIfReached(ctx, post, newLikeCount, post.commentCount)
     return { counted: true }
+  }
+})
+
+/**
+ * backlog/R21 — "Hide now": the post leaves the viewer's feed at once instead of after 24 h.
+ * Only for a post the viewer already reacted to or commented on (there is no hide for untouched
+ * posts, and no unhide — /history keeps the record). Idempotent: a second call changes nothing.
+ */
+export const hidePost = mutation({
+  args: { sessionToken: v.string(), postId: v.id('posts') },
+  handler: async (ctx, { sessionToken, postId }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const state = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', user._id).eq('postId', postId))
+      .unique()
+    if (!state || !canHide(state)) throw new ConvexError('NOT_INTERACTED')
+    if (state.hiddenAt === undefined) await ctx.db.patch(state._id, { hiddenAt: Date.now() })
+    return null
   }
 })
 
