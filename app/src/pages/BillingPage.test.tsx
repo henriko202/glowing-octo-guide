@@ -33,7 +33,8 @@ vi.mock('../convex', () => ({
     interactions: { getRecap: 'interactions.getRecap' },
     feedback: { feedback: { submitFeedback: 'feedback.feedback.submitFeedback' } },
     // CardGateBanner's useOwnPostState (reused for the R07 "post is live" line) reads this.
-    posts: { getMyPosts: 'posts.getMyPosts' }
+    // getTierLimits also lives here (backlog/R17 — the featured-post add-on line's numbers).
+    posts: { getMyPosts: 'posts.getMyPosts', getTierLimits: 'posts.getTierLimits' }
   }
 }))
 
@@ -68,6 +69,14 @@ vi.mock('react-router-dom', () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   useSearchParams: () => [mockSearchParams, mockSetSearchParams]
 }))
+
+// getTierLimits result — matches the shape convex/posts.ts's getTierLimits returns (backlog/R17).
+const TIER_LIMITS = {
+  starter: { interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
+  growth: { interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
+  pro: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
+  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 9999 }
+}
 
 // Echo the key plus its interpolation so assertions can see both — except plan names, which
 // resolve to the real localized label. That keeps the "never print a raw tier id" rule testable.
@@ -146,7 +155,15 @@ beforeEach(() => {
   mockSearchParams = new URLSearchParams()
   mockQueryReturns = {
     'users.getSubscriptionInfo': { tier: 'growth', status: 'trialing', cancelAtPeriodEnd: false },
-    'users.getTrialProgress': { made: 1, received: 1, combined: 2, threshold: 50, reached: false, nearThreshold: false }
+    'users.getTrialProgress': {
+      made: 1,
+      received: 1,
+      combined: 2,
+      threshold: 50,
+      reached: false,
+      nearThreshold: false
+    },
+    'posts.getTierLimits': TIER_LIMITS
   }
   setUser()
 })
@@ -808,5 +825,37 @@ describe('BillingPage member with no trial left', () => {
     renderPage()
     expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7\}/)).toBeInTheDocument()
     expect(screen.queryByText(/billing\.noTrialNote/)).not.toBeInTheDocument()
+  })
+})
+
+describe('BillingPage — featured post add-on (backlog/R17)', () => {
+  it('offers the add-on under the plans with the bought cap and links to My Posts in buy mode', () => {
+    setUser({ subscriptionStatus: 'active', tier: 'growth' })
+    renderPage()
+    // growth cap 50 + growth bonus 50
+    expect(screen.getByText(/billing\.featuredAddon:.*"newCap":100/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'billing.featuredAddonCta' })).toHaveAttribute(
+      'href',
+      '/my-posts?feature=buy'
+    )
+  })
+
+  it('hides it for an unlimited tier and for a member without a card', () => {
+    setUser({ subscriptionStatus: 'active', tier: 'contact' })
+    const contact = renderPage()
+    expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
+    contact.unmount()
+    setUser({ subscriptionStatus: 'none', tier: 'growth' })
+    renderPage()
+    expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
+  })
+
+  // A2: canEngage alone still returns true for 'canceled' (they're inside their paid window and
+  // assertCanEngage lets them buy server-side), but a $5 feature for a post that leaves the feed
+  // once that window ends is a bad sale — the UI has to say no even though the server would allow it.
+  it('hides the add-on for a canceled member even though canEngage alone would allow them', () => {
+    setUser({ subscriptionStatus: 'canceled', tier: 'growth' })
+    renderPage()
+    expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
   })
 })

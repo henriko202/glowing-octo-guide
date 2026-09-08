@@ -76,7 +76,7 @@ engagement/post‑volume limits. See
 
 | Capability                          | Starter |               Growth                |     Pro     |     Contact (Enterprise)     |
 |-------------------------------------|:-------:|:-----------------------------------:|:-----------:|:----------------------------:|
-| Price                               |  $5/mo  |               $15/mo                |   $50/mo    |            Custom            |
+| Price                               | $10/mo  |               $15/mo                |   $50/mo    |            Custom            |
 | Access shared feed                  |   ✓    |                 ✓                  |     ✓      |              ✓              |
 | 7‑day trial (card required)         |   ✓    | ✓ (tier chosen on landing, see §8) |     ✓      |              —               |
 | Feed filtered by industry + country |   ✗    |       ✓ (auto from profile)        | ✓ (custom) |         ✓ (custom)          |
@@ -325,6 +325,8 @@ erDiagram
         boolean isFeatured
         number authorTierRank "4=contact..1=starter"
         boolean interactionLimitReached
+        number interactionCapBonus "optional, R17"
+        object featuredPurchase "optional, R17"
         string sourceUrl
         number deletedAt "soft-delete; row kept for weekly count"
     }
@@ -432,7 +434,9 @@ keeps the denormalized `feedRank` / `inFeed` fields in sync through the single
 | `visibilityCountries`     | string[]      | ✓  | Author allowlist — only viewers in these countries see it. Copied from `users.defaultVisibilityCountries` at insert time (empty when the author has none set).                                                                                                                                                                       |
 | `hidden`                  | boolean       | ✓  | `true` = excluded from feed (trial posts, un‑hidden on activation; also author/admin **Hide** via `setPostHidden`).                                                                                                                                                                                                                  |
 | `authorTierRank`          | number        |  –  | Denormalized tier rank at write time (4=contact, 3=pro, 2=growth, 1=starter). Defaults to 1 in feed sort when absent.                                                                                                                                                                                                                |
-| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost`; filtered out of feed.                                                                                                                                                                                                                                                    |
+| `interactionLimitReached` | boolean       |  –  | `true` once `likeCount+commentCount ≥ interactionsPerPost + interactionCapBonus` (the effective cap — see the row below); filtered out of feed.                                                                                                                                                                                      |
+| `interactionCapBonus`     | number        |  –  | Per‑tier bonus added to the post's interaction cap when its featured slot is bought (starter +25, growth +50, pro +100, contact 0); written once at fulfilment so a later plan change can't move it. See [§8](#8-subscriptions--billing).                                                                                            |
+| `featuredPurchase`        | object        |  –  | The one‑time Checkout purchase record (`checkoutSessionId`, `amountCents`, `paidAt`) written once by the `checkout.session.completed` webhook. Present ⇒ this post was bought, not earned by tier — re‑featuring is free and a redelivered webhook is a no‑op. See [§8](#8-subscriptions--billing).                                  |
 | `sourceUrl`               | string        |  –  | Original submitted URL (preserved for correct back‑links; powers PostCard's "View on LinkedIn"). Absent for cron‑synced posts.                                                                                                                                                                                                       |
 | `article`                 | object        |  –  | Best‑effort enrichment for a linked article (`{ url, title?, summary?, text?, author?, imageUrls }`, where `text` is the **full body**); see `lib/articleValidator.ts`. Feeds the AI reaction/comment prompts; not displayed. Absent when the post shares no article or enrichment failed.                                           |
 | `suggestedReaction`       | enum          |  –  | AI‑predicted most‑likely reaction (`LIKE\|PRAISE\|EMPATHY\|INTEREST\|APPRECIATION\|ENTERTAINMENT`), set async after a **new** post is inserted (manual submit or Apify sync — a re‑synced/queued‑then‑promoted post does not get one). Absent ⇒ the UI picker treats it as `LIKE`. See [§11A](#11a-ai-reaction--comment-assistance). |
@@ -973,7 +977,9 @@ our code adds **Checkout/Portal session creation** and **webhook callbacks**
 price IDs (six env vars total — see §16). The pure helpers
 `buildPriceMap(env)` and `resolveTier(map, priceId)` are unit‑tested; the module‑level
 `ALLOWED_PRICE_IDS` set and `getTierFromPriceId(priceId)` function read `process.env` once at load. Unknown or blank IDs
-default to `starter`. `contact` is admin‑assigned, not purchasable via Checkout.
+default to `starter`. `contact` is admin‑assigned, not purchasable via Checkout. The one-time featured-post Price
+(`STRIPE_FEATURED_POST_PRICE_ID`, backlog/R17) is exported separately as `FEATURED_POST_PRICE_ID` and is never part of
+`buildPriceMap`, so it cannot enter the subscription allowlist or resolve to a tier.
 
 > **Tier pin — admins only.** Stripe webhook tier writes route through the pure, unit‑tested
 > `resolveSyncedTier(currentTier, isAdmin, stripeTier)` in `stripe.ts`: an **admin's tier is never
@@ -994,8 +1000,83 @@ default to `starter`. `contact` is admin‑assigned, not purchasable via Checkou
 
 The BillingPage exposes a **monthly / annual toggle**, seeded from the interval the member is already billed on
 (`getSubscriptionInfo.priceInterval`) and defaulting to annual for anyone without a subscription row; a `?interval=`
-link, the landing's stash, or a click always wins (§14). Annual pricing is 2 months free:
-Starter $50/yr · Growth $150/yr · Pro $500/yr.
+link, the landing's stash, or a click always wins (§14). Annual pricing is 2 months free: Starter $100/yr · Growth
+$150/yr ·
+Pro $500/yr. The landing shows the annual price on every card and puts the monthly price behind a text link ("Prefer to pay monthly?") — the Good-Better-Best ladder is Starter $
+10 → Growth $15 → Pro $50, and Starter is the
+decoy that makes Growth the obvious buy (backlog/revenue/R13).
+
+### Featured post add-on (one-time Checkout, backlog/R17)
+
+A member buys one featured slot for **$5** for ONE of their posts. It is a Stripe Checkout in `mode: 'payment'`
+on the same customer as the subscription (saved card offered), fulfilled by webhook. It is outside the monthly
+featured quota: `featuredPostUsage` is never written, a bought post re-features for free forever, and there is
+no refund for un-featuring it (the hint under the button says so before the tap).
+
+**Entry points (all in the app, upgrade named first on every one):** the capped-post row on My Posts
+(`buyFeaturedCapped` copy, source `cap`), the Feature slot on an unfeatured card at the monthly quota or in
+`?feature=buy` mode (source `quota` / `billing`), the featured `UpgradeAtLimit` line (`upgrade.featuredAddon`,
+text only), and the Billing page line (`billing.featuredAddon` → `/my-posts?feature=buy`). The buy control itself
+is withheld — `MyPostsPage.tsx`'s `canBuy()` is the single gate — on a hidden post (fulfilment keeps `inFeed`
+false, so the placement could not happen), on a post that already has a `featuredPurchase`, for a canceled
+member (`assertCanEngage` still allows it inside the paid window, but a $5 placement that outlives that window
+is a bad sale), and for a card-gated member or a tier with unlimited featured slots.
+
+**`billingNode.purchaseFeaturedPost({ sessionToken, postId })`** — `"use node"` action:
+
+1. `requireAuthAction` → `assertCanEngage(user)` (`PAYMENT_REQUIRED:` for no card / past due; trialing passes —
+   the trial hint says "Charged today, separate from your trial" — and so do canceled-but-still-engaging
+   members and admins, per `canEngage` / `isAdmin` in `lib/access.ts`).
+2. `FEATURED_POST_PRICE_ID` unset → `FEATURED_PRICE_UNSET`.
+3. `internal.posts.assertFeaturedPurchasable({ postId, userId })` → `POST_NOT_FOUND` (missing, deleted, or not
+   the caller's — one answer, no ownership leak), `ALREADY_PURCHASED`, `NOTHING_TO_BUY` (unlimited featured tier).
+4. `getOrCreateCustomer` → `checkout.sessions.create({ mode: 'payment', customer, line_items: [featured price × 1],
+   metadata: { kind: 'featured_post', convexUserId, postId }, locale, success_url: /my-posts?featured=paid&post=<id>,
+   cancel_url: /my-posts })` → `{ url }`.
+
+**Fulfilment — `checkout.session.completed` → `posts.applyPurchasedFeature`:**
+`lib/featuredPurchase.isFeaturedPostCheckout`
+lets only a paid `payment`-mode session with `metadata.kind === 'featured_post'` through (subscription checkouts
+complete through the same event). The mutation takes `postId` as a plain string and `normalizeId`s it. A malformed
+id, or a valid id for a post that no longer exists (hard-deleted via the erasure cascade, `privacy/deletion.ts` —
+not merely soft-deleted), logs and returns with no audit row, so Stripe never retries. Then, via the pure
+`purchasedFeaturePatch`:
+
+| Post state at the webhook                                      | Written                                                                                                                                                                                                                                  | Audit action                                                                          |
+|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
+| Already has `featuredPurchase` (redelivery)                    | nothing                                                                                                                                                                                                                                  | —                                                                                     |
+| A second, different paid session for an already-purchased post | nothing (the first purchase stands)                                                                                                                                                                                                      | `post.featured_purchase_duplicate` (both session ids + `amountCents` in the metadata) |
+| Soft-deleted between Checkout and webhook                      | `featuredPurchase` only (the money exists; nothing to feature)                                                                                                                                                                           | `post.featured_purchase_orphaned`                                                     |
+| Live                                                           | `isFeatured: true`, `featuredAt`, `interactionCapBonus = FEATURED_CAP_BONUS[author tier]`, `featuredPurchase`, `interactionLimitReached` re-decided against `planCap + bonus` (a capped post comes back at the top), `feedRank`/`inFeed` | `post.featured_purchased`                                                             |
+
+Every branch above returns `null` — the webhook handler never throws for a redelivery or a duplicate payment, so
+Stripe always sees a 200 (a duplicate charge is real money Stripe won't take back on our say-so; the audit row is
+where the owner finds it, not a thrown error that would just make Stripe retry the same charge forever).
+
+Cap bonus by the author's tier at fulfilment: starter +25, growth +50, pro +100, contact 0 (nothing to buy).
+§9 and §11 describe how the effective cap is applied.
+
+```mermaid
+sequenceDiagram
+  participant M as Member (My Posts)
+  participant A as billingNode.purchaseFeaturedPost
+  participant P as posts.assertFeaturedPurchasable
+  participant S as Stripe Checkout
+  participant W as http.ts checkout.session.completed
+  participant F as posts.applyPurchasedFeature
+  M->>A: { sessionToken, postId }  (featured_purchase_started {source})
+  A->>A: assertCanEngage · FEATURED_POST_PRICE_ID
+  A->>P: { postId, userId }
+  P-->>A: null | ConvexError(POST_NOT_FOUND | ALREADY_PURCHASED | NOTHING_TO_BUY)
+  A->>S: sessions.create(mode payment, metadata kind=featured_post, postId)
+  S-->>M: hosted Checkout → pays $5
+  S-->>M: success_url /my-posts?featured=paid&post=id  ("Confirming your payment…")
+  S->>W: checkout.session.completed
+  W->>W: isFeaturedPostCheckout? else return
+  W->>F: { postId, checkoutSessionId, amountCents, paidAt }
+  F->>F: normalizeId · redelivery no-op · purchasedFeaturePatch · audit
+  F-->>M: post.featuredPurchase appears → clears "Confirming your payment…" (toast + featured_purchase_completed already fired off the return-leg param, independent of this)
+```
 
 ### Checkout (subscribe) flow
 
@@ -1231,7 +1312,7 @@ flowchart TD
     G1 -->|" no "| DROP["silent"]
     G1 -->|" yes "| G2{"shouldSendCapNotice:<br/>email + trialing/active + no scheduled cancel"}
     G2 -->|" no "| DROP
-    G2 -->|" yes "| MODE{"capNoticeMode(tier, cap, nextCap)"}
+    G2 -->|" yes "| MODE{"capNoticeMode(tier, planCap, nextCap)"}
     MODE -->|" upgrade "| UP["one link: /billing?plan=next&interval=…&src=cap_email"]
     MODE -->|" proContact "| SUP["My Posts link + SUPPORT_EMAIL address"]
     MODE -->|" contactCustom "| SUP
@@ -1239,26 +1320,34 @@ flowchart TD
     SUP --> DEL
 ```
 
-**The subject reports the post's own total, the body reports the plan's cap.** `postCapReachedEmail` takes both
+**The subject reports the post's own total, the body reports the cap it hit.** `postCapReachedEmail` takes both
 `total` (the post's `likeCount + commentCount`, passed by `sendPostCapReached`) and `cap`. At the flip the two usually
 agree, but after a **Growth → Starter downgrade** a post already sitting at 41 flips against a cap of 25 — so the
-subject ("your post reached **41** interactions and left the feed") uses the total, and only the body sentence that is
-genuinely about the plan quotes the cap ("it reached the Starter cap of **25** interactions").
+subject ("your post reached **41** interactions and left the feed") uses the total, and the body names the cap with no
+plan attribution ("it reached its cap of **25** interactions") — a bought post's cap already includes its R17 bonus,
+so naming a plan there would sometimes be false.
 
-**The upgrade line promises the author's *next* posts, never this one coming back.** Nothing ever un-flips
-`interactionLimitReached`: no writer sets it `false`, `computeFeedFields` (`lib/feedRank.ts`) preserves it through the
-tier restamp, and `syncPosts.applyEngagementCounts` is one-way. A capped post therefore stays out of the feed even
-after the author upgrades, so the line reads *"On {nextPlan}, your next posts collect up to {nextCap} each:"* (and the
+**The upgrade line promises the author's *next* posts, never this one coming back — unless it is bought back.** Apart
+from `posts.applyPurchasedFeature` (backlog/R17, which re-decides `interactionLimitReached` against the post's new,
+bigger `effectiveInteractionCap` at fulfilment), nothing un-flips it: no other writer sets it `false`,
+`computeFeedFields` (`lib/feedRank.ts`) preserves it through the tier restamp, and `syncPosts.applyEngagementCounts` is
+one-way. A capped post therefore stays out of the feed after a plain upgrade — the bigger cap only applies to the
+author's *next* posts — so the line reads *"On {nextPlan}, your next posts collect up to {nextCap} each:"* (and the
 pt-BR / es equivalents) rather than anything suggesting the post keeps collecting. It is still the email's one
 actionable line and still the only link. A locale-wide unit test bans the old "keeps collecting" / "continua recebendo"
 / "sigue recibiendo" phrasings, because that promise sits directly in front of a charge.
 
-**One flip, one email.** Both `incrementLikeCount` and `incrementCommentCount` now call a single helper,
-`flipCapIfReached` (`convex/interactions.ts`), instead of duplicating the cap check. It patches
+**One flip, one email — until a purchase resets it.** Both `incrementLikeCount` and `incrementCommentCount` call a
+single helper, `flipCapIfReached` (`convex/interactions.ts`), instead of duplicating the cap check. It patches
 `interactionLimitReached` together with the recomputed `computeFeedFields`, then schedules
 `internal.notifications.sendPostCapReached({ postId })` at 0 ms. Because both callers return early when the post is
-**already** capped, the flip happens exactly once in the post's life — so the schedule, and therefore the email, cannot
-repeat. There is no dedupe flag on the post: the flip *is* the dedupe.
+**already** capped, an organic flip happens exactly once against a given cap — so the schedule, and therefore the
+email, cannot repeat against that same number. `posts.applyPurchasedFeature` (backlog/R17) is the one path that
+un-flips `interactionLimitReached`, against the post's new, bigger `effectiveInteractionCap`; from there the same
+`flipCapIfReached` (and the Apify-refresh equivalent in `syncPosts.applyEngagementCounts`, [§11](#11-feed--engagement))
+can flip it a second time once the bought post reaches that bigger cap, scheduling a second, independent
+`post_cap_reached` email at the new number. There is no dedupe flag on the post: the flip *is* the dedupe, once per cap
+it is currently measured against.
 
 **Everything that could make the email wrong is re-checked at send time.** The action re-reads the post
 (`internal.interactions.getPost`), the author's billing context (`internal.billing.getBillingContext`) and the effective
@@ -1313,6 +1402,7 @@ see [§17](#17-security-posture).
 | `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`. If the member **still holds a live row** (the voided duplicate's own `deleted`, or a period-end cancel landing after a re-subscribe) their `tier` / `subscriptionStatus` / `subscriptionEndsAt` follow that row — nothing is downgraded. Otherwise set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this), downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `customer.subscription.trial_will_end`      | Schedules `internal.notifications.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears. Skips an event older than the row's `lastEventAt`, so a retried failure cannot re‑block a member whose payment already cleared, and ignores a failure for a row already `canceled` (Stripe's dunning end delivers the final failure and the `deleted` in either order).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `checkout.session.completed`                | `isFeaturedPostCheckout` (`lib/featuredPurchase.ts`) lets through only a **paid** `payment`-mode session tagged `metadata.kind === 'featured_post'` — a subscription checkout completes through this same event and is ignored here. `posts.applyPurchasedFeature` normalises `postId`, no-ops on a redelivery (same session id) or logs a `post.featured_purchase_duplicate` audit row for a second paid session on an already-featured post (no refund), and otherwise features the post with its tier's cap bonus. Never throws — Stripe always sees 200. See "Featured post add-on" above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ```mermaid
 flowchart TD
@@ -1334,6 +1424,9 @@ flowchart TD
     T -->|trial_will_end| TWE["scheduler → notifications.sendTrialEnding (day-7 reminder)"]
     T -->|deleted| CAN["cancelUserSubscription → follow the surviving live row if any, else tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
     T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement; skips an out-of-order event or a canceled row)"]
+    T -->|checkout.session.completed| CSC{"isFeaturedPostCheckout? (payment mode + paid + metadata.kind=featured_post)"}
+    CSC -->|no| IGN["ignore (subscription checkouts complete through this event too)"]
+    CSC -->|yes| APF["posts.applyPurchasedFeature (normalizeId · redelivery/duplicate no-op+audit · else feature + cap bonus)"]
 ```
 
 > **Apify dormant guard:** `syncUserSubscription` reads `appSettings` and checks
@@ -1553,25 +1646,33 @@ sequenceDiagram
 
 ### Stripe Dashboard setup
 
-> **Status (2026-09-07): not yet applied** in test or live mode. Every row below is an open manual step — including the
+> **Status (2026-09-08): not yet applied** in test or live mode. Every row below is an open manual step — including the
 > three portal rows added for the cancel flow (R09), which the plan-switch deep link (R08 / R20, above) depends on too.
 
 None of the following is configurable from code, and **all of it must be applied twice — once in test mode and again in
 live mode**. Two of Stripe's defaults are actively wrong for this product (the built-in trial-ending email, which would
 double up with ours, and downgrade proration), so treat this as required setup rather than preference.
 
-| Setting                | Where (Stripe Dashboard)                               | Value                                                                                                                           | Why                                                                                                                                                                                                                                                            |
-|------------------------|--------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Plan switching         | Billing → Customer portal → products/prices            | All **three products** and **six prices** (monthly + annual) listed as switchable                                               | A card holder switches plans in the portal; `createCheckoutSession` refuses a second subscription (`ALREADY_SUBSCRIBED`), so a price missing from the portal is a dead end for that member. `createPlanSwitchSession` deep-links to that price's confirm step. |
-| Payment-method updates | Billing → Customer portal                              | Allowed                                                                                                                         | The only route a `past_due` member has to fix a failed card and clear the engagement gate.                                                                                                                                                                     |
-| Cancellation           | Billing → Customer portal                              | Allowed                                                                                                                         | The cancel path that the checkout copy, the Terms and every billing email point at has to actually exist. No roach motel.                                                                                                                                      |
-| Proration              | Billing → Customer portal → subscription updates       | **Upgrade: immediate, with proration. Downgrade: at period end.**                                                               | Decision D7 of the design spec, and consistent with the no-refund policy: a downgrade never issues a credit.                                                                                                                                                   |
-| Cancellation mode      | Billing → Customer portal → Cancellations              | **On**, mode **at end of billing period**, cancellation **reasons on**                                                          | R09's `subscription_cancel` flow lands here. Period-end is the only mode consistent with the no-refund policy; Stripe's reason picker is separate from our single free-text question.                                                                          |
-| Subscription updates   | Billing → Customer portal → Subscriptions              | Update **on**, with **six prices** listed — Starter monthly **and** annual included; proration behaviour **none** if offered    | R09's downgrade and the R08 / R20 plan switch use `subscription_update_confirm`; a price missing here makes "Move to Starter" a dead end and "Switch to X" fall back to the portal home. No proration keeps the downgrade credit-free (no refund).             |
-| Pausing                | Billing → Customer portal → Subscriptions              | **Off**                                                                                                                         | A paused subscription is neither live nor canceled: `toSubscriptionStatus` maps Stripe's `paused` to `none`, which silently revokes engagement while the member believes they are on hold.                                                                     |
-| Trial-ending email     | Settings → Billing → automatic customer emails         | **OFF**                                                                                                                         | Ours handles it (`sendTrialEnding`, above). Both enabled = two warnings for one event.                                                                                                                                                                         |
-| Payment receipt        | Settings → Billing → automatic customer emails         | **ON**                                                                                                                          | The receipt for the first charge is Stripe's job; we send no receipt of our own.                                                                                                                                                                               |
-| Webhook events         | Developers → Webhooks → `<convex site>/stripe/webhook` | `customer.subscription.created` / `.updated` / `.deleted`, **`customer.subscription.trial_will_end`**, `invoice.payment_failed` | `trial_will_end` is new — without it subscribed, the day-7 reminder never fires and the 7-day path charges unannounced.                                                                                                                                        |
+| Setting                   | Where (Stripe Dashboard)                               | Value                                                                                                                                                                                                                                                                                          | Why                                                                                                                                                                                                                                                                                                                                                                                                              |
+|---------------------------|--------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Plan switching            | Billing → Customer portal → products/prices            | All **three products** and **six prices** (monthly + annual) listed as switchable                                                                                                                                                                                                              | A card holder switches plans in the portal; `createCheckoutSession` refuses a second subscription (`ALREADY_SUBSCRIBED`), so a price missing from the portal is a dead end for that member. `createPlanSwitchSession` deep-links to that price's confirm step.                                                                                                                                                   |
+| Payment-method updates    | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                                                        | The only route a `past_due` member has to fix a failed card and clear the engagement gate.                                                                                                                                                                                                                                                                                                                       |
+| Cancellation              | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                                                        | The cancel path that the checkout copy, the Terms and every billing email point at has to actually exist. No roach motel.                                                                                                                                                                                                                                                                                        |
+| Proration                 | Billing → Customer portal → subscription updates       | **Upgrade: immediate, with proration. Downgrade: at period end.** ⚠️ **Conflicts with the "Subscription updates" row below — read both before you touch this toggle.**                                                                                                                         | Decision D7 of the design spec, and consistent with the no-refund policy: a downgrade never issues a credit. But Stripe exposes **one** proration setting for every update (see the plan-switch note above), so this value and the "none" the row below asks for cannot both be applied: picking proration charges a downgrade, picking "none" makes an upgrade free until renewal. Unresolved — Henriko's call. |
+| Cancellation mode         | Billing → Customer portal → Cancellations              | **On**, mode **at end of billing period**, cancellation **reasons on**                                                                                                                                                                                                                         | R09's `subscription_cancel` flow lands here. Period-end is the only mode consistent with the no-refund policy; Stripe's reason picker is separate from our single free-text question.                                                                                                                                                                                                                            |
+| Subscription updates      | Billing → Customer portal → Subscriptions              | Update **on**, with **six prices** listed — Starter monthly **and** annual included; proration behaviour **none** if offered                                                                                                                                                                   | R09's downgrade and the R08 / R20 plan switch use `subscription_update_confirm`; a price missing here makes "Move to Starter" a dead end and "Switch to X" fall back to the portal home. No proration keeps the downgrade credit-free (no refund).                                                                                                                                                               |
+| Pausing                   | Billing → Customer portal → Subscriptions              | **Off**                                                                                                                                                                                                                                                                                        | A paused subscription is neither live nor canceled: `toSubscriptionStatus` maps Stripe's `paused` to `none`, which silently revokes engagement while the member believes they are on hold.                                                                                                                                                                                                                       |
+| Trial-ending email        | Settings → Billing → automatic customer emails         | **OFF**                                                                                                                                                                                                                                                                                        | Ours handles it (`sendTrialEnding`, above). Both enabled = two warnings for one event.                                                                                                                                                                                                                                                                                                                           |
+| Payment receipt           | Settings → Billing → automatic customer emails         | **ON**                                                                                                                                                                                                                                                                                         | The receipt for the first charge is Stripe's job; we send no receipt of our own.                                                                                                                                                                                                                                                                                                                                 |
+| Starter prices (R13)      | Products → Starter                                     | Create a **$10 monthly** and a **$100 annual** Price (2 months free) in every environment; repoint `STRIPE_STARTER_PRICE_ID` / `STRIPE_STARTER_ANNUAL_PRICE_ID` and the `VITE_STRIPE_STARTER_*` copies; archive the $5/$50 Prices. Existing $5 subscribers keep their Price until they switch. | The client's labels (`app/src/lib/planPrices.ts`, `landing/components/Pricing.tsx`) already say $10/$100.                                                                                                                                                                                                                                                                                                        |
+| Featured post Price (R17) | Products → "Featured post"                             | One-time **$5** Price (not recurring) per environment; set `STRIPE_FEATURED_POST_PRICE_ID` in the Convex env.                                                                                                                                                                                  | Never add it to the subscription price ids.                                                                                                                                                                                                                                                                                                                                                                      |
+| Webhook events            | Developers → Webhooks → `<convex site>/stripe/webhook` | `customer.subscription.created` / `.updated` / `.deleted`, **`customer.subscription.trial_will_end`**, `invoice.payment_failed`, `checkout.session.completed`                                                                                                                                  | `trial_will_end` is new — without it subscribed, the day-7 reminder never fires and the 7-day path charges unannounced.                                                                                                                                                                                                                                                                                          |
+
+**Payment methods for the $5 add-on** are deliberately **not** a Dashboard setting: `billingNode.purchaseFeaturedPost`
+pins `payment_method_types: ['card']` on the one-time Checkout. A delayed-notification method (boleto, OXXO, SEPA debit)
+would complete `unpaid` — dropped by `isFeaturedPostCheckout` — and settle later through
+`checkout.session.async_payment_succeeded`, which nothing handles, so the member would be charged and never fulfilled.
+Enabling one for this purchase means adding that webhook handler, and a pending-payment UI, first.
 
 **Manual check after any of the above changes (test mode).** Switch a plan **during a trial** and confirm two things
 survive: Stripe preserves `trial_end` across the price change (the trial is neither restarted nor dropped), and the
@@ -1628,6 +1729,12 @@ to dropping out of the feed. One post, one ask, per recap ([§11](#11-feed--enga
 | growth  |         50          |      2       |        1         |     2      |
 | pro     |         200         |      5       |        3         |     3      |
 | contact |         200         |      5       | 9999 (sentinel)  |     4      |
+
+**Featured-post cap bonus (backlog/R17).** `FEATURED_CAP_BONUS` (`convex/lib/planLimits.ts`) = starter 25 · growth 50 ·
+pro 100 · contact 0. A post whose featured slot was bought carries it as `posts.interactionCapBonus`;
+`effectiveInteractionCap(planCap, bonus)` (`convex/lib/interactionLimit.ts`) is the cap such a post is measured
+against. Plan + bonus never exceeds the next tier's plain cap (25+25 ≤ 50, 50+50 ≤ 200; `planLimits.test.ts`), so the
+add-on never outranks an upgrade.
 
 `contact`'s 9999 (`UNLIMITED_FEATURED_SENTINEL` in `lib/postLimit.ts`, shared with the app's `isUnlimitedFeatured` pill
 check) is a "Custom/effectively‑unlimited" sentinel, not a real cap. For `interactionsPerPost` and
@@ -1898,6 +2005,15 @@ and is gated by a per‑tier **monthly quota** (`planLimits.featuredPerMonth`, s
 - **Month key.** `featuredPostUsage.month` is a deterministic **UTC** `"YYYY-MM"` string
   (`lib/postLimit.ts:currentUtcMonthKey`), not derived from any server-local clock — the quota resets at the same
   instant worldwide regardless of where the Convex function executes.
+- **Featuring a capped post spends the slot without returning it to the feed.** `featurePost` passes the post's
+  existing `interactionLimitReached` straight into `computeFeedFields` — it does not re-decide the cap — so featuring
+  a post that already reached its interaction cap still increments `featuredPostUsage` while the post stays out of the
+  feed. My Posts therefore disables the plain Feature/Unfeature toggle on a capped, unfeatured post
+  (`myPosts.featuredCappedTitle`); only the paid path below re-decides `interactionLimitReached` against the bigger cap.
+
+**Bought slots.** A post with `featuredPurchase` was featured by the $5 add-on ([§8](#8-subscriptions--billing)).
+`featurePost` re-features it without reading or writing `featuredPostUsage`; `unfeaturePost` is unchanged and refunds
+nothing (the hint under the buy button says so). Fulfilment itself is `posts.applyPurchasedFeature`, not `featurePost`.
 
 ### Apify sync + queue pipeline
 
@@ -2139,6 +2255,18 @@ thing that happened to their account, not an in-page state they can be expected 
 [§8 "Post-cap email (R20)"](#post-cap-email-r20) for the send rules and the copy,
 [§14](#14-frontend--authenticated-app-app) (`MyPostsPage`) for the in-app placement, and
 [§9](#9-plan-limits-system) for `UpgradeAtLimit` itself.
+
+**The bonus applies only where a post already exists (backlog/R17).** The three sites that decide whether an *existing*
+post is capped — `interactions.flipCapIfReached`, the Apify refresh's `jobs/syncPosts.applyEngagementCounts`,
+and the recap's `lib/recap.pickNearCapPost` (below) — all call
+`effectiveInteractionCap(limits.interactionsPerPost, post.interactionCapBonus)` (`convex/lib/interactionLimit.ts`)
+rather than the plan's plain `interactionsPerPost`, so a bought post is measured against its own bigger cap everywhere
+it can leave or stay in the feed. The three creation-time checks (submit rejection, the Apify insert, the queue
+promotion — [§9](#9-plan-limits-system)) keep the plain plan cap: a post has no `interactionCapBonus` until it is
+featured by a purchase. Because `posts.applyPurchasedFeature` re-decides `interactionLimitReached` against the new,
+bigger cap at fulfilment ([§8 "Post-cap email (R20)"](#post-cap-email-r20)), a bought post can leave the feed a second
+time once it reaches that bigger number, and `flipCapIfReached` sends a second, independent `post_cap_reached` email
+at the new number — not a repeat of the first.
 
 | Action                                             | Validation                                                                 | Rate limit | Effect (no LinkedIn call)                |
 |----------------------------------------------------|----------------------------------------------------------------------------|------------|------------------------------------------|
@@ -2860,6 +2988,10 @@ flowchart TD
       inviter's **first name only**, at render time, for the one-line gift notice on Billing.
     - `userPostState.commentedAt` / `hiddenAt` — per-viewer engagement timestamps of exactly the same kind as the
       `reactedAt` already in that table, used only for the 24-hour feed-hygiene window ([§11](#11-feed--engagement)).
+- **Featured-post purchase record (R17)** — `posts.featuredPurchase` (session id, amount, date) and
+  `interactionCapBonus` live on the post: exported with it, deleted with it at erasure. The invoice/receipt stays in
+  Stripe under the customer (Stripe is a sub-processor already listed). Audit rows `post.featured_purchased` /
+  `post.featured_purchase_orphaned` carry `postId`, session id, amount and bonus, no content.
 - **The landing stores the invite code in `sessionStorage['ref']`** for the life of the tab (`RefCarrier`, see
   [§15](#15-frontend--landing-site-landing)), so a language switch — which drops the query string — does not lose it.
   This is **functional storage, not tracking**: one self-supplied code, no identifier, no cross-site read, cleared when
@@ -3257,6 +3389,30 @@ sync with the compliance docs and live support inbox.
   limit="interactionCap"` — passive and in‑page only, no toast. **Delete** opens a themed `Modal` confirmation
   (`myPosts.deleteConfirm`, ghost Cancel + destructive Confirm) instead of a native `window.confirm` ([[B18]]). Renders
   each post via the shared `LinkedInEmbed` with an app footer (stats, relative time, "View on LinkedIn").
+- **The $5 add-on (backlog/R17)** lives on this page as one shared `BuyFeaturedButton` — a ghost button reading
+  `myPosts.buyFeatured` ("Feature for {{price}}"), or `myPosts.buyFeaturedRoom` ("Add room for {{price}}") when
+  `post.isFeatured` (the capped-row case below, already featured for free — buying only adds room, so the label must
+  not offer to feature it again), plus a visible `myPosts.buyFeaturedHint` naming the new cap and the
+  no-refund rule, and `myPosts.buyFeaturedTrial` ("Charged today, separate from your trial.") while the member is
+  still trialing. It renders in exactly one of two places per card, never both: the capped-post row
+  (`myPosts.buyFeaturedCapped` plus the button, source `cap`, under the interaction-cap badge and its
+  `UpgradeAtLimit`) or the plain Feature slot on an unfeatured, uncapped card once the monthly quota is spent or the
+  page is in buy mode (source `quota` / `billing`). It is hidden entirely for a bought post, an unlimited-featured
+  tier, or a card-gated member ([§8](#8-subscriptions--billing) "Entry points"). Two one-shot query params drive the
+  return trip: `?feature=buy` (from the Billing add-on line) puts every eligible card's control in buy mode, and
+  `?featured=paid&post=<id>` (Stripe's `success_url`) shows `myPosts.confirmingPayment` ("Confirming your
+  payment…") on that one card — and suppresses every buy control on it, since `featuredPurchase` is exactly the
+  field that has not arrived yet — until its `featuredPurchase` lands reactively. The toast is **not** gated on
+  that: one `myPosts.featuredPaidToast` and `featured_purchase_completed` fire off the param itself as soon as
+  `newCap` and the post list have loaded, independent of the webhook, through a ref latch so they cannot repeat.
+  The toast alone also needs the id to name a post still in the list, so a purchase orphaned by a deleted post
+  never promises room on it. Both params are stripped via
+  `setSearchParams({}, { replace: true })`. A bought post's badge reads `myPosts.featuredPaidBadge` ("Featured · paid ·
+  cap {{cap}}") instead of the plain `feed.featured`, interpolating `effectiveInteractionCap(planCap,
+  post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPosts.postAddedBuy` when the featured
+  quota is already at its cap, `postAddedFeature` otherwise. Off this page, the same add-on surfaces as text only: the
+  `UpgradeAtLimit limit="featured"` line's `upgrade.featuredAddon` sentence, and Billing's own `billing.featuredAddon`
+  line linking to `/my-posts?feature=buy`.
 - **RecapPage** (`/recap`, R15) — the in-app answer to "did any of this do anything?". Queries
   `interactions.getRecap` + `posts.getWeeklyUsage` + `posts.getFeaturedUsage`, plus `useTrialProgress` for the
   `TrialMeter` shown only while trialing. `now` is `floorToHour(Date.now())` captured **once** in state, so the query
@@ -3569,7 +3725,11 @@ Pro‑only — `SettingsPage`'s `isPro` — so the generic Starter→Growth ladd
 and the **featured** ask is only rendered by `MyPostsPage` when the member's plan includes featured posts at all
 (`featuredPerMonth > 0`) — on Starter (0/month) `usedCount >= featuredPerMonth` is 0 ≥ 0 on every visit, so the ask
 used to fire on page load, an interruption rather than a limit moment; Starter meets the featured ask where it binds,
-the Feature button's own disabled state (the interim `upgrade.featuredNotIncluded` key is gone). An optional **
+the Feature button's own disabled state (the interim `upgrade.featuredNotIncluded` key is gone). When `limit ===
+'featured'` and the member is not canceled, one more line renders after the upgrade copy: `upgrade.featuredAddon`,
+naming the $5 add-on (backlog/R17) — the downsell after the upsell, text only, never shown to a canceled member (who
+has no buy control on My Posts either, `canBuy()` — [§14](#14-frontend--authenticated-app-app) MyPostsPage). An
+optional **
 `nearCap?: { total, cap }`** prop (R15, recap only) switches the `interactionCap` copy from the past-tense
 `upgrade.interactionCap` ("this post left the feed…") to `upgrade.interactionCapNear` ("your post is at {{total}} of
 {{cap}} interactions…") — the same component covering both sides of the [§9](#9-plan-limits-system) 0.8 band, so
@@ -3737,7 +3897,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-      | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -4003,8 +4163,8 @@ is a second thing to keep in sync with `NO_TRIAL_MESSAGE`, and the gate contradi
 being fixed. Cross-namespace `t()` is already the pattern here — `UpgradeAtLimit` reads `billing.plans.*.name`. Neither
 new key carries `{{days}}`, for the same reason as the three above. No keys were removed.
 
-**State the counting method with the number.** All three files hold **372 keys with arrays counted once** — the same
-files are **382 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
+**State the counting method with the number.** All three files hold **392 keys with arrays counted once** — the same
+files are **402 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
 pt and es show **zero drift** under a recursive key-diff in either counting mode, and the same diff compares the
 `{{placeholder}}` set of every leaf — a translated string that drops or renames one is a runtime hole no key-diff
 alone would catch. There is still no automated parity test, so both are run by hand whenever keys change.
@@ -4106,10 +4266,12 @@ at `/<lang>`.)
 
 #### Dictionary (`landing/i18n/`)
 
-UI strings live in `i18n/dictionaries/{en,pt,es}.json` — **88 keys with arrays counted once**, or **154 string leaves**
-when every array entry is counted individually (measured 2026‑09‑07 over `en.json`; **state which method you mean
-whenever you quote a number here**, because the two differ by more than 40%). All three files carry the same key set —
-zero drift under a recursive key-diff, run by hand: there is no automated parity test on this side either. Groups:
+UI strings live in `i18n/dictionaries/{en,pt,es}.json` — **87 keys with arrays counted once**, or **155 string leaves**
+when every string inside every array is counted individually (measured 2026‑09‑08 over `en.json`; **state which method
+you mean whenever you quote a number here**, because the two differ by more than 40%). Note the second method descends
+_into_ the objects an array holds: `pricing.plans` is three entries but twenty-seven leaves. All three files carry the
+same key set — zero drift under a recursive key-diff, run by hand: there is no automated parity test on this side
+either. Groups:
 `meta`, `nav`,
 `hero`, `painBeat`, `howItWorks`, `ssiExplainer`, `proof`, `features`, `tiers`, `pricing`, `faq`,
 `finalCta`, `footer`, `cookieNotice`, `themeToggle`, `languageSelector`). The server utility
@@ -4180,11 +4342,18 @@ reaches you, because LinkedIn never surfaces you. Recruiters and clients search,
   Navigator feature in August 2026, so sending a free visitor there sends them to a paywall.
   `Features` markets exactly three shipped capabilities (industry feed, AI-assisted comment/reaction, post targeting),
   outcome-framed and tier-labelled, with no "coming soon"
-  items. `Pricing` is a `'use client'` component with an annual/monthly toggle (annual default, annual = monthly × 10
-  giving 2 months free); three tiers — Starter $5/$50, Growth $15/$150 (Recommended, elevated), Pro $50/$500 — plus an
-  Enterprise contact-us line; trial copy reads "no charge until 50 interactions or 7 days, whichever comes first; card
-  required, cancel anytime" (the card-capture and milestone-gate mechanics are implemented in Plan 2). Each tier's
-  trial CTA (`Start 7-day <Plan> trial`) links directly to OAuth and appends
+  items. `Pricing` is a `'use client'` component. Three cards, annual price shown, one axis line under the price (
+  "25/50/200
+  interactions counted per post" — the only number the three plans are compared on), then the feature list (featured
+  posts on Growth/Pro after "Everything in …", posts/week last). Monthly pricing sits behind a text link ("Prefer to pay
+  monthly? See monthly prices" / "Back to annual · 2 months free") that flips a local `annual` boolean; the CTA carries
+  `?plan=<id>&interval=<annual|monthly>` exactly as before. **Pricing structure (backlog/R13):** Starter $10 → Growth
+  $15 → Pro $50. At $5 → $15 → $50 every step was ~3× for a linear feature gain, so no card read as the deal; at $10 →
+  $15 Growth costs 1.5× Starter for double the cap (50 vs 25), double the posts (2 vs 1) and a featured post, and Pro is
+  3.3× Growth for 4× the cap — Growth is the deal by construction, which is why it wears the "Recommended" badge. No
+  free plan, no fourth card, no struck-through prices. Trial copy reads "no charge until 50 interactions or 7 days,
+  whichever comes first; card required, cancel anytime" (the card-capture and milestone-gate mechanics are implemented
+  in Plan 2). Each tier's trial CTA (`Start 7-day <Plan> trial`) links directly to OAuth and appends
   `?plan=<starter|growth|pro>&interval=<monthly|annual>` so the chosen tier is carried through the OAuth flow and
   pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with honest
   trial-scope and SSI answers; no "no credit card required" or "3-day free trial" claims. Two answers were rewritten on
@@ -4281,7 +4450,8 @@ Internal nav (logo, footer, section anchors,
 `/pricing`) uses Next `<Link>`.
 
 The `?plan=…&interval=…` parameters those hrefs carry (`Nav`, `Hero`, `FinalCTA` pin Growth/annual; each `Pricing` card
-passes its own tier and the visitor's toggle) are **no longer decorative**. The OAuth callback forwards them into the
+passes its own tier and the visitor's chosen interval) are **no longer decorative**. The OAuth callback forwards them
+into the
 app's `#session=…&plan=…&interval=…` hash, `AuthSuccessPage` stashes them in `sessionStorage`, and `BillingPage` now
 resolves its single primary plan card from `?plan=` → `sessionStorage.chosenPlan` → Growth (see
 [§14](#14-frontend--authenticated-app-app)). A visitor who picked Pro on the Pricing table is offered Pro, not Growth —
@@ -4310,8 +4480,9 @@ There is no invite landing page and no interstitial: the referred visitor sees t
 - **Two passes, because Pricing rebuilds its hrefs.** An eager pass on every mount and `usePathname()` change stamps
   the code onto every `a[href*="/auth/linkedin"]` with `URL.searchParams.set`, which **preserves the existing
   `plan`/`interval`** rather than replacing the query. But the `Pricing` cards recompute their `href` from local
-  `annual` state on each Monthly/Annual toggle, and that state change does not touch `pathname` — React's re-render
-  silently drops the stamp. A **capture-phase `click` listener on `document`** therefore re-stamps the anchor
+  `annual` state on each click of the annual/monthly text link (`seeMonthly` / `seeAnnual`; annual by default), and
+  that state change does not touch `pathname` — React's re-render silently drops the stamp. A **capture-phase `click`
+  listener on `document`** therefore re-stamps the anchor
   immediately before the click is handled. The eager pass is still needed: it is the only one a middle-click or a
   "copy link address" ever sees, since neither fires an ordinary `click`.
 - **An origin check guards both passes.** `href*="/auth/linkedin"` is a loose substring selector and the click
@@ -4329,21 +4500,25 @@ There is no invite landing page and no interstitial: the referred visitor sees t
 **CTA inventory** (labels are R12 — every one names the trial length, the plan cards also name the plan, and no CTA
 says "Start free" in any locale):
 
-| Location               | Label (`en`)                       | Trigger line beside it                         | `href`                                          |
-|------------------------|------------------------------------|------------------------------------------------|-------------------------------------------------|
-| `Nav`                  | Start 7-day trial                  | (none, by design)                              | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
-| `Hero`                 | Start my 7-day trial with LinkedIn | `ctaDisclaimer` (cost) + `ctaTrust` (safety)   | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
-| `Pricing` (Starter)    | Start 7-day Starter trial          | `trialNote`, shared under the grid             | `${SIGN_IN_URL}?plan=starter&interval=<toggle>` |
-| `Pricing` (Growth)     | Start 7-day Growth trial           | (same)                                         | `${SIGN_IN_URL}?plan=growth&interval=<toggle>`  |
-| `Pricing` (Pro)        | Start 7-day Pro trial              | (same)                                         | `${SIGN_IN_URL}?plan=pro&interval=<toggle>`     |
-| `Pricing` (Enterprise) | Talk to us                         | `enterpriseNote` + `enterprisePrice` ($100/mo) | `mailto:contact@linkintothessi.com`             |
-| `FinalCTA`             | Start my 7-day trial with LinkedIn | `ctaTrust` (safety), then `earlyAccess`        | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| Location               | Label (`en`)                       | Trigger line beside it                       | `href`                                          |
+|------------------------|------------------------------------|----------------------------------------------|-------------------------------------------------|
+| `Nav`                  | Start 7-day trial                  | (none, by design)                            | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| `Hero`                 | Start my 7-day trial with LinkedIn | `ctaDisclaimer` (cost) + `ctaTrust` (safety) | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| `Pricing` (Starter)    | Start 7-day Starter trial          | `trialNote`, shared under the grid           | `${SIGN_IN_URL}?plan=starter&interval=<picked>` |
+| `Pricing` (Growth)     | Start 7-day Growth trial           | (same)                                       | `${SIGN_IN_URL}?plan=growth&interval=<picked>`  |
+| `Pricing` (Pro)        | Start 7-day Pro trial              | (same)                                       | `${SIGN_IN_URL}?plan=pro&interval=<picked>`     |
+| `Pricing` (Enterprise) | Talk to us                         | `enterpriseNote` + the toggled price         | `mailto:contact@linkintothessi.com`             |
+| `FinalCTA`             | Start my 7-day trial with LinkedIn | `ctaTrust` (safety), then `earlyAccess`      | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
 
-`<toggle>` is the visitor's annual/monthly `Pricing` toggle (annual by default); `Nav`, `Hero` and `FinalCTA` pin
-Growth/annual. `ctaTrust` ("Official LinkedIn sign-in · Name, photo and email only · Nothing posted for you") is the
-fear answered two centimetres from the button, and every clause of it is verifiable: OIDC-only scopes are asserted
-in `convex/linkedin/oauth.test.ts`, and the platform performs no API writes on the member's behalf
-([§1](#1-product-overview--business-model)).
+`<picked>` is the interval the visitor chose via the annual/monthly text link (`seeMonthly` / `seeAnnual`; annual by
+default); `Nav`, `Hero` and `FinalCTA` pin Growth/annual. The Enterprise floor follows that same choice —
+`enterprisePriceMonth` ($100/mo) or `enterprisePriceYear` ($1,000/yr, the page's own ×10 annual rule) — because a
+monthly floor quoted under an annual grid read as "$100" against Starter's "$100/yr", making the anchor tier look
+like the cheapest number on the page. Enterprise itself is still negotiated per account (§8); the floor is an anchor,
+not a Price. `ctaTrust` ("Official LinkedIn sign-in · Name, photo and
+email only · Nothing posted for you") is the fear answered two centimetres from the button, and every clause of it is
+verifiable: OIDC-only scopes are asserted in `convex/linkedin/oauth.test.ts`, and the platform performs no API writes
+on the member's behalf ([§1](#1-product-overview--business-model)).
 
 Because those two lines answer the top objection and carry the card-required disclosure, **they must stay visible
 above the fixed `CookieNotice` on a first mobile visit** — the visitor who most needs them is exactly the one who
@@ -4385,9 +4560,10 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `STRIPE_STARTER_PRICE_ID`        |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                                                                                                                                                                                                                                                   |
 | `STRIPE_GROWTH_PRICE_ID`         |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `growth` tier.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `STRIPE_PRO_PRICE_ID`            |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `pro` tier.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `STRIPE_STARTER_ANNUAL_PRICE_ID` |              ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `starter` tier ($50/yr). Create in Stripe Dashboard alongside the monthly price.                                                                                                                                                                                                                                                                                                                                        |
+| `STRIPE_STARTER_ANNUAL_PRICE_ID` |              ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `starter` tier ($100/yr). Create in Stripe Dashboard alongside the monthly price.                                                                                                                                                                                                                                                                                                                                       |
 | `STRIPE_GROWTH_ANNUAL_PRICE_ID`  |              ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `growth` tier ($150/yr).                                                                                                                                                                                                                                                                                                                                                                                                |
 | `STRIPE_PRO_ANNUAL_PRICE_ID`     |              ✓ (billing)               | `lib/stripePrices.ts`                               | Annual price id → `pro` tier ($500/yr).                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `STRIPE_FEATURED_POST_PRICE_ID`  |             ✓ (R17 add-on)             | `lib/stripePrices.ts`                               | One-time $5 featured-post Price (backlog/R17). Not a tier; never in `ALLOWED_PRICE_IDS`.                                                                                                                                                                                                                                                                                                                                                  |
 | `STRIPE_SECRET_KEY`              |              ✓ (billing)               | `billingNode.ts` + _(read by `@convex-dev/stripe`)_ | Stripe API secret — used directly in `billingNode.ts` for checkout + trial-end; also consumed by the Stripe component for customer/webhook ops. **Unset ⇒ `billingNode.ts:14` throws `'STRIPE_SECRET_KEY is not configured'`** on any checkout/portal/trial-end call.                                                                                                                                                                     |
 | `STRIPE_WEBHOOK_SECRET`          |              ✓ (billing)               | _(read by `@convex-dev/stripe`)_                    | Verifies webhook signatures at `/stripe/webhook`. **Unset/mismatched ⇒ the signature check fails, the event is rejected, and subscriptions silently stop syncing** (Stripe retries/alerts on repeated 4xxs, but nothing in-app surfaces this to a user).                                                                                                                                                                                  |
 | `APIFY_API_TOKEN`                |                ✓ (sync)                | `jobs/syncPostsApify.ts`                            | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -4414,7 +4590,8 @@ files are git‑ignored; the `.env*.example` files document the required set.
 > throws `'Invalid price ID'` if the id the client sends isn't in `ALLOWED_PRICE_IDS` — but that only guards
 > the checkout path, not the webhook-sync path above.) This defaulting is a known, accepted behavior today
 > (see [§8](#8-subscriptions--billing)); hardening it to throw/alert instead is a deliberate behavior change,
-> out of scope for this doc — flagged here for a future decision.
+> out of scope for this doc — flagged here for a future decision. The featured-post Price is outside
+> this list by construction (see [§8](#8-subscriptions--billing)).
 >
 > **Price-id parity, app ↔ backend.** Every `VITE_STRIPE_*_PRICE_ID` below (the app build) must hold the
 > **exact same** Stripe price id as its corresponding `STRIPE_*_PRICE_ID` above (Convex) — the app only
@@ -4457,7 +4634,7 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 | `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Starter checkout. Must match `STRIPE_STARTER_PRICE_ID` in Convex.                                                                                              |
 | `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Growth checkout. Must match `STRIPE_GROWTH_PRICE_ID` in Convex.                                                                                                |
 | `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                                          |
-| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Starter ($50/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                                        |
+| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Starter ($100/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                                       |
 | `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                                                                                         |
 | `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                               |
 | `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`    | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`. |
@@ -4591,7 +4768,7 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
 - **The complete event list.** Every product event goes through the one `captureEvent(name, props)` helper, so all of
   them inherit the consent gate above and every one is a **no‑op until `initPostHog` has run** (i.e. silent in dev and
   in prod without a key). Props are ids and enum‑ish strings only — never a name, email or post body. As of
-  2026‑09‑07 there are fifteen, and this is all of them:
+  2026‑09‑08 there are seventeen, and this is all of them:
     - `card_gate_opened` — `CardGateDialog` on open. Props: `source` (which tap opened it).
     - `card_gate_cta_clicked` — `CardGateBanner`, `CardGateDialog`, and a **gated** `UpgradeAtLimit`. Props: `plan`,
       plus `source` from `UpgradeAtLimit` only. Pairs with the event above as the single gate funnel across all three
@@ -4632,6 +4809,11 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
           itself would be a user identifier, and the count is the whole signal. It fires on the Clipboard-API path only:
           the manual-selection fallback (no Clipboard API, non-secure context, denied permission) is not a copy that
           happened, so it stays silent rather than inflating the number.
+        - `featured_purchase_started` — `MyPostsPage`, on the buy tap, before `purchaseFeaturedPost` runs (**R17**).
+          Props: `source` (`'cap' | 'billing' | 'quota'`).
+        - `featured_purchase_completed` — `MyPostsPage`, on the `?featured=paid` return leg as soon as `newCap` and
+          the post list have loaded — off the param itself, **not** the post's `featuredPurchase`, which arrives later
+          with the webhook — through the same ref-latch pattern as the other return-leg events (**R17**). **No props.**
 
   `HistoryPage` fires **nothing**, by design: reviewing one's own log is not a funnel step. There is no
   `cancel_alternative_completed` either — the downgrade's completion is a Stripe webhook, not a client event. And the
@@ -4853,39 +5035,92 @@ LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs), SS
 This document is **canonical** and must not be allowed to drift. The rule in `CLAUDE.md` requires that **any code change
 or push updates the relevant section (s) here in the same change**. Practical checklist when you touch the codebase:
 
-| If you change…                                                                                                                                                                                                                                              | Update section(s)                                                                                        |
-|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                                            |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                               |
-| Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                         | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                |
-| Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                          | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                              |
-| Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `notifications.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                       | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                |
-| Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/RefCarrier.tsx`)                                                                                                                | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                |
-| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                              |
-| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                            |
-| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                    |
-| 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `EmptyFeed.tsx`)                                                                                                                | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                  |
-| Recap & History (`convex/lib/recap.ts`, `convex/lib/history.ts`, `interactions.getRecap` / `listMyInteractions`, `app/src/pages/RecapPage.tsx`, `app/src/pages/HistoryPage.tsx`)                                                                            | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                  |
-| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                                            |
-| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                             |
-| Survival panel (`lib/survival.ts`, `admin.survivalMetrics`, `app/src/components/SurvivalTab.tsx`)                                                                                                                                                           | [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app)                                 |
-| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                            | [§12A](#12a-feedback)                                                                                    |
-| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                                     |
-| App UI (`app/src/**`)                                                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                               |
-| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                                                     | [§14A Design System](#14a-design-system)                                                                 |
-| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/[lang]/layout.tsx`, `landing/middleware.ts`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)              |
-| Landing (`landing/**`)                                                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                                |
-| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                                   |
-| Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                                                            | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app) |
-| Tooling/tests/deploy                                                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                                |
-| Resolving a stale item / removing dead code                                                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                                        |
+| If you change…                                                                                                                                                                                                                                              | Update section(s)                                                                                                                                                                                                                                                                                                                        |
+|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                  | [§5 Data Model](#5-data-model) (+ ER diagram)                                                                                                                                                                                                                                                                                            |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                                                                                                                                                                                                                                                               |
+| Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                         | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                                                                                                                                                                                                                                                |
+| Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                          | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
+| Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `notifications.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                       | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
+| Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
+| Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/RefCarrier.tsx`)                                                                                                                | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                                                                                                                                                                                                                                                |
+| Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                          | [§9](#9-plan-limits-system)                                                                                                                                                                                                                                                                                                              |
+| Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                      | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                                                                                                                                                                                                                                                            |
+| Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                            | [§11](#11-feed--engagement) (+ flows)                                                                                                                                                                                                                                                                                                    |
+| 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `EmptyFeed.tsx`)                                                                                                                | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
+| Recap & History (`convex/lib/recap.ts`, `convex/lib/history.ts`, `interactions.getRecap` / `listMyInteractions`, `app/src/pages/RecapPage.tsx`, `app/src/pages/HistoryPage.tsx`)                                                                            | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
+| Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                      | [§11B Search & Command Palette](#11b-search--command-palette)                                                                                                                                                                                                                                                                            |
+| Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                       | [§12](#12-admin--moderation)                                                                                                                                                                                                                                                                                                             |
+| Survival panel (`lib/survival.ts`, `admin.survivalMetrics`, `app/src/components/SurvivalTab.tsx`)                                                                                                                                                           | [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                 |
+| Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                            | [§12A](#12a-feedback)                                                                                                                                                                                                                                                                                                                    |
+| MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                       | [§12B](#12b-message-of-the-day-motd)                                                                                                                                                                                                                                                                                                     |
+| App UI (`app/src/**`)                                                                                                                                                                                                                                       | [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                                               |
+| Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                                                     | [§14A Design System](#14a-design-system)                                                                                                                                                                                                                                                                                                 |
+| Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/[lang]/layout.tsx`, `landing/middleware.ts`, `landing/components/ThemeToggle.tsx`) | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)                                                                                                                                                                                                                                              |
+| Landing (`landing/**`)                                                                                                                                                                                                                                      | [§15](#15-frontend--landing-site-landing)                                                                                                                                                                                                                                                                                                |
+| Any `process.env` / `import.meta.env` usage                                                                                                                                                                                                                 | [§16 Environment Variables](#16-environment-variables)                                                                                                                                                                                                                                                                                   |
+| Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                                                            | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                 |
+| Tooling/tests/deploy                                                                                                                                                                                                                                        | [§18](#18-configuration-tooling--testing)                                                                                                                                                                                                                                                                                                |
+| Resolving a stale item / removing dead code                                                                                                                                                                                                                 | [§19](#19-known-discrepancies-dead-code--roadmap)                                                                                                                                                                                                                                                                                        |
 
 When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add a flow chart
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
 
-_Last updated: 2026‑09‑07. **Survival panel, the post-cap email, 24-hour feed hygiene and invite-a-peer (R18 / R20 /
+_Last updated: 2026‑09‑08. **Decoy pricing, the $5 featured-post add-on and a ROPA refresh (R13 / R17).** One theme
+across two features and the record that has to keep up with them: make the ladder read as a ladder, then sell the
+member who is already at the cap the one thing they want, without pretending it is a plan. **The ladder (R13).**
+Starter is **$10/mo and $100/yr** — priced as the decoy that makes Growth's $15 the obvious buy rather than the step
+up — and the plan grid now leads with **annual**, monthly behind one centered text link (`dict.seeMonthly`) instead
+of the old equal-weight pill toggle, so the smaller number is never the anchor. Every card opens with the same **value
+axis** line (`plan.axis`) and lists features killer-first, and `app/src/lib/planPrices.ts` is the one
+`PLAN_PRICES` table the grid and the card gate both quote from, so the two can never disagree (§1, §15, §16). **The
+add-on (R17).** `posts` gained `interactionCapBonus` and `featuredPurchase` (`{ checkoutSessionId, amountCents,
+paidAt }`), both optional, no backfill. The bonus is **per tier and stored on the post at purchase time** —
+`FEATURED_CAP_BONUS` = starter 25 / growth 50 / pro 100 / contact 0 (`lib/planLimits.ts`) — so changing the table
+later never alters what a member already paid for, and $5 can never buy past the tier above. Every per-post cap now
+runs through `effectiveInteractionCap(planCap, bonus)` (`lib/interactionLimit.ts`), and the rules around it are
+load-bearing: the effective cap must never enter a **plan-vs-plan** comparison (`capNoticeMode` takes `planCap`, named
+so in the signature — a bought Starter post's 25 + 25 would otherwise tie Growth's 50 and hide the upgrade the member
+can actually use), and `interactionLimitReached` is one-way in production, with `purchasedFeaturePatch` the only thing
+that un-flips it, so a post that left the feed at 25 comes back pinned (§9, §11).
+`billingNode.purchaseFeaturedPost` opens a `mode: 'payment'` Checkout Session on `FEATURED_POST_PRICE_ID` with
+`metadata.kind = 'featured_post'` and `payment_method_types: ['card']` — deliberately card-only, because an
+asynchronous method (boleto, OXXO, SEPA debit, Konbini) would return the member to a paid URL with nothing bought
+until `checkout.session.async_payment_succeeded`, which has no handler. `checkout.session.completed` lands on
+`posts.applyPurchasedFeature`, idempotent on the session id, writing the `post.featured_purchased` audit row and never
+touching `featuredPostUsage`; a post deleted between checkout and webhook keeps the purchase record and logs
+`post.featured_purchase_orphaned` for a manual refund, and a second, different session logs
+`post.featured_purchase_duplicate` (§5, §8, §13B). The member's two legs are `?feature=buy` — Billing hands off to My
+Posts, because a featured post is a post and the choice belongs where the posts are — and `?featured=paid&post=<id>`,
+where that one card reads "Confirming your payment…" until `featuredPurchase` arrives; the named-event list reaches
+**seventeen** with `featured_purchase_started` and `featured_purchase_completed` (§14, §17). **The record (ROPA
+refresh).** `docs/compliance/DATA-INVENTORY.md` was brought back to the code it describes: the one-time purchase in
+the billing activity, `posts.imageUrls`, `userInteractions.authorId` and the Recap / History / feed-hygiene reads of
+that log, the tier-gated visibility setters, and the admin survival panel named as a derived-on-read consumer of the
+interaction rows. The Privacy Policy's payments paragraph gained one line in all three locales — a one-off purchase is
+charged by Stripe, appears on the Stripe receipt, and its record lives on the post — and the Terms' §5 billing clause
+gained a **one-time purchases** paragraph (en/pt/es): $5, once, one post, no renewal, no refund once that post has
+been featured. That text is factual only and still needs a legal read (§13B, §15). **Round-3 fix wave, fourteen items
+over the finished batch.** The one that mattered: the buy control still rendered under "Confirming your payment…", so
+a member could open a **second $5 Checkout Session for the same post** — and the server could not refuse it, because
+`ALREADY_PURCHASED` keys on the very field that has not arrived yet during that window. The guard went into `canBuy`,
+the single predicate every buy placement routes through, and the paid toast now waits for the post list as well and
+fires only while the id still names a post, so the orphaned case can no longer promise room on a post that will never
+be featured. `applyPurchasedFeature`'s body was extracted to `applyPurchasedFeatureHandler(ctx, args)` — the repo's
+mock-db convention, since there is no `convex-test` here — with no behaviour change, and the money path now carries
+seven unit tests. Locale counts, always with the method: app en/pt/es **392 keys with arrays counted once** (402
+string leaves), landing **88** (156 leaves), zero drift under a recursive key-diff, still no automated parity test;
+this wave added none. **Nothing here is live until the §8 Stripe steps are applied** — the new $10/$100 Starter
+Prices, the one-time $5 Price behind `STRIPE_FEATURED_POST_PRICE_ID`, and `checkout.session.completed` on the
+endpoint. Until then the landing advertises $10 while Stripe still charges $5. The $100 collision this batch shipped
+with — the new $100/yr Starter against the fixed "Enterprise from $100/mo" anchor, which on the annual grid made the
+top tier read as the cheapest number on the page — is **closed**: that floor now follows the interval toggle (
+`enterprisePriceMonth` / `enterprisePriceYear`, §15), so the anchor is quoted in whatever period the visitor is
+comparing in. Sections updated: §1, §5, §8, §9, §11, §13B, §14, §15, §16, §17,
+§21. Gates: convex 486/486, app 421/421, `pnpm verify` exit 0. Prior:
+2026‑09‑07 — **Survival panel, the post-cap email, 24-hour feed hygiene and invite-a-peer (R18 / R20 /
 R21 / R19).** One theme across four features: see where members actually fall out, then close the three leaks that were
 costing the most — a spent post nobody was told about, a feed that kept showing work already done, and growth that had
 no channel at all. **The panel (R18).** `convex/lib/survival.ts` is pure cohort maths — `returnWindows`,
@@ -4907,8 +5142,8 @@ and the app can share one constant, with `app/src/lib/support.ts` now a re-expor
 `userPostState` gained `commentedAt` and `hiddenAt` (widen-only, no backfill), and `convex/lib/feedHygiene.ts`
 turns them into three pure answers: `viewerPostStatus` (`fresh` / `done` / `gone` at `INTERACTED_TTL_MS` = 24 h),
 `canHide`, and `toFeedViewerState`. `feed.getFeed` reads the viewer's row per page item, drops `gone`, and attaches
-`viewerState` so `PostCard` can render a done footer with "leaves in N h" and a **Hide now** button
-(`interactions.hidePost`). Because the per-viewer filter can empty a page the index walk still considers full,
+`viewerState` so `PostCard` can render a done footer with "leaves in N h" and a **Hide now** button (
+`interactions.hidePost`). Because the per-viewer filter can empty a page the index walk still considers full,
 `FeedPage` auto-loads up to `MAX_EMPTY_LOADS` (5) pages before handing back to the manual button, shows **no** empty
 state while it is settling, and asks the new `feed.getCaughtUp` which empty state is the true one (§5, §11, §14).
 **Invite a peer (R19).** No invites table and no counters — `users` is the log: `inviteCode` and `referredByCode` with

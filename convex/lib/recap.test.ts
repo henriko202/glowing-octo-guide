@@ -85,4 +85,10 @@ describe('pickNearCapPost', () => {
     expect(pickNearCapPost([posts[0]], 25)).toBeNull()
     expect(pickNearCapPost([], 25)).toBeNull()
   })
+
+  it('measures a bought post against its plan cap plus its bonus (backlog/R17)', () => {
+    // 42 of 25 would be capped; 42 of 25 + 25 = 50 sits inside the 80 % band.
+    const bought = { id: 'bought', likeCount: 42, commentCount: 0, interactionCapBonus: 25 }
+    expect(pickNearCapPost([bought], 25)?.id).toBe('bought')
+  })
 })

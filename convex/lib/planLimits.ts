@@ -33,6 +33,12 @@ export const DEFAULTS: Record<Tier, PlanLimits> = {
   contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: UNLIMITED_FEATURED_SENTINEL }
 }
 
+// backlog/R17 — the interaction-cap bonus a bought featured post carries, keyed by the author's
+// tier at fulfilment (Henriko, 2026-09-07: a fixed table, not a multiplier). Kept next to
+// DEFAULTS so planLimits.test.ts can prove plan + bonus never passes the next tier's cap.
+// Contact has unlimited featured posts, so there is nothing to sell.
+export const FEATURED_CAP_BONUS: Record<Tier, number> = { starter: 25, growth: 50, pro: 100, contact: 0 }
+
 export type PlanLimitsDefaultRow = { tier: Tier } & PlanLimits
 
 /**

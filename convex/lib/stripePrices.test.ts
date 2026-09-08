@@ -29,6 +29,12 @@ describe('stripePrices', () => {
     expect(Object.keys(map)).toEqual(['price_g_m'])
     expect(map['']).toBeUndefined()
   })
+
+  it('never maps the one-time featured-post price to a tier (backlog/R17)', () => {
+    const map = buildPriceMap({ ...ENV, STRIPE_FEATURED_POST_PRICE_ID: 'price_feat' })
+    expect(resolveTier(map, 'price_feat')).toBe('starter') // the "unknown id" default, not a tier of its own
+    expect(Object.keys(map)).not.toContain('price_feat')
+  })
 })
 
 describe('starterPriceIdFor', () => {

@@ -120,7 +120,19 @@
     "deleteConfirm": "Delete this post? It will be removed from the feed and from My Posts. It still counts toward your weekly post limit.",
     "updateError": "Could not update the post.",
     "deleteError": "Could not delete the post.",
-    "interactionCapBadge": "Reached {{limit}} interactions and left the feed"
+    "interactionCapBadge": "Reached {{limit}} interactions and left the feed",
+    "buyFeatured": "Feature for {{price}}",
+    "buyFeaturedRoom": "Add room for {{price}}",
+    "buyFeaturedHint": "Once, this post only. Room for {{newCap}} interactions. No refund if you unfeature it.",
+    "buyFeaturedTrial": "Charged today, separate from your trial.",
+    "buyFeaturedCapped": "Reached {{cap}} and left the feed. Buying room for {{newCap}} brings it back to the top.",
+    "featuredPaidBadge": "Featured · paid · cap {{cap}}",
+    "featuredPaidToast": "Paid. We're adding room for {{newCap}} interactions to your post.",
+    "confirmingPayment": "Confirming your payment…",
+    "postAddedBuy": "Post added. Feature it for {{price}} below.",
+    "postAddedFeature": "Post added. Feature it below.",
+    "buyFeaturedError": "We couldn't start that purchase. Refresh and try again.",
+    "featuredCappedTitle": "This post reached its interaction cap. Featuring it won't bring it back to the feed."
   },
   "composer": {
     "shareLabel": "Share a post",
@@ -203,6 +215,8 @@
     "currentPlanLabel": "Current plan",
     "contact": "Contact us",
     "enterprise": "Need more? Contact us for custom enterprise plans.",
+    "featuredAddon": "Featured post add-on · {{price}} each · one post pinned at the top with room for {{newCap}} interactions",
+    "featuredAddonCta": "Pick a post",
     "subscriptionInfo": "Your Subscription",
     "status": "Status",
     "nextBilling": "Next Billing Date",
@@ -280,9 +294,9 @@
         "name": "Starter",
         "description": "Get started and start engaging",
         "features": [
+          "25 interactions counted per post",
           "See the full live feed",
           "Comment & react with AI",
-          "25 interactions counted per post",
           "1 post into the feed / week"
         ]
       },
@@ -290,9 +304,9 @@
         "name": "Growth",
         "description": "Targeted feed for faster results",
         "features": [
+          "50 interactions counted per post",
           "Feed filtered to your industry + country",
           "Everything in Starter",
-          "50 interactions counted per post",
           "2 posts into the feed / week"
         ]
       },
@@ -300,10 +314,10 @@
         "name": "Pro",
         "description": "Maximum visibility and control",
         "features": [
+          "200 interactions counted per post",
           "Custom industry + country filters",
           "Control who sees your posts",
           "Everything in Growth",
-          "200 interactions counted per post",
           "5 posts into the feed / week"
         ]
       },
@@ -416,12 +430,13 @@
   "upgrade": {
     "weeklyPosts": "You've reached your plan's weekly post cap of {{used}}. {{nextPlan}} gives you {{next}} per week, each able to collect up to {{interactions}} interactions.",
     "featured": "You've used all your featured posts this month. {{nextPlan}} gives you {{next}} per month.",
-    "interactionCap": "This post left the feed after reaching its interaction cap. {{nextPlan}} raises that cap to {{next}}.",
+    "interactionCap": "This post left the feed after reaching its interaction cap. On {{nextPlan}}, your next posts collect up to {{next}} each.",
     "interactionCapNear": "Your post is at {{total}} of {{cap}} interactions. On {{nextPlan}} it keeps collecting to {{next}}.",
     "visibility": "Choosing who sees your posts is a {{nextPlan}} feature.",
     "cta": "Upgrade to {{nextPlan}}",
     "proContact": "Need more than Pro offers? Contact us for a custom Enterprise plan.",
-    "contactCustom": "Your plan already has a custom limit. Contact us to adjust it."
+    "contactCustom": "Your plan already has a custom limit. Contact us to adjust it.",
+    "featuredAddon": "Or feature any post below for {{price}}, once."
   },
   "recap": {
     "title": "Recap",

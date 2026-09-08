@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
 import { TRIAL_INTERACTION_THRESHOLD, TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
@@ -18,8 +18,12 @@ import { captureException } from '@/lib/observability/sentry'
 import { captureEvent } from '@/lib/observability/analytics'
 import { formatPriceLabel } from '../../../convex/lib/billingEmails'
 import { resolveBillingLocale } from '../../../convex/lib/checkoutCopy'
+import { canEngage } from '../../../convex/lib/access'
+import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
+import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
+import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
 import { isPlanId, PLAN_IDS, resolveTargetPlan, type PlanId } from '@/lib/targetPlan'
-import { isInterval, PLAN_PRICES, type Interval } from '@/lib/planPrices'
+import { FEATURED_POST_PRICE, isInterval, PLAN_PRICES, type Interval } from '@/lib/planPrices'
 
 /** How long we give the Stripe webhook to land before the activating state times out (R07). */
 const ACTIVATION_TIMEOUT_MS = 20_000
@@ -48,6 +52,8 @@ export default function BillingPage() {
   const me = useQuery(api.users.getMe, { sessionToken })
   const subscriptionInfo = useQuery(api.users.getSubscriptionInfo, sessionToken ? { sessionToken } : 'skip')
   const progress = useQuery(api.users.getTrialProgress, sessionToken ? { sessionToken } : 'skip')
+  // backlog/R17 — the featured-post add-on line's numbers (effectiveInteractionCap needs the plan cap).
+  const tierLimits = useQuery(api.posts.getTierLimits, {})
   // backlog/R19 — invited members get 14 days; every "7-day" string reads this instead.
   const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
@@ -220,6 +226,20 @@ export default function BillingPage() {
   // the same rule checkout enforces. Optimistic while `me` loads — the majority case is a new
   // visitor, and this whole block already renders on the same optimistic assumption.
   const canTrial = me?.trialEligible !== false
+
+  // backlog/R17 — the featured-post add-on line under the plan grid: same eligibility as the
+  // purchase itself (lib/access.canEngage), nothing to sell to an unlimited tier. A canceled member
+  // is excluded on top of canEngage (A2): assertCanEngage lets them buy server-side — they're still
+  // inside their paid window — but a $5 feature for a post that leaves the feed once that window
+  // ends is a bad sale, so the UI says no even where the server would allow it.
+  const addonTier: Tier = me?.tier ?? 'starter'
+  const addonLimits = tierLimits?.[addonTier]
+  const showAddon =
+    !!me &&
+    canEngage(me.subscriptionStatus) &&
+    me.subscriptionStatus !== 'canceled' &&
+    addonLimits !== undefined &&
+    !isUnlimitedFeatured(addonLimits.featuredPerMonth)
 
   // R08 / R20 / R09 — back from a portal confirm flow: /billing?switched=<tier> (the grid's "Switch
   // to X", the tier the server resolved from the price) or /billing?downgraded=<tier left behind>
@@ -672,6 +692,22 @@ export default function BillingPage() {
           </Button>
         </div>
       </div>
+
+      {/* Upgrade (the grid above) first, add-on second — never instead of a plan. */}
+      {showAddon && addonLimits && (
+        <p className="text-muted-foreground mt-6 text-[13px]">
+          {t('billing.featuredAddon', {
+            price: FEATURED_POST_PRICE,
+            newCap: effectiveInteractionCap(addonLimits.interactionsPerPost, FEATURED_CAP_BONUS[addonTier])
+          })}{' '}
+          <Link
+            to="/my-posts?feature=buy"
+            className="text-primary hover:underline"
+          >
+            {t('billing.featuredAddonCta')}
+          </Link>
+        </p>
+      )}
 
       <p className="text-muted-foreground mt-6 text-[13px]">
         {t('billing.enterprise')}{' '}

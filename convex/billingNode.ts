@@ -6,10 +6,11 @@ import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
 import { requireAuthAction } from './lib/auth'
-import { ALLOWED_PRICE_IDS, getTierFromPriceId, starterPriceIdFor } from './lib/stripePrices'
+import { ALLOWED_PRICE_IDS, FEATURED_POST_PRICE_ID, getTierFromPriceId, starterPriceIdFor } from './lib/stripePrices'
 import { findLiveSubscription, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
+import { assertCanEngage } from './lib/access'
 
 const stripeComponent = new StripeSubscriptions(components.stripe, {})
 
@@ -84,6 +85,52 @@ export const createCheckoutSession = action({
       await ctx.runMutation(internal.users.setLanguage, { userId: user._id, language: billingLocale })
     }
 
+    return { url: session.url }
+  }
+})
+
+// ── Featured post add-on (backlog/revenue/R17) ───────────────────────────────────────────────────
+// One-time $5 Checkout that features ONE post with a bigger interaction cap. Same Stripe customer
+// as the subscription, so the saved card is offered; fulfilled by the checkout.session.completed
+// webhook (http.ts → posts.applyPurchasedFeature). The server allows any eligible post at any
+// time — the UI decides where to offer it (upgrade first, add-on second).
+export const purchaseFeaturedPost = action({
+  args: { sessionToken: v.string(), postId: v.id('posts') },
+  handler: async (ctx, { sessionToken, postId }): Promise<{ url: string | null }> => {
+    const user = await requireAuthAction(ctx, sessionToken)
+    if (!user) throw new ConvexError('User not found')
+    assertCanEngage(user) // PAYMENT_REQUIRED: for no card / past due; trialing members pass
+    if (!FEATURED_POST_PRICE_ID) throw new ConvexError('FEATURED_PRICE_UNSET')
+    await ctx.runQuery(internal.posts.assertFeaturedPurchasable, { postId, userId: user._id })
+
+    const customer = await stripeComponent.getOrCreateCustomer(ctx, {
+      userId: user._id,
+      email: user.email,
+      name: user.name
+    })
+    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+    const billingLocale = resolveBillingLocale(user.language, user.primaryLocale)
+
+    const session = await stripe().checkout.sessions.create({
+      mode: 'payment',
+      customer: customer.customerId,
+      line_items: [{ price: FEATURED_POST_PRICE_ID, quantity: 1 }],
+      // Card only, and not just the Dashboard's enabled set: a delayed-notification method (boleto,
+      // OXXO, SEPA debit, Konbini — all plausible for this pt-BR/es-LatAm audience) completes
+      // `unpaid`, which lib/featuredPurchase.isFeaturedPostCheckout drops, and settles later as
+      // `checkout.session.async_payment_succeeded`, which nothing handles — the member would be
+      // charged and never fulfilled. This fails closed. Enabling one of them means adding that
+      // webhook handler FIRST, plus a pending-payment UI: the confirming state on My Posts assumes
+      // seconds, not days.
+      payment_method_types: ['card'],
+      // Three strings, nothing personal: the webhook keys on `kind` and fulfils by `postId`;
+      // convexUserId is for support lookups in the Stripe Dashboard (the author comes from the
+      // post at fulfilment, never from here).
+      metadata: { kind: 'featured_post', convexUserId: user._id, postId },
+      locale: stripeCheckoutLocale(billingLocale),
+      success_url: `${appUrl}/my-posts?featured=paid&post=${postId}`,
+      cancel_url: `${appUrl}/my-posts`
+    })
     return { url: session.url }
   }
 })

@@ -8,6 +8,7 @@ import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './li
 import { getTierFromPriceId } from './lib/stripePrices'
 import { scrubError } from './lib/scrubError'
 import { isInviteCode } from './lib/invite'
+import { isFeaturedPostCheckout } from './lib/featuredPurchase'
 
 const http = httpRouter()
 
@@ -211,6 +212,20 @@ registerRoutes(http, components.stripe, {
           eventCreated: eventCreatedMs(event)
         })
       }
+    },
+    // backlog/R17 — the one-time featured-post purchase. Subscription checkouts complete through
+    // this event too; the pure filter lets only a PAID payment-mode session tagged by
+    // purchaseFeaturedPost through. postId travels as a plain string and is normalised inside the
+    // mutation: a malformed id must log and return, never throw (Stripe retries a 500 for days).
+    'checkout.session.completed': async (ctx: StripeEvent, event: StripeEvent) => {
+      const session = event.data.object
+      if (!isFeaturedPostCheckout(session)) return
+      await ctx.runMutation(internal.posts.applyPurchasedFeature, {
+        postId: String(session.metadata?.postId ?? ''),
+        checkoutSessionId: String(session.id),
+        amountCents: typeof session.amount_total === 'number' ? session.amount_total : 0,
+        paidAt: eventCreatedMs(event) ?? Date.now()
+      })
     }
   },
   onEvent: async (_ctx: StripeEvent, event: StripeEvent) => {

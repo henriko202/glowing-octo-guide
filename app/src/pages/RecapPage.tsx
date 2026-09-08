@@ -21,6 +21,7 @@ import {
   type RecapWindow
 } from '../../../convex/lib/recap'
 import { INVITED_TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
+import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
 
 const WINDOWS = ['7d', '30d'] as const
 
@@ -157,7 +158,15 @@ export default function RecapPage() {
                     <p className="text-muted-foreground m-0 line-clamp-2 text-sm italic">{recap.nearCapPost.excerpt}</p>
                     <UpgradeAtLimit
                       limit="interactionCap"
-                      nearCap={{ total: recap.nearCapPost.total, cap }}
+                      nearCap={{
+                        total: recap.nearCapPost.total,
+                        // backlog/R17 A1 — this post can be a bought one too; its own cap, not the
+                        // plan's, is what "near" is measured against.
+                        cap: effectiveInteractionCap(cap, recap.nearCapPost.interactionCapBonus)
+                      }}
+                      // F5 — same bonus, so the "Growth raises that cap to N" sentence names this
+                      // post's real next cap instead of the plan's plain one.
+                      capBonus={recap.nearCapPost.interactionCapBonus}
                       className="mt-2 block"
                     />
                   </div>
@@ -178,12 +187,15 @@ export default function RecapPage() {
                   <ul className="divide-border m-0 list-none divide-y p-0">
                     {recap.posts.map(p => {
                       const total = p.likeCount + p.commentCount
-                      const label = t('recap.postUsage', { total, cap })
+                      // backlog/R17 A1 — a bought post's cap is bigger than the plan's; "50 of 25"
+                      // was wrong for it. `cap` stays the plan cap, used only as the argument here.
+                      const rowCap = effectiveInteractionCap(cap, p.interactionCapBonus)
+                      const label = t('recap.postUsage', { total, cap: rowCap })
                       const labelId = `usage-${p.id}`
                       const pct = p.interactionLimitReached
                         ? 100
-                        : cap > 0
-                          ? Math.min(100, Math.round((total / cap) * 100))
+                        : rowCap > 0
+                          ? Math.min(100, Math.round((total / rowCap) * 100))
                           : 0
                       return (
                         <li
@@ -205,7 +217,7 @@ export default function RecapPage() {
                                 variant="warning"
                                 className="rounded-full px-2 py-0.5 text-[11px]"
                               >
-                                {t('myPosts.interactionCapBadge', { limit: cap })}
+                                {t('myPosts.interactionCapBadge', { limit: rowCap })}
                               </Badge>
                             )}
                           </div>
@@ -219,8 +231,8 @@ export default function RecapPage() {
                             role="progressbar"
                             aria-labelledby={labelId}
                             aria-valuemin={0}
-                            aria-valuemax={cap}
-                            aria-valuenow={Math.min(total, cap)}
+                            aria-valuemax={rowCap}
+                            aria-valuenow={Math.min(total, rowCap)}
                             className="bg-muted h-1.5 w-full overflow-hidden rounded-full"
                           >
                             <div

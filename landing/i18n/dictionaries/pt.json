@@ -127,9 +127,8 @@
     "eyebrow": "Planos",
     "headline": "Invista na sua marca profissional",
     "subheadline": "Todo plano inclui o feed. Planos superiores adicionam segmentação e controle.",
-    "toggleAnnual": "Anual",
-    "toggleAnnualSuffix": "· 2 meses grátis",
-    "toggleMonthly": "Mensal",
+    "seeMonthly": "Prefere pagar por mês? Ver preços mensais",
+    "seeAnnual": "Voltar ao anual · 2 meses grátis",
     "recommended": "Recomendado",
     "periodMonth": "/mês",
     "periodYear": "/ano",
@@ -137,29 +136,27 @@
     "monthlySubLabel": "2 meses grátis no plano anual",
     "trialNote": "Sem cobrança até 50 interações ou 7 dias, o que vier primeiro. Cartão necessário, cancele quando quiser.",
     "enterpriseNote": "Times e agências: Enterprise a partir de",
-    "enterprisePrice": "$100/mês",
+    "enterprisePriceMonth": "$100/mês",
+    "enterprisePriceYear": "$1.000/ano",
     "enterpriseCta": "Fale conosco",
     "plans": [
       {
         "id": "starter",
         "name": "Starter",
         "description": "Entre no feed e comece a engajar",
-        "features": [
-          "Veja o feed completo em tempo real",
-          "Comente e reaja com IA",
-          "25 interações contadas por publicação",
-          "1 publicação no feed / semana"
-        ],
+        "axis": "25 interações contadas por publicação",
+        "features": ["Veja o feed completo em tempo real", "Comente e reaja com IA", "1 publicação no feed / semana"],
         "cta": "Testar o Starter por 7 dias"
       },
       {
         "id": "growth",
         "name": "Growth",
         "description": "Um feed direcionado para resultados mais rápidos",
+        "axis": "50 interações contadas por publicação",
         "features": [
           "Feed filtrado por setor + país",
           "Tudo do Starter",
-          "50 interações contadas por publicação",
+          "1 publicação em destaque por mês",
           "2 publicações no feed / semana"
         ],
         "cta": "Testar o Growth por 7 dias"
@@ -168,11 +165,12 @@
         "id": "pro",
         "name": "Pro",
         "description": "Alcance máximo e controle total",
+        "axis": "200 interações contadas por publicação",
         "features": [
           "Filtros personalizados de setor + país",
           "Controle quem vê suas publicações",
           "Tudo do Growth",
-          "200 interações contadas por publicação",
+          "3 publicações em destaque por mês",
           "5 publicações no feed / semana"
         ],
         "cta": "Testar o Pro por 7 dias"

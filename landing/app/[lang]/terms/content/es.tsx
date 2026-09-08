@@ -85,6 +85,13 @@ export default function Es({ lang }: { lang: Locale }) {
           que cancele.
         </p>
         <p>
+          <strong className="text-cream">Compras únicas.</strong> Algunas funciones se venden por separado de la
+          suscripción. Destacar una de sus publicaciones cuesta <strong className="text-cream">$5</strong>, cobrados una
+          sola vez por Stripe cuando confirma la compra. Se aplica a la{' '}
+          <strong className="text-cream">publicación que elija</strong>, no se renueva y no es reembolsable una vez que
+          esa publicación ha sido destacada.
+        </p>
+        <p>
           <strong className="text-cream">Prueba gratuita.</strong> Las cuentas nuevas comienzan con una{' '}
           <strong className="text-cream">prueba gratuita de 7 días</strong> (14 días cuando se une mediante el enlace de
           invitación de un miembro) y se requiere un método de pago para iniciarla. La prueba termina —y la facturación

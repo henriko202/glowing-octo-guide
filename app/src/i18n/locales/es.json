@@ -120,7 +120,19 @@
     "deleteConfirm": "¿Eliminar esta publicación? Se eliminará del feed y de Mis Publicaciones. Seguirá contando para tu límite semanal de publicaciones.",
     "updateError": "No se pudo actualizar la publicación.",
     "deleteError": "No se pudo eliminar la publicación.",
-    "interactionCapBadge": "Alcanzó {{limit}} interacciones y salió del feed"
+    "interactionCapBadge": "Alcanzó {{limit}} interacciones y salió del feed",
+    "buyFeatured": "Destacar por {{price}}",
+    "buyFeaturedRoom": "Agregar espacio por {{price}}",
+    "buyFeaturedHint": "Una vez, solo esta publicación. Espacio para {{newCap}} interacciones. Sin reembolso si quitas el destacado.",
+    "buyFeaturedTrial": "Se cobra hoy, aparte de tu prueba.",
+    "buyFeaturedCapped": "Alcanzó {{cap}} y salió del feed. Comprar espacio para {{newCap}} la trae de vuelta arriba.",
+    "featuredPaidBadge": "Destacada · pagada · límite {{cap}}",
+    "featuredPaidToast": "Pagado. Estamos agregando espacio para {{newCap}} interacciones a tu publicación.",
+    "confirmingPayment": "Confirmando tu pago…",
+    "postAddedBuy": "Publicación agregada. Destácala por {{price}} abajo.",
+    "postAddedFeature": "Publicación agregada. Destácala abajo.",
+    "buyFeaturedError": "No se pudo iniciar esa compra. Actualiza la página e inténtalo de nuevo.",
+    "featuredCappedTitle": "Esta publicación alcanzó su límite de interacciones. Destacada, no vuelve al feed."
   },
   "composer": {
     "shareLabel": "Compartir una publicación",
@@ -203,6 +215,8 @@
     "currentPlanLabel": "Plan actual",
     "contact": "Contáctanos",
     "enterprise": "¿Necesitas más? Contáctanos para planes empresariales personalizados.",
+    "featuredAddon": "Publicación destacada adicional · {{price}} cada una · una publicación fijada arriba con espacio para {{newCap}} interacciones",
+    "featuredAddonCta": "Elegir una publicación",
     "subscriptionInfo": "Tu suscripción",
     "status": "Estado",
     "nextBilling": "Próxima fecha de facturación",
@@ -280,9 +294,9 @@
         "name": "Starter",
         "description": "Comienza e interactúa",
         "features": [
+          "25 interacciones contadas por publicación",
           "Accede al feed completo en vivo",
           "Comenta y reacciona con IA",
-          "25 interacciones contadas por publicación",
           "1 publicación en el feed / semana"
         ]
       },
@@ -290,9 +304,9 @@
         "name": "Growth",
         "description": "Feed dirigido para resultados más rápidos",
         "features": [
+          "50 interacciones contadas por publicación",
           "Feed filtrado por industria + país",
           "Todo lo de Starter",
-          "50 interacciones contadas por publicación",
           "2 publicaciones en el feed / semana"
         ]
       },
@@ -300,10 +314,10 @@
         "name": "Pro",
         "description": "Máxima visibilidad y control",
         "features": [
+          "200 interacciones contadas por publicación",
           "Filtros personalizados de industria + país",
           "Controla quién ve tus publicaciones",
           "Todo lo de Growth",
-          "200 interacciones contadas por publicación",
           "5 publicaciones en el feed / semana"
         ]
       },
@@ -416,12 +430,13 @@
   "upgrade": {
     "weeklyPosts": "Alcanzaste el límite semanal de {{used}} publicaciones de tu plan. {{nextPlan}} te da {{next}} por semana, cada una con hasta {{interactions}} interacciones.",
     "featured": "Usaste todas tus publicaciones destacadas este mes. {{nextPlan}} te da {{next}} por mes.",
-    "interactionCap": "Esta publicación salió del feed al alcanzar su límite de interacciones. {{nextPlan}} aumenta ese límite a {{next}}.",
+    "interactionCap": "Esta publicación salió del feed después de alcanzar su límite de interacciones. En {{nextPlan}}, tus próximas publicaciones reciben hasta {{next}} cada una.",
     "interactionCapNear": "Tu publicación está en {{total}} de {{cap}} interacciones. En {{nextPlan}} sigue acumulando hasta {{next}}.",
     "visibility": "Elegir quién ve tus publicaciones es una función de {{nextPlan}}.",
     "cta": "Mejorar a {{nextPlan}}",
     "proContact": "¿Necesitas más de lo que ofrece Pro? Contáctanos para un plan Empresa personalizado.",
-    "contactCustom": "Tu plan ya tiene un límite personalizado. Contáctanos para ajustarlo."
+    "contactCustom": "Tu plan ya tiene un límite personalizado. Contáctanos para ajustarlo.",
+    "featuredAddon": "O destaca cualquier publicación de abajo por {{price}}, una sola vez."
   },
   "recap": {
     "title": "Resumen",

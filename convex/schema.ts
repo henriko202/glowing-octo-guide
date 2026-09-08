@@ -150,6 +150,14 @@ export default defineSchema({
     // Set to true when likeCount + commentCount >= the author's interactionsPerPost
     // plan limit. Optional so existing posts without this field remain valid.
     interactionLimitReached: v.optional(v.boolean()),
+    // backlog/R17 — a bought featured post counts against planCap + this bonus (FEATURED_CAP_BONUS
+    // for the author's tier at fulfilment). Absent on every other post.
+    interactionCapBonus: v.optional(v.number()),
+    // backlog/R17 — the one-time Stripe Checkout that featured this post. Present ⇒ bought once:
+    // re-featuring is free (featurePost skips the monthly quota) and a redelivered webhook is a no-op.
+    featuredPurchase: v.optional(
+      v.object({ checkoutSessionId: v.string(), amountCents: v.number(), paidAt: v.number() })
+    ),
     // Original URL submitted by the user — stored so we can link back correctly
     // without reconstructing URNs (activity IDs ≠ ugcPost IDs across LinkedIn namespaces).
     // Absent for cron-synced posts (those use urnToLinkedInUrl fallback).

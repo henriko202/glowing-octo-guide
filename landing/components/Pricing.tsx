@@ -5,11 +5,10 @@ import type { Dictionary } from '@/i18n/getDictionary'
 
 type PlanEntry = Dictionary['pricing']['plans'][number]
 
-const MONTHLY_PRICES: Record<string, number> = {
-  starter: 5,
-  growth: 15,
-  pro: 50
-}
+// Display labels only — Stripe's Prices are the truth for what is charged (docs/PLATFORM.md §8).
+// Starter is $10 on purpose: the decoy that makes Growth ($15 for double the cap and the posts,
+// plus a featured post) the obvious buy. backlog/revenue/R13.
+const MONTHLY_PRICES: Record<string, number> = { starter: 10, growth: 15, pro: 50 }
 
 function priceLabel(plan: PlanEntry, annual: boolean, dict: Dictionary['pricing']) {
   const monthly = MONTHLY_PRICES[plan.id] ?? 0
@@ -35,21 +34,16 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
           <p className="mx-auto mt-4 max-w-lg text-base text-cream/50">{dict.subheadline}</p>
 
-          {/* Annual / monthly toggle (annual default) */}
-          <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-cream/10 bg-ink-800 p-1 text-sm">
-            <button
-              onClick={() => setAnnual(true)}
-              className={`rounded-full px-4 py-1.5 transition-colors duration-300 ${annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
-            >
-              {dict.toggleAnnual} <span className="text-xs opacity-80">{dict.toggleAnnualSuffix}</span>
-            </button>
-            <button
-              onClick={() => setAnnual(false)}
-              className={`rounded-full px-4 py-1.5 transition-colors duration-300 ${!annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
-            >
-              {dict.toggleMonthly}
-            </button>
-          </div>
+          {/* Annual is the price on the cards; monthly sits behind this text link so the yearly
+              number is what every visitor reads first (backlog/R13). The label names where it
+              goes, so it needs no aria-pressed; min-h-11 keeps a 44 px target on phones. */}
+          <button
+            type="button"
+            onClick={() => setAnnual(a => !a)}
+            className="mt-8 inline-flex min-h-11 items-center rounded-md px-3 text-sm text-cream/60 underline-offset-4 transition-colors duration-300 hover:text-cream hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+          >
+            {annual ? dict.seeMonthly : dict.seeAnnual}
+          </button>
         </div>
 
         <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
@@ -81,6 +75,9 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
                   <span className="ml-1 text-sm text-cream/40">{p.period}</span>
                   <p className="mt-2 text-xs text-gold-text">{p.sub}</p>
                 </div>
+                {/* The one axis the three plans are compared on (backlog/R13): the number the ladder
+                    sells, in body-weight cream so it reads before the checklist. */}
+                <p className="mb-5 text-sm font-medium text-cream">{plan.axis}</p>
                 <ul className="mb-8 flex-1 space-y-2.5">
                   {plan.features.map(f => (
                     <li
@@ -110,8 +107,14 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
         {/* Trial framing + Enterprise line */}
         <div className="mt-8 space-y-3 text-center">
           <p className="text-sm text-cream/50">{dict.trialNote}</p>
+          {/* The Enterprise floor follows the toggle, for the same reason the cards do. Quoted
+              monthly beside an annual grid it read as "$100" against Starter's "$100/yr" — the
+              anchor tier showing the cheapest number on the page, which inverts the ladder R13
+              exists to build. Same negotiated floor, quoted in the period being compared; the
+              annual form is the page's own ×10 rule (`monthlySubLabel`: 2 months free). */}
           <p className="text-sm text-cream/40">
-            {dict.enterpriseNote} <span className="text-cream/70">{dict.enterprisePrice}</span>.{' '}
+            {dict.enterpriseNote}{' '}
+            <span className="text-cream/70">{annual ? dict.enterprisePriceYear : dict.enterprisePriceMonth}</span>.{' '}
             <a
               href="mailto:contact@linkintothessi.com"
               className="text-gold-text underline underline-offset-4 hover:text-gold-light"

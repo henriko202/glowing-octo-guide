@@ -1,7 +1,7 @@
 // Pure helpers for the recap page (backlog/R15). Everything here is time-zone free: windows are
 // computed from a caller-supplied `now` (the client floors it to the hour so the query args stay
 // stable across re-renders and Convex can share the subscription).
-import { isNearInteractionLimit } from './interactionLimit'
+import { effectiveInteractionCap, isNearInteractionLimit } from './interactionLimit'
 
 export type RecapWindow = '7d' | '30d'
 
@@ -74,12 +74,18 @@ export function excerpt(content: string, max = EXCERPT_LENGTH): string {
 
 /** The post closest to the cap (highest total inside the nudge band), or null. */
 export function pickNearCapPost<
-  T extends { likeCount: number; commentCount: number; interactionLimitReached?: boolean }
+  T extends {
+    likeCount: number
+    commentCount: number
+    interactionLimitReached?: boolean
+    interactionCapBonus?: number
+  }
 >(posts: T[], cap: number): T | null {
   let best: T | null = null
   for (const p of posts) {
     if (p.interactionLimitReached) continue
-    if (!isNearInteractionLimit(p.likeCount, p.commentCount, cap)) continue
+    const effectiveCap = effectiveInteractionCap(cap, p.interactionCapBonus)
+    if (!isNearInteractionLimit(p.likeCount, p.commentCount, effectiveCap)) continue
     if (!best || p.likeCount + p.commentCount > best.likeCount + best.commentCount) best = p
   }
   return best

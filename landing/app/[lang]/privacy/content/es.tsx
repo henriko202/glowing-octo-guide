@@ -62,6 +62,9 @@ export default function Es({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Facturación.</strong> Los pagos de suscripción son procesados por Stripe.
           Almacenamos su ID de cliente de Stripe y el estado de suscripción; no almacenamos datos de tarjeta de pago.
+          Las compras únicas (una publicación destacada) se cobran a través de Stripe de la misma forma y aparecen en su
+          recibo de Stripe; guardamos el registro de la compra (ID de sesión, monto y fecha) en la publicación
+          destacada.
         </p>
         <p>
           <strong className="text-cream">Datos técnicos y de sesión.</strong> Recopilamos registros de servidor estándar

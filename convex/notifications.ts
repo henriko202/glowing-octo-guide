@@ -26,6 +26,7 @@ import {
   trialNearEndEmail
 } from './lib/billingEmails'
 import { findLiveSubscription, pickTrialingSubscription, TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
+import { effectiveInteractionCap } from './lib/interactionLimit'
 import { billingIntervalParam, capNoticeMode, shouldSendCapNotice } from './lib/postCapNotice'
 import { nextTier, type Tier } from './lib/planLimits'
 import { excerpt } from './lib/recap'
@@ -181,10 +182,15 @@ export const sendPostCapReached = internalAction({
 
     const tier: Tier = c.tier ?? 'starter'
     const limits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId: post.authorId, tier })
+    // A bought featured post is measured (and reported here) against plan cap + its bonus (backlog/R17).
+    const cap = effectiveInteractionCap(limits.interactionsPerPost, post.interactionCapBonus)
     const next = nextTier(tier)
     const nextLimits = next
       ? await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId: post.authorId, tier: next })
       : null
+    // capNoticeMode's `planCap` compares plan cap to plan cap to decide if there's a bigger plan
+    // worth naming — feed it the plain limit, not the effective `cap` above, or this post's one-time
+    // bonus (R17) makes a bought Starter post look like it already matches Growth and hides the upgrade.
     const mode = capNoticeMode(tier, limits.interactionsPerPost, nextLimits?.interactionsPerPost)
     const locale = resolveBillingLocale(c.language, c.primaryLocale)
     const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
@@ -195,8 +201,7 @@ export const sendPostCapReached = internalAction({
       // downgrade drops the cap under what the post already collected — and the subject must not
       // claim the post has fewer interactions than it does.
       total: post.likeCount + post.commentCount,
-      cap: limits.interactionsPerPost,
-      planName: planName(locale, tier),
+      cap,
       mode,
       nextPlanName: next ? planName(locale, next) : undefined,
       nextCap: nextLimits?.interactionsPerPost,

@@ -85,6 +85,13 @@ export default function En({ lang }: { lang: Locale }) {
           basis until you cancel.
         </p>
         <p>
+          <strong className="text-cream">One-time purchases.</strong> Some features are sold separately from the
+          subscription. Featuring one of your posts costs <strong className="text-cream">$5</strong>, charged once by
+          Stripe when you confirm the purchase. It applies to the{' '}
+          <strong className="text-cream">single post you choose</strong>, does not renew, and is not refundable once
+          that post has been featured.
+        </p>
+        <p>
           <strong className="text-cream">Free trial.</strong> New accounts start with a{' '}
           <strong className="text-cream">7-day free trial</strong> (14 days when you join through a member&apos;s invite
           link) and a payment method is required to begin it. The trial ends — and billing starts — as soon as you reach{' '}

@@ -10,7 +10,7 @@ import { assertCanEngage } from './lib/access'
 import { assertPostEngageable } from './feed'
 import { getPlanLimitsHelper, nextTier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
-import { shouldFlipInteractionLimit } from './lib/interactionLimit'
+import { effectiveInteractionCap, shouldFlipInteractionLimit } from './lib/interactionLimit'
 import { canHide } from './lib/feedHygiene'
 import {
   crossesThreshold,
@@ -117,9 +117,10 @@ export const saveCommentDraft = internalMutation({
 
 /**
  * Flip `interactionLimitReached` the moment a post reaches its plan cap, recompute the feed fields
- * (the post leaves the feed) and — once per post — tell the author by email (backlog/R20). The
- * email is scheduled only from inside the flip, and both callers bail earlier when the post is
- * already capped, so a second email for the same post cannot happen.
+ * (the post leaves the feed) and — once per post — tell the author by email (backlog/R20). A
+ * purchase (posts.applyPurchasedFeature) re-decides the flag against the bigger cap, so a bought
+ * post can reach a second cap and get a second notice — a new event at a new number, never a
+ * repeat of the first.
  */
 async function flipCapIfReached(
   ctx: MutationCtx,
@@ -130,8 +131,10 @@ async function flipCapIfReached(
   const author = await ctx.db.get(post.authorId)
   if (!author) return
   const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
+  // A bought featured post is measured against plan cap + its bonus (backlog/R17).
+  const cap = effectiveInteractionCap(limits.interactionsPerPost, post.interactionCapBonus)
   // The callers already returned when the post was capped, so it's provably not-yet-reached here.
-  if (!shouldFlipInteractionLimit(likeCount, commentCount, limits.interactionsPerPost, false)) return
+  if (!shouldFlipInteractionLimit(likeCount, commentCount, cap, false)) return
   // Hitting the interaction limit removes the post from the feed — refresh feed fields.
   const feed = computeFeedFields({
     isFeatured: post.isFeatured,
@@ -386,10 +389,18 @@ export const getRecap = query({
         likeCount: p.likeCount,
         commentCount: p.commentCount,
         isFeatured: p.isFeatured,
-        interactionLimitReached: p.interactionLimitReached === true
+        interactionLimitReached: p.interactionLimitReached === true,
+        interactionCapBonus: p.interactionCapBonus
       })),
       nearCapPost: near
-        ? { id: near._id, excerpt: excerpt(near.content), total: near.likeCount + near.commentCount }
+        ? {
+            id: near._id,
+            excerpt: excerpt(near.content),
+            total: near.likeCount + near.commentCount,
+            // backlog/R17 A1 — a bought post's own cap can exceed the plan cap; RecapPage needs the
+            // bonus to compute it, the same way the `posts` projection above already does.
+            interactionCapBonus: near.interactionCapBonus
+          }
         : null
     }
   }

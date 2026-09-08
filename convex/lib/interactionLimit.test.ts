@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isNearInteractionLimit, shouldFlipInteractionLimit } from './interactionLimit'
+import { effectiveInteractionCap, isNearInteractionLimit, shouldFlipInteractionLimit } from './interactionLimit'
 
 describe('shouldFlipInteractionLimit', () => {
   it('returns false when under limit', () => {
@@ -29,5 +29,15 @@ describe('isNearInteractionLimit', () => {
   it('is false for a zero or negative cap', () => {
     expect(isNearInteractionLimit(0, 0, 0)).toBe(false)
     expect(isNearInteractionLimit(5, 5, -1)).toBe(false)
+  })
+})
+
+describe('effectiveInteractionCap (backlog/R17)', () => {
+  it('is the plan cap when the post carries no bonus', () => {
+    expect(effectiveInteractionCap(25, undefined)).toBe(25)
+  })
+
+  it('adds the bonus a bought post carries', () => {
+    expect(effectiveInteractionCap(25, 25)).toBe(50)
   })
 })

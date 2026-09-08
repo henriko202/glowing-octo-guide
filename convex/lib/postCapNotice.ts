@@ -8,12 +8,16 @@ import type { Tier } from './planLimits'
  * - `upgrade`: Starter/Growth with a bigger cap one tier up — one checkout deep link.
  * - `proContact`: Pro (nothing above it) or a next tier whose cap is not bigger — the support line.
  * - `contactCustom`: contact tier — the cap is bespoke; the support line says so.
+ *
+ * `planCap` is the tier's plain limit, never a post's effective (bonus-inflated) cap: this is a
+ * plan-vs-plan comparison, and a bought Starter post's 25 + 25 would otherwise tie Growth's 50 and
+ * hide the upgrade the member can actually use (backlog/R17).
  */
 export type CapNoticeMode = 'upgrade' | 'proContact' | 'contactCustom'
 
-export function capNoticeMode(tier: Tier, cap: number, nextCap: number | undefined): CapNoticeMode {
+export function capNoticeMode(tier: Tier, planCap: number, nextCap: number | undefined): CapNoticeMode {
   if (tier === 'contact') return 'contactCustom'
-  if (tier === 'pro' || nextCap === undefined || nextCap <= cap) return 'proContact'
+  if (tier === 'pro' || nextCap === undefined || nextCap <= planCap) return 'proContact'
   return 'upgrade'
 }
 

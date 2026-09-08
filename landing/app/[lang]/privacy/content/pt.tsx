@@ -62,6 +62,8 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Cobrança.</strong> Os pagamentos de assinatura são processados pelo Stripe.
           Armazenamos seu ID de cliente Stripe e o status da assinatura; não armazenamos dados de cartão de pagamento.
+          Compras avulsas (uma publicação em destaque) são cobradas pelo Stripe da mesma forma e aparecem no seu recibo
+          do Stripe; armazenamos o registro da compra (ID da sessão, valor e data) na publicação destacada.
         </p>
         <p>
           <strong className="text-cream">Dados técnicos e de sessão.</strong> Coletamos logs padrão de servidor

@@ -26,3 +26,13 @@ export function isNearInteractionLimit(likeCount: number, commentCount: number, 
   const total = likeCount + commentCount
   return total >= Math.ceil(interactionsPerPost * UPGRADE_NUDGE_RATIO) && total < interactionsPerPost
 }
+
+/**
+ * backlog/R17 — the cap a specific post is measured against: its author's plan cap plus the bonus
+ * stored on the post when its featured slot was bought. Every site that decides "reached"
+ * for an EXISTING post goes through this (interactions.flipCapIfReached, jobs/syncPosts
+ * applyEngagementCounts, lib/recap.pickNearCapPost); creation-time checks keep the plan cap.
+ */
+export function effectiveInteractionCap(planCap: number, bonus: number | undefined): number {
+  return planCap + (bonus ?? 0)
+}

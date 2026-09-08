@@ -38,13 +38,15 @@ function routeQueries() {
 
 function renderComponent(
   limit: 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibility',
-  nearCap?: { total: number; cap: number }
+  nearCap?: { total: number; cap: number },
+  capBonus?: number
 ) {
   return render(
     <MemoryRouter>
       <UpgradeAtLimit
         limit={limit}
         nearCap={nearCap}
+        capBonus={capBonus}
       />
     </MemoryRouter>
   )
@@ -131,6 +133,16 @@ describe('UpgradeAtLimit', () => {
     })
   })
 
+  // C4 — after C5, capBonus only reaches the near-cap branch (a bought post that hasn't flipped
+  // yet); the plain branch below no longer reads it. RecapPage.tsx:169 is the only caller that
+  // passes it, so this pins the arithmetic the way that call site relies on.
+  it('adds a bought post’s bonus to the next tier’s cap on the near-cap branch', () => {
+    renderComponent('interactionCap', { total: 40, cap: 50 }, 25)
+    expect(screen.getByText(/40 of 50 interactions/)).toBeInTheDocument()
+    // next tier is growth (50) + this post's own bonus (25) = 75, not the plain 50.
+    expect(screen.getByText(/keeps collecting to 75/)).toBeInTheDocument()
+  })
+
   it('tags the plain cap event near=false', () => {
     renderComponent('interactionCap')
     fireEvent.click(screen.getByRole('link'))
@@ -139,5 +151,32 @@ describe('UpgradeAtLimit', () => {
       plan: 'growth',
       near: false
     })
+  })
+
+  it('names the $5 add-on after the featured upgrade line (backlog/R17)', () => {
+    mockMe = { tier: 'growth', subscriptionStatus: 'active' }
+    renderComponent('featured')
+    const upgrade = screen.getByRole('link', { name: /upgrade to/i })
+    const addon = screen.getByText(/feature any post below for \$5/i)
+    expect(upgrade.compareDocumentPosition(addon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // F2 — a canceled member has no buy control on My Posts (MyPostsPage.tsx canBuy), so the add-on
+  // line has nothing to point at there. Mirrors the test above with only the status changed.
+  it('never names the $5 add-on for a canceled member', () => {
+    mockMe = { tier: 'growth', subscriptionStatus: 'canceled' }
+    renderComponent('featured')
+    expect(screen.getByRole('link', { name: /upgrade to/i })).toBeInTheDocument()
+    expect(screen.queryByText(/feature any post below for \$5/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the add-on off the contact line and off every other limit kind', () => {
+    mockMe = { tier: 'contact', subscriptionStatus: 'active' }
+    const contact = renderComponent('featured')
+    expect(screen.queryByText(/\$5/)).not.toBeInTheDocument()
+    contact.unmount()
+    mockMe = { tier: 'growth', subscriptionStatus: 'active' }
+    renderComponent('weeklyPosts')
+    expect(screen.queryByText(/\$5/)).not.toBeInTheDocument()
   })
 })

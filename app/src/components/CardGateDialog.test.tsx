@@ -73,7 +73,7 @@ describe('CardGateDialog', () => {
   // status reset) is gated but gets NO trial at checkout: `getMe.trialEligible` is the row-count
   // truth, `subscriptionStatus` is not. All three promises have to go — the cost line included,
   // because that one is the disclosure they are billed against the moment they click.
-  it('drops every trial promise when the member has no trial left', ;() => {
+  it('drops every trial promise when the member has no trial left', () => {
     mockMe = { subscriptionStatus: 'none', trialEligible: false }
     renderDialog('?plan=pro')
     expect(screen.getByRole('link', { name: /subscribe to pro/i })).toHaveAttribute('href', '/billing?plan=pro')

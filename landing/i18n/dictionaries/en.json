@@ -127,9 +127,8 @@
     "eyebrow": "Pricing",
     "headline": "Invest in your professional brand",
     "subheadline": "Every plan includes the feed. Higher tiers add targeting and control.",
-    "toggleAnnual": "Annual",
-    "toggleAnnualSuffix": "· 2 months free",
-    "toggleMonthly": "Monthly",
+    "seeMonthly": "Prefer to pay monthly? See monthly prices",
+    "seeAnnual": "Back to annual · 2 months free",
     "recommended": "Recommended",
     "periodMonth": "/mo",
     "periodYear": "/yr",
@@ -137,29 +136,27 @@
     "monthlySubLabel": "2 months free if you pay annually",
     "trialNote": "No charge until 50 interactions or 7 days, whichever comes first. Card required, cancel anytime.",
     "enterpriseNote": "Teams & agencies: Enterprise from",
-    "enterprisePrice": "$100/mo",
+    "enterprisePriceMonth": "$100/mo",
+    "enterprisePriceYear": "$1,000/yr",
     "enterpriseCta": "Talk to us",
     "plans": [
       {
         "id": "starter",
         "name": "Starter",
         "description": "Get into the feed and start engaging",
-        "features": [
-          "See the full live feed",
-          "Comment & react with AI",
-          "25 interactions counted per post",
-          "1 post into the feed / week"
-        ],
+        "axis": "25 interactions counted per post",
+        "features": ["See the full live feed", "Comment & react with AI", "1 post into the feed / week"],
         "cta": "Start 7-day Starter trial"
       },
       {
         "id": "growth",
         "name": "Growth",
         "description": "A targeted feed for faster results",
+        "axis": "50 interactions counted per post",
         "features": [
           "Feed filtered to your industry + country",
           "Everything in Starter",
-          "50 interactions counted per post",
+          "1 featured post a month",
           "2 posts into the feed / week"
         ],
         "cta": "Start 7-day Growth trial"
@@ -168,11 +165,12 @@
         "id": "pro",
         "name": "Pro",
         "description": "Maximum reach and control",
+        "axis": "200 interactions counted per post",
         "features": [
           "Custom industry + country filters",
           "Control who sees your posts",
           "Everything in Growth",
-          "200 interactions counted per post",
+          "3 featured posts a month",
           "5 posts into the feed / week"
         ],
         "cta": "Start 7-day Pro trial"

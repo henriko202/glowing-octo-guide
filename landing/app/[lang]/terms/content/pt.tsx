@@ -87,6 +87,13 @@ export default function Pt({ lang }: { lang: Locale }) {
           recorrente até que você cancele.
         </p>
         <p>
+          <strong className="text-cream">Compras avulsas.</strong> Alguns recursos são vendidos separadamente da
+          assinatura. Destacar uma publicação sua custa <strong className="text-cream">$5</strong>, cobrados uma única
+          vez pelo Stripe quando você confirma a compra. A compra vale para a{' '}
+          <strong className="text-cream">publicação que você escolher</strong>, não é renovada e não é reembolsável
+          depois que essa publicação for destacada.
+        </p>
+        <p>
           <strong className="text-cream">Teste grátis.</strong> Novas contas começam com um{' '}
           <strong className="text-cream">teste grátis de 7 dias</strong> (14 dias quando você entra pelo link de convite
           de um membro) e é necessário informar um método de pagamento para iniciá-lo. O teste termina — e a cobrança

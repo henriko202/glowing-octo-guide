@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
+import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
 import { nextTier } from '../../../convex/lib/planLimits'
 import { billingIntervalParam } from '../../../convex/lib/postCapNotice'
 import { TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
@@ -11,7 +12,7 @@ import { SUPPORT_EMAIL } from '@/lib/support'
 import { captureEvent } from '@/lib/observability/analytics'
 import { useCardGate } from '@/hooks/useCardGate'
 import { resolveTargetPlan } from '@/lib/targetPlan'
-import { PLAN_PRICES } from '@/lib/planPrices'
+import { FEATURED_POST_PRICE, PLAN_PRICES } from '@/lib/planPrices'
 
 export type LimitKind = 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibility'
 
@@ -24,11 +25,15 @@ export type LimitKind = 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibil
 export default function UpgradeAtLimit({
   limit,
   nearCap,
+  capBonus,
   className
 }: {
   limit: LimitKind
   /** Recap-only: the post is inside the 80% band, not capped yet (backlog/R15). */
   nearCap?: { total: number; cap: number }
+  /** backlog/R17 F5 — a bought post's own bonus, so the next-tier number this prints is the post's
+   *  real next cap, not the plan's plain one. Undefined for every other caller. */
+  capBonus?: number
   className?: string
 }) {
   const { t } = useTranslation()
@@ -131,9 +136,12 @@ export default function UpgradeAtLimit({
               total: nearCap.total,
               cap: nearCap.cap,
               nextPlan,
+              next: effectiveInteractionCap(nextLimits.interactionsPerPost, capBonus)
+            })
+          : t('upgrade.interactionCap', {
+              nextPlan,
               next: nextLimits.interactionsPerPost
             })
-          : t('upgrade.interactionCap', { nextPlan, next: nextLimits.interactionsPerPost })
       case 'visibility':
         return t('upgrade.visibility', { nextPlan })
     }
@@ -149,6 +157,13 @@ export default function UpgradeAtLimit({
       >
         {t('upgrade.cta', { nextPlan })}
       </Link>
+      {/* backlog/R17 — the add-on, after the upgrade, as text only: the cards on My Posts carry
+          the control. Contact never reaches this return (the mailto branch above). F2 — a canceled
+          member has no buy control on My Posts either (MyPostsPage.tsx canBuy), so the price has
+          nothing to point at here. */}
+      {limit === 'featured' && me.subscriptionStatus !== 'canceled' && (
+        <span className="block">{t('upgrade.featuredAddon', { price: FEATURED_POST_PRICE })}</span>
+      )}
     </span>
   )
 }

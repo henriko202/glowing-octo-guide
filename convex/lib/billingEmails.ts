@@ -199,7 +199,6 @@ export interface CapReachedArgs {
    */
   total: number
   cap: number
-  planName: string
   mode: CapNoticeMode
   nextPlanName?: string
   nextCap?: number
@@ -220,17 +219,18 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
   > = {
     en: {
       subject: `Your post reached ${a.total} interactions and left the feed`,
-      body: `It reached the ${a.planName} cap of ${a.cap} interactions and left the feed so members see the rest.`,
+      body: `It reached its cap of ${a.cap} interactions and left the feed so members see the rest.`,
       stays: 'It stays on My Posts:',
-      // Future tense on purpose: nothing ever un-flips `interactionLimitReached`, so upgrading does
-      // NOT put this post back in the feed. Promising that ahead of a charge would be a lie.
+      // Future tense on purpose: an upgrade alone never un-flips `interactionLimitReached` — only
+      // a featured-post purchase does (lib/featuredPurchase.purchasedFeaturePatch) — so upgrading
+      // does NOT put this post back in the feed. Promising that ahead of a charge would be a lie.
       upgrade: `On ${a.nextPlanName}, your next posts collect up to ${a.nextCap} each:`,
       proContact: `Need a higher cap? Write to ${a.supportEmail}.`,
       contactCustom: `Your plan has a custom cap. Write to ${a.supportEmail} to adjust it.`
     },
     pt: {
       subject: `Sua publicação chegou a ${a.total} interações e saiu do feed`,
-      body: `Ela atingiu o limite do plano ${a.planName}, de ${a.cap} interações, e saiu do feed para que os membros vejam as demais.`,
+      body: `Ela atingiu seu limite de ${a.cap} interações e saiu do feed para que os membros vejam as demais.`,
       stays: 'Ela continua em Minhas publicações:',
       upgrade: `No ${a.nextPlanName}, suas próximas publicações recebem até ${a.nextCap} cada uma:`,
       proContact: `Precisa de um limite maior? Escreva para ${a.supportEmail}.`,
@@ -238,7 +238,7 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
     },
     es: {
       subject: `Tu publicación llegó a ${a.total} interacciones y salió del feed`,
-      body: `Alcanzó el límite del plan ${a.planName}, de ${a.cap} interacciones, y salió del feed para que los miembros vean las demás.`,
+      body: `Alcanzó su límite de ${a.cap} interacciones y salió del feed para que los miembros vean las demás.`,
       stays: 'Sigue en Mis publicaciones:',
       upgrade: `En ${a.nextPlanName}, tus próximas publicaciones reciben hasta ${a.nextCap} cada una:`,
       proContact: `¿Necesitas un límite mayor? Escribe a ${a.supportEmail}.`,

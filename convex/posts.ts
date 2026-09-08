@@ -1,5 +1,13 @@
 // convex/posts.ts
-import { action, internalQuery, mutation, query, type QueryCtx } from './_generated/server'
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  type MutationCtx,
+  query,
+  type QueryCtx
+} from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
@@ -17,6 +25,8 @@ import { DEFAULTS, getPlanLimitsHelper, type PlanLimits, type Tier } from './lib
 import { computeFeedFields } from './lib/feedRank'
 import { currentUtcMonthKey, isFeaturedLimitReached } from './lib/postLimit'
 import { hasReachedInteractionLimit } from './lib/interactionLimit'
+import { featuredPurchaseBlocker, fulfilmentAction, purchasedFeaturePatch } from './lib/featuredPurchase'
+import { writeAuditLog } from './lib/audit'
 import {
   appendMediaLinks,
   extractPostUrn,
@@ -556,6 +566,22 @@ export const featurePost = mutation({
     // Idempotent no-op if already featured — see the concurrency note above.
     if (post.isFeatured) return
 
+    // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
+    const feed = computeFeedFields({
+      isFeatured: true,
+      publishedAt: post.publishedAt,
+      authorTierRank: post.authorTierRank,
+      hidden: post.hidden,
+      interactionLimitReached: post.interactionLimitReached,
+      deletedAt: post.deletedAt
+    })
+    // backlog/R17 — a bought slot was paid for once; re-featuring it never touches the monthly
+    // quota and never refunds (the hint under the buy button says so).
+    if (post.featuredPurchase) {
+      await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
+      return
+    }
+
     const tier = user.tier ?? 'starter'
     const limits = await getPlanLimitsHelper(ctx, user._id, tier)
     const month = currentUtcMonthKey()
@@ -570,15 +596,6 @@ export const featurePost = mutation({
       throw new ConvexError(`FEATURED_LIMIT:${limits.featuredPerMonth}`)
     }
 
-    // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
-    const feed = computeFeedFields({
-      isFeatured: true,
-      publishedAt: post.publishedAt,
-      authorTierRank: post.authorTierRank,
-      hidden: post.hidden,
-      interactionLimitReached: post.interactionLimitReached,
-      deletedAt: post.deletedAt
-    })
     await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
 
     if (usageRow) await ctx.db.patch(usageRow._id, { usedCount: usedCount + 1 })
@@ -616,4 +633,100 @@ export const unfeaturePost = mutation({
     await ctx.db.patch(postId, { isFeatured: false, featuredAt: undefined, ...feed })
     // No usedCount decrement — unfeaturing does not refund the monthly quota.
   }
+})
+
+// ── Featured post add-on (backlog/revenue/R17) ───────────────────────────────────────────────────
+
+// billingNode.purchaseFeaturedPost asks before opening Checkout. Throws the blocker's code; the
+// client shows it through friendlyError.
+export const assertFeaturedPurchasable = internalQuery({
+  args: { postId: v.id('posts'), userId: v.id('users') },
+  handler: async (ctx, { postId, userId }): Promise<null> => {
+    const [post, user] = await Promise.all([ctx.db.get(postId), ctx.db.get(userId)])
+    const blocker = featuredPurchaseBlocker(post, userId, user?.tier ?? 'starter')
+    if (blocker) throw new ConvexError(blocker)
+    return null
+  }
+})
+
+type AuditDb = Parameters<typeof writeAuditLog>[0]
+
+export interface ApplyPurchasedFeatureArgs {
+  postId: string
+  checkoutSessionId: string
+  amountCents: number
+  paidAt: number
+}
+
+/**
+ * Fulfilment, called by http.ts on checkout.session.completed. `postId` is a plain string on
+ * purpose: Stripe retries a failing webhook for days, so a bad id must log and return, never fail
+ * the validator. Idempotent — a redelivered event finds `featuredPurchase` set and stops. Never
+ * touches featuredPostUsage: the purchase is outside the monthly quota by design.
+ *
+ * Extracted from the mutation below so every branch of a money path is unit-testable with a mock
+ * ctx (posts.test.ts), the same shape as users.ts's setPostVisibilityHandler.
+ */
+export async function applyPurchasedFeatureHandler(
+  ctx: MutationCtx,
+  { postId, checkoutSessionId, amountCents, paidAt }: ApplyPurchasedFeatureArgs
+): Promise<null> {
+  const id = ctx.db.normalizeId('posts', postId)
+  const post = id ? await ctx.db.get(id) : null
+  // A hard-deleted post (not merely soft-deleted) means the author ran the erasure cascade
+  // (convex/privacy/deletion.ts); by design, no audit row is written against an erased subject.
+  if (!id || !post) {
+    console.error('[posts] featured purchase for unknown post', { postId, checkoutSessionId })
+    return null
+  }
+  // Stripe redelivers checkout.session.completed: the same session id is a replay (already
+  // applied, nothing left to do); a different one is a second payment for a post that can only
+  // be featured — and billed — once.
+  const existing = post.featuredPurchase
+  const fulfilment = fulfilmentAction(existing, checkoutSessionId)
+  if (fulfilment === 'replay') return null
+  if (fulfilment === 'duplicate_payment') {
+    // Stripe already has the $5 and won't take it back on our say-so — never throw (that would
+    // just make Stripe retry this same charge forever). Log loudly and leave an audit row naming
+    // both sessions; the owner refunds the second one from there.
+    const existingCheckoutSessionId = existing!.checkoutSessionId
+    console.error('[posts] duplicate featured purchase', {
+      postId: id,
+      existingCheckoutSessionId,
+      checkoutSessionId
+    })
+    await writeAuditLog(ctx.db as unknown as AuditDb, {
+      actor: 'system',
+      action: 'post.featured_purchase_duplicate',
+      targetUserId: post.authorId,
+      metadata: JSON.stringify({ existingCheckoutSessionId, checkoutSessionId, amountCents })
+    })
+    return null
+  }
+  const author = await ctx.db.get(post.authorId)
+  const tier: Tier = author?.tier ?? 'starter'
+  const limits = await getPlanLimitsHelper(ctx, post.authorId, tier)
+  const purchase = { checkoutSessionId, amountCents, paidAt }
+  const { patch, action } = purchasedFeaturePatch({
+    post,
+    tier,
+    planCap: limits.interactionsPerPost,
+    purchase,
+    now: Date.now()
+  })
+  await ctx.db.patch(id, patch)
+  // Money moved without a member action in our app, so the row says what it bought (or why
+  // nothing was featured: the post was deleted between Checkout and the webhook).
+  await writeAuditLog(ctx.db as unknown as AuditDb, {
+    actor: 'system',
+    action,
+    targetUserId: post.authorId,
+    metadata: JSON.stringify({ postId: id, checkoutSessionId, amountCents, bonus: patch.interactionCapBonus ?? 0 })
+  })
+  return null
+}
+
+export const applyPurchasedFeature = internalMutation({
+  args: { postId: v.string(), checkoutSessionId: v.string(), amountCents: v.number(), paidAt: v.number() },
+  handler: (ctx, args): Promise<null> => applyPurchasedFeatureHandler(ctx, args)
 })

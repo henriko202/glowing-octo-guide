@@ -58,7 +58,9 @@ export default function En({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Billing.</strong> Subscription payments are processed by Stripe. We store your
-          Stripe customer ID and subscription status; we do <em>not</em> store payment card details.
+          Stripe customer ID and subscription status; we do <em>not</em> store payment card details. One-off purchases
+          (a featured post) are charged by Stripe the same way and appear on your Stripe receipt; we store the purchase
+          record (session id, amount, date) on the post it featured.
         </p>
         <p>
           <strong className="text-cream">Technical &amp; session data.</strong> We collect standard server logs (IP

@@ -140,7 +140,6 @@ describe('billing emails stay transactional', () => {
           excerpt: 'x',
           total: 25,
           cap: 25,
-          planName: 'Starter',
           mode: 'upgrade',
           nextPlanName: 'Growth',
           nextCap: 50,
@@ -154,7 +153,6 @@ describe('billing emails stay transactional', () => {
           excerpt: 'x',
           total: 100,
           cap: 100,
-          planName: 'Pro',
           mode: 'proContact',
           myPostsUrl: BILLING_URL,
           supportEmail: 'contact@example.com'
@@ -165,7 +163,6 @@ describe('billing emails stay transactional', () => {
           excerpt: 'x',
           total: 40,
           cap: 40,
-          planName: 'Enterprise',
           mode: 'contactCustom',
           myPostsUrl: BILLING_URL,
           supportEmail: 'contact@example.com'
@@ -215,7 +212,6 @@ describe('postCapReachedEmail (R20)', () => {
     excerpt: 'Hiring a <senior> engineer & more',
     total: 25,
     cap: 25,
-    planName: 'Starter',
     myPostsUrl: 'https://app.example/my-posts',
     supportEmail: 'contact@linkintothessi.com'
   }
@@ -230,13 +226,14 @@ describe('postCapReachedEmail (R20)', () => {
   })
 
   // After a Growth → Starter downgrade a post already at 41 flips against a cap of 25. The subject
-  // reports what the post collected; only the body sentence about the plan quotes the cap.
+  // reports what the post collected; the body quotes the cap it hit, with no plan attribution — a
+  // bought post's cap includes its R17 bonus, so naming a plan there would sometimes be false.
   it('reports the post’s own total in the subject when it overshoots the cap, in every locale', () => {
     for (const l of LOCALES) {
       const m = postCapReachedEmail(l, { ...base, total: 41, mode: 'proContact' })
       expect(m.subject).toContain('41')
       expect(m.subject).not.toContain('25')
-      expect(m.text).toContain('25') // the plan's cap still appears in the body
+      expect(m.text).toContain('25') // the cap it hit still appears in the body
     }
   })
 
@@ -258,8 +255,9 @@ describe('postCapReachedEmail (R20)', () => {
     expect(m.html).not.toContain(base.myPostsUrl)
   })
 
-  // Nothing ever un-flips posts.interactionLimitReached (feedRank.computeFeedFields preserves it,
-  // syncPosts.applyEngagementCounts is one-way), so upgrading cannot bring THIS post back. The
+  // An upgrade alone never un-flips posts.interactionLimitReached (feedRank.computeFeedFields
+  // preserves it, syncPosts.applyEngagementCounts is one-way) — only a featured-post purchase does
+  // (lib/featuredPurchase.purchasedFeaturePatch), so upgrading cannot bring THIS post back. The
   // upgrade line must promise future posts and never "keeps"/"continua"/"sigue".
   it('promises the next posts, never this one coming back, in every locale', () => {
     const promisesReturn = {

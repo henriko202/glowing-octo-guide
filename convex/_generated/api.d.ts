@@ -35,6 +35,7 @@ import type * as lib_billingEmails from "../lib/billingEmails.js";
 import type * as lib_checkoutCopy from "../lib/checkoutCopy.js";
 import type * as lib_concurrency from "../lib/concurrency.js";
 import type * as lib_email from "../lib/email.js";
+import type * as lib_featuredPurchase from "../lib/featuredPurchase.js";
 import type * as lib_feedHygiene from "../lib/feedHygiene.js";
 import type * as lib_feedRank from "../lib/feedRank.js";
 import type * as lib_fetchWithTimeout from "../lib/fetchWithTimeout.js";
@@ -113,6 +114,7 @@ declare const fullApi: ApiFromModules<{
   "lib/checkoutCopy": typeof lib_checkoutCopy;
   "lib/concurrency": typeof lib_concurrency;
   "lib/email": typeof lib_email;
+  "lib/featuredPurchase": typeof lib_featuredPurchase;
   "lib/feedHygiene": typeof lib_feedHygiene;
   "lib/feedRank": typeof lib_feedRank;
   "lib/fetchWithTimeout": typeof lib_fetchWithTimeout;

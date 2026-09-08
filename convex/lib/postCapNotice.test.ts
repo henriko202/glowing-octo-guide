@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { billingIntervalParam, capNoticeMode, shouldSendCapNotice } from './postCapNotice'
 
-describe('capNoticeMode', () => {
+describe('capNoticeMode', ;() => {
   it('offers the upgrade when the next tier caps higher', () => {
     expect(capNoticeMode('starter', 25, 50)).toBe('upgrade')
     expect(capNoticeMode('growth', 50, 100)).toBe('upgrade')
@@ -18,6 +18,16 @@ describe('capNoticeMode', () => {
   it('tells a contact member their cap is custom', () => {
     expect(capNoticeMode('contact', 9999, undefined)).toBe('contactCustom')
     expect(capNoticeMode('contact', 40, 100)).toBe('contactCustom')
+  })
+
+  // C1/backlog-R17 — notifications.ts used to pass this function the post's bonus-inflated
+  // effective cap instead of the plan's plain cap. A bought Starter post (plan cap 25 + a $5
+  // bonus of 25 = 50) then compared equal to Growth's plain 50 and lost its upgrade CTA. Pin the
+  // plain-cap comparison this fix restores, alongside the wrong answer feeding it the bonus would
+  // have produced, so the two numbers this bug actually confused stay on record together.
+  it('compares plan cap to plan cap — a bought post’s bonus must never reach this function', () => {
+    expect(capNoticeMode('starter', 25, 50)).toBe('upgrade')
+    expect(capNoticeMode('starter', 50, 50)).toBe('proContact') // the bonus-inflated call's wrong input
   })
 })
 

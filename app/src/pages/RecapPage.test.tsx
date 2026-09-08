@@ -94,7 +94,7 @@ beforeEach(() => {
   }
 })
 
-describe('RecapPage', () => {
+describe('RecapPage', ;() => {
   it('keeps the header and window toggle mounted while the recap loads (F1)', () => {
     mockQueryReturns['interactions.getRecap'] = undefined
     renderPage()
@@ -132,6 +132,18 @@ describe('RecapPage', () => {
     }
     renderPage()
     expect(screen.getByText('Reached 25 interactions and left the feed')).toBeInTheDocument()
+  })
+
+  // backlog/R17 A1: a bought post's cap is the plan cap plus its bonus, not the plan cap alone —
+  // "50 of 25" was wrong. starter plan cap 25 + bonus 25 = 50.
+  it("uses the bought post's bigger cap, not the plan cap, in its usage line and progress bar", () => {
+    mockQueryReturns['interactions.getRecap'] = {
+      ...RECAP,
+      posts: [{ ...RECAP.posts[0], likeCount: 30, commentCount: 15, interactionCapBonus: 25 }]
+    }
+    renderPage()
+    expect(screen.getByText('45 of 50 interactions')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '50')
   })
 
   it('keeps the SSI mention behind the Sales Navigator line and links to history', () => {

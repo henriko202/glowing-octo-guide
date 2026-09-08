@@ -37,3 +37,8 @@ export function getTierFromPriceId(priceId: string): Tier {
 export function starterPriceIdFor(env: Env, interval: string | undefined): string | undefined {
   return interval === 'year' ? env.STRIPE_STARTER_ANNUAL_PRICE_ID : env.STRIPE_STARTER_PRICE_ID
 }
+
+// backlog/R17 — the one-time $5 "Featured post" Price (Checkout mode: payment). Deliberately NOT
+// part of buildPriceMap: it maps to no tier, so it can never enter ALLOWED_PRICE_IDS or resolve
+// through getTierFromPriceId. billingNode.purchaseFeaturedPost is its only consumer.
+export const FEATURED_POST_PRICE_ID = process.env.STRIPE_FEATURED_POST_PRICE_ID

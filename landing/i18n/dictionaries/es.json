@@ -127,9 +127,8 @@
     "eyebrow": "Planes",
     "headline": "Invierte en tu marca profesional",
     "subheadline": "Todos los planes incluyen el feed. Los planes superiores añaden segmentación y control.",
-    "toggleAnnual": "Anual",
-    "toggleAnnualSuffix": "· 2 meses gratis",
-    "toggleMonthly": "Mensual",
+    "seeMonthly": "¿Prefieres pagar por mes? Ver precios mensuales",
+    "seeAnnual": "Volver a anual · 2 meses gratis",
     "recommended": "Recomendado",
     "periodMonth": "/mes",
     "periodYear": "/año",
@@ -137,17 +136,18 @@
     "monthlySubLabel": "2 meses gratis si pagas anualmente",
     "trialNote": "Sin cobro hasta 50 interacciones o 7 días, lo que ocurra primero. Tarjeta requerida, cancela cuando quieras.",
     "enterpriseNote": "Equipos y agencias: Enterprise desde",
-    "enterprisePrice": "$100/mes",
+    "enterprisePriceMonth": "$100/mes",
+    "enterprisePriceYear": "$1,000/año",
     "enterpriseCta": "Contáctanos",
     "plans": [
       {
         "id": "starter",
         "name": "Starter",
         "description": "Entra al feed y empieza a interactuar",
+        "axis": "25 interacciones contadas por publicación",
         "features": [
           "Accede al feed completo en vivo",
           "Comenta y reacciona con IA",
-          "25 interacciones contadas por publicación",
           "1 publicación en el feed / semana"
         ],
         "cta": "Probar Starter por 7 días"
@@ -156,10 +156,11 @@
         "id": "growth",
         "name": "Growth",
         "description": "Un feed dirigido para resultados más rápidos",
+        "axis": "50 interacciones contadas por publicación",
         "features": [
           "Feed filtrado por industria + país",
           "Todo lo de Starter",
-          "50 interacciones contadas por publicación",
+          "1 publicación destacada al mes",
           "2 publicaciones en el feed / semana"
         ],
         "cta": "Probar Growth por 7 días"
@@ -168,11 +169,12 @@
         "id": "pro",
         "name": "Pro",
         "description": "Alcance máximo y control total",
+        "axis": "200 interacciones contadas por publicación",
         "features": [
           "Filtros personalizados de industria + país",
           "Controla quién ve tus publicaciones",
           "Todo lo de Growth",
-          "200 interacciones contadas por publicación",
+          "3 publicaciones destacadas al mes",
           "5 publicaciones en el feed / semana"
         ],
         "cta": "Probar Pro por 7 días"
