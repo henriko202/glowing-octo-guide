@@ -1,12 +1,21 @@
-// scripts/billing-scenarios.mjs — everything stripe-downgrade-proof.mjs could NOT prove, because a
-// synthetic Stripe customer matches no member and so our own code never runs. TEST MODE ONLY.
+// scripts/billing-scenarios.mjs — the whole B07 proof in one run: does a cross-tier downgrade swap at
+// period end, does our own code follow it, and was anyone credited a cent? TEST MODE ONLY.
 //
-//   node scripts/billing-scenarios.mjs           full run, deletes the test clock afterwards
-//   node scripts/billing-scenarios.mjs --keep    keep the clock (and its customer/subscription)
+//   node scripts/billing-scenarios.mjs                    full run, deletes the test clock afterwards
+//   node scripts/billing-scenarios.mjs --keep             keep the clock (and its customer/subscription)
+//   node scripts/billing-scenarios.mjs --user <convexId>  read-only audit of one member, writes nothing
 //
-// The other script drives the Stripe API directly and answers "does Stripe behave?". This one drives
-// OUR public actions through the Convex CLI and answers "does the platform behave?" — the guards, the
-// pending-downgrade mirror, and the webhook half (syncUserSubscription → releaseSubscriptionSchedule).
+// It drives OUR public actions through the Convex CLI, so it answers "does the platform behave?" —
+// the guards, the pending-downgrade mirror, and the webhook half (syncUserSubscription →
+// releaseSubscriptionSchedule) — and then reads Stripe's own money objects for the question B07
+// actually asks: was NOTHING credited? Those are two different claims, and the mechanism one does not
+// imply the other. A run can build a perfectly-shaped schedule, apply it, mirror it on our row and
+// still hand the member a refund: drop the top-level `proration_behavior: 'none'` from
+// scheduleDowngrade's phase-0 rewrite and every mechanism check below still passes while `no new
+// invoice` fails. Hence the money assertions in S5, S7 and S8 — customer balance and invoice count at
+// each step, and the applied invoice's own lines. (Those came from stripe-downgrade-proof.mjs, merged
+// in and deleted on 2026-09-09: it could only drive Stripe against a synthetic customer that no member
+// row pointed at, so it could never reach our own code at all.)
 //
 // HOW THE BLOCKER IS SOLVED. syncUserSubscription resolves the member by users.by_stripe_customer, so
 // a customer no row points at is invisible to us. A test clock can only be attached to a customer at
@@ -24,6 +33,8 @@
 // PREREQUISITES
 //   - `npx convex dev` running (this reads and writes the DEV deployment, and needs its webhooks live)
 //   - the test-mode account provisioned by scripts/stripe-provision.mjs (prices + portal configs)
+//   `--user` needs neither to be useful: it is all GETs plus one sandboxed readonly query, and it
+//   degrades to a Stripe-only report when the deployment is unreachable.
 //
 // NOT COVERED, deliberately: past_due/dunning (needs a failing card and repeated advances),
 // invoice.payment_failed, the featured-post one-time checkout, the duplicate-subscription guard, and
@@ -32,10 +43,10 @@
 // subscription, which is endTrialEarly's one line verbatim, and asserts the card is charged (the row
 // moves to `active`). Each of the others needs machinery worth more than the coverage.
 //
-// ponytail: the Stripe form encoder and the assertion helpers below are a third copy (see
-// stripe-provision.mjs and stripe-downgrade-proof.mjs). Both of those run their whole flow at import,
-// so neither can be imported for its helpers; extracting a shared module would mean editing the
-// live-mode provisioning tool, which is not worth a DRY win. Extract if a fourth copy ever appears.
+// ponytail: the Stripe form encoder and the assertion helpers below are a second copy of
+// stripe-provision.mjs's. That script runs its whole flow at import, so it cannot be imported for its
+// helpers, and extracting a shared module would mean editing the live-mode provisioning tool for a
+// DRY win nobody asked for. Extract if a third copy ever appears.
 
 import { spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -89,11 +100,23 @@ function form(value, prefix = '') {
 }
 
 const KEY = arg('key') ?? process.env.STRIPE_SECRET_KEY ?? readEnv('.env.local', 'STRIPE_SECRET_KEY')
+const USER = arg('user')
 const PRICE = {
   starter: readEnv('.env.local', 'STRIPE_STARTER_PRICE_ID'),
   growth: readEnv('.env.local', 'STRIPE_GROWTH_PRICE_ID'),
   pro: readEnv('.env.local', 'STRIPE_PRO_PRICE_ID')
 }
+
+// Every price → its tier, annual included. The run below only ever touches monthly, but --user has to
+// name whatever price a real member is actually on — and annual is where a credit costs the most.
+// This is lib/stripePrices.getTierFromPriceId's map, read from the same six env vars.
+const TIER_BY_PRICE = {}
+for (const tier of Object.keys(PRICE)) {
+  for (const id of [PRICE[tier], readEnv('.env.local', `STRIPE_${tier.toUpperCase()}_ANNUAL_PRICE_ID`)]) {
+    if (id) TIER_BY_PRICE[id] = tier
+  }
+}
+const tierOf = priceId => TIER_BY_PRICE[priceId] ?? 'unknown'
 
 // Called from inside run()'s try, so a misconfiguration prints one line like every other failure
 // rather than an uncaught stack trace.
@@ -123,6 +146,11 @@ async function stripe(method, endpoint, body) {
 
 const periodEndOf = sub => sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end
 const scheduleIdOf = sub => (typeof sub.schedule === 'string' ? sub.schedule : sub.schedule?.id)
+// A line item's price moved the same way current_period_end did: `line.price` is now
+// `line.pricing.price_details.price`. No Stripe-Version header is sent, so read both shapes.
+const linePriceOf = line => line.pricing?.price_details?.price ?? line.price?.id
+const invoicesOf = async subId => (await stripe('GET', `/invoices?subscription=${subId}&limit=100`)).data
+const balanceOf = async customerId => (await stripe('GET', `/customers/${customerId}`)).balance
 
 // ── Convex ────────────────────────────────────────────────────────────────────────────────────
 // Returns { ok, value, error }. Never throws: a REFUSAL is the expected outcome of half the
@@ -180,6 +208,19 @@ function expectRefusal(label, code, name, args) {
   const r = call(name, args)
   if (r.ok) return check(label, false, `succeeded — returned ${JSON.stringify(r.value)}`)
   check(label, r.error.includes(code), errLine(r.error))
+}
+
+/**
+ * The B07 assertion proper: no money moved. Both halves are needed. A credit does NOT arrive as an
+ * invoice line — Stripe parks it as a NEGATIVE customer balance and silently consumes it on the next
+ * invoice a period later — so an invoice-only check cannot see it, while a balance-only check misses
+ * a charge that settled immediately.
+ */
+async function checkNoMoneyMoved(when, customerId, subId, baseline) {
+  const balance = await balanceOf(customerId)
+  check(`customer balance is still 0 ${when}`, balance === 0, String(balance))
+  const count = (await invoicesOf(subId)).length
+  check(`no new invoice ${when}`, count === baseline, `${count} vs ${baseline}`)
 }
 
 /**
@@ -285,6 +326,11 @@ async function run() {
       items: [{ price: PRICE.growth }],
       trial_period_days: 7,
       payment_behavior: 'error_if_incomplete',
+      // What checkout stamps (billingNode.ts:72). Nothing in the webhook path reads it — it is a
+      // Dashboard support lookup — but it earns its place twice here: `--user` searches on it, and
+      // buildDowngradePhases has to carry it through the phase-0 rewrite or that rewrite silently
+      // UNSETS it (lib/downgrade.ts:127). Without the stamp neither of those is exercised at all.
+      metadata: { convexUserId: userId },
       expand: ['items.data.price']
     })
     note(`subscription ${sub.id} — ${sub.status}, ${PRICE.growth} (Growth), 7-day trial`)
@@ -348,6 +394,11 @@ async function run() {
 
     // ── S5 downgrade through our own action ──
     heading('S5 downgrade — createPlanSwitchSession schedules instead of opening the portal')
+    // Baseline for every money assertion below. Taken HERE, with the trial conversion already billed:
+    // from this point until the swap applies, nothing may add an invoice or move the balance.
+    const invoicesBefore = (await invoicesOf(sub.id)).length
+    note(`${invoicesBefore} invoice(s) so far — the baseline; nothing between here and the swap may add one`)
+
     const switched = call('billingNode:createPlanSwitchSession', { sessionToken, priceId: PRICE.starter })
     if (!switched.ok) fail(`createPlanSwitchSession refused unexpectedly:\n${switched.error}`)
     check('returns { url: null } — no portal round trip', switched.value?.url === null, JSON.stringify(switched.value))
@@ -383,6 +434,9 @@ async function run() {
     // The member is not moved yet — that is the whole product promise of a scheduled downgrade.
     const stillGrowth = query(readUser(userId)).value?.tier
     check('member keeps growth until it applies', stillGrowth === 'growth', stillGrowth)
+    // …and neither is their money. This is the state the portal used to reach by crediting on the
+    // spot, which is the contradiction with the no-refund Terms that B07 exists to close.
+    await checkNoMoneyMoved('while the downgrade is merely scheduled', customer.id, sub.id, invoicesBefore)
 
     // ── S6 guards while pending ──
     heading('S6 guards — what the plan grid refuses while a downgrade is booked')
@@ -407,9 +461,12 @@ async function run() {
     check('subscription.schedule is null', scheduleIdOf(subC) === undefined, String(scheduleIdOf(subC)))
     check('price unchanged', subC.items.data[0].price.id === PRICE.growth, subC.items.data[0].price.id)
     await waitFor('row pendingTier cleared', readSub(sub.id), r => r?.pendingTier === null, 10)
+    // An undo is the other way a naive implementation leaks money: releasing a schedule that already
+    // rewrote phase 0 can re-invoice the current period.
+    await checkNoMoneyMoved('after the undo', customer.id, sub.id, invoicesBefore)
 
     // ── S8 the webhook half ──
-    heading('S8 the webhook half — the swap lands, our code clears up after it')
+    heading('S8 the swap lands — one clean invoice, and our code clears up after it')
     const again = call('billingNode:createCancelFlowSession', { sessionToken, flow: 'downgrade' })
     if (!again.ok) fail(`createCancelFlowSession refused unexpectedly:\n${again.error}`)
     check('cancel flow also returns { url: null }', again.value?.url === null, JSON.stringify(again.value))
@@ -424,9 +481,37 @@ async function run() {
       subB.items.data[0].price.id === PRICE.starter,
       subB.items.data[0].price.id
     )
+    // A phase rewrite that omits metadata unsets it for the whole phase, which would quietly break
+    // every Dashboard support lookup after a downgrade. buildDowngradePhases carries it; this is the
+    // only place that proves the carry actually survives Stripe's round trip.
+    check('checkout metadata survived the swap', subB.metadata?.convexUserId === userId, subB.metadata?.convexUserId)
     await waitFor('row tier moved to starter', readSub(sub.id), r => r?.tier === 'starter')
     await waitFor('row pendingTier cleared by the sync', readSub(sub.id), r => r?.pendingTier === null, 15)
     await waitFor('users.tier moved to starter', readUser(userId), u => u?.tier === 'starter', 15)
+
+    // The renewal invoice the swap produced — the one artefact that would carry a refund if one had
+    // been given. A credited downgrade appears here as a negative line, or, when the credit exceeds
+    // the new invoice, as a negative customer balance carried silently into the next period.
+    const starterPrice = await stripe('GET', `/prices/${PRICE.starter}`)
+    const invoices = await invoicesOf(sub.id)
+    const lines = invoices[0]?.lines?.data ?? []
+    check('a new invoice was issued', invoices.length > invoicesBefore, `${invoices.length} vs ${invoicesBefore}`)
+    check('the invoice has EXACTLY ONE line', lines.length === 1, `${lines.length} line(s)`)
+    check(
+      'that line is the Starter price',
+      lines.length === 1 && linePriceOf(lines[0]) === PRICE.starter,
+      lines.map(linePriceOf).join()
+    )
+    check('NO negative line', !lines.some(l => l.amount < 0), lines.map(l => l.amount).join())
+    check('NO proration line', !lines.some(l => l.proration === true))
+    check(
+      'invoice total is the Starter price',
+      invoices[0]?.total === starterPrice.unit_amount,
+      `${invoices[0]?.total} vs ${starterPrice.unit_amount}`
+    )
+    const balanceB = await balanceOf(customer.id)
+    check('customer balance is 0 — nothing was credited', balanceB === 0, String(balanceB))
+
     // The webhook-scheduled release cannot be observed under a test clock. Stripe locks writes while
     // a clock advances ("Test clock advancement underway - cannot perform modifications"), and the
     // swap webhook necessarily fires INSIDE that window — so the one-shot action runs and is refused
@@ -507,9 +592,92 @@ async function run() {
   }
 }
 
+// ── Read-only audit ───────────────────────────────────────────────────────────────────────────
+// Every Stripe call here is a GET and the Convex read is a sandboxed readonly query, so this is safe
+// against a member's real test-mode subscription at any time — including while a downgrade is
+// pending, which is exactly when it has something to say.
+async function audit(convexUserId) {
+  preflight()
+  heading(`Read-only audit — convexUserId ${convexUserId}`)
+
+  // Checkout stamps convexUserId on the SUBSCRIPTION, not the customer (billingNode.ts).
+  const q = encodeURIComponent(`metadata['convexUserId']:'${convexUserId}'`)
+  const found = await stripe('GET', `/subscriptions/search?query=${q}&limit=10&expand[]=data.schedule`)
+  if (!found.data?.length) {
+    note('No subscription carries that convexUserId — the member has not checked out in this mode')
+    note('(or did so before the metadata stamp, or in a sandbox that has since been deleted).')
+    // Say what IS here rather than only what is missing: "none at all" and "one under a different id"
+    // are different problems, and the difference decides whether a full run is the only way in.
+    const all = await stripe('GET', '/subscriptions?status=all&limit=20&expand[]=data.schedule')
+    heading(`Every subscription in this mode (${all.data.length}):`)
+    if (!all.data.length) note('none — nothing to audit; a full run builds its own')
+    for (const s of all.data) {
+      const p = s.items.data[0]?.price
+      note(
+        `${s.id} ${s.status} · ${s.customer} · ${tierOf(p?.id)} ` +
+          `$${((p?.unit_amount ?? 0) / 100).toFixed(2)}/${p?.recurring?.interval} · ` +
+          `schedule ${scheduleIdOf(s) ?? 'none'} · convexUserId ${s.metadata?.convexUserId ?? 'unstamped'}`
+      )
+    }
+    return
+  }
+
+  for (const sub of found.data) {
+    const item = sub.items.data[0]
+    const periodEnd = periodEndOf(sub)
+    const customer = await stripe('GET', `/customers/${sub.customer}`)
+    const schedule = sub.schedule && typeof sub.schedule === 'object' ? sub.schedule : null
+    // Our row, not Stripe's object — the half a synthetic-customer script could never read. A
+    // schedule id and a pendingTier are DIFFERENT states, and only this tells them apart.
+    const mirror = query(readSub(sub.id))
+    const row = mirror.ok ? mirror.value : undefined
+
+    heading(`${sub.id} — status ${sub.status}, customer ${sub.customer}`)
+    const amount = (item.price.unit_amount / 100).toFixed(2)
+    note(`item price ${item.price.id} — ${tierOf(item.price.id)} $${amount}/${item.price.recurring.interval}`)
+    note(`current_period_end ${new Date(periodEnd * 1000).toISOString()}`)
+    note(`customer balance ${customer.balance} (0 = nothing credited)`)
+    note(`test clock ${customer.test_clock ?? 'none'}`)
+    note(
+      mirror.ok
+        ? `our row: tier ${row?.tier ?? '—'}, status ${row?.status ?? '—'}, pendingTier ${row?.pendingTier ?? 'none'}`
+        : 'our row: unreadable — is `npx convex dev` running? (Stripe-only report below)'
+    )
+
+    if (!schedule) {
+      console.log('\n  No schedule attached — the undone / never-scheduled shape:')
+      check('subscription.schedule is null', scheduleIdOf(sub) === undefined)
+      check('customer balance is 0', customer.balance === 0, String(customer.balance))
+      // The mirror pointing at a downgrade Stripe no longer holds: BillingPage would promise
+      // "Starter from <date>" for a swap that will never happen, and undoing it has nothing to release.
+      if (row) check('our row agrees nothing is pending', row.pendingTier === null, String(row.pendingTier))
+      continue
+    }
+
+    console.log('\n  Schedule attached — the pending-downgrade shape:')
+    check('schedule status is active', schedule.status === 'active', schedule.status)
+    check('two phases', schedule.phases?.length === 2, `${schedule.phases?.length} phase(s)`)
+    const [kept, next] = schedule.phases ?? []
+    const nextPrice = next?.items?.[0]?.price
+    check('phase 0 keeps the current price', kept?.items?.[0]?.price === item.price.id, kept?.items?.[0]?.price)
+    check('phase 1 proration_behavior is "none"', next?.proration_behavior === 'none', next?.proration_behavior)
+    check('phase 1 starts at current_period_end', next?.start_date === periodEnd, `${next?.start_date} vs ${periodEnd}`)
+    check('item still on the OLD price', item.price.id !== nextPrice, item.price.id)
+    check('customer balance is 0', customer.balance === 0, String(customer.balance))
+    check('end_behavior is release', schedule.end_behavior === 'release', schedule.end_behavior)
+    if (row) {
+      // isSpentSchedule's state, in the wild: the swap applied and the release that should have
+      // followed never landed. Not an assertion — it is self-healing since 2026-09-09, and the member
+      // sees nothing wrong. Worth naming, because before that fix it refused their every upgrade.
+      if (row.pendingTier === null) note('SPENT schedule — nothing pending on our row; the next upgrade releases it')
+      else check('our row mirrors the pending tier', row.pendingTier === tierOf(nextPrice), row.pendingTier)
+    }
+  }
+}
+
 let aborted = false
 try {
-  await run()
+  await (USER ? audit(USER) : run())
 } catch (err) {
   aborted = true
   // fail() has already printed and set the exit code; anything else is a genuine crash.

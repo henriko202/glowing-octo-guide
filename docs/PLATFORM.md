@@ -1909,30 +1909,74 @@ flowchart TD
 > (Growth $15/mo, period end 2026-10-09T19:00:25Z), all deleted with the clock. Every Stripe write is Henriko's —
 > the assistant's tooling permits Stripe reads and refuses writes.
 >
-> **Two scripts cover this, and they answer different questions.**
+> ✅ **The platform half is proven too, 2026-09-09 — 47 of 47 checks passed** (`scripts/billing-scenarios.mjs`, nine
+> scenarios, driven against a live `npx convex dev` so webhook-delivered state is real). Clock
+> `clock_1UDrvcFPUrUP5vm6A4Olt8aH`, customer `cus_VEKaspMgxpOUf5`, subscription `sub_1UDrvrFPUrUP5vm6nIDoaSEs`,
+> schedule `sub_sched_1UDrwRFPUrUP5vm6ssJb3cd8`, probe member `jn74289zwmbcjaa40dxggf8vy98e3dqw` — everything but the
+> probe member deleted with the clock, and the probe member is never reused. The two partial runs it took to get
+> there are what found the `currentPeriodEnd` and spent-schedule bugs recorded below; both were real, and neither
+> was reachable from the proof run.
 >
-> `scripts/stripe-downgrade-proof.mjs` asks **does Stripe behave?** — `--clock` builds a test clock, a customer, a
-> Growth subscription, then schedules / releases / re-schedules and advances past period end, asserting each
-> read-back and exiting non-zero on any failure. It deletes the clock afterwards (`--keep` to inspect). Without
-> `--clock` it is a **read-only** audit of a member's live test-mode subscription (`--user <convexUserId>`, found by
-> the `metadata.convexUserId` that Checkout stamps), which is the half the assistant can run.
+> ✅ **Then 59 of 59, same day, after the merge.** `stripe-downgrade-proof.mjs` was folded into this script — its
+> money assertions (+11) and its read-only `--user` audit, plus a new check that the Checkout metadata survives the
+> swap — and the merged run is green end to end. Clock `clock_1UDsKIFPUrUP5vm61Vg609m5`, customer
+> `cus_VEL02p9tr6P2lQ`, subscription `sub_1UDsKQFPUrUP5vm6OK2Tow7U`, schedule `sub_sched_1UDsKmFPUrUP5vm6KS8ZRs3R`,
+> probe member `jn79w33vqh4t81c1evfz7qm9bn8e2x22`. The money half read **2 invoices before, 3 after**, the applied
+> invoice **one line at `price_1UDaHRFPUrUP5vm6HUZUaCNW`, total 1000 == the Starter price, no negative line, no
+> proration line**, and `customer.balance` **0 at all three steps**. `--user` was then run against the kept clock and
+> reported the same subscription from the other side: item on Starter $10.00/month, balance 0, our row `tier starter,
+> status active, pendingTier none`, schedule already handed back.
 >
-> `scripts/billing-scenarios.mjs` asks **does the platform behave?** — everything the proof run structurally could
-> not reach. A test clock can only be attached to a customer **at creation**, so that run necessarily uses a
-> synthetic customer; and because `syncUserSubscription` finds the member by `users.by_stripe_customer`, a synthetic
-> customer matches no row, so our own webhook half never runs there. This script goes the other way round: it creates
-> the clock customer **first**, then points a **disposable probe member** at it, minted fresh each run. That detail is
-> not fussiness: `setStripeCustomerId` cannot unset, so a repointed real member would be left holding a dead customer
-> id, and `createCheckoutSession` only mints a fresh one when the field is empty. Fresh rather than reused because
-> `findLiveSubscription` scans `by_user` **oldest-first** — one aborted run would otherwise leave an `active` row that
-> shadows every later run's own subscription. It then drives our own public actions through the Convex CLI and
-> asserts on **our rows**, not only Stripe's objects. Nine scenarios: the webhook creating the row; the trial gate
-> (`TRIAL_NO_SWITCH` from both entry points); the cancel-pending mirror and `resumeSubscription`; the scheduled
-> downgrade's `pendingTier` / `pendingAt` mirror; the `PENDING_DOWNGRADE` / `ALREADY_ON_PLAN` / `Invalid price ID`
-> guards; the undo; the applied swap, with `releaseSubscriptionSchedule` handing the subscription back; and a portal
-> home session proving a per-tier configuration matched. It needs `npx convex dev` running, because it asserts on
-> webhook-delivered state. Deliberately **not** covered: `past_due` dunning, `invoice.payment_failed`, the
-> featured-post checkout, the duplicate-subscription guard, and `endTrialEarly`'s 50-interaction trigger.
+> ⚠️ One branch of `--user` is still unexercised: the **schedule-attached** shape. S8 releases the schedule before the
+> run ends, so a kept clock always audits clean. Reaching it means auditing a run mid-flight, between S5 and S7.
+>
+> **One script covers this as of 2026-09-09.** `scripts/billing-scenarios.mjs` carries both halves. There used to be a
+> second, `stripe-downgrade-proof.mjs`; its money assertions and its read-only audit were ported in and the file was
+> **deleted**, because everything else it did was a strictly weaker version of the same run: it drove the Stripe API
+> directly against a **synthetic** customer, which is the single thing that made it unable to prove anything about our
+> own code.
+>
+> **Why the synthetic customer was the ceiling.** A test clock can only be attached to a customer **at creation**, so a
+> clock run must build its own customer — and `syncUserSubscription` finds the member by `users.by_stripe_customer`, so
+> a customer no row points at is invisible to us and the entire webhook half never runs. `billing-scenarios.mjs` goes
+> the other way round: it creates the clock customer **first**, then points a **disposable probe member** at it, minted
+> fresh each run. That detail is not fussiness — `setStripeCustomerId` cannot unset, so a repointed real member would
+> be left holding a dead customer id, and `createCheckoutSession` only mints a fresh one when the field is empty. Fresh
+> rather than reused because `findLiveSubscription` scans `by_user` **oldest-first**: one aborted run would otherwise
+> leave an `active` row that shadows every later run's own subscription.
+>
+> **The mechanism half — nine scenarios**, driven through our own public actions via the Convex CLI and asserted on
+> **our rows**, not only Stripe's objects: the webhook creating the row; the trial gate (`TRIAL_NO_SWITCH` from both
+> entry points); the cancel-pending mirror and `resumeSubscription`; the scheduled downgrade's `pendingTier` /
+> `pendingAt` mirror; the `PENDING_DOWNGRADE` / `ALREADY_ON_PLAN` / `Invalid price ID` guards; the undo; the applied
+> swap, with `releaseSubscriptionSchedule` handing the subscription back; and a portal home session proving a per-tier
+> configuration matched.
+>
+> **The money half — the assertion B07 actually asks for**, and it does **not** follow from the mechanism half.
+> Customer balance and invoice count are checked at each step (S5 while merely scheduled, S7 after the undo), and the
+> applied renewal invoice is checked line by line in S8: **exactly one line**, that line the Starter price, **no
+> negative line**, **no proration line**, total == the Starter price, `balance: 0`. A credit does not arrive as an
+> invoice line — Stripe parks it as a **negative `customer.balance`** and silently consumes it on the next invoice a
+> period later — so an invoice-only check cannot see one. The gap is not theoretical: drop the top-level
+> `proration_behavior: 'none'` from `scheduleDowngrade`'s phase-0 rewrite and **every mechanism check still passes**
+> while `no new invoice` fails. Keep the phase assertions matching `lib/downgrade.buildDowngradePhases` whenever that
+> function changes.
+>
+> The probe subscription is stamped with `metadata.convexUserId` exactly as Checkout stamps it (`billingNode.ts:72`).
+> It earns that twice: `--user` searches on it, and `buildDowngradePhases` must carry it through the phase-0 rewrite or
+> that rewrite silently **unsets** it, quietly breaking every Dashboard support lookup after a downgrade. S8 asserts it
+> survived the swap.
+>
+> `--user <convexUserId>` is a **read-only** audit — all GETs plus one sandboxed readonly query, safe against a
+> member's live test-mode subscription at any time, and the only half the assistant can run unaided (the tooling
+> permits Stripe reads and refuses writes). It reports the item price and its tier, period end, customer balance and
+> test clock, and **our row beside them** — the thing the old script structurally could not read, and the only way to
+> tell a genuinely pending downgrade from a **spent** schedule (attached on Stripe, nothing pending on our row). With
+> no deployment reachable it degrades to a Stripe-only report rather than failing.
+>
+> The full run needs `npx convex dev` running, because it asserts on webhook-delivered state. Deliberately **not**
+> covered: `past_due` dunning, `invoice.payment_failed`, the featured-post checkout, the duplicate-subscription guard,
+> and `endTrialEarly`'s 50-interaction trigger.
 >
 > ⚠️ Spawn the Convex CLI as `node node_modules/convex/bin/main.js run …`, never `npx convex`. On Windows `npx.cmd`
 > without a shell is `EINVAL` (the CVE-2024-27980 fix), and with `shell: true` the JSON argument's quotes are mangled
@@ -5641,7 +5685,6 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                          | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
 | Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                     | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Customer Portal configurations (`convex/lib/portalConfig.ts`, `billingNode.portalConfigurationId` / `portalSession` / `createPortalSession`, the portal block in `scripts/stripe-provision.mjs`)                                                            | [§8](#8-subscriptions--billing) per-tier portal configurations + Dashboard table, [§14](#14-frontend--authenticated-app-app) BillingPage                                                                                                                                                                                                 |
-| Stripe proof runs (`scripts/stripe-downgrade-proof.mjs`)                                                                                                                                                                                                    | [§8](#8-subscriptions--billing) the (A)/(C)/(B) read-backs — keep the assertions matching `lib/downgrade.buildDowngradePhases`                                                                                                                                                                                                           |
 | Billing scenario runs (`scripts/billing-scenarios.mjs`)                                                                                                                                                                                                     | [§8](#8-subscriptions--billing) the nine scenarios — add one whenever a billing guard, mirror field or webhook effect is added                                                                                                                                                                                                           |
 | Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `notifications.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                       | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
 | Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
