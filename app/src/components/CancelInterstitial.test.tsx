@@ -10,7 +10,7 @@ vi.mock('../convex', () => ({
 }))
 
 let mockQueryReturns: Record<string, unknown> = {}
-const mockCancelFlow = vi.fn(async () => ({ url: '' }))
+const mockCancelFlow = vi.fn(async () => ({ url: '' }) as { url: string | null })
 const mockSubmitFeedback = vi.fn(async () => null)
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
@@ -127,5 +127,33 @@ describe('CancelInterstitial', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keep my plan' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(mockCancelFlow).not.toHaveBeenCalled()
+  })
+})
+
+// backlog/B07 — the downgrade is written as a Stripe subscription schedule, so it returns no url and
+// completes here instead of on a portal return leg.
+describe('scheduled downgrade (B07)', () => {
+  it('hides the Starter alternative when a downgrade is already scheduled', () => {
+    renderIt({ pendingTier: 'starter' })
+    expect(screen.queryByRole('button', { name: 'Move to Starter' })).not.toBeInTheDocument()
+  })
+
+  it('closes, toasts and completes the save funnel when the downgrade returns no url', async () => {
+    const onOpenChange = vi.fn()
+    mockCancelFlow.mockResolvedValueOnce({ url: null })
+    renderIt({ onOpenChange })
+    fireEvent.click(screen.getByRole('button', { name: 'Move to Starter' }))
+    await waitFor(() => expect(captureEvent).toHaveBeenCalledWith('cancel_alternative_completed', { from: 'growth' }))
+    expect(captureEvent).toHaveBeenCalledWith('cancel_alternative_taken', { from: 'growth' })
+    expect(toast).toHaveBeenCalledWith('You move to Starter at the end of your period.')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('never completes the funnel on the cancel flow, which returns no url only on an error', async () => {
+    mockCancelFlow.mockResolvedValueOnce({ url: null })
+    renderIt()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to cancel' }))
+    await waitFor(() => expect(mockCancelFlow).toHaveBeenCalled())
+    expect(captureEvent).not.toHaveBeenCalledWith('cancel_alternative_completed', { from: 'growth' })
   })
 })

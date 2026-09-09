@@ -12,6 +12,7 @@ import { restampUserPostsTierRank } from './lib/feedRank'
 import { canEngage } from './lib/access'
 import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
 import { findDuplicateSubscription, findLiveSubscription, isStaleEvent, isTrialConversion } from './lib/trialMilestone'
+import { resolvePendingDowngrade } from './lib/downgrade'
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
 // any status that does not clearly grant access (incomplete, unpaid, paused, unknown)
@@ -64,6 +65,8 @@ export const syncUserSubscription = internalMutation({
     priceCurrency: v.optional(v.string()),
     priceInterval: v.optional(v.string()),
     cancelAtPeriodEnd: v.optional(v.boolean()),
+    // backlog/B07 — presence of an attached subscription schedule. See lib/downgrade.
+    stripeScheduleId: v.optional(v.string()),
     stripeCreated: v.optional(v.number()),
     // Stripe `created` of the EVENT (ms), not of the subscription — see schema: subscriptions.lastEventAt.
     eventCreated: v.optional(v.number())
@@ -100,6 +103,12 @@ export const syncUserSubscription = internalMutation({
     if (stale) {
       console.warn(`syncUserSubscription: ignoring out-of-order ${args.status} event for ${args.stripeSubscriptionId}`)
     } else {
+      // backlog/B07 — decided on the row as it stands BEFORE this patch, because "the tier moved" is
+      // precisely the signal that the schedule's swap landed.
+      const pending = resolvePendingDowngrade(existing ?? null, {
+        tier: args.tier,
+        stripeScheduleId: args.stripeScheduleId
+      })
       const fields = {
         tier: args.tier,
         status: args.status,
@@ -109,7 +118,10 @@ export const syncUserSubscription = internalMutation({
         priceInterval: args.priceInterval,
         cancelAtPeriodEnd: args.cancelAtPeriodEnd,
         stripeCreated: args.stripeCreated ?? existing?.stripeCreated,
-        lastEventAt: args.eventCreated ?? existing?.lastEventAt
+        lastEventAt: args.eventCreated ?? existing?.lastEventAt,
+        // 'keep' leaves the mirror alone and 'none' has nothing to leave, so the keys stay OUT of the
+        // patch for both — including them as undefined would unset a mirror that is still true.
+        ...(pending === 'applied' || pending === 'clear' ? { pendingTier: undefined, pendingAt: undefined } : {})
       }
       if (existing) {
         await ctx.db.patch(existing._id, fields)
@@ -118,6 +130,14 @@ export const syncUserSubscription = internalMutation({
           userId: user._id,
           stripeSubscriptionId: args.stripeSubscriptionId,
           ...fields
+        })
+      }
+      // The swap landed. end_behavior 'release' only fires when the cheaper phase ENDS — a whole
+      // period away, a year on annual — and until then every other flow reads "has a schedule" as
+      // "downgrade pending". Hand it back now; the self-release is the backstop if this never runs.
+      if (pending === 'applied') {
+        await ctx.scheduler.runAfter(0, internal.billingNode.releaseSubscriptionSchedule, {
+          stripeSubscriptionId: args.stripeSubscriptionId
         })
       }
     }

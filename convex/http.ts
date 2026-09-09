@@ -159,6 +159,10 @@ function syncArgs(event: StripeEvent) {
     priceCurrency: price?.currency ?? undefined,
     priceInterval: price?.recurring?.interval ?? undefined,
     cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+    // backlog/B07 — the subscription schedule attached to this subscription, if any. Its PRESENCE is
+    // how the sync tells "downgrade still pending" from "applied or released"; the id itself is never
+    // stored (Stripe's own advice: discard a schedule id once it is released).
+    stripeScheduleId: typeof sub.schedule === 'string' ? sub.schedule : (sub.schedule?.id ?? undefined),
     // Stripe's own creation instant: the duplicate guard voids the newest by this, not by arrival.
     stripeCreated: typeof sub.created === 'number' ? sub.created * 1000 : undefined,
     eventCreated: eventCreatedMs(event)

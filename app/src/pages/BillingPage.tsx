@@ -61,6 +61,7 @@ export default function BillingPage() {
   const createPlanSwitch = useAction(api.billingNode.createPlanSwitchSession)
   const clearBillingNotice = useMutation(api.users.clearBillingNotice)
   const resumeSubscription = useAction(api.billingNode.resumeSubscription)
+  const undoDowngrade = useAction(api.billingNode.undoScheduledDowngrade)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [resumeLoading, setResumeLoading] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
@@ -287,6 +288,13 @@ export default function BillingPage() {
       ? new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString(i18n.language)
       : null
 
+  // backlog/B07 — when the scheduled downgrade takes effect. Falls back to the renewal date: they
+  // are the same instant when the schedule is written, and the mirror can lag by one webhook.
+  const pendingDate =
+    subscriptionInfo?.pendingAt != null
+      ? new Date(subscriptionInfo.pendingAt).toLocaleDateString(i18n.language)
+      : periodEndDate
+
   // Derived label shown next to "Current plan:" — lead with X/50 when trialing
   const planLabel = (() => {
     if (isTrialing && !isTrialExpired) {
@@ -334,7 +342,7 @@ export default function BillingPage() {
         plan: planId,
         source: searchParams.get('src') === 'cap_email' ? 'cap_email' : 'billing'
       })
-      return void handlePlanSwitch(priceId)
+      return void handlePlanSwitch(priceId, planId)
     }
     return void handleUpgrade(planId, priceId)
   }
@@ -354,17 +362,28 @@ export default function BillingPage() {
   }
 
   // Lands the member on Stripe's confirmation for the price on the button they clicked (R08, and the
-  // R20 email's landing). Whatever stops the deep link — the price not yet allowed in the Customer
-  // Portal, the plan they are already on — still opens the portal home, where every plan is one more
-  // click away: a door, never a dead end. The refusal itself is logged server-side.
-  async function handlePlanSwitch(priceId: string) {
+  // R20 email's landing). A cheaper tier returns NO url: it was scheduled for the period end
+  // (backlog/B07), so there is nothing to redirect to and nothing to wait for — which is also why a
+  // downgrade never reaches the `?switched=` landing above, or its 20-second Sentry report. Whatever
+  // else stops the deep link — the price not yet allowed in the Customer Portal, the plan they are
+  // already on — still opens the portal home: a door, never a dead end. The two refusals that name a
+  // fix say it instead, because the portal cannot apply either one.
+  async function handlePlanSwitch(priceId: string, planId: string) {
     if (!sessionToken) return
     setPortalLoading(true)
     try {
       const result = await createPlanSwitch({ sessionToken, priceId })
       // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
       if (result?.url) window.location.href = result.url
-    } catch {
+      else {
+        captureEvent('downgrade_scheduled', { from: me?.tier ?? 'starter', to: planId })
+        // Plan only, no date: pendingAt reaches this component a beat later, through the query.
+        toast(t('billing.pendingScheduled', { plan: t(`billing.plans.${planId}.name`) }))
+      }
+    } catch (err: unknown) {
+      const message = friendlyError(err, String(err))
+      if (message.startsWith('PENDING_DOWNGRADE')) return void toast(t('billing.pendingUndoFirst'))
+      if (message.startsWith('CANCEL_PENDING')) return void toast(t('billing.pendingResumeFirst'))
       await handleManageSubscription()
     } finally {
       setPortalLoading(false)
@@ -377,6 +396,21 @@ export default function BillingPage() {
     try {
       await resumeSubscription({ sessionToken })
       toast(t('billing.cancel.resumed'))
+    } catch (err: unknown) {
+      toast(t('billing.cancel.resumeFailed', { error: friendlyError(err, String(err)) }))
+    } finally {
+      setResumeLoading(false)
+    }
+  }
+
+  // backlog/B07 — cancel the scheduled cross-tier downgrade. The webhook clears the mirror on our
+  // row, so the cell disappears reactively and nothing is returned. Idempotent server-side.
+  async function handleUndoDowngrade() {
+    if (!sessionToken) return
+    setResumeLoading(true)
+    try {
+      await undoDowngrade({ sessionToken })
+      toast(t('billing.pendingKept'))
     } catch (err: unknown) {
       toast(t('billing.cancel.resumeFailed', { error: friendlyError(err, String(err)) }))
     } finally {
@@ -441,14 +475,16 @@ export default function BillingPage() {
               <p className="text-muted-foreground m-0 text-xs">{t('billing.status')}</p>
               <p className="text-foreground mt-1 text-sm font-semibold capitalize">{String(subscriptionInfo.status)}</p>
             </div>
-            {(subscriptionInfo.cancelAtPeriodEnd || periodEndDate) && (
+            {(subscriptionInfo.cancelAtPeriodEnd || subscriptionInfo.pendingTier || periodEndDate) && (
               <div>
                 <p className="text-muted-foreground m-0 text-xs">
                   {subscriptionInfo.cancelAtPeriodEnd
                     ? periodEndDate
                       ? t('billing.cancelsOn')
                       : t('billing.renewal')
-                    : t('billing.nextBilling')}
+                    : subscriptionInfo.pendingTier
+                      ? t('billing.pendingChange')
+                      : t('billing.nextBilling')}
                 </p>
                 <p
                   className={`mt-1 text-sm font-semibold ${subscriptionInfo.cancelAtPeriodEnd ? 'text-destructive' : 'text-foreground'}`}
@@ -457,7 +493,12 @@ export default function BillingPage() {
                     ? periodEndDate
                       ? t('billing.accessUntil', { date: periodEndDate })
                       : t('billing.cancelPending')
-                    : t('billing.renewsOn', { date: periodEndDate })}
+                    : subscriptionInfo.pendingTier
+                      ? t('billing.pendingFrom', {
+                          plan: t(`billing.plans.${subscriptionInfo.pendingTier}.name`),
+                          date: pendingDate
+                        })
+                      : t('billing.renewsOn', { date: periodEndDate })}
                 </p>
               </div>
             )}
@@ -481,20 +522,38 @@ export default function BillingPage() {
                 {resumeLoading ? '...' : t('billing.cancel.resume')}
               </Button>
             ) : (
-              <button
-                type="button"
-                onClick={() => setCancelOpen(true)}
-                className="text-muted-foreground min-h-10 text-[13px] underline-offset-4 hover:underline"
-              >
-                {t('billing.cancel.link')}
-              </button>
+              <>
+                {/* backlog/B07 — the undo for a scheduled downgrade. The cancel link stays reachable
+                    beside it: createCancelFlowSession('cancel') releases the schedule first. */}
+                {subscriptionInfo.pendingTier && (
+                  <Button
+                    onClick={handleUndoDowngrade}
+                    disabled={resumeLoading}
+                    aria-busy={resumeLoading}
+                    className="cursor-pointer text-[13px]"
+                  >
+                    {resumeLoading ? '...' : t('billing.pendingKeep', { plan: t(`billing.plans.${me?.tier}.name`) })}
+                  </Button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCancelOpen(true)}
+                  className="text-muted-foreground min-h-10 text-[13px] underline-offset-4 hover:underline"
+                >
+                  {t('billing.cancel.link')}
+                </button>
+              </>
             )}
           </div>
-          {subscriptionInfo.cancelAtPeriodEnd && periodEndDate && (
+          {subscriptionInfo.cancelAtPeriodEnd && periodEndDate ? (
             <p className="text-muted-foreground mt-2 mb-0 text-xs">
               {t('billing.cancel.postsLeave', { date: periodEndDate })}
             </p>
-          )}
+          ) : subscriptionInfo.pendingTier ? (
+            <p className="text-muted-foreground mt-2 mb-0 text-xs">
+              {t('billing.pendingUntil', { plan: t(`billing.plans.${me?.tier}.name`) })}
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -733,6 +792,7 @@ export default function BillingPage() {
         tier={me?.tier ?? 'starter'}
         isTrialing={isTrialing}
         periodEndDate={periodEndDate}
+        pendingTier={subscriptionInfo?.pendingTier}
       />
     </div>
   )

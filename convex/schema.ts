@@ -212,6 +212,14 @@ export default defineSchema({
     // cancels mid-trial, so this is the only signal that tells the trial mailers not to
     // promise a charge that will never happen.
     cancelAtPeriodEnd: v.optional(v.boolean()),
+    // backlog/B07 — a cross-tier downgrade is SCHEDULED, never prorated: our own Stripe subscription
+    // schedule swaps the item price at current_period_end with proration_behavior 'none'. These two
+    // mirror that pending swap so the billing page can show "Starter from <date>" and offer an undo.
+    // Stripe stays the source of truth (the actions read sub.schedule); this is a mirror, cleared by
+    // the webhook once the swap applies or the schedule is released. Never 'pro' — nothing sits above
+    // it on a Stripe-synced row, since contact is admin-assigned and has no price.
+    pendingTier: v.optional(v.union(v.literal('starter'), v.literal('growth'))),
+    pendingAt: v.optional(v.number()),
     // Stripe's own `created` (ms). The duplicate-subscription guard voids the NEWEST live row by
     // this stamp, never by webhook arrival order, which Stripe does not guarantee.
     stripeCreated: v.optional(v.number()),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPriceMap, resolveTier, starterPriceIdFor } from './stripePrices'
+import { buildPriceMap, intervalForPriceId, resolveTier, starterPriceIdFor } from './stripePrices'
 
 const ENV = {
   STRIPE_STARTER_PRICE_ID: 'price_s_m',
@@ -43,5 +43,25 @@ describe('starterPriceIdFor', () => {
     expect(starterPriceIdFor(ENV, 'month')).toBe('price_s_m')
     expect(starterPriceIdFor(ENV, undefined)).toBe('price_s_m')
     expect(starterPriceIdFor({}, 'year')).toBeUndefined()
+  })
+})
+
+describe('intervalForPriceId', () => {
+  it('names the interval of every one of the six prices', () => {
+    expect(intervalForPriceId(ENV, 'price_s_m')).toBe('month')
+    expect(intervalForPriceId(ENV, 'price_g_m')).toBe('month')
+    expect(intervalForPriceId(ENV, 'price_p_m')).toBe('month')
+    expect(intervalForPriceId(ENV, 'price_s_y')).toBe('year')
+    expect(intervalForPriceId(ENV, 'price_g_y')).toBe('year')
+    expect(intervalForPriceId(ENV, 'price_p_y')).toBe('year')
+  })
+
+  it('returns undefined for an unknown or blank id rather than guessing monthly', () => {
+    expect(intervalForPriceId(ENV, 'price_featured')).toBeUndefined()
+    expect(intervalForPriceId(ENV, '')).toBeUndefined()
+  })
+
+  it('returns undefined when the env has no prices configured', () => {
+    expect(intervalForPriceId({}, 'price_s_m')).toBeUndefined()
   })
 })

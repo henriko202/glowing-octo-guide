@@ -34,13 +34,16 @@ export default function CancelInterstitial({
   onOpenChange,
   tier,
   isTrialing,
-  periodEndDate
+  periodEndDate,
+  pendingTier
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   tier: string
   isTrialing: boolean
   periodEndDate: string | null
+  /** backlog/B07 — a downgrade already scheduled for the period end. Hides the alternative. */
+  pendingTier?: string
 }) {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
@@ -112,8 +115,19 @@ export default function CancelInterstitial({
         captureEvent('cancel_alternative_taken', { from: tier })
       }
       const { url } = await createCancelFlow({ sessionToken, flow })
-      if (url) window.location.href = url
-      else setPending(false)
+      if (url) {
+        window.location.href = url
+        return
+      }
+      // No url means the downgrade was SCHEDULED for the period end (backlog/B07): nowhere to send
+      // them, and the save has already happened here rather than on a Stripe return leg — so this is
+      // where cancel_alternative_taken's completion belongs.
+      setPending(false)
+      if (flow === 'downgrade') {
+        captureEvent('cancel_alternative_completed', { from: tier })
+        toast(t('billing.pendingScheduled', { plan: t('billing.plans.starter.name') }))
+        onOpenChange(false)
+      }
     } catch (err: unknown) {
       toast(t('billing.portalFailed', { error: friendlyError(err, String(err)) }))
       setPending(false)
@@ -134,7 +148,7 @@ export default function CancelInterstitial({
           <DialogDescription>{body}</DialogDescription>
         </DialogHeader>
 
-        {tier !== 'starter' && (
+        {tier !== 'starter' && !pendingTier && (
           <div className="bg-muted rounded-xl p-4 text-sm">
             <p className="m-0">{t('billing.cancel.alternative')}</p>
             <Button

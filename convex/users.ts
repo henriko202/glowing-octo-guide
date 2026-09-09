@@ -310,7 +310,11 @@ export const getSubscriptionInfo = query({
         // must never be used to tell a member what they are about to be charged.
         priceInterval: ourSub?.priceInterval,
         priceAmount: ourSub?.priceAmount,
-        priceCurrency: ourSub?.priceCurrency
+        priceCurrency: ourSub?.priceCurrency,
+        // backlog/B07 — the pending cross-tier downgrade, for the billing card's "Starter from
+        // <date>" cell and its Keep button. Absent ⇒ nothing is scheduled.
+        pendingTier: ourSub?.pendingTier,
+        pendingAt: ourSub?.pendingAt
       }
     }
 
@@ -323,7 +327,9 @@ export const getSubscriptionInfo = query({
       currentPeriodEnd: undefined,
       priceInterval: undefined,
       priceAmount: undefined,
-      priceCurrency: undefined
+      priceCurrency: undefined,
+      pendingTier: undefined,
+      pendingAt: undefined
     }
   }
 })

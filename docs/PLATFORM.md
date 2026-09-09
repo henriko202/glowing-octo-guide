@@ -472,6 +472,8 @@ and by the internal readers in `billing.ts` (`listUserSubscriptions`, `getBillin
 | `cancelAtPeriodEnd`    | boolean                                 |  –  | Mirrors Stripe's `cancel_at_period_end`. **Stripe keeps `status: 'trialing'` after a member cancels mid-trial**, so this is the only signal that tells the trial mailers not to promise a charge that will never happen (see [§8](#8-subscriptions--billing)).                                 |
 | `stripeCreated`        | number                                  |  –  | Stripe's own `created` (ms). The duplicate-subscription guard voids the **newest** live row by this stamp, never by webhook arrival order, which Stripe does not guarantee (see [§8](#8-subscriptions--billing)). Absent on a row ⇒ it counts as the oldest and is never the one voided.       |
 | `lastEventAt`          | number                                  |  –  | Stripe `created` (ms) of the newest webhook **event** applied to this row. `syncUserSubscription` / `markPastDue` skip an event older than it, so a late retry can never rewind `status` or re‑send the trial‑converted email (see [§8](#8-subscriptions--billing)). Absent ⇒ never stale.     |
+| `pendingTier`          | `'starter'\|'growth'`                   |  –  | backlog/B07 — the tier a scheduled cross-tier downgrade moves to at the period end. Set when `billingNode` attaches the Stripe subscription schedule, cleared when the swap lands or the schedule is released. A mirror for the UI: the schedule on Stripe is the source of truth.             |
+| `pendingAt`            | number                                  |  –  | backlog/B07 — when that pending change applies (ms), taken from the schedule second phase `start_date`. Absent ⇒ `BillingPage` falls back to `currentPeriodEnd`, which is the same instant on every schedule we write.                                                                         |
 
 Indexes: `by_user [userId]`, `by_stripe_id [stripeSubscriptionId]`.
 
@@ -1160,9 +1162,10 @@ A ->> S: window.location = url
 
 **`checkout_started` (R18).** `BillingPage.handleUpgrade` fires `captureEvent('checkout_started', { plan, interval })`
 immediately before `createCheckoutSession`, so the survival panel's funnel can separate a member who never reached the
-card from one who reached it and bounced. It fires only on the checkout branch — a card holder clicking a plan is
-deep-linked into the Customer Portal's confirm flow (`createPlanSwitchSession`, below) and fires `plan_switch_opened`
-instead. See [§17](#17-security-posture).
+card from one who reached it and bounced. It fires only on the checkout branch — a card holder clicking a plan goes to
+`createPlanSwitchSession` (below), which deep-links into the Customer Portal's confirm flow or, for a move down a
+tier, schedules the change for the period end; either way it fires `plan_switch_opened`, and the scheduled path adds
+`downgrade_scheduled`. See [§17](#17-security-posture).
 
 `createPortalSession` (still in `billing.ts`) returns a Stripe **Customer Portal** URL (requires an existing
 `stripeCustomerId`).
@@ -1396,13 +1399,13 @@ see [§17](#17-security-posture).
 `http.ts` registers handlers for these Stripe events, each delegating to an internal mutation in
 `stripe.ts`:
 
-| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), persist the **price snapshot** (`unit_amount` / `currency` / `recurring.interval` off `items.data[0].price`) and `cancelAtPeriodEnd`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). Also persists `stripeCreated` + `lastEventAt`, **refuses a stale replay** (a live status for a row already `canceled` — Stripe retries on any non-2xx) **and an out‑of‑order event** (`event.created` older than the row's `lastEventAt`; only the duplicate decision still runs), and when **another row defines the member** (this row is the duplicate, or this is a non-live event while they still hold a live row) leaves the user doc alone. Returns the **duplicate to void**, which only the `created` handler acts on (below). |
-| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`. If the member **still holds a live row** (the voided duplicate's own `deleted`, or a period-end cancel landing after a re-subscribe) their `tier` / `subscriptionStatus` / `subscriptionEndsAt` follow that row — nothing is downgraded. Otherwise set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this), downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `customer.subscription.trial_will_end`      | Schedules `internal.notifications.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears. Skips an event older than the row's `lastEventAt`, so a retried failure cannot re‑block a member whose payment already cleared, and ignores a failure for a row already `canceled` (Stripe's dunning end delivers the final failure and the `deleted` in either order).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `checkout.session.completed`                | `isFeaturedPostCheckout` (`lib/featuredPurchase.ts`) lets through only a **paid** `payment`-mode session tagged `metadata.kind === 'featured_post'` — a subscription checkout completes through this same event and is ignored here. `posts.applyPurchasedFeature` normalises `postId`, no-ops on a redelivery (same session id) or logs a `post.featured_purchase_duplicate` audit row for a second paid session on an already-featured post (no refund), and otherwise features the post with its tier's cap bonus. Never throws — Stripe always sees 200. See "Featured post add-on" above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), persist the **price snapshot** (`unit_amount` / `currency` / `recurring.interval` off `items.data[0].price`) and `cancelAtPeriodEnd`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). Also persists `stripeCreated` + `lastEventAt`, **refuses a stale replay** (a live status for a row already `canceled` — Stripe retries on any non-2xx) **and an out‑of‑order event** (`event.created` older than the row's `lastEventAt`; only the duplicate decision still runs), and when **another row defines the member** (this row is the duplicate, or this is a non-live event while they still hold a live row) leaves the user doc alone. Returns the **duplicate to void**, which only the `created` handler acts on (below). Mirrors `sub.schedule` as `stripeScheduleId`; a landed **scheduled downgrade** clears the pending mirror and releases the schedule (B07). |
+| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`. If the member **still holds a live row** (the voided duplicate's own `deleted`, or a period-end cancel landing after a re-subscribe) their `tier` / `subscriptionStatus` / `subscriptionEndsAt` follow that row — nothing is downgraded. Otherwise set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this), downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `customer.subscription.trial_will_end`      | Schedules `internal.notifications.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears. Skips an event older than the row's `lastEventAt`, so a retried failure cannot re‑block a member whose payment already cleared, and ignores a failure for a row already `canceled` (Stripe's dunning end delivers the final failure and the `deleted` in either order).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `checkout.session.completed`                | `isFeaturedPostCheckout` (`lib/featuredPurchase.ts`) lets through only a **paid** `payment`-mode session tagged `metadata.kind === 'featured_post'` — a subscription checkout completes through this same event and is ignored here. `posts.applyPurchasedFeature` normalises `postId`, no-ops on a redelivery (same session id) or logs a `post.featured_purchase_duplicate` audit row for a second paid session on an already-featured post (no refund), and otherwise features the post with its tier's cap bonus. Never throws — Stripe always sees 200. See "Featured post add-on" above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ```mermaid
 flowchart TD
@@ -1413,6 +1416,10 @@ flowchart TD
     ORD -->|no| P1["patch user: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
     ORD -->|no| P2["re-stamp authorTierRank on all posts"]
     ORD -->|no| P3["upsert subscriptions row (+ price snapshot, cancelAtPeriodEnd, stripeCreated, lastEventAt)"]
+    ORD -->|no| PEND{"resolvePendingDowngrade (B07)"}
+    PEND -->|applied: tier moved| REL["clear pendingTier/pendingAt → scheduler → releaseSubscriptionSchedule"]
+    PEND -->|clear: schedule gone| CLR["clear pendingTier/pendingAt"]
+    PEND -->|keep / none| KEEP["leave the pending mirror alone"]
     ORD -->|no| ACT{"status == active?"}
     ACT -->|yes| U1["un-hide author's hidden posts"]
     ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
@@ -1524,38 +1531,46 @@ case.
 
 ### Cancel, downgrade and resume (R09)
 
-`billingNode.createCancelFlowSession({ sessionToken, flow })` (public action, `'use node'`) deep-links into Stripe's
-**hosted Customer Portal** with `flow_data`. The `@convex-dev/stripe` component's `createCustomerPortalSession` cannot
-set `flow_data`, so this uses the Stripe SDK directly — the same pattern `createCheckoutSession` already follows — with
-the customer id from `stripeComponent.getOrCreateCustomer`. The frame every portal deep link shares (auth → the live
-`subscriptions` row → the portal customer → `billingPortal.sessions.create` with a `return_url` of `/billing`) is one
-private helper, `portalFlowSession(ctx, sessionToken, buildFlow)`; each action only builds its `flow_data`. Two flows
-here (the plan switch below is the third):
+`billingNode.createCancelFlowSession({ sessionToken, flow })` (public action, `'use node'`) answers the interstitial's
+two buttons and returns **`{ url: string | null }`** — a **hosted Customer Portal** deep link when Stripe owns the next
+step, `null` when the change was written here instead. Every path opens with the same two reads: `liveSubscriptionFor`
+(auth → the live `subscriptions` row, else `ConvexError('NO_LIVE_SUBSCRIPTION')`) and `retrieveWithItem` (Stripe's copy
+of the subscription **and** its single item in one retrieve, else `Subscription has no item`). Portal links are minted
+by the shared `portalSession(ctx, user, flow)` helper — customer id from `stripeComponent.getOrCreateCustomer`,
+`return_url` of `/billing` — which uses the Stripe SDK directly because the `@convex-dev/stripe` component's
+`createCustomerPortalSession` cannot set `flow_data`, the same pattern `createCheckoutSession` already follows. Two
+flows here (the plan switch below is the third):
 
 - **`cancel`** → `flow_data.type = 'subscription_cancel'` on the live subscription, returning to
-  `/billing?canceled=true`.
-- **`downgrade`** → `flow_data.type = 'subscription_update_confirm'`, swapping the subscription's single item onto the
-  **Starter price of the same billing interval**, returning to `/billing?downgraded=<tier left behind>`. The interval
-  comes from the **retrieved Stripe subscription item** (`item.price.recurring?.interval`, narrowed to `month`/`year`),
-  with our own optional `subscriptions.priceInterval` snapshot as the fallback;
-  `starterPriceIdFor(process.env, interval)`
+  `/billing?canceled=true`. It **releases any downgrade schedule first**, so the portal acts on a plain subscription: a
+  pending downgrade and a pending cancellation both want the period end, and the cancellation wins. A member who then
+  abandons the portal has lost the downgrade and can schedule it again.
+- **`downgrade`** → Starter at the **same billing interval**. The interval comes from the **retrieved Stripe
+  subscription item** (`item.price.recurring?.interval`, narrowed to `month`/`year`), with our own optional
+  `subscriptions.priceInterval` snapshot as the fallback; `starterPriceIdFor(process.env, interval)`
   (`convex/lib/stripePrices.ts`) then resolves it to `STRIPE_STARTER_ANNUAL_PRICE_ID` for `year` and
-  `STRIPE_STARTER_PRICE_ID` otherwise — **annual stays annual**.
+  `STRIPE_STARTER_PRICE_ID` otherwise — **annual stays annual**. On an **`active`** subscription the move is
+  **scheduled, not switched** ("Scheduled downgrade" below) and the action returns `null`. `trialing` and `past_due`
+  keep the immediate `subscription_update_confirm` portal switch returning to `/billing?downgraded=<tier left behind>`:
+  a trial has paid nothing, so there is nothing to credit, and Stripe's dunning owns a `past_due` invoice.
 
 `billingNode.resumeSubscription({ sessionToken })` undoes a pending period-end cancellation
-(`cancel_at_period_end: false`). It is **idempotent**: a live subscription that is already not cancelling (stale tab,
-double tap) returns `null` **without calling Stripe** — there is no "nothing to resume" error. Both actions resolve the
-member's subscription through the shared `findLiveSubscription` and throw `ConvexError('NO_LIVE_SUBSCRIPTION')` when
-there is none; `downgrade` additionally throws `ALREADY_STARTER` on the Starter tier, `Subscription has no item` when
-Stripe returns a subscription with no items, and `Starter price not configured` when neither Starter price env var is
-set.
+(`cancel_at_period_end: false`), and `billingNode.undoScheduledDowngrade({ sessionToken })` undoes a pending downgrade
+(release the schedule, clear the mirror). Both are **idempotent**: a subscription that is already not cancelling, or
+that carries no schedule (stale tab, double tap), returns `null` **without calling Stripe** — there is no "nothing to
+resume" error. `downgrade` additionally throws `ALREADY_STARTER` on the Starter tier, `CANCEL_PENDING` when the
+subscription is already cancelling (a schedule would fight the cancellation), and `Starter price not configured` when
+neither Starter price env var is set.
 
-Neither action writes to our tables. Both rely on the existing **`customer.subscription.updated` webhook** to carry
-`cancel_at_period_end` into `subscriptions.cancelAtPeriodEnd` (and into the component's own table that
-`getSubscriptionInfo` reads), so `BillingPage` swaps its "Cancel plan" link for "Resume plan" reactively, from that one
-field. `?downgraded=<tier>` lands on the same switching state as the plan switch below ("Switching you to Starter…",
-then "You're on Starter now." and `cancel_alternative_completed { from }` once the webhook has moved the tier — `from`
-is the tier left behind, pairing with `cancel_alternative_taken`); `?canceled=true` fires
+Only the scheduled path writes to our tables, and only the `pendingTier` / `pendingAt` mirror (§5). Everything else
+rides the existing **`customer.subscription.updated` webhook**, which carries `cancel_at_period_end` into
+`subscriptions.cancelAtPeriodEnd` (and into the component's own table that `getSubscriptionInfo` reads), so
+`BillingPage` swaps its "Cancel plan" link for "Resume plan" reactively, from that one field. `?downgraded=<tier>` — a
+`trialing` or `past_due` return leg only — lands on the same switching state as the plan switch below ("Switching you
+to Starter…", then "You're on Starter now." and `cancel_alternative_completed { from }` once the webhook has moved the
+tier — `from` is the tier left behind, pairing with `cancel_alternative_taken`). A **scheduled** downgrade never
+redirects at all, so it fires `cancel_alternative_completed` in the interstitial the moment the action resolves;
+`?canceled=true` fires
 `cancel_completed { plan }` exactly once (a `useRef` latch, so React StrictMode's double effect can't double-count) and
 is then stripped from the URL. A trialing member who cancels keeps `status: 'trialing'` with `cancelAtPeriodEnd: true`,
 and both trial mailers already skip that state (see "Trial notifications" above). While a trial is cancel-pending, the
@@ -1564,9 +1579,12 @@ No proration, no refund, no discount — the policy is unchanged.
 
 The app shows **exactly one** interstitial before Stripe (`app/src/components/CancelInterstitial.tsx`, §14): what
 leaves the feed (the member's live post count from `posts.getMyPosts` plus their 30-day received total from
-`interactions.getRecap`), a **"Move to Starter"** alternative shown only above the Starter tier, and one optional
-question stored as `feedback` category `cancellation` (§5, §12A). Stripe's own portal owns the confirmation step — the
-interstitial never confirms the cancellation itself.
+`interactions.getRecap`), a **"Move to Starter"** alternative shown only above the Starter tier **and only while no
+downgrade is already pending** (the `pendingTier` prop), and one optional question stored as `feedback` category
+`cancellation` (§5, §12A). Stripe's own portal owns the **cancellation's** confirmation step — the interstitial never
+confirms the cancellation itself. A **scheduled** downgrade has no confirmation step to own: the action returns no
+url, so the interstitial toasts "You move to Starter at the end of your period.", fires
+`cancel_alternative_completed { from }` and closes itself.
 
 ```mermaid
 sequenceDiagram
@@ -1579,39 +1597,61 @@ sequenceDiagram
     U ->> B: Cancel plan
     B ->> I: open (cancel_started)
     I ->> I: getRecap 30d + getMyPosts
-    alt Move to Starter
+    alt Move to Starter (hidden once one is pending)
         I ->> N: createCancelFlowSession(downgrade) (cancel_alternative_taken)
+        alt status active
+            N ->> S: subscriptionSchedules — Starter at period end, proration none
+            N -->> I: url = null → toast + close (cancel_alternative_completed)
+        else trialing / past_due
+            N -->> I: portal url (subscription_update_confirm)
+        end
     else Continue to cancel
         I ->> N: submitFeedback(cancellation) [optional]
-        I ->> N: createCancelFlowSession(cancel)
+        I ->> N: createCancelFlowSession(cancel) — releases any schedule first
+        N -->> I: portal url (subscription_cancel)
     end
-    N -->> I: portal url (flow_data)
-    I ->> S: redirect
+    I ->> S: redirect (only when a url came back)
     S ->> W: customer.subscription.updated
     W ->> W: syncUserSubscription (cancelAtPeriodEnd)
     S -->> B: /billing?canceled=true (cancel_completed)
     S -->> B: /billing?downgraded=(tier) → You're on Starter now (cancel_alternative_completed)
-    U ->> B: Resume plan
-    B ->> N: resumeSubscription
-    N ->> S: cancel_at_period_end=false
+    U ->> B: Resume plan / Keep (tier)
+    B ->> N: resumeSubscription / undoScheduledDowngrade
+    N ->> S: cancel_at_period_end=false / schedules.release
 ```
 
 ### Plan switch (R08 / R20)
 
 `billingNode.createPlanSwitchSession({ sessionToken, priceId })` (public action, `'use node'`) is the card holder's
-"Switch to {{plan}}": the same `subscription_update_confirm` flow as the downgrade, aimed at the **price on the button
-the member clicked** — the plan × the interval toggle, which the post-cap email's link pre-sets to the member's charged
-interval (`?plan=&interval=`, R20). The member lands on Stripe's confirmation for **that** plan (upcoming invoice,
-proration, 3-D Secure all handled by the portal), never on the portal home four clicks away from it. `priceId` is
-client-chosen, so the action checks it against `ALLOWED_PRICE_IDS` first (exactly as `createCheckoutSession` does),
-retrieves the subscription's single item, and throws `ALREADY_ON_PLAN` when the item already carries that price — a
-trialing member sees a Switch button for their own plan, because the "current plan" badge is reserved for paying
-members. The return leg is `/billing?switched=<tier>` — the tier resolved from the price through `getTierFromPriceId` —
-which `BillingPage` reads back as a landing state (next paragraph); the R09 downgrade's `?downgraded=<tier left behind>`
-lands on the same state.
+"Switch to {{plan}}", aimed at the **price on the button the member clicked** — the plan × the interval toggle, which
+the post-cap email's link pre-sets to the member's charged interval (`?plan=&interval=`, R20). It returns the same **
+`{ url: string | null }`** as the cancel flow, and the **direction** decides which:
+
+- **Up, or a same-tier interval switch** → the `subscription_update_confirm` portal flow. The member lands on Stripe's
+  confirmation for **that** plan (upcoming invoice, proration, 3-D Secure all handled by the portal), never on the
+  portal home four clicks away from it, and returns to `/billing?switched=<tier>`.
+- **Down a tier** (`planChangeDirection(live.tier, targetTier) === 'down'`, ranked by `tierToRank`, **never** by price
+  amount — the R13 decoy ladder makes amounts a liar) **on an `active` subscription** → scheduled at the period end,
+  `url: null`, no redirect. See "Scheduled downgrade" below.
+
+Direction is computed from tiers, so the annual↔monthly toggle inside one tier stays a portal switch whichever way it
+points. `priceId` is client-chosen, so the action checks it against `ALLOWED_PRICE_IDS` first (exactly as
+`createCheckoutSession` does), retrieves the subscription's single item, and throws `ALREADY_ON_PLAN` when the item
+already carries that price — a trialing member sees a Switch button for their own plan, because the "current plan"
+badge is reserved for paying members. It also throws `CANCEL_PENDING` when a downgrade would fight a pending
+cancellation, and **`PENDING_DOWNGRADE`** when a non-downgrade is attempted while a schedule is attached: the portal
+would write the same subscription the schedule owns, so `BillingPage` asks for the undo first. The portal return leg is
+`/billing?switched=<tier>` — the tier resolved from the price through `getTierFromPriceId` — which `BillingPage` reads
+back as a landing state (next paragraph); the R09 trial/past_due downgrade's `?downgraded=<tier left behind>` lands on
+the same state. **A scheduled downgrade never appends either marker**, which is what keeps it out of that state's
+20-second Sentry timeout.
 
 On the client, `BillingPage.handlePlanClick` fires `plan_switch_opened { plan, source }` and calls `handlePlanSwitch`,
-which redirects to the flow URL; **any** refusal (`ALREADY_ON_PLAN`, a price not yet allowed in the portal
+which redirects to the flow URL **when one comes back**; a `null` url means the change was scheduled, so it toasts
+"You move to {{plan}} at the end of your period." and fires `downgrade_scheduled { from, to }` instead.
+`PENDING_DOWNGRADE`
+and `CANCEL_PENDING` each toast the one-line instruction that clears them ("Undo your scheduled change first.",
+"Resume your plan first."); **any other** refusal (`ALREADY_ON_PLAN`, a price not yet allowed in the portal
 configuration, a Stripe error) falls back to `handleManageSubscription` — the portal **home**, where every plan is one
 more click away — with no error toast; the refusal is logged server-side. The plan buttons are disabled while a portal
 session is being minted, so a double tap cannot open two. Back on `/billing?switched=<tier>`, the page latches the tier
@@ -1620,12 +1660,12 @@ same 20-second timeout and Manage escape valve as the R07 activation, with a Sen
 once the webhook has moved the tier, **"You're on X now."** and `plan_switch_completed { plan }` exactly once (a
 `useRef`
 latch), stripping the param only at that point so a refresh mid-wait re-latches it. A card-less member ignores the
-marker: their default tier could otherwise "complete" a switch that never happened. The flow needs the same Dashboard
-rows as the downgrade (below): subscription updates **on** with all six prices listed. The portal runs
-`always_invoice`, so an upgrade taken here is invoiced on the spot for the rest of the period, while a **same-product**
-downgrade matches `schedule_at_period_end` and lands at the end of the period with no credit — the
-same economics as the portal home's own "Update plan", not new ones. A cross-tier downgrade still credits, and §8
-explains why that cannot be fixed by rearranging the products.
+marker: their default tier could otherwise "complete" a switch that never happened. The portal flow needs the same
+Dashboard rows as before: subscription updates **on** with all six prices listed. The portal runs `always_invoice`, so
+an upgrade taken here is invoiced on the spot for the rest of the period, while a **same-product** interval switch
+matches `schedule_at_period_end` and lands at the end of the period with no credit — the same economics as the portal
+home's own "Update plan", not new ones. **Cross-tier downgrades no longer reach the portal at all**, which is how the
+credit they used to pay out was closed; the section below has the whole story.
 
 ```mermaid
 sequenceDiagram
@@ -1637,12 +1677,106 @@ sequenceDiagram
     U ->> B: Switch to {{plan}} (plan_switch_opened)
     B ->> N: createPlanSwitchSession(priceId)
     N ->> N: priceId ∈ ALLOWED_PRICE_IDS · live row · retrieve item · price differs?
-    N -->> B: portal url (subscription_update_confirm) — or a refusal
-    B ->> S: redirect (refusal → createPortalSession, the portal home)
-    S ->> W: customer.subscription.updated
-    W ->> W: syncUserSubscription (tier, price snapshot)
-    S -->> B: /billing?switched=(tier) — Switching you to X…
-    B ->> B: me.tier moved → You're on X now (plan_switch_completed)
+    N ->> N: planChangeDirection(live.tier, targetTier)
+    alt down + active
+        N ->> S: subscriptionSchedules — target price at period end, proration none
+        N -->> B: url = null → toast + downgrade_scheduled
+    else up / same tier
+        N -->> B: portal url (subscription_update_confirm) — or a refusal
+        B ->> S: redirect (refusal → createPortalSession, the portal home)
+        S ->> W: customer.subscription.updated
+        W ->> W: syncUserSubscription (tier, price snapshot)
+        S -->> B: /billing?switched=(tier) — Switching you to X…
+        B ->> B: me.tier moved → You're on X now (plan_switch_completed)
+    end
+```
+
+### Scheduled downgrade — no credit at the period end (B07)
+
+**The gap this closes.** The Customer Portal prorates with `always_invoice` (D7), and its
+`schedule_at_period_end` conditions defer a switch **only between prices that share a product**. Starter, Growth and
+Pro are three products, so a cross-tier downgrade taken in the portal applied at once and **credited** the unused
+period — money back, against the no-refund line in the Terms. Putting all six prices on one product is not a fix and is
+not available: Stripe answers `400 For each product, its price must have unique billing intervals`, because a portal
+product entry holds exactly one monthly and one annual price (tried, refused and reverted 2026-09-09 — do not
+re-propose it). The fix is to stop asking the portal: **we write the downgrade ourselves as a Stripe subscription
+schedule**, and the portal keeps only the upgrades and interval switches it handles correctly.
+
+**`scheduleDowngrade(ctx, sub, targetPriceId, targetTier)`** (private, `billingNode.ts`) is the whole write, shared by
+R09's "Move to Starter" and the plan grid's cheaper-tier button:
+
+1. **Resolve the interval from the target price**, not from the subscription — `intervalForPriceId(process.env,
+   priceId)` (`convex/lib/stripePrices.ts`), because the grid can send a monthly member to an annual price. No match
+   throws `Unknown price interval`.
+2. **Get the schedule.** `subscriptionSchedules.create({ from_subscription })` when the subscription carries none, or
+   `retrieve` when it does. A subscription holds **at most one** schedule, so a double tap — or a re-target to a
+   different cheaper plan — rewrites the same one instead of racing a second. That is the whole idempotency story.
+3. **Update it with two phases**, built by the pure `buildDowngradePhases` (below): phase 0 is the period already paid
+   for, unchanged; phase 1 is the target price for one interval. `proration_behavior: 'none'` on phase 1 is what makes
+   the swap settle no money, and the same value at the top level says the current-phase rewrite settles none either.
+   `end_behavior: 'release'` hands the subscription back when the last phase ends.
+4. **Mirror it** onto our row through `internal.billing.setPendingDowngrade` — `pendingTier` plus `pendingAt`, taken
+   from **Stripe's own** `phases[1].start_date` (seconds→ms), never from our arithmetic. Returns `{ url: null }`.
+
+**`convex/lib/downgrade.ts`** holds every decision that can be tested without Stripe, and nothing else:
+
+- `planChangeDirection(fromTier, toTier)` → `'up' | 'down' | 'same'`, ranked through `tierToRank`
+  (`convex/lib/planLimits.ts`). **Never** compares `unit_amount`: the R13 decoy ladder means a cheaper amount is not a
+  lower tier.
+- `buildDowngradePhases(schedule, targetPriceId, targetInterval)` → exactly two phases. It finds the phase whose
+  `start_date` matches `current_phase.start_date` — the **current** phase, not `phases[0]`, which differ on a schedule
+  that has already run one — and throws `ConvexError('Schedule has no current phase')` when there is none, rather than
+  guessing. A Stripe `update` **unsets whatever it omits**, so the current phase is repeated field by field: items
+  (price ids unwrapped from expanded objects, `quantity` defaulted to 1), `start_date`, `end_date`, discounts (carried
+  as `discount` id → `coupon` → `promotion_code`, whichever the phase actually has) and metadata, with empty
+  collections omitted so Stripe is not sent `[]`. `trial_end` is seen and deliberately **not** carried: re-asserting a
+  spent trial on a paid phase is the one repetition that would be wrong.
+- `resolvePendingDowngrade(existing, incoming)` → `'none' | 'keep' | 'clear' | 'applied'`, the webhook's decision
+  (below).
+
+**The webhook closes the loop.** `customer.subscription.updated` fires when the schedule is attached, again when the
+price swaps, and again on release — no new event type is needed. `http.ts` passes `sub.schedule` through as
+`stripeScheduleId`, and `syncUserSubscription` calls `resolvePendingDowngrade` **before** it patches the row, because
+the decision depends on the tier the row still holds:
+
+| Incoming vs. our row                               | Outcome     | Effect                                                          |
+|----------------------------------------------------|-------------|-----------------------------------------------------------------|
+| no `pendingTier` on our row                        | `'none'`    | nothing to do                                                   |
+| tier **changed**                                   | `'applied'` | clear the mirror **and** schedule `releaseSubscriptionSchedule` |
+| tier unchanged, no `stripeScheduleId` on the event | `'clear'`   | the schedule is gone (released elsewhere) — clear the mirror    |
+| tier unchanged, schedule still attached            | `'keep'`    | the attach event itself — leave the mirror alone                |
+
+`'applied'` is checked **before** `'clear'` on purpose: the release event that follows a landed swap carries no
+schedule id, and reading it as `'clear'` would look identical to an undo.
+
+**Why the release matters.** `end_behavior: 'release'` fires only when the **last** phase ends — a year away on an
+annual plan — so a spent schedule would otherwise sit on the subscription for a whole cheaper period, making every
+later flow believe a downgrade is still pending. `releaseSubscriptionSchedule` (an `internalAction`, scheduled with
+`runAfter(0)`) releases it the moment the swap lands; Stripe's own `end_behavior` is the backstop, not the mechanism.
+Release failures are logged through `scrubError` and swallowed — `release` is valid only for a `not_started` or
+`active` schedule, and every other status means the work is already done — but the mirror is cleared either way, so a
+Stripe hiccup can never strand the UI in "pending".
+
+**Undo.** `undoScheduledDowngrade` releases the schedule and clears the mirror, and the `cancel` flow does the same
+before opening the portal. Both go through one `releaseScheduleOn(ctx, sub)` helper, so "no schedule attached" is a
+silent success on every path.
+
+```mermaid
+flowchart TD
+    A["Move to Starter / Switch to a cheaper tier"] --> B{"status active?"}
+    B -->|no: trialing, past_due| P["portal subscription_update_confirm (nothing paid / dunning owns it)"]
+    B -->|yes| C{"cancel_at_period_end?"}
+    C -->|yes| X["throw CANCEL_PENDING → 'Resume your plan first.'"]
+    C -->|no| D["schedule = retrieve(sub.schedule) ?? create(from_subscription)"]
+    D --> E["buildDowngradePhases: repeat the current phase, append target price · duration 1 interval · proration none"]
+    E --> F["schedules.update(phases, proration_behavior none, end_behavior release)"]
+    F --> G["setPendingDowngrade(pendingTier, pendingAt = phases[1].start_date)"]
+    G --> H["url = null → toast 'You move to X at the end of your period.'"]
+    F -.-> W1["webhook: schedule attached → resolvePendingDowngrade = keep"]
+    I["period end: Stripe swaps the item price, no invoice line for proration"] --> W2["webhook: tier moved → applied"]
+    W2 --> J["clear pendingTier/pendingAt + runAfter(0) releaseSubscriptionSchedule"]
+    K["Keep my plan (undo)"] --> L["schedules.release + clear the mirror"]
+    L -.-> W3["webhook: no schedule id, tier unchanged → clear"]
 ```
 
 ### Stripe Dashboard setup
@@ -1731,19 +1865,30 @@ sequenceDiagram
 > them. The lesson is 2026-09-08k's, unlearned and re-learned: **a design that depends on an API accepting something
 > is not settled until that write returns 200.**
 >
-> So the live behaviour is: Starter annual → Starter monthly **defers** to period end and never credits, while a
-> cross-tier downgrade (R09's "Move to Starter" from Growth or Pro) **applies at once and issues a prorated credit**,
-> against the no-refund line in the Terms. Treat that as current behaviour, not a hypothetical.
+> So the portal's own behaviour is: Starter annual → Starter monthly **defers** to period end and never credits, while
+> a cross-tier downgrade **applies at once and issues a prorated credit**, against the no-refund line in the Terms.
 >
-> **Closing it means taking cross-tier downgrades off the portal**, which is a decision, not a config change. Both
-> paths that can reach one — `createPlanSwitchSession` (the plan grid) and `createCancelFlowSession(flow:'downgrade')`
-> — build a `subscription_update_confirm` deep link, and a portal-driven update obeys the portal's
-> `proration_behavior`. Replacing the downgrade half with our own `subscriptionSchedules` call that swaps the item
-> price at `current_period_end` with `proration_behavior: 'none'` gives the member what they paid for, moves the tier
-> on the period-end webhook, and never prorates. Stripe's own portal guide warns that its Manage-downgrades feature
-> "automatically creates and attaches a subscription schedule to the subscription" and to follow subscription-schedule
-> best practices "to prevent unexpected subscription overwrites", so a hand-rolled schedule has to own that flow
-> exclusively rather than race the portal for it. Not built; not scheduled.
+> ✅ **Closed 2026-09-09 by taking cross-tier downgrades off the portal** — see "Scheduled downgrade" above for the
+> build. Both paths that could reach one — `createPlanSwitchSession` (the plan grid) and
+> `createCancelFlowSession(flow:'downgrade')` — used to build a `subscription_update_confirm` deep link, and a
+> portal-driven update obeys the portal's `proration_behavior`. They now write our own `subscriptionSchedules` phases
+> instead, swapping the item price at `current_period_end` with `proration_behavior: 'none'`: the member keeps what
+> they paid for, the tier moves on the period-end webhook, and nothing prorates. Stripe's own portal guide warns that
+> its Manage-downgrades feature "automatically creates and attaches a subscription schedule to the subscription" and to
+> follow subscription-schedule best practices "to prevent unexpected subscription overwrites" — which is exactly why
+> our schedule **owns** that flow rather than racing the portal for it: the cheaper-tier direction never reaches a
+> portal deep link at all, and the portal's own `subscription_update` settings still govern only upgrades and interval
+> switches. The portal Dashboard rows below are unchanged and still required for those.
+>
+> ⏳ **Proof pending — the code is written and green, the behaviour is not yet verified against Stripe.** `pnpm verify`
+> exits 0 (convex 509/509, app 433/433), but a passing suite proves our logic, not that Stripe issues no credit. What
+> closes this: a **test-mode** downgrade on a test clock, read back three times — **(A)** scheduled: `schedule` set,
+> the item still on the old price, two phases with phase 1 carrying `proration_behavior: "none"` and a `start_date`
+> equal to `current_period_end`, customer `balance: 0`, no new invoice; **(C)** undo: `schedule: null`, schedule
+> `status: "released"`, price unchanged, `balance: 0`; **(B)** after advancing the clock past the period end: the item
+> on the Starter price, `schedule: null`, and an invoice with **exactly one line** at the Starter price and **no
+> negative proration line**. Record the dated results here when they land. Every Stripe write is Henriko's — the
+> assistant's tooling permits Stripe reads and refuses writes.
 >
 > **Dev, re-provisioned 2026-09-08.** Starter `price_1UDaHRFPUrUP5vm6HUZUaCNW` / `price_1UDaHRFPUrUP5vm6qGEST6gp`,
 > Growth `price_1UDaHSFPUrUP5vm6LcFMOYki` / `price_1UDaHSFPUrUP5vm6c947d4vE`, Pro `price_1UDaHTFPUrUP5vm6UaxMSuu4` /
@@ -1802,12 +1947,12 @@ double up with ours, and downgrade proration), so treat this as required setup r
 
 | Setting                   | Where (Stripe Dashboard)                               | Value                                                                                                                                                                                                                                                               | Why                                                                                                                                                                                                                                                                         |
 |---------------------------|--------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Plan switching            | Billing → Customer portal → products/prices            | All **three products** and **six prices** (monthly + annual) listed as switchable                                                                                                                                                                                   | A card holder switches plans in the portal; `createCheckoutSession` refuses a second subscription (`ALREADY_SUBSCRIBED`), so a price missing from the portal is a dead end for that member. `createPlanSwitchSession` deep-links to that price's confirm step.              |
+| Plan switching            | Billing → Customer portal → products/prices            | All **three products** and **six prices** (monthly + annual) listed as switchable                                                                                                                                                                                   | A card holder upgrades or switches interval in the portal; `createCheckoutSession` refuses a second subscription (`ALREADY_SUBSCRIBED`), so a price missing here is a dead end for them. `createPlanSwitchSession` deep-links there; a cheaper tier is scheduled instead.   |
 | Payment-method updates    | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                             | The only route a `past_due` member has to fix a failed card and clear the engagement gate.                                                                                                                                                                                  |
 | Cancellation              | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                             | The cancel path that the checkout copy, the Terms and every billing email point at has to actually exist. No roach motel.                                                                                                                                                   |
-| Proration                 | Billing → Customer portal → subscription updates       | **`always_invoice`** + **`schedule_at_period_end`** — an upgrade is invoiced the moment it happens; a same-product downgrade defers to period end and never credits. Set by the script.                                                                             | Decision D7, **settled 2026-09-09**. `create_prorations` let a mid-period upgrade ride to the next invoice, so it could be used and cancelled unbilled. `schedule_at_period_end` defers only **same-product** switches, so a cross-tier downgrade still credits (⛔ above). |
+| Proration                 | Billing → Customer portal → subscription updates       | **`always_invoice`** + **`schedule_at_period_end`** — an upgrade is invoiced the moment it happens; a same-product downgrade defers to period end and never credits. Set by the script.                                                                             | Decision D7, **settled 2026-09-09**. `create_prorations` let a mid-period upgrade ride to the next invoice, so it could be used and cancelled unbilled. `schedule_at_period_end` defers only **same-product** switches; cross-tier downgrades bypass the portal (⛔ above). |
 | Cancellation mode         | Billing → Customer portal → Cancellations              | **On**, mode **at end of billing period**, cancellation **reasons on**                                                                                                                                                                                              | R09's `subscription_cancel` flow lands here. Period-end is the only mode consistent with the no-refund policy; Stripe's reason picker is separate from our single free-text question.                                                                                       |
-| Subscription updates      | Billing → Customer portal → Subscriptions              | Update **on**, with **six prices** listed — Starter monthly **and** annual included; proration `always_invoice` + `schedule_at_period_end` (shared with the row above)                                                                                              | R09's downgrade and the R08 / R20 plan switch use `subscription_update_confirm`; a price missing here makes "Move to Starter" a dead end and "Switch to X" fall back to the portal home. The shared proration setting is D7, above.                                         |
+| Subscription updates      | Billing → Customer portal → Subscriptions              | Update **on**, with **six prices** listed — Starter monthly **and** annual included; proration `always_invoice` + `schedule_at_period_end` (shared with the row above)                                                                                              | The R08 / R20 plan switch uses `subscription_update_confirm`; R09's downgrade only while trialing or past_due, since a cross-tier downgrade is scheduled instead. A price missing here sends "Switch to X" to the portal home.                                              |
 | Pausing                   | Billing → Customer portal → Subscriptions              | **Off**                                                                                                                                                                                                                                                             | A paused subscription is neither live nor canceled: `toSubscriptionStatus` maps Stripe's `paused` to `none`, which silently revokes engagement while the member believes they are on hold.                                                                                  |
 | Trial-ending email        | Settings → Billing → automatic customer emails         | **OFF**                                                                                                                                                                                                                                                             | Ours handles it (`sendTrialEnding`, above). Both enabled = two warnings for one event.                                                                                                                                                                                      |
 | Payment receipt           | Settings → Billing → automatic customer emails         | **ON**                                                                                                                                                                                                                                                              | The receipt for the first charge is Stripe's job; we send no receipt of our own.                                                                                                                                                                                            |
@@ -3645,16 +3790,22 @@ sync with the compliance docs and live support inbox.
   `settings.inviteJoinedMany` ("100+") once the query's bounded `.take(101)` is exceeded. No skeleton input renders
   while the code mints — an empty box reads as broken, so the button carries the waiting state.
 - **BillingPage** — `getMe` + `getSubscriptionInfo` + `getTrialProgress` + `createCheckoutSession` +
-  `createPortalSession` + `createPlanSwitchSession` + `users.clearBillingNotice`. `getTrialProgress` returns
+  `createPortalSession` + `createPlanSwitchSession` + `resumeSubscription` + `undoScheduledDowngrade` +
+  `users.clearBillingNotice`. `getTrialProgress` returns
   `{ made, received, combined, threshold, reached, nearThreshold, status, trialEndsAt }` (see §8/§11).
 
     - **Card holder vs pre-card.** `hasCard` is `subscriptionStatus ∈ {trialing, active, past_due}` — **not**
       `stripeCustomerId`, which `toSafeMe` strips before the client ever sees it (and which a member who abandoned a
       checkout would hold anyway, with nothing for the portal to show). A card holder's plan CTAs read
       "Switch to {{plan}}" and deep-link into the **Customer Portal's confirm step** for the price on that button
-      (`handlePlanSwitch` → `billingNode.createPlanSwitchSession`, §8); a refused deep link (price not yet allowed in
-      the portal, the plan they already hold) falls back to the portal home with no error toast, and the plan buttons
-      are disabled while a portal session is minted. Everyone else goes to checkout. `canceled` is deliberately **not**
+      (`handlePlanSwitch` → `billingNode.createPlanSwitchSession`, §8) — **except a move down a tier**, which the
+      server schedules for the period end and answers with no url at all: the page then toasts
+      `billing.pendingScheduled` and fires `downgrade_scheduled { from, to }` instead of navigating. A refused deep
+      link (price not yet allowed in the portal, the plan they already hold) falls back to the portal home with no
+      error toast, while `PENDING_DOWNGRADE` and `CANCEL_PENDING` toast the one thing that clears them
+      (`billing.pendingUndoFirst`, `billing.pendingResumeFirst`) rather than opening a portal that would fight the
+      schedule. The plan buttons are disabled while a portal session is minted. Everyone else goes to checkout.
+      `canceled` is deliberately **not**
       a card holder — they re-subscribe through checkout, without a trial, enforced server-side (§8). The
       billing-info card and the **Manage Subscription** button now render for all three card-holder statuses, so a
       trialing or `past_due` member can actually reach the portal; previously only `active` could.
@@ -3771,26 +3922,44 @@ sync with the compliance docs and live support inbox.
           posts leave the feed. Nothing here polls: `getSubscriptionInfo` is reactive, so the webhook flip re-renders
           the
           card on its own.
-        - **The `?canceled=true` return.** Stripe's hosted cancel flow redirects back to `/billing?canceled=true`. The
-          page
-          latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh can't lose
-          it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state, so it is
-          StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so the
-          event
-          records a confirmed cancel rather than a visit to the URL. The param is stripped with
-          `setSearchParams({}, { replace: true })` in the same effect.
-        - **The `?switched=<tier>` / `?downgraded=<tier>` return (R08 / R20 / R09).** The plan-switch deep link
-          ([§8](#8-subscriptions--billing)) returns with the tier it was aimed at; the Starter downgrade returns with
-          the tier left behind and always lands on Starter. The page latches either during render (`landing`, the
-          `justSubscribed` pattern), shows **"Switching you to X…"** while `me.tier` still differs — the same 20-second
-          timeout and Manage escape valve as the R07 activation, a Sentry exception on timeout — and, once the tier
-          matches, **"You're on X now."** plus exactly one event (a `useRef` latch): **
-          `plan_switch_completed { plan }`**
-          for the grid, **`cancel_alternative_completed { from }`** for the downgrade, stripping the param only then
-          (the
-          F4 rule). Card-less members ignore both markers: their default tier could otherwise "complete" a switch
-          that never happened, and a marker that names no plan (`?downgraded=true`, a contact-tier `from`) is inert.
-          Three keys per locale, shared by both: `billing.switching`, `billing.switched`, `billing.switchTimeout`.
+        - **The pending downgrade (B07 — see [§8](#8-subscriptions--billing)).** `getSubscriptionInfo` also surfaces
+          `pendingTier` / `pendingAt`, and the card reads them **only when no cancel is pending** — a cancellation
+          outranks a downgrade, and the schedule is released when the cancel flow opens, so the two states can never
+          both be shown. The date line becomes `billing.pendingChange` / `billing.pendingFrom` ("Starter from
+          <date>", `pendingAt` falling back to the period end), a **"Keep {{plan}}"** button (`billing.pendingKeep`,
+          naming the tier they are on now) calls `billingNode.undoScheduledDowngrade` and
+          toasts `billing.pendingKept`, and the footnote becomes `billing.pendingUntil`. The "Cancel plan" link stays
+          reachable beside the undo — the cancel flow releases the schedule itself, so it is never a dead end. Both
+          buttons share `resumeLoading`, since neither can be pressed while the other runs.
+            - **The `?canceled=true` return.** Stripe's hosted cancel flow redirects back to `/billing?canceled=true`.
+              The
+              page
+              latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh can't
+              lose
+              it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state, so it
+              is
+              StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so the
+              event
+              records a confirmed cancel rather than a visit to the URL. The param is stripped with
+              `setSearchParams({}, { replace: true })` in the same effect.
+            - **The `?switched=<tier>` / `?downgraded=<tier>` return (R08 / R20 / R09).** The plan-switch deep link
+              ([§8](#8-subscriptions--billing)) returns with the tier it was aimed at; the Starter downgrade returns
+              with
+              the tier left behind and always lands on Starter. **A scheduled downgrade appends neither marker** — it
+              never
+              leaves the app, so it can never reach the 20-second wait below or report a false timeout for a tier that
+              was
+              never going to move on this visit. The page latches either during render (`landing`, the
+              `justSubscribed` pattern), shows **"Switching you to X…"** while `me.tier` still differs — the same
+              20-second
+              timeout and Manage escape valve as the R07 activation, a Sentry exception on timeout — and, once the tier
+              matches, **"You're on X now."** plus exactly one event (a `useRef` latch): **
+              `plan_switch_completed { plan }`**
+              for the grid, **`cancel_alternative_completed { from }`** for the downgrade, stripping the param only then
+              (the
+              F4 rule). Card-less members ignore both markers: their default tier could otherwise "complete" a switch
+              that never happened, and a marker that names no plan (`?downgraded=true`, a contact-tier `from`) is inert.
+              Three keys per locale, shared by both: `billing.switching`, `billing.switched`, `billing.switchTimeout`.
     - **The two funnel events (R18/R20).** `handleUpgrade` fires **`checkout_started { plan, interval }`** before it
       calls `createCheckoutSession`, marking the card-entry step so the survival panel's signup → trial gap can be read
       as a card-gate leak rather than an activation leak. Separately, the post-cap email's single link lands here as
@@ -4048,7 +4217,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -4992,7 +5161,7 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
 - **The complete event list.** Every product event goes through the one `captureEvent(name, props)` helper, so all of
   them inherit the consent gate above and every one is a **no‑op until `initPostHog` has run** (i.e. silent in dev and
   in prod without a key). Props are ids and enum‑ish strings only — never a name, email or post body. As of
-  2026‑09‑08 there are seventeen, and this is all of them:
+  2026‑09‑09 there are eighteen, and this is all of them:
     - `card_gate_opened` — `CardGateDialog` on open. Props: `source` (which tap opened it).
     - `card_gate_cta_clicked` — `CardGateBanner`, `CardGateDialog`, and a **gated** `UpgradeAtLimit`. Props: `plan`,
       plus `source` from `UpgradeAtLimit` only. Pairs with the event above as the single gate funnel across all three
@@ -5004,44 +5173,59 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
     - `recap_viewed` — `RecapPage`, **once per loaded window** (R15). Props: `window` (`7d`/`30d`), `nearCap` (boolean).
     - `cancel_started` — `CancelInterstitial` on open (R09). Props: `plan`, `trial`.
     - `cancel_alternative_taken` — `CancelInterstitial`'s "Move to Starter" (R09). Props: `from` (the tier left behind).
-    - `cancel_alternative_completed` — `BillingPage`, on the `?downgraded=<tier>` return **after** the webhook has
-      moved `me.tier` to Starter, latched to fire once (R09). Props: `from` (the tier left behind — the same prop as
-      `cancel_alternative_taken`, so the interstitial's save rate is that one funnel).
-        - `cancel_completed` — `BillingPage`, on the `?canceled=true` return **after** `cancelAtPeriodEnd` has actually
-          flipped, latched to fire once (R09). Props: `plan`.
-        - `checkout_started` — `BillingPage.handleUpgrade`, immediately before `createCheckoutSession` (**R18**). Props:
-          `plan`, `interval`. This is the card-entry step, so the survival panel's signup → started-trial gap can be
-          read
-          as a card-gate leak rather than an activation leak.
-        - `cap_email_billing_opened` — `BillingPage`, when the post-cap email's link lands with `?src=cap_email`
-          (**R20**), `useRef`-latched to fire once per landing. Props: `plan` (from the same `resolveTargetPlan`).
-        - `plan_switch_opened` — `BillingPage.handlePlanClick`, on a **card holder's** plan click, right before the
-          Customer
-          Portal's confirm flow opens — or its home, on the fallback (the portal path never fires `checkout_started`).
-          Props: `plan`, and `source` — `cap_email` when
-          the landing carried `?src=cap_email`, otherwise `billing`. The step after `cap_email_billing_opened`, so the
-          R20
-          funnel no longer ends at the landing.
-    - `plan_switch_completed` — `BillingPage`, on the `?switched=<tier>` return **after** the webhook has moved
-      `me.tier` onto that plan, latched to fire once (**R08 / R20**). Props: `plan`. The cap-email funnel's last step;
-      a wait that times out fires a Sentry exception instead, never this event.
-        - `post_hidden` — `FeedPage`, after `interactions.hidePost` resolves (**R21**). Props: **`after`** — whole hours
-          between the interaction and the tap, derived from `INTERACTED_TTL_MS - (hidesAt - now)`. The one number R21
-          wants: whether people clear a handled post immediately or leave it to age out.
-        - `invite_copied` — `SettingsPage`, after the invite link reaches the clipboard (**R19**). **No props** — the
-          code
-          itself would be a user identifier, and the count is the whole signal. It fires on the Clipboard-API path only:
-          the manual-selection fallback (no Clipboard API, non-secure context, denied permission) is not a copy that
-          happened, so it stays silent rather than inflating the number.
-        - `featured_purchase_started` — `MyPostsPage`, on the buy tap, before `purchaseFeaturedPost` runs (**R17**).
-          Props: `source` (`'cap' | 'billing' | 'quota'`).
-        - `featured_purchase_completed` — `MyPostsPage`, on the `?featured=paid` return leg as soon as `newCap` and
-          the post list have loaded — off the param itself, **not** the post's `featuredPurchase`, which arrives later
-          with the webhook — through the same ref-latch pattern as the other return-leg events (**R17**). **No props.**
+    - `cancel_alternative_completed` — the save actually landing (R09). Props: `from` (the tier left behind — the same
+      prop as `cancel_alternative_taken`, so the interstitial's save rate is that one funnel). Two firing points, never
+      both for one member: `CancelInterstitial` the moment a **scheduled** downgrade returns no url (B07 — there is no
+      return leg to wait for), and `BillingPage` on the `?downgraded=<tier>` return **after** the webhook has moved
+      `me.tier` to Starter, latched to fire once (the trialing / past_due portal path).
+    - `downgrade_scheduled` — `BillingPage.handlePlanSwitch`, when a **plan-grid** move down a tier comes back with no
+      url because the server scheduled it for the period end (**B07**). Props: `from` (the tier they hold now,
+      defaulting to `starter` so the prop is never undefined), `to` (the tier they will move to). The grid's own
+      counterpart to `cancel_alternative_completed`: it records the intent that the period-end webhook later fulfils,
+      which is why it fires here and not on a tier change.
+      - `cancel_completed` — `BillingPage`, on the `?canceled=true` return **after** `cancelAtPeriodEnd` has actually
+      flipped, latched to fire once (R09). Props: `plan`.
+      - `checkout_started` — `BillingPage.handleUpgrade`, immediately before `createCheckoutSession` (**R18**). Props:
+      `plan`, `interval`. This is the card-entry step, so the survival panel's signup → started-trial gap can be
+      read
+      as a card-gate leak rather than an activation leak.
+      - `cap_email_billing_opened` — `BillingPage`, when the post-cap email's link lands with `?src=cap_email`
+      (**R20**), `useRef`-latched to fire once per landing. Props: `plan` (from the same `resolveTargetPlan`).
+      - `plan_switch_opened` — `BillingPage.handlePlanClick`, on a **card holder's** plan click, right before the
+      Customer
+      Portal's confirm flow opens — or its home, on the fallback (the portal path never fires `checkout_started`).
+      Props: `plan`, and `source` — `cap_email` when
+      the landing carried `?src=cap_email`, otherwise `billing`. The step after `cap_email_billing_opened`, so the
+      R20
+      funnel no longer ends at the landing.
+        - `plan_switch_completed` — `BillingPage`, on the `?switched=<tier>` return **after** the webhook has moved
+          `me.tier` onto that plan, latched to fire once (**R08 / R20**). Props: `plan`. The cap-email funnel's last
+          step;
+          a wait that times out fires a Sentry exception instead, never this event.
+            - `post_hidden` — `FeedPage`, after `interactions.hidePost` resolves (**R21**). Props: **`after`** — whole
+              hours
+              between the interaction and the tap, derived from `INTERACTED_TTL_MS - (hidesAt - now)`. The one number
+              R21
+              wants: whether people clear a handled post immediately or leave it to age out.
+            - `invite_copied` — `SettingsPage`, after the invite link reaches the clipboard (**R19**). **No props** —
+              the
+              code
+              itself would be a user identifier, and the count is the whole signal. It fires on the Clipboard-API path
+              only:
+              the manual-selection fallback (no Clipboard API, non-secure context, denied permission) is not a copy that
+              happened, so it stays silent rather than inflating the number.
+            - `featured_purchase_started` — `MyPostsPage`, on the buy tap, before `purchaseFeaturedPost` runs (**R17**).
+              Props: `source` (`'cap' | 'billing' | 'quota'`).
+            - `featured_purchase_completed` — `MyPostsPage`, on the `?featured=paid` return leg as soon as `newCap` and
+              the post list have loaded — off the param itself, **not** the post's `featuredPurchase`, which arrives
+              later
+              with the webhook — through the same ref-latch pattern as the other return-leg events (**R17**). **No
+              props.**
 
-  `HistoryPage` fires **nothing**, by design: reviewing one's own log is not a funnel step. There is no
-  `cancel_alternative_completed` either — the downgrade's completion is a Stripe webhook, not a client event. And the
-  **survival panel reads the database, not PostHog** ([§12](#12-admin--moderation)): its cohort maths runs over `users`,
+  `HistoryPage` fires **nothing**, by design: reviewing one's own log is not a funnel step. No event marks the moment a
+  scheduled downgrade **applies** either — that is a Stripe webhook landing days later, with no client to fire from;
+  `downgrade_scheduled` and `cancel_alternative_completed` record the decision instead. And the **survival panel reads
+  the database, not PostHog** ([§12](#12-admin--moderation)): its cohort maths runs over `users`,
   `subscriptions` and `userInteractions`, so it is complete for every member — including the analytics-consent
   refusers PostHog never sees — and it works with no analytics key configured at all. The events above answer *why* a
   step leaked; the panel answers *how many*.
@@ -5265,6 +5449,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                  | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                                                                                                                                                                                                                                                               |
 | Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                         | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                                                                                                                                                                                                                                                |
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                          | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
+| Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                     | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `notifications.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                       | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
 | Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
 | Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/RefCarrier.tsx`)                                                                                                                | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                                                                                                                                                                                                                                                |
@@ -5292,7 +5477,40 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑09‑08. **Legal pages aligned with Stripe live-mode activation.** Henriko filled Stripe's
+_Last updated: 2026‑09‑09. **The cross-tier downgrade credit is closed (B07).** A Growth or Pro member moving to
+Starter was **credited** the unused period on the spot, against the no-refund line in the Terms, because the Customer
+Portal prorates with `always_invoice` and its `schedule_at_period_end` conditions defer a switch only between prices
+that **share a product** — and Starter/Growth/Pro are three products. The one-product workaround is not available
+(Stripe: `400 For each product, its price must have unique billing intervals`; built, refused and reverted the same
+day — do not re-propose it), so **cross-tier downgrades left the portal**. `billingNode` now writes them itself as a
+Stripe **subscription schedule**: two phases, the paid period repeated verbatim and the target price starting at
+`current_period_end` with `proration_behavior: 'none'` and `end_behavior: 'release'`. Both paths that could reach a
+downgrade route through it — `createCancelFlowSession(flow:'downgrade')` and `createPlanSwitchSession` on a move down
+a tier — and both now answer `{ url: string | null }`, `null` meaning "scheduled, nowhere to send you". Upgrades and
+same-tier interval switches keep the portal untouched; `trialing` and `past_due` keep the immediate switch, since a
+trial has paid nothing to credit and dunning owns an unpaid invoice. All the decidable logic lives in the new pure
+`convex/lib/downgrade.ts` (`planChangeDirection` by `tierToRank`, **never** by price amount; `buildDowngradePhases`,
+which repeats the current phase field by field because a Stripe `update` unsets what it omits, carries discounts and
+metadata, drops `trial_end`, and refuses a schedule with no current phase; `resolvePendingDowngrade`), tested with
+plain vitest and no Stripe fixtures. `subscriptions` gained `pendingTier` / `pendingAt` as a **UI mirror only** —
+Stripe's schedule stays the source of truth — set from Stripe's own `phases[1].start_date` and cleared by the
+webhook. `http.ts` passes `sub.schedule` through as `stripeScheduleId`; `syncUserSubscription` resolves the mirror
+**before** it patches the row and, once the swap has landed, schedules `releaseSubscriptionSchedule` — necessary
+because `end_behavior: 'release'` fires only when the **last** phase ends, a year away on an annual plan. `BillingPage`
+shows `Starter from <date>`, a **"Keep {{plan}}"** undo (`undoScheduledDowngrade`) beside the still-reachable
+cancel link, and toasts `PENDING_DOWNGRADE` / `CANCEL_PENDING` as the one instruction that clears them; the cancel
+flow releases the schedule before opening the portal, so a cancellation always outranks a pending downgrade. The
+scheduled path **never appends `?switched=` or `?downgraded=`**, which is what keeps it out of that landing state's
+20-second false-timeout Sentry report — the trap this design was shaped around. `CancelInterstitial` hides its Starter
+alternative once one is pending and completes the save itself (`cancel_alternative_completed`) when no url comes back;
+the plan grid fires a new **`downgrade_scheduled { from, to }`**, the eighteenth event. Eight `billing.pending*` keys
+per locale. `portalFlowSession` and `singleItem` are gone, split into `liveSubscriptionFor` / `portalSession` /
+`retrieveWithItem`. Sections updated: §5, §8, §14, §17, §21. Gates: convex **509/509**, app **433/433**,
+`pnpm verify` exit 0, i18n **400/400/400** by recursive key diff with identical placeholder sets. ⚠️ **Not yet proven
+against Stripe:** the test-mode downgrade that must show a period-end swap with **no credit line** is Henriko's to
+run — every Stripe write is hand-off only. Until those read-backs land, this is code that compiles and tests, not
+behaviour that is verified.
+Prior: 2026‑09‑08 — **Legal pages aligned with Stripe live-mode activation.** Henriko filled Stripe's
 "What products or services will you offer through Stripe?" form, and the public pages had to say the same thing.
 `/terms` gained two clauses in all three locales: **§2 "What you buy"** (the member buys software access; we sell no
 reactions, comments, connections or followers; we promise no SSI score, ranking or result) and **§5 "Plans and

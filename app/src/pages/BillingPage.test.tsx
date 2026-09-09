@@ -28,7 +28,8 @@ vi.mock('../convex', () => ({
       createCheckoutSession: 'billingNode.createCheckoutSession',
       createCancelFlowSession: 'billingNode.createCancelFlowSession',
       createPlanSwitchSession: 'billingNode.createPlanSwitchSession',
-      resumeSubscription: 'billingNode.resumeSubscription'
+      resumeSubscription: 'billingNode.resumeSubscription',
+      undoScheduledDowngrade: 'billingNode.undoScheduledDowngrade'
     },
     interactions: { getRecap: 'interactions.getRecap' },
     feedback: { feedback: { submitFeedback: 'feedback.feedback.submitFeedback' } },
@@ -43,12 +44,14 @@ const mockCheckout = vi.fn(async () => ({ url: '' }))
 const mockPortal = vi.fn(async () => ({ url: '' }))
 const mockResume = vi.fn(async () => null)
 const mockCancelFlow = vi.fn(async () => ({ url: '' }))
-const mockSwitch = vi.fn(async () => ({ url: '' }))
+const mockSwitch = vi.fn(async () => ({ url: '' }) as { url: string | null })
+const mockUndo = vi.fn(async () => null)
 const ACTIONS: Record<string, unknown> = {
   'billing.createPortalSession': mockPortal,
   'billingNode.resumeSubscription': mockResume,
   'billingNode.createCancelFlowSession': mockCancelFlow,
-  'billingNode.createPlanSwitchSession': mockSwitch
+  'billingNode.createPlanSwitchSession': mockSwitch,
+  'billingNode.undoScheduledDowngrade': mockUndo
 }
 
 vi.mock('convex/react', () => ({
@@ -150,6 +153,7 @@ beforeEach(() => {
   mockResume.mockClear()
   mockCancelFlow.mockClear()
   mockSwitch.mockClear()
+  mockUndo.mockClear()
   vi.mocked(captureEvent).mockClear()
   mockSetSearchParams.mockClear()
   mockSearchParams = new URLSearchParams()
@@ -857,5 +861,92 @@ describe('BillingPage — featured post add-on (backlog/R17)', () => {
     setUser({ subscriptionStatus: 'canceled', tier: 'growth' })
     renderPage()
     expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
+  })
+})
+
+// backlog/B07 — a cross-tier downgrade is scheduled for the period end instead of prorated through
+// the Customer Portal, so the switch returns no url at all and the card carries the pending state.
+describe('scheduled downgrade (B07)', () => {
+  const PENDING = {
+    tier: 'growth',
+    status: 'active',
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: Date.parse('2026-10-01T00:00:00Z'),
+    pendingTier: 'starter',
+    pendingAt: Date.parse('2026-10-01T00:00:00Z')
+  }
+
+  function renderPending() {
+    mockQueryReturns['users.getSubscriptionInfo'] = PENDING
+    setUser({ subscriptionStatus: 'active' })
+    return renderPage()
+  }
+
+  it('names the plan and the date the member moves down on', () => {
+    renderPending()
+    expect(screen.getByText('billing.pendingChange')).toBeInTheDocument()
+    expect(screen.getByText(/billing\.pendingFrom.*Starter/)).toBeInTheDocument()
+  })
+
+  it('offers Keep <current plan>, not Keep <the plan they are leaving for>', () => {
+    renderPending()
+    expect(screen.getByRole('button', { name: /billing\.pendingKeep.*Growth/ })).toBeInTheDocument()
+  })
+
+  it('undoes the scheduled downgrade', async () => {
+    renderPending()
+    fireEvent.click(screen.getByRole('button', { name: /billing\.pendingKeep/ }))
+    await waitFor(() => expect(mockUndo).toHaveBeenCalledWith({ sessionToken: 'tok' }))
+  })
+
+  it('keeps the cancel link reachable while a downgrade is pending', () => {
+    renderPending()
+    expect(screen.getByRole('button', { name: 'billing.cancel.link' })).toBeInTheDocument()
+  })
+
+  it('shows no pending cell and no Keep button when nothing is scheduled', () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = { ...PENDING, pendingTier: undefined, pendingAt: undefined }
+    setUser({ subscriptionStatus: 'active' })
+    renderPage()
+    expect(screen.queryByText('billing.pendingChange')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /billing\.pendingKeep/ })).not.toBeInTheDocument()
+  })
+
+  it('treats a null url as scheduled: no redirect, an event, and no false "switching" wait', async () => {
+    mockSwitch.mockResolvedValueOnce({ url: null })
+    setUser({ subscriptionStatus: 'active', tier: 'growth' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() =>
+      expect(captureEvent).toHaveBeenCalledWith('downgrade_scheduled', { from: 'growth', to: 'starter' })
+    )
+    expect(mockPortal).not.toHaveBeenCalled()
+    expect(screen.queryByText(/billing\.switching/)).not.toBeInTheDocument()
+  })
+
+  it('asks for the undo instead of opening the portal when the server refuses PENDING_DOWNGRADE', async () => {
+    mockSwitch.mockRejectedValueOnce(new Error('PENDING_DOWNGRADE'))
+    setUser({ subscriptionStatus: 'active' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalled())
+    expect(mockPortal).not.toHaveBeenCalled()
+  })
+
+  it('asks for the resume instead of opening the portal when the server refuses CANCEL_PENDING', async () => {
+    mockSwitch.mockRejectedValueOnce(new Error('CANCEL_PENDING'))
+    setUser({ subscriptionStatus: 'active' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalled())
+    expect(mockPortal).not.toHaveBeenCalled()
+  })
+
+  it('still falls back to the portal home for any other refusal', async () => {
+    mockSwitch.mockRejectedValueOnce(new Error('ALREADY_ON_PLAN'))
+    setUser({ subscriptionStatus: 'active' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockPortal).toHaveBeenCalled())
   })
 })

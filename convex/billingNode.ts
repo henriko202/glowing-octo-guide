@@ -6,7 +6,14 @@ import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { StripeSubscriptions } from '@convex-dev/stripe'
 import { requireAuthAction } from './lib/auth'
-import { ALLOWED_PRICE_IDS, FEATURED_POST_PRICE_ID, getTierFromPriceId, starterPriceIdFor } from './lib/stripePrices'
+import {
+  ALLOWED_PRICE_IDS,
+  FEATURED_POST_PRICE_ID,
+  getTierFromPriceId,
+  intervalForPriceId,
+  starterPriceIdFor
+} from './lib/stripePrices'
+import { buildDowngradePhases, planChangeDirection } from './lib/downgrade'
 import { findLiveSubscription, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
@@ -166,105 +173,245 @@ export const cancelDuplicateSubscription = internalAction({
   }
 })
 
-// ── Customer Portal deep links (backlog/R09 cancel + downgrade, R08/R20 plan switch) ───────────
-// Stripe's hosted portal owns the confirmation UI; we only deep-link into the right flow. The
-// @convex-dev/stripe component's createCustomerPortalSession cannot set flow_data, so this uses
-// the SDK directly (same pattern as createCheckoutSession). Sync lands via the existing webhook.
+// ── Plan changes: the portal for upgrades, our own schedule for downgrades ─────────────────────
+// Stripe's hosted portal owns the confirmation UI for an upgrade or an interval switch, and we only
+// deep-link into the right flow (the @convex-dev/stripe component's createCustomerPortalSession
+// cannot set flow_data, so this uses the SDK directly, as createCheckoutSession does).
+//
+// A cross-tier DOWNGRADE cannot go through it. The portal runs proration_behavior 'always_invoice'
+// (D7) and defers a switch only between prices sharing a PRODUCT — and Starter/Growth/Pro are three
+// products, which no rearrangement fixes (Stripe refuses a portal product carrying two prices of one
+// interval; proven 2026-09-09). A portal downgrade therefore credits the unused period in cash,
+// against the no-refund line in the Terms (B07). So we write our own subscription schedule instead:
+// the item price swaps at current_period_end with proration_behavior 'none'. Sync lands via the
+// existing customer.subscription.updated webhook either way.
 type FlowData = Stripe.BillingPortal.SessionCreateParams.FlowData
 
-// Every flow shares the same frame: the member's live subscription, their portal customer, and the
-// session itself. `buildFlow` gets the live row plus the app origin for its after-completion URL.
-async function portalFlowSession(
+const appOrigin = (): string => process.env.APP_URL ?? 'http://localhost:5173'
+
+/** The member and their live subscription row — where every billing action starts. */
+async function liveSubscriptionFor(
   ctx: ActionCtx,
-  sessionToken: string,
-  buildFlow: (live: Doc<'subscriptions'>, appUrl: string) => Promise<FlowData>
-): Promise<{ url: string }> {
+  sessionToken: string
+): Promise<{ user: Doc<'users'>; live: Doc<'subscriptions'> }> {
   const user = await requireAuthAction(ctx, sessionToken)
   const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
   const live = findLiveSubscription(subscriptions)
   if (!live) throw new ConvexError('NO_LIVE_SUBSCRIPTION')
+  return { user, live }
+}
 
+/** Mints the portal deep link. The flow is already decided by the caller. */
+async function portalSession(ctx: ActionCtx, user: Doc<'users'>, flow: FlowData): Promise<{ url: string }> {
   const customer = await stripeComponent.getOrCreateCustomer(ctx, {
     userId: user._id,
     email: user.email,
     name: user.name
   })
-  const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
-
   const session = await stripe().billingPortal.sessions.create({
     customer: customer.customerId,
-    return_url: `${appUrl}/billing`,
-    flow_data: await buildFlow(live, appUrl)
+    return_url: `${appOrigin()}/billing`,
+    flow_data: flow
   })
   return { url: session.url }
 }
 
-// subscription_update_confirm swaps a subscription ITEM, so it needs Stripe's copy of the row.
-async function singleItem(stripeSubscriptionId: string): Promise<Stripe.SubscriptionItem> {
+/**
+ * Stripe's copy of the subscription plus its single item. Both halves are needed on every path — the
+ * item to name a price in a portal flow, the subscription to read `status`, `cancel_at_period_end`
+ * and `schedule` — so it is one retrieve, not two.
+ */
+async function retrieveWithItem(
+  stripeSubscriptionId: string
+): Promise<{ sub: Stripe.Subscription; item: Stripe.SubscriptionItem }> {
   const sub = await stripe().subscriptions.retrieve(stripeSubscriptionId)
   const item = sub.items.data[0]
   if (!item) throw new ConvexError('Subscription has no item')
-  return item
+  return { sub, item }
 }
+
+/** The id of the schedule attached to a subscription, if any — the "downgrade pending" signal. */
+function scheduleIdOf(sub: Stripe.Subscription): string | undefined {
+  return typeof sub.schedule === 'string' ? sub.schedule : (sub.schedule?.id ?? undefined)
+}
+
+/**
+ * Moves the member to `targetPriceId` at current_period_end with NO proration, and mirrors the
+ * pending swap onto our row.
+ *
+ * Idempotent by construction: a subscription carries at most ONE schedule, so a double tap — or a
+ * re-target to a different cheaper plan — rewrites the same one instead of racing a second.
+ */
+async function scheduleDowngrade(
+  ctx: ActionCtx,
+  sub: Stripe.Subscription,
+  targetPriceId: string,
+  targetTier: 'starter' | 'growth'
+): Promise<{ url: null }> {
+  // Phase 1's duration needs the TARGET price's interval; the grid can send a monthly member to an
+  // annual price, so it cannot come off the subscription we just retrieved.
+  const interval = intervalForPriceId(process.env, targetPriceId)
+  if (!interval) throw new ConvexError('Unknown price interval')
+
+  const existingId = scheduleIdOf(sub)
+  // from_subscription answers with one phase matching the period already paid for; the phases
+  // themselves are set by the update below, which is the documented two-call pattern.
+  const schedule = existingId
+    ? await stripe().subscriptionSchedules.retrieve(existingId)
+    : await stripe().subscriptionSchedules.create({ from_subscription: sub.id })
+
+  // ponytail: a portal-scheduled interval switch (same product) is overwritten by this update; read
+  // the existing phase 1 first if that ever matters.
+  const updated = await stripe().subscriptionSchedules.update(schedule.id, {
+    phases: buildDowngradePhases(schedule, targetPriceId, interval),
+    // The current phase is rewritten wholesale above (Stripe removes what an update omits), so say
+    // out loud that rewriting it settles no money.
+    proration_behavior: 'none',
+    // Once the cheaper phase has run, hand the subscription back untouched. Our webhook normally
+    // releases it the moment the swap lands; this is the backstop.
+    end_behavior: 'release'
+  })
+
+  // Stripe's own answer, never our arithmetic: the instant phase 1 begins.
+  const startsAt = updated.phases[1]?.start_date
+  await ctx.runMutation(internal.billing.setPendingDowngrade, {
+    stripeSubscriptionId: sub.id,
+    pendingTier: targetTier,
+    pendingAt: startsAt ? startsAt * 1000 : undefined
+  })
+  return { url: null }
+}
+
+/**
+ * Hands a scheduled subscription back to Stripe untouched — same price, same period — and clears our
+ * mirror. Silent when nothing is attached (that is the idempotent undo), and forgiving when Stripe
+ * refuses: `release` is valid only for a not_started/active schedule, and every other status means
+ * the work is already done.
+ */
+async function releaseScheduleOn(ctx: ActionCtx, sub: Stripe.Subscription): Promise<void> {
+  const scheduleId = scheduleIdOf(sub)
+  if (scheduleId) {
+    try {
+      await stripe().subscriptionSchedules.release(scheduleId)
+    } catch (err) {
+      console.error('[billing] could not release subscription schedule', scrubError(err))
+    }
+  }
+  await ctx.runMutation(internal.billing.setPendingDowngrade, { stripeSubscriptionId: sub.id })
+}
+
+/**
+ * Releases the schedule once its swap has applied — scheduled by syncUserSubscription, so the
+ * subscription returns to the plain state every other flow assumes instead of carrying a spent
+ * schedule for a whole cheaper period.
+ */
+export const releaseSubscriptionSchedule = internalAction({
+  args: { stripeSubscriptionId: v.string() },
+  handler: async (ctx, { stripeSubscriptionId }) => {
+    const sub = await stripe().subscriptions.retrieve(stripeSubscriptionId)
+    await releaseScheduleOn(ctx, sub)
+  }
+})
 
 export const createCancelFlowSession = action({
   args: { sessionToken: v.string(), flow: v.union(v.literal('cancel'), v.literal('downgrade')) },
-  handler: (ctx, { sessionToken, flow }): Promise<{ url: string }> =>
-    portalFlowSession(ctx, sessionToken, async (live, appUrl) => {
-      if (flow === 'cancel') {
-        return {
-          type: 'subscription_cancel',
-          subscription_cancel: { subscription: live.stripeSubscriptionId },
-          after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?canceled=true` } }
-        }
-      }
-      if (live.tier === 'starter') throw new ConvexError('ALREADY_STARTER')
-      const item = await singleItem(live.stripeSubscriptionId)
-      // The retrieved item carries the authoritative interval; our snapshot (optional) is the fallback.
-      const stripeInterval = item.price.recurring?.interval
-      const interval = stripeInterval === 'month' || stripeInterval === 'year' ? stripeInterval : live.priceInterval
-      const price = starterPriceIdFor(process.env, interval)
-      if (!price) throw new ConvexError('Starter price not configured')
-      return {
-        type: 'subscription_update_confirm',
-        subscription_update_confirm: {
-          subscription: live.stripeSubscriptionId,
-          items: [{ id: item.id, price, quantity: 1 }]
-        },
-        // BillingPage lands this like the plan switch: "Switching you to Starter…", then
-        // cancel_alternative_completed { from } once the webhook has moved the tier.
-        after_completion: { type: 'redirect', redirect: { return_url: `${appUrl}/billing?downgraded=${live.tier}` } }
+  handler: async (ctx, { sessionToken, flow }): Promise<{ url: string | null }> => {
+    const { user, live } = await liveSubscriptionFor(ctx, sessionToken)
+    const { sub, item } = await retrieveWithItem(live.stripeSubscriptionId)
+
+    if (flow === 'cancel') {
+      // A pending downgrade and a pending cancellation both want the period end. The cancellation
+      // wins: release the schedule so the portal acts on a plain subscription. A member who then
+      // abandons the portal has lost the downgrade and can schedule it again.
+      await releaseScheduleOn(ctx, sub)
+      return portalSession(ctx, user, {
+        type: 'subscription_cancel',
+        subscription_cancel: { subscription: sub.id },
+        after_completion: { type: 'redirect', redirect: { return_url: `${appOrigin()}/billing?canceled=true` } }
+      })
+    }
+
+    if (live.tier === 'starter') throw new ConvexError('ALREADY_STARTER')
+    // The retrieved item carries the authoritative interval; our snapshot (optional) is the fallback.
+    const stripeInterval = item.price.recurring?.interval
+    const interval = stripeInterval === 'month' || stripeInterval === 'year' ? stripeInterval : live.priceInterval
+    const price = starterPriceIdFor(process.env, interval)
+    if (!price) throw new ConvexError('Starter price not configured')
+
+    if (sub.status === 'active') {
+      if (sub.cancel_at_period_end) throw new ConvexError('CANCEL_PENDING')
+      return scheduleDowngrade(ctx, sub, price, 'starter')
+    }
+    // Trialing (nothing paid, so nothing to credit — and the portal's trial_update_behavior keeps
+    // the trial) and past_due (Stripe's dunning owns the unpaid invoice) keep the immediate switch.
+    return portalSession(ctx, user, {
+      type: 'subscription_update_confirm',
+      subscription_update_confirm: { subscription: sub.id, items: [{ id: item.id, price, quantity: 1 }] },
+      // BillingPage lands this like the plan switch: "Switching you to Starter…", then
+      // cancel_alternative_completed { from } once the webhook has moved the tier.
+      after_completion: {
+        type: 'redirect',
+        redirect: { return_url: `${appOrigin()}/billing?downgraded=${live.tier}` }
       }
     })
+  }
 })
 
-// A card holder's "Switch to <plan>" (the plan grid, and the post-cap email's landing): the same
-// confirm flow as the downgrade, aimed at the price the member was looking at, so they land on
-// Stripe's confirmation for THAT plan — never on the portal home, four clicks away from it. The
-// price id is client-chosen, so it is checked against our own list first, as checkout does.
+// A card holder's "Switch to <plan>" (the plan grid, and the post-cap email's landing). An upgrade or
+// an interval switch lands on Stripe's confirmation for THAT price — never the portal home, four
+// clicks away. A cheaper tier is scheduled instead, and returns no URL at all. The price id is
+// client-chosen, so it is checked against our own list first, as checkout does.
 export const createPlanSwitchSession = action({
   args: { sessionToken: v.string(), priceId: v.string() },
-  handler: (ctx, { sessionToken, priceId }): Promise<{ url: string }> => {
+  handler: async (ctx, { sessionToken, priceId }): Promise<{ url: string | null }> => {
     if (!ALLOWED_PRICE_IDS.has(priceId)) throw new ConvexError('Invalid price ID')
-    return portalFlowSession(ctx, sessionToken, async (live, appUrl) => {
-      const item = await singleItem(live.stripeSubscriptionId)
-      // Nothing to confirm. A trialing member sees a Switch button for their own plan (no "current"
-      // badge during a trial), so name it; the client falls back to the portal home.
-      if (item.price.id === priceId) throw new ConvexError('ALREADY_ON_PLAN')
-      return {
-        type: 'subscription_update_confirm',
-        subscription_update_confirm: {
-          subscription: live.stripeSubscriptionId,
-          items: [{ id: item.id, price: priceId, quantity: 1 }]
-        },
-        // BillingPage reads the tier back: "Switching you to X…" until the webhook moves `me.tier`,
-        // then "You're on X now." and plan_switch_completed, once (the downgrade above lands the same way).
-        after_completion: {
-          type: 'redirect',
-          redirect: { return_url: `${appUrl}/billing?switched=${getTierFromPriceId(priceId)}` }
-        }
+    const { user, live } = await liveSubscriptionFor(ctx, sessionToken)
+    const { sub, item } = await retrieveWithItem(live.stripeSubscriptionId)
+    // Nothing to confirm. A trialing member sees a Switch button for their own plan (no "current"
+    // badge during a trial), so name it; the client falls back to the portal home.
+    if (item.price.id === priceId) throw new ConvexError('ALREADY_ON_PLAN')
+
+    const targetTier = getTierFromPriceId(priceId)
+    // Rank, never price amount: the decoy ladder makes amounts a liar (lib/downgrade).
+    const direction = planChangeDirection(live.tier, targetTier)
+
+    // `targetTier !== 'pro'` keeps pendingTier's union honest. It is unreachable in practice — only a
+    // `contact` row would rank Pro as cheaper, and the sync never writes contact to a row — so the
+    // fall-through to the portal is a type guard, not a member-facing path.
+    if (direction === 'down' && targetTier !== 'pro' && sub.status === 'active') {
+      if (sub.cancel_at_period_end) throw new ConvexError('CANCEL_PENDING')
+      return scheduleDowngrade(ctx, sub, priceId, targetTier)
+    }
+    // The portal writes the same subscription our schedule owns, so an upgrade taken while one is
+    // attached would race it. Ask for the undo first; BillingPage says exactly that.
+    if (direction !== 'down' && scheduleIdOf(sub)) throw new ConvexError('PENDING_DOWNGRADE')
+
+    return portalSession(ctx, user, {
+      type: 'subscription_update_confirm',
+      subscription_update_confirm: { subscription: sub.id, items: [{ id: item.id, price: priceId, quantity: 1 }] },
+      // BillingPage reads the tier back: "Switching you to X…" until the webhook moves `me.tier`,
+      // then "You're on X now." and plan_switch_completed, once. Never appended to a scheduled
+      // downgrade, which is why that path can never reach the 20-second wait or its Sentry report.
+      after_completion: {
+        type: 'redirect',
+        redirect: { return_url: `${appOrigin()}/billing?switched=${targetTier}` }
       }
     })
+  }
+})
+
+/**
+ * Undo a scheduled downgrade: the subscription keeps the plan it is on, at the price it is on.
+ * Idempotent, like resumeSubscription — a subscription with no schedule (stale tab, double tap) is a
+ * silent success that clears the mirror and calls no Stripe write.
+ */
+export const undoScheduledDowngrade = action({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }): Promise<null> => {
+    const { live } = await liveSubscriptionFor(ctx, sessionToken)
+    const sub = await stripe().subscriptions.retrieve(live.stripeSubscriptionId)
+    await releaseScheduleOn(ctx, sub)
+    return null
   }
 })
 
@@ -274,10 +421,7 @@ export const createPlanSwitchSession = action({
 export const resumeSubscription = action({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }): Promise<null> => {
-    const user = await requireAuthAction(ctx, sessionToken)
-    const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
-    const live = findLiveSubscription(subscriptions)
-    if (!live) throw new ConvexError('NO_LIVE_SUBSCRIPTION')
+    const { live } = await liveSubscriptionFor(ctx, sessionToken)
     if (!live.cancelAtPeriodEnd) return null
     await stripe().subscriptions.update(live.stripeSubscriptionId, { cancel_at_period_end: false })
     return null
