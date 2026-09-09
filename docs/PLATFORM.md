@@ -1058,24 +1058,24 @@ Cap bonus by the author's tier at fulfilment: starter +25, growth +50, pro +100,
 
 ```mermaid
 sequenceDiagram
-  participant M as Member (My Posts)
-  participant A as billingNode.purchaseFeaturedPost
-  participant P as posts.assertFeaturedPurchasable
-  participant S as Stripe Checkout
-  participant W as http.ts checkout.session.completed
-  participant F as posts.applyPurchasedFeature
-  M->>A: { sessionToken, postId }  (featured_purchase_started {source})
-  A->>A: assertCanEngage · FEATURED_POST_PRICE_ID
-  A->>P: { postId, userId }
-  P-->>A: null | ConvexError(POST_NOT_FOUND | ALREADY_PURCHASED | NOTHING_TO_BUY)
-  A->>S: sessions.create(mode payment, metadata kind=featured_post, postId)
-  S-->>M: hosted Checkout → pays $5
-  S-->>M: success_url /my-posts?featured=paid&post=id  ("Confirming your payment…")
-  S->>W: checkout.session.completed
-  W->>W: isFeaturedPostCheckout? else return
-  W->>F: { postId, checkoutSessionId, amountCents, paidAt }
-  F->>F: normalizeId · redelivery no-op · purchasedFeaturePatch · audit
-  F-->>M: post.featuredPurchase appears → clears "Confirming your payment…" (toast + featured_purchase_completed already fired off the return-leg param, independent of this)
+    participant M as Member (My Posts)
+    participant A as billingNode.purchaseFeaturedPost
+    participant P as posts.assertFeaturedPurchasable
+    participant S as Stripe Checkout
+    participant W as http.ts checkout.session.completed
+    participant F as posts.applyPurchasedFeature
+    M ->> A: { sessionToken, postId } (featured_purchase_started {source})
+    A ->> A: assertCanEngage · FEATURED_POST_PRICE_ID
+    A ->> P: { postId, userId }
+    P -->> A: null | ConvexError(POST_NOT_FOUND | ALREADY_PURCHASED | NOTHING_TO_BUY)
+    A ->> S: sessions.create(mode payment, metadata kind=featured_post, postId)
+    S -->> M: hosted Checkout → pays $5
+    S -->> M: success_url /my-posts?featured=paid&post=id ("Confirming your payment…")
+    S ->> W: checkout.session.completed
+    W ->> W: isFeaturedPostCheckout? else return
+    W ->> F: { postId, checkoutSessionId, amountCents, paidAt }
+    F ->> F: normalizeId · redelivery no-op · purchasedFeaturePatch · audit
+    F -->> M: post.featuredPurchase appears → clears "Confirming your payment…" (toast + featured_purchase_completed already fired off the return-leg param, independent of this)
 ```
 
 ### Checkout (subscribe) flow
@@ -1151,7 +1151,7 @@ sequenceDiagram
     B ->> DB: internal.billing.listUserSubscriptions(userId)
     B -->> A: findLiveSubscription? → ConvexError ALREADY_SUBSCRIBED (client opens the portal)
     B ->> B: trial = trialEligible(rows.length); days = trialDaysFor(user); billingLocale = resolveBillingLocale(...)
-    B ->> SC: getOrCreateCustomer(userId, email, name)
+B ->> SC: getOrCreateCustomer(userId, email, name)
 B ->> S: checkout.sessions.create(trial? days, card-required, promo-codes, locale, custom_text)
 B ->> DB: setStripeCustomerId (if unset) + users.setLanguage (if changed)
 B -->> A: { url }
@@ -1424,7 +1424,7 @@ flowchart TD
     T -->|trial_will_end| TWE["scheduler → notifications.sendTrialEnding (day-7 reminder)"]
     T -->|deleted| CAN["cancelUserSubscription → follow the surviving live row if any, else tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
     T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement; skips an out-of-order event or a canceled row)"]
-    T -->|checkout.session.completed| CSC{"isFeaturedPostCheckout? (payment mode + paid + metadata.kind=featured_post)"}
+    T -->|checkout . session . completed| CSC{"isFeaturedPostCheckout? (payment mode + paid + metadata.kind=featured_post)"}
     CSC -->|no| IGN["ignore (subscription checkouts complete through this event too)"]
     CSC -->|yes| APF["posts.applyPurchasedFeature (normalizeId · redelivery/duplicate no-op+audit · else feature + cap bonus)"]
 ```
@@ -1576,24 +1576,24 @@ sequenceDiagram
     participant N as billingNode / feedback
     participant S as Stripe Portal
     participant W as http.ts webhook
-    U->>B: Cancel plan
-    B->>I: open (cancel_started)
-    I->>I: getRecap 30d + getMyPosts
+    U ->> B: Cancel plan
+    B ->> I: open (cancel_started)
+    I ->> I: getRecap 30d + getMyPosts
     alt Move to Starter
-        I->>N: createCancelFlowSession(downgrade) (cancel_alternative_taken)
+        I ->> N: createCancelFlowSession(downgrade) (cancel_alternative_taken)
     else Continue to cancel
-        I->>N: submitFeedback(cancellation) [optional]
-        I->>N: createCancelFlowSession(cancel)
+        I ->> N: submitFeedback(cancellation) [optional]
+        I ->> N: createCancelFlowSession(cancel)
     end
-    N-->>I: portal url (flow_data)
-    I->>S: redirect
-    S->>W: customer.subscription.updated
-    W->>W: syncUserSubscription (cancelAtPeriodEnd)
-    S-->>B: /billing?canceled=true (cancel_completed)
-    S-->>B: /billing?downgraded=(tier) → You're on Starter now (cancel_alternative_completed)
-    U->>B: Resume plan
-    B->>N: resumeSubscription
-    N->>S: cancel_at_period_end=false
+    N -->> I: portal url (flow_data)
+    I ->> S: redirect
+    S ->> W: customer.subscription.updated
+    W ->> W: syncUserSubscription (cancelAtPeriodEnd)
+    S -->> B: /billing?canceled=true (cancel_completed)
+    S -->> B: /billing?downgraded=(tier) → You're on Starter now (cancel_alternative_completed)
+    U ->> B: Resume plan
+    B ->> N: resumeSubscription
+    N ->> S: cancel_at_period_end=false
 ```
 
 ### Plan switch (R08 / R20)
@@ -1633,21 +1633,53 @@ sequenceDiagram
     participant N as billingNode.createPlanSwitchSession
     participant S as Stripe Portal
     participant W as http.ts webhook
-    U->>B: Switch to {{plan}} (plan_switch_opened)
-    B->>N: createPlanSwitchSession(priceId)
-    N->>N: priceId ∈ ALLOWED_PRICE_IDS · live row · retrieve item · price differs?
-    N-->>B: portal url (subscription_update_confirm) — or a refusal
-    B->>S: redirect (refusal → createPortalSession, the portal home)
-    S->>W: customer.subscription.updated
-    W->>W: syncUserSubscription (tier, price snapshot)
-    S-->>B: /billing?switched=(tier) — Switching you to X…
-    B->>B: me.tier moved → You're on X now (plan_switch_completed)
+    U ->> B: Switch to {{plan}} (plan_switch_opened)
+    B ->> N: createPlanSwitchSession(priceId)
+    N ->> N: priceId ∈ ALLOWED_PRICE_IDS · live row · retrieve item · price differs?
+    N -->> B: portal url (subscription_update_confirm) — or a refusal
+    B ->> S: redirect (refusal → createPortalSession, the portal home)
+    S ->> W: customer.subscription.updated
+    W ->> W: syncUserSubscription (tier, price snapshot)
+    S -->> B: /billing?switched=(tier) — Switching you to X…
+    B ->> B: me.tier moved → You're on X now (plan_switch_completed)
 ```
 
 ### Stripe Dashboard setup
 
-> **Status (2026-09-08): not yet applied** in test or live mode. Every row below is an open manual step — including the
-> three portal rows added for the cancel flow (R09), which the plan-switch deep link (R08 / R20, above) depends on too.
+> **Status (2026-09-08, audited against the live Stripe API in test mode).** "Not yet applied" was too broad — several
+> rows are already in place. What is actually open, in test mode:
+>
+> | Row                        | State                                                                                                     |
+> |----------------------------|-----------------------------------------------------------------------------------------------------------|
+> | Starter prices (R13)       | ✅ **$10/mo `price_1UDYvOJyGKdozmOnso427cxk`, $100/yr `price_1UDYvPJyGKdozmOnli7fwJPD`**, every id repointed (Convex deployment env, root `.env.local`, `convex/.env.local`, `app/.env.local` `VITE_` copies), the product's `default_price` moved to the $10 monthly, and the old $5/$50 Prices archived. Stripe and the landing agree |
+> | Featured post Price (R17)  | ✅ One-time $5 Price `price_1UDYLUJyGKdozmOnc7I1DbdL` on product `prod_VE0MQSmKyP4zk4`, and `STRIPE_FEATURED_POST_PRICE_ID` is now set on `dev:shocking-dragon-458` |
+> | Subscription updates       | ⚠️ `trial_update_behavior` is now **`continue_trial`**, so the R08/R20 deep link no longer charges a trialing member. But `products` is **still null** — the portal offers nothing to switch to. See the encoding note below |
+> | Webhook events             | ✅ Exactly the six events `convex/http.ts` handles, `customer.subscription.trial_will_end` among them — the day-7 warning fires and `sendTrialEnding` is reachable. The seven subscribed-but-unhandled events were dropped |
+> | Proration                  | ⚠️ **`none`** on both update and cancel. That is the "Subscription updates" row's value, not the D7 row's — so the conflict below is currently resolved *against* D7 by default rather than by decision. Henriko's call to confirm or flip |
+> | Cancellation / mode        | ✅ On, `at_period_end`, reasons on                                                                          |
+> | Payment-method updates     | ✅ Allowed                                                                                                  |
+> | Pausing                    | ✅ Off                                                                                                      |
+> | Automatic customer emails  | ❓ Not readable via API — Dashboard-only, still unverified                                                   |
+>
+> **Live mode remains entirely unconfigured** and no live key exists on the development machine, so every row above must
+> still be applied a second time against live before launch.
+>
+> **Writes to the Stripe API are refused to the assistant; reads are allowed.** So an audit like this one can be redone
+> at any time, but the writes themselves are Henriko's to run. Objects, in test mode: webhook endpoint
+> `we_1TFRqXJyGKdozmOnUc5udijk` (→ `https://shocking-dragon-458.convex.site/stripe/webhook`), portal configuration
+> `bpc_1TFSe4JyGKdozmOn3gJylzOY` (the default), superseded Starter Prices `price_1TBM6UJyGKdozmOnvv5M7Wem` ($5/mo) and
+> `price_1TlAtuJyGKdozmOn371RVy7O` ($50/yr).
+>
+> ⚠️ **One API row remains: `subscription_update.products` is still `null`.** The first attempt sent
+> `products[0][prices][]=…` and Stripe answered **200 while silently dropping the whole list** — its form encoding
+> requires an explicit index for an array nested inside an array (`products[0][prices][0]`); the bare `[]` shorthand
+> works only at the top level. **Verify this row with a `GET`, never by the POST's status code.** Two prerequisites bit
+> here and are worth knowing for live mode: a Price that is its product's `default_price` **cannot be archived** until
+> the product is repointed, and `unit_amount` is in **cents** while `recurring[interval]` is what separates $100/yr from
+> a catastrophic $100/mo — read both back after creating.
+>
+> Beyond the API, the "automatic customer emails" pair (trial-ending **OFF**, receipts **ON**) is Dashboard-only, not
+> exposed by the API, and still unverified.
 
 None of the following is configurable from code, and **all of it must be applied twice — once in test mode and again in
 live mode**. Two of Stripe's defaults are actively wrong for this product (the built-in trial-ending email, which would
@@ -1676,9 +1708,13 @@ Enabling one for this purchase means adding that webhook handler, and a pending-
 
 **Manual check after any of the above changes (test mode).** Switch a plan **during a trial** and confirm two things
 survive: Stripe preserves `trial_end` across the price change (the trial is neither restarted nor dropped), and the
-`customer.subscription.updated` handler re-derives the tier through `getTierFromPriceId`. Separately, confirm **Resend
-has a verified sending domain** in production before launch — without it every billing notice no-ops (loudly logged,
-but not delivered).
+`customer.subscription.updated` handler re-derives the tier through `getTierFromPriceId`. That check is **blocked**
+until the portal lists prices and `trial_update_behavior` moves off `end_trial` (see the status table above).
+
+**Resend sending domain — ✅ done** (verified against the Resend API, 2026-09-08): `notifications.linkintothessi.com`
+reports `verified` in region `sa-east-1`, and `EMAIL_FROM` is `noreply@` that domain. Domains are account-level in
+Resend, not per-key, so this holds for production as long as production uses the same Resend account. Without a
+verified domain every billing notice no-ops (loudly logged, but not delivered).
 
 ---
 
@@ -3897,7 +3933,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+          | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -4415,6 +4451,25 @@ The wording deliberately matches the Stripe `custom_text` under the pay button a
 pages it remains a **draft pending legal review**, and this clause in particular is new wording that has not been
 reviewed.
 
+### What-you-buy and delivery clauses (Terms §2 and §5, 2026‑09‑08)
+
+Two paragraphs added to all three locale modules so the Terms answer the same question Stripe's account-activation form
+asks ("What products or services will you offer through Stripe?"). **Terms §2, "What you buy":** the member buys access
+to the software; the subscription covers the shared feed, the reaction and comment suggestions, and the plan's account
+features; **we sell no reactions, comments, connections or followers, and deliver no engagement to any account**; and
+because the SSI depends on what the member does on LinkedIn, the Service promises **no score, no ranking and no
+result**. **Terms §5, "Plans and delivery":** four plans (Starter, Growth, Pro, custom Enterprise by contact), the
+current price visible on the home page and again at checkout, delivery as a **hosted web application** opened when the
+subscription starts, and **no physical goods**.
+
+Why this wording and not prices: Stripe restricts businesses that sell social-media engagement as the product, so a
+"LinkedIn growth" service invites that question at review. The disclaimer is a true statement of what this product is,
+already backed by §3 (no LinkedIn write scopes) and §4 (acceptable use), and it now sits where a reviewer reads. Plan
+**names** appear but plan **prices** do not: prices live in `landing/components/Pricing.tsx` and
+`app/src/lib/planPrices.ts`, and a third copy in three locale modules of the Terms is a fourth place for the $5-vs-$10
+kind of drift to hide. The `Last updated` line moved to **September 2026** in all three locales. Still a draft pending
+legal review, this wording included.
+
 ### CookieNotice (Phase 3b)
 
 `CookieNotice` is a **client component** rendered in `landing/app/[lang]/layout.tsx`. It displays a dismissible
@@ -4521,13 +4576,33 @@ verifiable: OIDC-only scopes are asserted in `convex/linkedin/oauth.test.ts`, an
 on the member's behalf ([§1](#1-product-overview--business-model)).
 
 Because those two lines answer the top objection and carry the card-required disclosure, **they must stay visible
-above the fixed `CookieNotice` on a first mobile visit** — the visitor who most needs them is exactly the one who
-still has the banner on screen. At 375×812 the usable band is `y=64..671`: the `Nav` overlay is opaque (`fixed top-0`,
-`h-16`) and the notice covers the bottom 141px. The `pt`/`es` headlines wrap two lines longer than
-`en`, which previously pushed the whole CTA column under the banner. `Hero` therefore drops the headline to
-`text-4xl` below `sm` (`sm:text-5xl md:text-7xl` — desktop unchanged) and reserves `pb-24 sm:pb-0` on the section,
-leaving ≥ 50px of clearance in the longest locale. Raising either value, or lengthening `hero.headlineLine2` in any
-locale, re-opens the bug; re-measure at 375×812 in all three locales after touching them.
+above the fixed `CookieNotice` on a first mobile visit**, and the headline must stay clear of the opaque `Nav` — the
+visitor who most needs those lines is exactly the one who still has the banner on screen. Two fixed overlays eat the
+viewport: `Nav` (`fixed top-0`, `h-16`, 65px) and the notice at the bottom. `Hero` is `min-h-screen … justify-center`,
+so it centres its content in the **whole** viewport unless told otherwise, and the deficit is vertical, not
+horizontal — `pt`/`es` wrap both the headline and `subLine1` a line longer than `en`. The fix is therefore keyed to **
+`[@media(max-height:720px)]`**, not to `sm:`:
+
+| Where          | Short-viewport override                                              | Why                                                                 |
+|----------------|----------------------------------------------------------------------|---------------------------------------------------------------------|
+| `Hero` section | `pt-16` + `pb-32` (paired with the existing `pb-24 sm:pb-0`)         | `justify-center` then centres inside the band, not the raw viewport |
+| `Hero` content | `space-y-3`, `h1` → `text-2xl`, `subLine1` → `text-base`, CTA `pt-0` | `pt` content is 526px unaided but the band is 461px at 375×667      |
+| `CookieNotice` | `py-2`, `text-xs`, `gap-2`                                           | Bar height is locale-dependent, so a fixed `pb` cannot reserve it   |
+
+The notice is the reason a padding-only fix fails: it measures **89px in `en` but 105px in `pt`/`es`** once tightened
+(141px / 161px untightened), so any single `pb` value either clips the headline into the `Nav` or lets the disclosure
+slide under the bar. Tightening the bar itself removes the guess. Measured clearances (headline-to-`Nav`,
+block-to-notice) after the fix:
+
+| Viewport | `en`                                                 | `pt`    | `es`    |
+|----------|------------------------------------------------------|---------|---------|
+| 360×640  | +28/+68                                              | +13/+37 | +28/+52 |
+| 375×667  | +19/+39                                              | +55/+79 | +42/+66 |
+| 375×812  | unchanged (query does not apply; +30/+50, bar 141px) |         |         |
+
+A landscape phone (≥`sm` wide, ≤720px tall) resolves to the height query, not `sm:text-5xl` — verified at 800×600 (h1
+24px, +62/+142). **Re-measure at all three viewports in all three locales** after touching `hero.*` copy, the
+spacing here, or `cookieNotice.text`; every gap must be positive.
 
 ### Styling
 
@@ -5068,7 +5143,36 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑09‑08. **Decoy pricing, the $5 featured-post add-on and a ROPA refresh (R13 / R17).** One theme
+_Last updated: 2026‑09‑08. **The three non-code items left after R01–R21: the mobile hero overlap, the Stripe
+Dashboard audit and the Resend domain — plus two test files HEAD could not parse.** With the revenue backlog at 21/21
+this wave closed what was left around it. **The hero overlap (landing).** The 2026‑09‑06 note said `pt`/`es` trust
+lines sat under the `CookieNotice` at 375×812; re-measured, that viewport is fine (+50px) — the copy changed under the
+note. The bug is real one size down: at **375×667** `pt` ran 22px under the notice **and** its headline ran under the
+opaque `Nav`, because `min-h-screen … justify-center` centres in the raw viewport while two fixed overlays eat 206px
+of it, and `pb-24` shrank the box from the bottom only, pushing the headline up into the nav. Fixed with one
+`[@media(max-height:720px)]` query shared by `Hero` and `CookieNotice` — paired `pt-16`/`pb-32` so centring happens
+inside the band, a tighter type ramp, and a shorter notice, since the bar is **89px in `en` but 105px in `pt`/`es`**
+and no single `pb` can reserve a height that varies by locale. All nine locale × viewport combinations now clear at
+both ends (table in §15); 375×812 is untouched. **Two unparseable test files.** `convex/lib/postCapNotice.test.ts` and
+`app/src/pages/RecapPage.test.tsx` were committed in `60b779b` as `describe('X', ;() => {` — a stray semicolon that
+made Prettier, and therefore `pnpm verify`, fail outright and silently removed both files from the run. Removing the
+two characters restores exactly the counts this document already claimed for that batch (convex 486, app 421), which
+is the evidence the corruption landed after the batch was verified, not before. **Stripe Dashboard (§8).** Audited
+against the live API in test mode rather than assumed: cancellation, payment-method updates and pausing are already
+correct; `checkout.session.completed` **is** subscribed; proration is already `none`. The one-time $5 featured Price
+exists and `STRIPE_FEATURED_POST_PRICE_ID` is now set on `dev:shocking-dragon-458`, so `purchaseFeaturedPost` no longer
+throws `FEATURED_PRICE_UNSET`. The remaining three were **Stripe writes this environment refuses the assistant**, so
+Henriko ran them: Starter is now **$10/mo `price_1UDYvO…` and $100/yr `price_1UDYvP…`**, repointed across the Convex
+deployment env and all three `.env.local` files — *including `convex/.env.local`, a fourth copy left behind by a CLI run
+from inside `convex/`, which still held the $5 id* — so Stripe and the landing finally agree; the webhook now carries
+exactly the six events `http.ts` handles, `trial_will_end` among them; and `trial_update_behavior` is `continue_trial`.
+**Two are still open**, both on the portal: `subscription_update.products` is `null` because Stripe answered **200 while
+silently dropping** a `products[0][prices][]=…` list (its form encoding needs an explicit nested index — verify that row
+by `GET`, not by status code), and the old $5/$50 Prices are still active and want archiving. Live mode is untouched and
+has no key on the dev machine. **Resend — done.** `notifications.linkintothessi.com` reports
+`verified` (region `sa-east-1`) against the Resend API, so the pre-launch caveat in §8 is retired. Sections updated:
+§8, §15, §21. Gates: convex **486/486**, app **421/421**, `pnpm verify` exit 0. Prior:
+2026‑09‑08 — **Decoy pricing, the $5 featured-post add-on and a ROPA refresh (R13 / R17).** One theme
 across two features and the record that has to keep up with them: make the ladder read as a ladder, then sell the
 member who is already at the cap the one thing they want, without pretending it is a plan. **The ladder (R13).**
 Starter is **$10/mo and $100/yr** — priced as the decoy that makes Growth's $15 the obvious buy rather than the step

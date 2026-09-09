@@ -6,7 +6,7 @@ export default function En({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Privacy Policy</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Last updated:</strong> June 2026
+          <strong className="text-cream">Last updated:</strong> September 2026
         </p>
         <p>Policy version: 2026-06-15</p>
 
@@ -68,8 +68,9 @@ export default function En({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">No scraping.</strong> We do not scrape LinkedIn or any other third-party
-          website. All data originates from your direct interactions with our platform or through the LinkedIn API under
-          your authorised consent.
+          website. We receive data from your own use of our platform and from LinkedIn OpenID Connect sign-in, which
+          returns your member ID, name, profile picture, and email. We hold no permission to post, comment, or react on
+          LinkedIn, and we write nothing to your LinkedIn account.
         </p>
 
         {/* 3. Why we use it & legal bases */}
@@ -122,6 +123,20 @@ export default function En({ lang }: { lang: Locale }) {
             providers with zero data retention (prompts are not stored or used for training).
           </li>
         </ul>
+        <p>
+          <strong className="text-cream">Stripe&rsquo;s own role.</strong> Stripe processes payments on our behalf, and
+          Stripe also acts as an independent controller of the payment data it collects from you, which it uses to
+          prevent fraud and to meet its own legal and regulatory duties. Stripe governs that use under{' '}
+          <a
+            href="https://stripe.com/privacy"
+            className="text-gold-text hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Stripe&rsquo;s privacy policy
+          </a>
+          . Your card number goes to Stripe, and we never see or store it.
+        </p>
         <p>
           <strong className="text-cream">We do not sell or share your personal information</strong> for cross-context
           behavioural advertising or any other commercial purpose.

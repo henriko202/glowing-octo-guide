@@ -94,7 +94,7 @@ beforeEach(() => {
   }
 })
 
-describe('RecapPage', ;() => {
+describe('RecapPage', () => {
   it('keeps the header and window toggle mounted while the recap loads (F1)', () => {
     mockQueryReturns['interactions.getRecap'] = undefined
     renderPage()

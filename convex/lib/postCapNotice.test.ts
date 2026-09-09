@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { billingIntervalParam, capNoticeMode, shouldSendCapNotice } from './postCapNotice'
 
-describe('capNoticeMode', ;() => {
+describe('capNoticeMode', () => {
   it('offers the upgrade when the next tier caps higher', () => {
     expect(capNoticeMode('starter', 25, 50)).toBe('upgrade')
     expect(capNoticeMode('growth', 50, 100)).toBe('upgrade')
