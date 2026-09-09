@@ -22,8 +22,8 @@ import { canEngage } from '../../../convex/lib/access'
 import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
 import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
-import { isPlanId, PLAN_IDS, resolveTargetPlan, type PlanId } from '@/lib/targetPlan'
-import { FEATURED_POST_PRICE, isInterval, PLAN_PRICES, type Interval } from '@/lib/planPrices'
+import { isPlanId, PLAN_IDS, type PlanId, resolveTargetPlan } from '@/lib/targetPlan'
+import { FEATURED_POST_PRICE, type Interval, isInterval, PLAN_PRICES } from '@/lib/planPrices'
 
 /** How long we give the Stripe webhook to land before the activating state times out (R07). */
 const ACTIVATION_TIMEOUT_MS = 20_000

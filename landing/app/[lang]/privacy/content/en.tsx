@@ -8,7 +8,10 @@ export default function En({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Last updated:</strong> September 2026
         </p>
-        <p>Policy version: 2026-06-15</p>
+        {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts, which drives the in-app re-consent
+            prompt. The landing site has no convex dependency, so this string is a manual copy: bump it in
+            en/pt/es whenever you bump the constant, or the page under-reports a policy members re-accepted. */}
+        <p>Policy version: 2026-09-08</p>
 
         {/* 1. Who we are */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Who We Are</h2>

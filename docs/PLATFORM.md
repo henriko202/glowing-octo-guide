@@ -1621,10 +1621,11 @@ once the webhook has moved the tier, **"You're on X now."** and `plan_switch_com
 `useRef`
 latch), stripping the param only at that point so a refresh mid-wait re-latches it. A card-less member ignores the
 marker: their default tier could otherwise "complete" a switch that never happened. The flow needs the same Dashboard
-rows as the downgrade (below): subscription updates **on** with all six prices listed. Note that the portal has **one**
-proration setting for
-every update, so "no proration" (chosen to keep a downgrade credit-free) also makes an upgrade free until the next
-renewal — the same economics as the portal home's own "Update plan", not new ones.
+rows as the downgrade (below): subscription updates **on** with all six prices listed. The portal runs
+`always_invoice`, so an upgrade taken here is invoiced on the spot for the rest of the period, while a **same-product**
+downgrade matches `schedule_at_period_end` and lands at the end of the period with no credit — the
+same economics as the portal home's own "Update plan", not new ones. A cross-tier downgrade still credits, and §8
+explains why that cannot be fixed by rearranging the products.
 
 ```mermaid
 sequenceDiagram
@@ -1646,59 +1647,173 @@ sequenceDiagram
 
 ### Stripe Dashboard setup
 
-> **Status (2026-09-08, audited against the live Stripe API in test mode).** "Not yet applied" was too broad — several
-> rows are already in place. What is actually open, in test mode:
+> **Status (2026-09-08 — the test-mode sandbox was DELETED; everything below must be recreated).** Every Stripe object
+> named by the earlier audits is gone: the products and all seven Prices (`price_1TBM…`, `price_1UDY…`), webhook
+> endpoint
+> `we_1TFRqXJyGKdozmOnUc5udijk`, portal configuration `bpc_1TFSe4JyGKdozmOn3gJylzOY`. Confirmed by `GET` under a working
+> key: **0 products, 0 prices, 0 webhook endpoints, 0 portal configurations**. Every `STRIPE_*_PRICE_ID` and the
+> `STRIPE_WEBHOOK_SECRET` in all four env copies now name an object that does not exist, so checkout fails with
+> `No such price` and no webhook is delivered at all.
 >
-> | Row                        | State                                                                                                     |
-> |----------------------------|-----------------------------------------------------------------------------------------------------------|
-> | Starter prices (R13)       | ✅ **$10/mo `price_1UDYvOJyGKdozmOnso427cxk`, $100/yr `price_1UDYvPJyGKdozmOnli7fwJPD`**, every id repointed (Convex deployment env, root `.env.local`, `convex/.env.local`, `app/.env.local` `VITE_` copies), the product's `default_price` moved to the $10 monthly, and the old $5/$50 Prices archived. Stripe and the landing agree |
-> | Featured post Price (R17)  | ✅ One-time $5 Price `price_1UDYLUJyGKdozmOnc7I1DbdL` on product `prod_VE0MQSmKyP4zk4`, and `STRIPE_FEATURED_POST_PRICE_ID` is now set on `dev:shocking-dragon-458` |
-> | Subscription updates       | ⚠️ `trial_update_behavior` is now **`continue_trial`**, so the R08/R20 deep link no longer charges a trialing member. But `products` is **still null** — the portal offers nothing to switch to. See the encoding note below |
-> | Webhook events             | ✅ Exactly the six events `convex/http.ts` handles, `customer.subscription.trial_will_end` among them — the day-7 warning fires and `sendTrialEnding` is reachable. The seven subscribed-but-unhandled events were dropped |
-> | Proration                  | ⚠️ **`none`** on both update and cancel. That is the "Subscription updates" row's value, not the D7 row's — so the conflict below is currently resolved *against* D7 by default rather than by decision. Henriko's call to confirm or flip |
-> | Cancellation / mode        | ✅ On, `at_period_end`, reasons on                                                                          |
-> | Payment-method updates     | ✅ Allowed                                                                                                  |
-> | Pausing                    | ✅ Off                                                                                                      |
-> | Automatic customer emails  | ❓ Not readable via API — Dashboard-only, still unverified                                                   |
+> **A usable key already exists — no new one has to be issued.** The stores hold **two different** keys: the Convex
+> **deployment** env (`npx convex env get STRIPE_SECRET_KEY`, tail `N0Os`) still authenticates against an empty test
+> environment, while `.env.local` and `convex/.env.local` both carry the sandbox's dead key (tail `SJfF`,
+> `api_key_expired`). The deployment copy is the one the backend actually reads, so it is also the one to hand the
+> provisioning script — which writes it back into the two local files and repairs them in the same pass.
 >
-> **Live mode remains entirely unconfigured** and no live key exists on the development machine, so every row above must
-> still be applied a second time against live before launch.
+> `scripts/stripe-provision.mjs` recreates the whole set in one pass, against whichever environment the key belongs to.
+> The table below is its specification; run it from the repo root as `node scripts/stripe-provision.mjs --key sk_test_…`
+> (add `--site https://<deployment>.convex.site` if `CONVEX_SITE_URL` is not in `.env.local`; `--check` runs only its
+> form-encoder self-test and exits, no key needed).
 >
-> **Writes to the Stripe API are refused to the assistant; reads are allowed.** So an audit like this one can be redone
-> at any time, but the writes themselves are Henriko's to run. Objects, in test mode: webhook endpoint
-> `we_1TFRqXJyGKdozmOnUc5udijk` (→ `https://shocking-dragon-458.convex.site/stripe/webhook`), portal configuration
-> `bpc_1TFSe4JyGKdozmOn3gJylzOY` (the default), superseded Starter Prices `price_1TBM6UJyGKdozmOnvv5M7Wem` ($5/mo) and
-> `price_1TlAtuJyGKdozmOn371RVy7O` ($50/yr).
+> It creates the three plan products with a monthly and an annual Price each, the one-time featured-post Price, the
+> webhook endpoint with exactly the six events
+> `convex/http.ts` handles, and it updates the **default** Customer Portal configuration — never a new one, because
+> `billingPortal.sessions.create` passes no `configuration` and so always uses the account default. On an account that
+> has **no** default yet it writes no configuration at all and says so: a new one would be ignored, and Stripe has no
+> delete for portal configurations, only `active: false`, so the stray object would sit in a live account forever.
+> Each object carries a fixed `Idempotency-Key`, so a re-run **within 24h** repairs a half-finished
+> run instead of duplicating it; after that window a re-run creates a second set that has to be archived by hand.
+> Finally it writes the ids into `.env.local`, `convex/.env.local` and the `VITE_` copies in `app/.env.local`, and
+> prints
+> the `npx convex env set` lines for the fourth copy — the deployment env, the only one the backend actually reads.
 >
-> ⚠️ **One API row remains: `subscription_update.products` is still `null`.** The first attempt sent
-> `products[0][prices][]=…` and Stripe answered **200 while silently dropping the whole list** — its form encoding
-> requires an explicit index for an array nested inside an array (`products[0][prices][0]`); the bare `[]` shorthand
-> works only at the top level. **Verify this row with a `GET`, never by the POST's status code.** Two prerequisites bit
-> here and are worth knowing for live mode: a Price that is its product's `default_price` **cannot be archived** until
-> the product is repointed, and `unit_amount` is in **cents** while `recurring[interval]` is what separates $100/yr from
-> a catastrophic $100/mo — read both back after creating.
+> **Two traps the script encodes**, worth keeping if it is ever replaced. ✅ **Resolved 2026-09-08: `products` was
+> never dropped.** `features.subscription_update.products` is an **expandable** field, so Stripe leaves it out of the
+> configuration body unless the request asks for it, and every read-back that reported it missing had simply never
+> asked. Two successive diagnoses were wrong for the same reason — first the form encoder, then the Dashboard — and
+> the second was built on the first one's evidence instead of a fresh test. The script now retrieves it as
+> `…/billing_portal/configurations/{id}?expand[0]=features.subscription_update.products`, which returns all three
+> products and all six prices. The distinguishing probe: expanding a real-but-unexpanded path returns **200 with a
+> larger body**, while a nonsense path returns **`400 This property cannot be expanded`**. Verify every config write
+> with a `GET` — but **expand the field you mean to check, or the check cannot pass no matter what was stored**.
+> And `unit_amount` is in **cents** while
+> `recurring[interval]` is what separates $100/yr from a
+> catastrophic $100/mo — every Price is read back after creation. A third, latent: a Price that is its product's
+> `default_price` cannot be archived until the product is repointed, so the script sets `default_price` to the monthly
+> up front.
 >
-> Beyond the API, the "automatic customer emails" pair (trial-ending **OFF**, receipts **ON**) is Dashboard-only, not
-> exposed by the API, and still unverified.
+> **Decision D7 is SETTLED (Henriko, 2026-09-09): `PRORATION = 'always_invoice'` + `schedule_at_period_end`.**
+> `features[subscription_update][schedule_at_period_end]` separates the two directions, which one `proration_behavior`
+> never could. An update matching `decreasing_item_amount` or `shortening_interval` is **scheduled at the end of the
+> period** rather than applied now, so it never prorates and never credits; Stripe shipped the field for this precise
+> problem. `SCHEDULE_AT_PERIOD_END` in the script carries both conditions and reads them back by `GET`: **drop them
+> and every downgrade silently credits**, which is what the no-refund line in the Terms exists to prevent. That half
+> holds whatever `PRORATION` is set to.
+>
+> ⚠️ **Why not `create_prorations`**, the value this replaced and the one an earlier note here wrongly described as
+> charging immediately. Stripe's wording: it "creates proration invoice items when applicable. These proration items
+> are only invoiced immediately under certain conditions" — otherwise they ride the **next** scheduled invoice. A
+> member could therefore upgrade Starter → Pro on day 2, hold Pro for the rest of the month, cancel before renewal
+> and never be billed the difference. `always_invoice` finalises that invoice at the moment of the switch instead.
+> Its one historic drawback, immediately invoicing a **downgrade's** credit, is exactly what `schedule_at_period_end`
+> removes for every switch it covers.
+>
+> **Applying it to an environment that already exists is one Dashboard control, not a re-provision**: Settings →
+> Billing → Customer portal → *When customers change plans or quantities* → keep **Prorate charges and credits** and
+> set **Charge timing** to **Invoice prorations immediately**. ✅ Applied and read back 2026-09-09: that pair does
+> write `always_invoice`, and it left `products`, both `schedule_at_period_end` conditions and
+> `trial_update_behavior` untouched. Record the mapping, because the Dashboard's three radios plus a timing dropdown
+> are more combinations than the API's three enum values: *Prorate charges and credits* + *at the end of the billing
+> period* = `create_prorations`, the same radio + *immediately* = `always_invoice`, *No charges or credits* = `none`.
+> A Dashboard save rewrites the whole `subscription_update` object, so **read it back after any portal edit** — that
+> is the only proof a control did what its label says and clobbered nothing next to it.
+>
+> ⛔ **Scheduling covers INTERVAL switches only, and that ceiling is structural — do not try to widen it by
+> restructuring the products.** Stripe defers a downgrade only **between prices that have the same product**, so the
+> obvious fix is one product carrying all six prices. It is not available: the portal rejects the configuration
+> outright with **`400 For each product, its price must have unique billing intervals`**. A product entry may list one
+> monthly price and one annual price and no more. The portal's data model *is* "product = plan, prices = billing
+> intervals", which is exactly the three-product layout, so the two constraints close the door between them.
+> **Proven 2026-09-09** by provisioning a single `LinkIntoTheSSI` product with all six prices and watching the portal
+> write fail; every earlier note here claiming one product would close the gap was wrong, and reasoning from the
+> `schedule_at_period_end` docs alone is what produced it — the portal's own constraint is documented nowhere near
+> them. The lesson is 2026-09-08k's, unlearned and re-learned: **a design that depends on an API accepting something
+> is not settled until that write returns 200.**
+>
+> So the live behaviour is: Starter annual → Starter monthly **defers** to period end and never credits, while a
+> cross-tier downgrade (R09's "Move to Starter" from Growth or Pro) **applies at once and issues a prorated credit**,
+> against the no-refund line in the Terms. Treat that as current behaviour, not a hypothetical.
+>
+> **Closing it means taking cross-tier downgrades off the portal**, which is a decision, not a config change. Both
+> paths that can reach one — `createPlanSwitchSession` (the plan grid) and `createCancelFlowSession(flow:'downgrade')`
+> — build a `subscription_update_confirm` deep link, and a portal-driven update obeys the portal's
+> `proration_behavior`. Replacing the downgrade half with our own `subscriptionSchedules` call that swaps the item
+> price at `current_period_end` with `proration_behavior: 'none'` gives the member what they paid for, moves the tier
+> on the period-end webhook, and never prorates. Stripe's own portal guide warns that its Manage-downgrades feature
+> "automatically creates and attaches a subscription schedule to the subscription" and to follow subscription-schedule
+> best practices "to prevent unexpected subscription overwrites", so a hand-rolled schedule has to own that flow
+> exclusively rather than race the portal for it. Not built; not scheduled.
+>
+> **Dev, re-provisioned 2026-09-08.** Starter `price_1UDaHRFPUrUP5vm6HUZUaCNW` / `price_1UDaHRFPUrUP5vm6qGEST6gp`,
+> Growth `price_1UDaHSFPUrUP5vm6LcFMOYki` / `price_1UDaHSFPUrUP5vm6c947d4vE`, Pro `price_1UDaHTFPUrUP5vm6UaxMSuu4` /
+> `price_1UDaHTFPUrUP5vm6PFtCbiGy`, featured `price_1UDaHUFPUrUP5vm614jy6LNX`, webhook `we_1UDaHWFPUrUP5vm6nEKJh0Fq` —
+> all seven prices verified by read-back. **The portal step is green too**, once it was read correctly: portal
+> `bpc_1UDaHWFPUrUP5vm6E6Qgebvt` is now `is_default: true`, carries all **three products and six prices** (visible
+> only under `expand`, above), `proration_behavior: always_invoice`, both `schedule_at_period_end` conditions,
+> `trial_update_behavior: continue_trial`, cancellation at period end with reasons on, `invoice_history` on and
+> `subscription_pause` off. Every field §8 asks for is now live in test mode. That
+> first run aborted before printing the webhook signing secret (a fatal exit after an unrecoverable value; the
+> script now prints it at the moment of creation and downgrades later failures to warnings), so the secret has to be
+> revealed by hand in Developers → Webhooks.
+>
+> **Production is the same command**, with `--key sk_live_…` and an explicit `--site https://<prod>.convex.site`. The
+> script is convergent — product matched by name, price by amount + interval + currency, webhook by url, portal by
+> `is_default` — so the products that already exist in live are **reused, never duplicated**, and nothing is ever
+> archived or deleted. Four live-mode guards:
+>
+> - It refuses to infer `--site` from a key that starts `sk_live_`. Inheriting the dev site URL from `.env.local`
+>   would point production Stripe at the development backend, and the mistake is invisible until a real payment is
+    lost.
+> - It leaves the local `.env` files untouched — they configure the dev deployment — printing the values and
+>   `npx convex env set … --prod` lines instead, then reminding that `APP_URL` and `CONVEX_SITE_URL` must be set on
+>   the prod deployment too. Neither is Stripe's to set, and a wrong one fails quietly: the payment succeeds and the
+>   member is redirected into the dev app.
+> - Every list read is a single `limit=100` page. If Stripe reports `has_more`, the lookups behind it could miss and
+>   create **duplicate** products and prices in a live account, so the run reports that instead of guessing.
+> - On an account with no default portal configuration — which is any account where the portal has never been saved
+>   in the Dashboard — it writes no configuration rather than leaving a permanent stray one behind.
+>
+> Reusing an existing webhook endpoint means Stripe returns no signing secret, so the live `STRIPE_WEBHOOK_SECRET`
+> must be kept or rolled deliberately. Verified 2026-09-09 as far as it can be without a live key: the guards above
+> were exercised directly (a `sk_live_` key with no `--site` exits 1 before any network call), and everything past
+> them is the same code path both modes run. A hard failure mid-request prints its error and exits 1, then Node on
+> Windows adds a `libuv assertion` line as it tears down a pooled socket — noise after the fact, not a second fault.
+>
+> **Left over after the script runs**, in every environment:
+>
+> - The automatic-customer-emails pair — trial-ending **OFF**, payment receipt **ON** — is Dashboard-only, not exposed
+>   by the API, and still unverified. Both matter: Stripe's trial-ending email would double up with `sendTrialEnding`.
+> - **Live mode is entirely unconfigured** and no live key exists on the development machine. Same script, live key,
+>   webhook pointed at the production Convex site.
+> - The manual trial check below: switch a plan **during a trial** and confirm Stripe preserves `trial_end` across the
+>   price change and that `customer.subscription.updated` re-derives the tier through `getTierFromPriceId`.
+> - **Archiving `prod_VEBsyAeHkslgPH` "LinkIntoTheSSI"** in the dev sandbox — the abandoned one-product experiment of
+>   2026-09-09, with six unused prices under it. Nothing references them: the portal write failed, so the run never
+>   reached env propagation and all four copies still name the original prices. Its `default_price` is set, which
+>   blocks archiving until the product is repointed. Harmless catalogue clutter until then.
+>
+> **Writes to the Stripe API are refused to the assistant; reads are allowed.** An audit like this one can be redone at
+> any time, but running the provisioning script is Henriko's to do.
 
 None of the following is configurable from code, and **all of it must be applied twice — once in test mode and again in
 live mode**. Two of Stripe's defaults are actively wrong for this product (the built-in trial-ending email, which would
 double up with ours, and downgrade proration), so treat this as required setup rather than preference.
 
-| Setting                   | Where (Stripe Dashboard)                               | Value                                                                                                                                                                                                                                                                                          | Why                                                                                                                                                                                                                                                                                                                                                                                                              |
-|---------------------------|--------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Plan switching            | Billing → Customer portal → products/prices            | All **three products** and **six prices** (monthly + annual) listed as switchable                                                                                                                                                                                                              | A card holder switches plans in the portal; `createCheckoutSession` refuses a second subscription (`ALREADY_SUBSCRIBED`), so a price missing from the portal is a dead end for that member. `createPlanSwitchSession` deep-links to that price's confirm step.                                                                                                                                                   |
-| Payment-method updates    | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                                                        | The only route a `past_due` member has to fix a failed card and clear the engagement gate.                                                                                                                                                                                                                                                                                                                       |
-| Cancellation              | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                                                        | The cancel path that the checkout copy, the Terms and every billing email point at has to actually exist. No roach motel.                                                                                                                                                                                                                                                                                        |
-| Proration                 | Billing → Customer portal → subscription updates       | **Upgrade: immediate, with proration. Downgrade: at period end.** ⚠️ **Conflicts with the "Subscription updates" row below — read both before you touch this toggle.**                                                                                                                         | Decision D7 of the design spec, and consistent with the no-refund policy: a downgrade never issues a credit. But Stripe exposes **one** proration setting for every update (see the plan-switch note above), so this value and the "none" the row below asks for cannot both be applied: picking proration charges a downgrade, picking "none" makes an upgrade free until renewal. Unresolved — Henriko's call. |
-| Cancellation mode         | Billing → Customer portal → Cancellations              | **On**, mode **at end of billing period**, cancellation **reasons on**                                                                                                                                                                                                                         | R09's `subscription_cancel` flow lands here. Period-end is the only mode consistent with the no-refund policy; Stripe's reason picker is separate from our single free-text question.                                                                                                                                                                                                                            |
-| Subscription updates      | Billing → Customer portal → Subscriptions              | Update **on**, with **six prices** listed — Starter monthly **and** annual included; proration behaviour **none** if offered                                                                                                                                                                   | R09's downgrade and the R08 / R20 plan switch use `subscription_update_confirm`; a price missing here makes "Move to Starter" a dead end and "Switch to X" fall back to the portal home. No proration keeps the downgrade credit-free (no refund).                                                                                                                                                               |
-| Pausing                   | Billing → Customer portal → Subscriptions              | **Off**                                                                                                                                                                                                                                                                                        | A paused subscription is neither live nor canceled: `toSubscriptionStatus` maps Stripe's `paused` to `none`, which silently revokes engagement while the member believes they are on hold.                                                                                                                                                                                                                       |
-| Trial-ending email        | Settings → Billing → automatic customer emails         | **OFF**                                                                                                                                                                                                                                                                                        | Ours handles it (`sendTrialEnding`, above). Both enabled = two warnings for one event.                                                                                                                                                                                                                                                                                                                           |
-| Payment receipt           | Settings → Billing → automatic customer emails         | **ON**                                                                                                                                                                                                                                                                                         | The receipt for the first charge is Stripe's job; we send no receipt of our own.                                                                                                                                                                                                                                                                                                                                 |
-| Starter prices (R13)      | Products → Starter                                     | Create a **$10 monthly** and a **$100 annual** Price (2 months free) in every environment; repoint `STRIPE_STARTER_PRICE_ID` / `STRIPE_STARTER_ANNUAL_PRICE_ID` and the `VITE_STRIPE_STARTER_*` copies; archive the $5/$50 Prices. Existing $5 subscribers keep their Price until they switch. | The client's labels (`app/src/lib/planPrices.ts`, `landing/components/Pricing.tsx`) already say $10/$100.                                                                                                                                                                                                                                                                                                        |
-| Featured post Price (R17) | Products → "Featured post"                             | One-time **$5** Price (not recurring) per environment; set `STRIPE_FEATURED_POST_PRICE_ID` in the Convex env.                                                                                                                                                                                  | Never add it to the subscription price ids.                                                                                                                                                                                                                                                                                                                                                                      |
-| Webhook events            | Developers → Webhooks → `<convex site>/stripe/webhook` | `customer.subscription.created` / `.updated` / `.deleted`, **`customer.subscription.trial_will_end`**, `invoice.payment_failed`, `checkout.session.completed`                                                                                                                                  | `trial_will_end` is new — without it subscribed, the day-7 reminder never fires and the 7-day path charges unannounced.                                                                                                                                                                                                                                                                                          |
+| Setting                   | Where (Stripe Dashboard)                               | Value                                                                                                                                                                                                                                                               | Why                                                                                                                                                                                                                                                                         |
+|---------------------------|--------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Plan switching            | Billing → Customer portal → products/prices            | All **three products** and **six prices** (monthly + annual) listed as switchable                                                                                                                                                                                   | A card holder switches plans in the portal; `createCheckoutSession` refuses a second subscription (`ALREADY_SUBSCRIBED`), so a price missing from the portal is a dead end for that member. `createPlanSwitchSession` deep-links to that price's confirm step.              |
+| Payment-method updates    | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                             | The only route a `past_due` member has to fix a failed card and clear the engagement gate.                                                                                                                                                                                  |
+| Cancellation              | Billing → Customer portal                              | Allowed                                                                                                                                                                                                                                                             | The cancel path that the checkout copy, the Terms and every billing email point at has to actually exist. No roach motel.                                                                                                                                                   |
+| Proration                 | Billing → Customer portal → subscription updates       | **`always_invoice`** + **`schedule_at_period_end`** — an upgrade is invoiced the moment it happens; a same-product downgrade defers to period end and never credits. Set by the script.                                                                             | Decision D7, **settled 2026-09-09**. `create_prorations` let a mid-period upgrade ride to the next invoice, so it could be used and cancelled unbilled. `schedule_at_period_end` defers only **same-product** switches, so a cross-tier downgrade still credits (⛔ above). |
+| Cancellation mode         | Billing → Customer portal → Cancellations              | **On**, mode **at end of billing period**, cancellation **reasons on**                                                                                                                                                                                              | R09's `subscription_cancel` flow lands here. Period-end is the only mode consistent with the no-refund policy; Stripe's reason picker is separate from our single free-text question.                                                                                       |
+| Subscription updates      | Billing → Customer portal → Subscriptions              | Update **on**, with **six prices** listed — Starter monthly **and** annual included; proration `always_invoice` + `schedule_at_period_end` (shared with the row above)                                                                                              | R09's downgrade and the R08 / R20 plan switch use `subscription_update_confirm`; a price missing here makes "Move to Starter" a dead end and "Switch to X" fall back to the portal home. The shared proration setting is D7, above.                                         |
+| Pausing                   | Billing → Customer portal → Subscriptions              | **Off**                                                                                                                                                                                                                                                             | A paused subscription is neither live nor canceled: `toSubscriptionStatus` maps Stripe's `paused` to `none`, which silently revokes engagement while the member believes they are on hold.                                                                                  |
+| Trial-ending email        | Settings → Billing → automatic customer emails         | **OFF**                                                                                                                                                                                                                                                             | Ours handles it (`sendTrialEnding`, above). Both enabled = two warnings for one event.                                                                                                                                                                                      |
+| Payment receipt           | Settings → Billing → automatic customer emails         | **ON**                                                                                                                                                                                                                                                              | The receipt for the first charge is Stripe's job; we send no receipt of our own.                                                                                                                                                                                            |
+| Starter prices (R13)      | Products → Starter                                     | Create a **$10 monthly** and a **$100 annual** Price (2 months free) in every environment; repoint `STRIPE_STARTER_PRICE_ID` / `STRIPE_STARTER_ANNUAL_PRICE_ID` and the `VITE_STRIPE_STARTER_*` copies. `scripts/stripe-provision.mjs` does all of this in one run. | The client's labels (`app/src/lib/planPrices.ts`, `landing/components/Pricing.tsx`) already say $10/$100.                                                                                                                                                                   |
+| Featured post Price (R17) | Products → "Featured post"                             | One-time **$5** Price (not recurring) per environment; set `STRIPE_FEATURED_POST_PRICE_ID` in the Convex env.                                                                                                                                                       | Never add it to the subscription price ids.                                                                                                                                                                                                                                 |
+| Webhook events            | Developers → Webhooks → `<convex site>/stripe/webhook` | `customer.subscription.created` / `.updated` / `.deleted`, **`customer.subscription.trial_will_end`**, `invoice.payment_failed`, `checkout.session.completed`                                                                                                       | `trial_will_end` is new — without it subscribed, the day-7 reminder never fires and the 7-day path charges unannounced.                                                                                                                                                     |
 
 **Payment methods for the $5 add-on** are deliberately **not** a Dashboard setting: `billingNode.purchaseFeaturedPost`
 pins `payment_method_types: ['card']` on the one-time Checkout. A delayed-notification method (boleto, OXXO, SEPA debit)
@@ -3933,7 +4048,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-          | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -4469,6 +4584,40 @@ already backed by §3 (no LinkedIn write scopes) and §4 (acceptable use), and i
 `app/src/lib/planPrices.ts`, and a third copy in three locale modules of the Terms is a fourth place for the $5-vs-$10
 kind of drift to hide. The `Last updated` line moved to **September 2026** in all three locales. Still a draft pending
 legal review, this wording included.
+
+### Privacy Policy: OIDC wording and Stripe's controller role (2026‑09‑08)
+
+Two changes in all three locale modules of `/privacy`, made alongside the Terms clauses above so the three pages tell a
+Stripe reviewer one story.
+
+**§2 "No scraping"** used to end "or through the LinkedIn API under your authorised consent", which was looser than
+Terms §3 and read as though the app calls LinkedIn on the member's behalf. It now names **OpenID Connect sign-in** and
+the four fields it returns, and repeats that the Service holds no permission to post, comment or react and writes
+nothing to the member's LinkedIn account.
+
+**§4 gained "Stripe's own role."** Stripe is a processor for the payments it runs for us **and an independent
+controller** of the payment data it collects directly, which it uses for fraud prevention and its own regulatory
+duties; that half is governed by Stripe's privacy policy, now linked. The card number reaches Stripe and never reaches
+us. Listing Stripe only as a sub-processor understated a relationship the member should see before they pay.
+
+**`POLICY_VERSION` bumped `2026-06-15` → `2026-09-08`** (`convex/lib/policy.ts`), per the rule in that file: a material
+privacy change re-prompts every member whose `acknowledgedPolicyVersion` differs, through `<PolicyUpdateScreen>`
+([§14](#14-frontend--authenticated-app-app)). No test pins the constant, and pre-launch there is no production cohort to
+re-prompt, so the bump costs nothing today.
+
+⚠️ **That constant has a fourth copy the compiler cannot see.** Each `/privacy` locale module renders a literal
+`<p>Policy version: …</p>`, and the landing site has **no convex dependency** (its `tsconfig` scopes `include` to
+`landing/`, and nothing there imports across the package boundary), so the string cannot be imported. All three were
+still printing `2026-06-15` after the constant moved, which would have told a member the site was serving the policy
+they had already re-accepted. Bump **four** places together: the constant plus `en.tsx`, `pt.tsx` and `es.tsx`; a
+comment in `en.tsx` now names the source of truth. Wiring a cross-package import for one string would mean a workspace
+dependency, a `tsconfig` change and a Next build change, which costs more than the copy it removes.
+
+⚠️ **Still deferred, and now the closest thing to a launch blocker on this page:** `/privacy` §4 lists six
+sub-processors and **omits Sentry and PostHog**. That omission is correct while both SDKs sit inert without prod keys,
+and the public-copy update plus a second `POLICY_VERSION` bump are recorded as launch-time steps in
+`docs/compliance/SUBPROCESSORS.md` ("Human action required"). Setting the prod `VITE_` keys in Cloudflare and leaving
+this copy alone would make the policy wrong on the day traffic starts.
 
 ### CookieNotice (Phase 3b)
 
@@ -5143,7 +5292,22 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑09‑08. **The three non-code items left after R01–R21: the mobile hero overlap, the Stripe
+_Last updated: 2026‑09‑08. **Legal pages aligned with Stripe live-mode activation.** Henriko filled Stripe's
+"What products or services will you offer through Stripe?" form, and the public pages had to say the same thing.
+`/terms` gained two clauses in all three locales: **§2 "What you buy"** (the member buys software access; we sell no
+reactions, comments, connections or followers; we promise no SSI score, ranking or result) and **§5 "Plans and
+delivery"** (four plans by name, price on the home page and at checkout, hosted web application, no physical goods).
+Plan **names** ship, plan **prices** do not — they already live in `Pricing.tsx` and `planPrices.ts`, and a third copy
+across three locale modules is a fourth place for the $5-vs-$10 drift to hide. `/privacy` gained the matching
+precision: §2 now names **OpenID Connect sign-in** and its four fields instead of "the LinkedIn API under your
+authorised consent", and §4 gained **"Stripe's own role"**, since Stripe is our processor *and* an independent
+controller of the payment data it collects for fraud prevention and its own regulatory duties. `POLICY_VERSION` bumped
+**`2026-06-15` → `2026-09-08`**, which re-prompts members through `<PolicyUpdateScreen>`; nothing pins the constant and
+there is no production cohort yet. Both `Last updated` lines moved to September 2026. ⚠️ `/privacy` §4 still omits
+**Sentry and PostHog** — correct while both SDKs sit inert, wrong the moment prod `VITE_` keys land in Cloudflare, and
+recorded as a launch-time step in `SUBPROCESSORS.md`. Sections updated: §15, §21. Gates: convex **486/486**, app
+**421/421**, `pnpm verify` exit 0, 12 SSG pages, clauses confirmed in the prerendered HTML of all three locales.
+Prior: 2026‑09‑08 — **The three non-code items left after R01–R21: the mobile hero overlap, the Stripe
 Dashboard audit and the Resend domain — plus two test files HEAD could not parse.** With the revenue backlog at 21/21
 this wave closed what was left around it. **The hero overlap (landing).** The 2026‑09‑06 note said `pt`/`es` trust
 lines sat under the `CookieNotice` at 375×812; re-measured, that viewport is fine (+50px) — the copy changed under the
