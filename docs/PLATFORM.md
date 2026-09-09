@@ -2034,6 +2034,57 @@ flowchart TD
 > **6 events** to `we_1UDaHWFPUrUP5vm6nEKJh0Fq`. The day-7 mailer's webhook dependency is met; it is `EVENTS` in the
 > script, so it cannot drift back out. Live mode still needs the run.
 >
+> ⚠️ **Live, first run 2026-09-09 — the prices landed, the portal did not, and the run itself broke Starter.** Against
+> `whimsical-elk-440` (`--site https://whimsical-elk-440.convex.site`) all **7 live prices** were created and verified
+> by GET: Starter `price_1UDZc6FPUrUP5vm6sKd0wo7Y` / `price_1UDZc5FPUrUP5vm6HNDZTwDA`, Growth
+> `price_1UDZc9FPUrUP5vm6Vz3kp5Rx` / `price_1UDZc9FPUrUP5vm67AY2Xjce`, Pro `price_1UDZc7FPUrUP5vm6zmmIRSiA` /
+> `price_1UDZc5FPUrUP5vm6VvVuAvKw`, featured `price_1UDZc8FPUrUP5vm6WN0Nen2e`. Webhook
+> `we_1UDshDFPUrUP5vm6Pc1lrDKd` was **reused**, so Stripe returned no signing secret and the printed `convex env set`
+> block held only **8** vars — `STRIPE_WEBHOOK_SECRET` was absent while the prod deployment had **no Stripe vars at
+> all**. Without it `@convex-dev/stripe` (which is where the signature is verified — `convex/http.ts` never names the
+> secret) rejects every live webhook, so a member would pay and never change tier, with the 400 visible only to
+> Stripe. Reveal it by hand in Developers → Webhooks. **And the portal step misfired:** `bpc_1UDshDFPUrUP5vm6TXlHDIH2`
+> printed as both **(starter)** and **(default)** — one object, stamped `is_default` by Stripe because the account
+> held no configuration before this run — so the default handler stripped the six prices the tier loop had just given
+> it. Fixed in the script by releasing the `lits_tier` stamp on a stray default before the tier loop (see "Per-tier
+> portal configurations" below) — but the **re-run did not apply it**, for a second and independent reason. Every
+> `POST` that creates something carried a **fixed `Idempotency-Key`** (`lits-portal-starter`, `lits-product-pro`,
+> `lits-webhook`, …). **Stripe caches an idempotent response for 24 hours and replays it for any later request
+> carrying that key, without performing the write.** So the loop, having correctly decided Starter needed a fresh
+> configuration, POSTed one — and Stripe replayed the previous run's response, handing back
+> `bpc_1UDshDFPUrUP5vm6TXlHDIH2`: the very object the release was escaping, still stripped. The run reported it
+> honestly (`✗ … (starter): expected 6 prices, read 0`, `"products":[]`) and left the account **fail-closed** — no
+> Starter configuration at all, so `PORTAL_NOT_CONFIGURED` rather than a silent leak. Keys are now **scoped to the run**
+> (`idem()` appends a per-run nonce): duplicates across runs are prevented by the identity lookups, never by the key,
+> whose only job is making one run's write safe to retry. Also caught on the same pass: prod `APP_URL` carried a
+> **trailing slash**, and every consumer
+> concatenates (`${APP_URL}/billing` in `convex/notifications.ts:36`, the checkout and portal `return_url` in
+> `convex/billingNode.ts`), so each Stripe redirect built `//billing` — a path React Router does not match, i.e. a
+> blank page after a successful payment.
+>
+> ✅ **Live Stripe is fully provisioned, 2026-09-09, on the third run.** Four distinct configurations, each verified by
+> the expanded GET: `bpc_1UDt62FPUrUP5vm658EHwvYN` **(starter)** 6 prices `[starter growth pro]`,
+> `bpc_1UDshEFPUrUP5vm6wGL0ONvO` **(growth)** 4 `[growth pro]`, `bpc_1UDshEFPUrUP5vm6qFlCJaQ2` **(pro)** 2 `[pro]`,
+> and `bpc_1UDshDFPUrUP5vm6TXlHDIH2` **(default)** with plan switching off — each tier config `always_invoice`, both
+> `schedule_at_period_end` conditions, `continue_trial`. Exit 0, no problem list. **D7 needs no Dashboard step in
+live**:
+> `always_invoice` was written and read back by the script itself, so the "Charge timing → Invoice prorations
+> immediately" control only applies to an environment being changed without a re-provision. Prod deployment env holds
+> all **9** Stripe vars plus `APP_URL` with no trailing slash.
+>
+> ⚠️ **Provisioning live Stripe is only half of going live — the deployment has to match.** Caught the same day:
+> immediately after the run above, `npx convex function-spec --prod` listed **2 of 10** `billingNode` exports (only
+> `createCheckoutSession` and `endTrialEarly`) and still carried `billing.js:createPortalSession`, which had moved to
+> `billingNode.ts` earlier that day. **That combination is worse than either half alone:** the old
+> `createPortalSession` routes through the Convex Stripe component, which *cannot name a configuration* — the whole
+> reason for the move — so Stripe falls back to the account default, and the run above deliberately set that default's
+> `subscription_update.enabled` to `false`. For as long as it lasted, **no member of any tier could switch plans in the
+> portal**, where before provisioning the default still allowed it. The four configurations were correct and
+> unreachable. ✅ **Closed by `npx convex deploy` the same day:** prod now lists all **10** `billingNode` exports,
+> `billing.js:createPortalSession` is gone, and the deployment went from 137 to **165** functions. The check worth
+> repeating after any live Stripe change: `npx convex function-spec --prod` and confirm the functions that read the new
+> configuration actually exist there.
+>
 > **Dev, re-provisioned 2026-09-08.** Starter `price_1UDaHRFPUrUP5vm6HUZUaCNW` / `price_1UDaHRFPUrUP5vm6qGEST6gp`,
 > Growth `price_1UDaHSFPUrUP5vm6LcFMOYki` / `price_1UDaHSFPUrUP5vm6c947d4vE`, Pro `price_1UDaHTFPUrUP5vm6UaxMSuu4` /
 > `price_1UDaHTFPUrUP5vm6PFtCbiGy`, featured `price_1UDaHUFPUrUP5vm614jy6LNX`, webhook `we_1UDaHWFPUrUP5vm6nEKJh0Fq` —
@@ -2084,8 +2135,12 @@ flowchart TD
 >   `sendTrialEnding`. The trial half _is_ testable in a sandbox — Stripe suppresses automatic customer email there
 >   **except** to an address on a verified email domain or belonging to an active team member. The receipt half is
 >   not: a test-mode receipt can only be sent by hand from the payment's **Receipt history**.
-> - **Live mode is entirely unconfigured** and no live key exists on the development machine. Same script, live key,
->   webhook pointed at the production Convex site.
+> - ~~**Live mode is entirely unconfigured** and no live key exists on the development machine.~~ **Done 2026-09-09** —
+>   provisioned against `whimsical-elk-440` and green on the third run; see the dated blocks above for the two
+>   live-only bugs it surfaced. The emails pair above is still open **in live specifically**: it is per-environment,
+    so
+>   the sandbox fix does not carry over, and being Dashboard-only it is the one row of this table nothing can verify
+>   programmatically.
 > - ~~The manual trial check: switch a plan during a trial and confirm `trial_end` survives.~~ **Retired 2026-09-09** —
 >   a trial cannot change plan at all (see "No plan switching during a trial" below), and the code now enforces that
 >   in four places, so there is nothing left to check.
@@ -2153,6 +2208,20 @@ additive rather than a behaviour change for Starter members.
 The account default matters because a portal link **Stripe** sends (the "manage subscription" line on a receipt) opens
 the default configuration and carries no tier, so it cannot be routed. It gets `subscription_update: { enabled: false }`
 — invoice history, payment method and cancellation still work there, plan switching does not.
+
+⚠️ **The `*(none)*` in that row is an invariant the script has to enforce, not one it can assume.** Stripe stamps
+`is_default` on the **first** configuration an account ever holds, and never lets it move afterwards: there is no
+`is_default` parameter on `POST /v1/billing_portal/configurations/:id` and no Dashboard control for it. So on an account
+where the portal has never been saved in the Dashboard, the first object this script creates becomes the default —
+`PORTAL_TIERS` is cheapest-first, so that is **Starter**. Both handlers then write to one object: the tier loop gives it
+six prices, the default block strips `subscription_update` to close the receipt-link gap, and the strip runs last. The
+run prints `✓ … (starter): 6 prices` and `✓ … (default): plan switching off` **with the same `bpc_` id**, and the first
+line is stale by the time the second prints — Starter members are left with no upgrade path in the portal at all. Since
+the default cannot be moved, the script instead stops the default from *being* a tier config: before the tier loop it
+unsets `metadata.lits_tier` on any default that carries one, and the loop then builds that tier a fresh configuration.
+Test mode never reached this, because saving portal settings in the Dashboard once — which the missing-default message
+asks for — creates a default of its own first. **Live hit it on 2026-09-09**; see the dated block in "Stripe Dashboard
+setup" above.
 
 **Selection is a runtime metadata lookup, not configuration.** `portalConfigurationId` in `convex/billingNode.ts`
 lists the active configurations and matches `metadata.lits_tier` against the member's tier. Storing three more ids in
@@ -4435,7 +4504,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                      | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                          | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
