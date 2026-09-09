@@ -162,3 +162,20 @@ export function resolvePendingDowngrade(
   if (!incoming.stripeScheduleId) return 'clear'
   return 'keep'
 }
+
+/**
+ * A schedule still attached to the subscription with nothing pending on our row: its swap already
+ * applied and the release that should have followed never landed. `releaseSubscriptionSchedule` is
+ * a one-shot scheduled action and Convex does not retry actions, so any Stripe refusal leaves the
+ * spent schedule attached until phase 1's own `end_behavior` fires — a whole period later, a year
+ * on annual.
+ *
+ * That state is a dead end for the member: `scheduleIdOf(sub)` still reads as "a downgrade is
+ * pending", but `pendingTier` — the only thing BillingPage renders — says nothing is. So every
+ * upgrade is refused with PENDING_DOWNGRADE, whose toast asks them to undo a downgrade the page
+ * shows no undo button for. `pendingTier` is the mirror this whole design trusts; a schedule id is
+ * not, and never was. So a spent schedule is released in place rather than raised.
+ */
+export function isSpentSchedule(scheduleId: string | undefined, pendingTier: string | undefined): boolean {
+  return Boolean(scheduleId) && !pendingTier
+}

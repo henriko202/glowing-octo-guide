@@ -13,7 +13,7 @@ import {
   intervalForPriceId,
   starterPriceIdFor
 } from './lib/stripePrices'
-import { buildDowngradePhases, planChangeDirection } from './lib/downgrade'
+import { buildDowngradePhases, isSpentSchedule, planChangeDirection } from './lib/downgrade'
 import { PORTAL_TIER_KEY, portalTierFor } from './lib/portalConfig'
 import { findLiveSubscription, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
@@ -434,8 +434,15 @@ export const createPlanSwitchSession = action({
       return scheduleDowngrade(ctx, sub, priceId, targetTier)
     }
     // The portal writes the same subscription our schedule owns, so an upgrade taken while one is
-    // attached would race it. Ask for the undo first; BillingPage says exactly that.
-    if (scheduleIdOf(sub)) throw new ConvexError('PENDING_DOWNGRADE')
+    // attached would race it. Ask for the undo first; BillingPage says exactly that — but only while
+    // the downgrade is genuinely pending. A SPENT schedule (swap applied, release refused) is handed
+    // back here instead: refusing it would lock the member out of every upgrade for a whole period,
+    // behind an undo button the page does not render. See isSpentSchedule.
+    const scheduleId = scheduleIdOf(sub)
+    if (scheduleId) {
+      if (!isSpentSchedule(scheduleId, live.pendingTier)) throw new ConvexError('PENDING_DOWNGRADE')
+      await releaseScheduleOn(ctx, sub)
+    }
 
     return portalSession(ctx, user, live.tier, {
       type: 'subscription_update_confirm',

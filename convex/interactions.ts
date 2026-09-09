@@ -30,9 +30,36 @@ import {
   windowBounds
 } from './lib/recap'
 
-// Bump one side of a trialing user's interaction counter; when their combined count first
-// reaches the threshold, schedule the early end of their Stripe trial (billing starts now).
-async function bumpTrialInteraction(ctx: MutationCtx, userId: Id<'users'>, kind: 'made' | 'received'): Promise<void> {
+/** The slice of the member's row the milestone reads — narrow so a test can build one inline. */
+type TrialCounts = { subscriptionStatus?: string; trialInteractionsMade?: number; trialInteractionsReceived?: number }
+
+/** The slice of a subscription row `pickTrialingSubscription` and `shouldEndTrialEarly` need. */
+type TrialSubscriptionRow = { status: string; stripeSubscriptionId?: string; cancelAtPeriodEnd?: boolean }
+
+/** The slice of MutationCtx the handler touches. Same narrowing as users.setPostVisibilityHandler. */
+export interface TrialBumpCtx {
+  db: {
+    get: (id: string) => Promise<TrialCounts | null>
+    patch: (id: string, fields: Record<string, number>) => Promise<void>
+  }
+  scheduler: { runAfter: (delay: number, fn: unknown, args: Record<string, unknown>) => Promise<unknown> }
+}
+
+/**
+ * Bump one side of a trialing user's interaction counter; when their combined count first reaches
+ * the threshold, schedule the early end of their Stripe trial (billing starts now).
+ *
+ * Split out of the mutation so it can be unit-tested: the three predicates it calls were already
+ * covered, but nothing pinned the wiring between them — that the 50th interaction is the one that
+ * charges the card. `loadSubscriptions` is lazy on purpose, so the index read still happens only on
+ * that one interaction in fifty.
+ */
+export async function bumpTrialInteractionHandler(
+  ctx: TrialBumpCtx,
+  userId: string,
+  kind: 'made' | 'received',
+  loadSubscriptions: () => Promise<readonly TrialSubscriptionRow[]>
+): Promise<void> {
   const u = await ctx.db.get(userId)
   if (!u || u.subscriptionStatus !== 'trialing') return
   const made = u.trialInteractionsMade ?? 0
@@ -48,13 +75,7 @@ async function bumpTrialInteraction(ctx: MutationCtx, userId: Id<'users'>, kind:
   }
 
   if (crossesThreshold(combined, 1)) {
-    // NOT .first(): by_user is ordered by _creationTime, so .first() is the OLDEST row — after a
-    // cancel + re-subscribe that is the canceled subscription, and ending its trial does nothing.
-    const rows = await ctx.db
-      .query('subscriptions')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .collect()
-    const sub = pickTrialingSubscription(rows)
+    const sub = pickTrialingSubscription(await loadSubscriptions())
     if (shouldEndTrialEarly(sub)) {
       await ctx.scheduler.runAfter(0, internal.billingNode.endTrialEarly, {
         stripeSubscriptionId: sub.stripeSubscriptionId
@@ -62,6 +83,17 @@ async function bumpTrialInteraction(ctx: MutationCtx, userId: Id<'users'>, kind:
     }
   }
 }
+
+// The Convex half: the index read stays here, where the generated types check the index name.
+const bumpTrialInteraction = (ctx: MutationCtx, userId: Id<'users'>, kind: 'made' | 'received'): Promise<void> =>
+  bumpTrialInteractionHandler(ctx as unknown as TrialBumpCtx, userId, kind, () =>
+    // NOT .first(): by_user is ordered by _creationTime, so .first() is the OLDEST row — after a
+    // cancel + re-subscribe that is the canceled subscription, and ending its trial does nothing.
+    ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .collect()
+  )
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({

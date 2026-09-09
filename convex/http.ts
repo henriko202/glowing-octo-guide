@@ -5,7 +5,7 @@ import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
-import { getTierFromPriceId } from './lib/stripePrices'
+import { eventCreatedMs, syncArgs } from './stripe'
 import { scrubError } from './lib/scrubError'
 import { isInviteCode } from './lib/invite'
 import { isFeaturedPostCheckout } from './lib/featuredPurchase'
@@ -135,39 +135,11 @@ http.route({
 // ─── Stripe Webhooks (via @convex-dev/stripe component) ─────────────────────
 // The component auto-syncs customers, subscriptions, payments, and invoices.
 // Custom handlers below keep our app's users + subscriptions tables in sync.
-// getTierFromPriceId is imported from ./lib/stripePrices (single source of truth).
+// `syncArgs` (payload → syncUserSubscription's args) lives in ./stripe so it can be unit-tested:
+// this file registers its routes at module scope and cannot be imported by a test.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
 type StripeEvent = any
-
-// Stripe's `created` of the EVENT itself (ms): the ordering stamp behind subscriptions.lastEventAt.
-const eventCreatedMs = (event: StripeEvent) => (typeof event.created === 'number' ? event.created * 1000 : undefined)
-
-// syncUserSubscription's args for a subscription event — shared by created + updated.
-function syncArgs(event: StripeEvent) {
-  const sub = event.data.object
-  const price = sub.items?.data?.[0]?.price
-  return {
-    stripeCustomerId: String(sub.customer),
-    stripeSubscriptionId: sub.id,
-    tier: getTierFromPriceId(price?.id ?? ''),
-    status: sub.status,
-    currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
-    trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined,
-    // Price snapshot so a billing email can state the exact amount without a second Stripe call.
-    priceAmount: typeof price?.unit_amount === 'number' ? price.unit_amount : undefined,
-    priceCurrency: price?.currency ?? undefined,
-    priceInterval: price?.recurring?.interval ?? undefined,
-    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
-    // backlog/B07 — the subscription schedule attached to this subscription, if any. Its PRESENCE is
-    // how the sync tells "downgrade still pending" from "applied or released"; the id itself is never
-    // stored (Stripe's own advice: discard a schedule id once it is released).
-    stripeScheduleId: typeof sub.schedule === 'string' ? sub.schedule : (sub.schedule?.id ?? undefined),
-    // Stripe's own creation instant: the duplicate guard voids the newest by this, not by arrival.
-    stripeCreated: typeof sub.created === 'number' ? sub.created * 1000 : undefined,
-    eventCreated: eventCreatedMs(event)
-  }
-}
 
 registerRoutes(http, components.stripe, {
   webhookPath: '/stripe/webhook',

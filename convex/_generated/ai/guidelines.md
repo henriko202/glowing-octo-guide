@@ -130,11 +130,11 @@ dynamic keys. Keys must be only ASCII characters, nonempty, and not start with "
 
 ```ts
 try {
-  await ctx.runMutation(internal.example.writeBatch, args, {
-    transactionLimits: { documentsWritten: 100, bytesWritten: 1024 * 1024 },
-  });
+    await ctx.runMutation(internal.example.writeBatch, args, {
+        transactionLimits: {documentsWritten: 100, bytesWritten: 1024 * 1024},
+    });
 } catch (e) {
-  // The nested mutation's writes rolled back; this mutation can still write.
+    // The nested mutation's writes rolled back; this mutation can still write.
 }
 ```
 
@@ -178,18 +178,19 @@ export const g = query({
 - Define pagination using the following syntax:
 
 ```ts
-import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
-import { paginationOptsValidator } from "convex/server";
+import {v} from "convex/values";
+import {query, mutation} from "./_generated/server";
+import {paginationOptsValidator} from "convex/server";
+
 export const listWithExtraArg = query({
-  args: { paginationOpts: paginationOptsValidator, author: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_author", (q) => q.eq("author", args.author))
-      .order("desc")
-      .paginate(args.paginationOpts);
-  },
+    args: {paginationOpts: paginationOptsValidator, author: v.string()},
+    handler: async (ctx, args) => {
+        return await ctx.db
+            .query("messages")
+            .withIndex("by_author", (q) => q.eq("author", args.author))
+            .order("desc")
+            .paginate(args.paginationOpts);
+    },
 });
 ```
 
@@ -359,9 +360,9 @@ documents: defineTable({
 
 ```ts
 const results = await ctx.vectorSearch("documents", "by_embedding", {
-  vector: args.embedding,
-  limit: 10,
-  filter: (q) => q.eq("category", args.category),
+    vector: args.embedding,
+    limit: 10,
+    filter: (q) => q.eq("category", args.category),
 });
 ```
 
@@ -535,18 +536,18 @@ Test files go inside the `convex/` directory. You must pass a module map from `i
 
 ```typescript
 /// <reference types="vite/client" />
-import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
-import { api } from "./_generated/api";
+import {convexTest} from "convex-test";
+import {expect, test} from "vitest";
+import {api} from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
 
 test("some behavior", async () => {
-  const t = convexTest(schema, modules);
-  await t.mutation(api.messages.send, { body: "Hi!", author: "Sarah" });
-  const messages = await t.query(api.messages.list);
-  expect(messages).toMatchObject([{ body: "Hi!", author: "Sarah" }]);
+    const t = convexTest(schema, modules);
+    await t.mutation(api.messages.send, {body: "Hi!", author: "Sarah"});
+    const messages = await t.query(api.messages.list);
+    expect(messages).toMatchObject([{body: "Hi!", author: "Sarah"}]);
 });
 ```
 

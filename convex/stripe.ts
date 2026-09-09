@@ -13,6 +13,49 @@ import { canEngage } from './lib/access'
 import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
 import { findDuplicateSubscription, findLiveSubscription, isStaleEvent, isTrialConversion } from './lib/trialMilestone'
 import { resolvePendingDowngrade } from './lib/downgrade'
+import { getTierFromPriceId } from './lib/stripePrices'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
+type StripeEvent = any
+
+// Stripe's `created` of the EVENT itself (ms): the ordering stamp behind subscriptions.lastEventAt.
+export const eventCreatedMs = (event: StripeEvent) =>
+  typeof event.created === 'number' ? event.created * 1000 : undefined
+
+/**
+ * A `customer.subscription.*` payload reshaped into syncUserSubscription's args — shared by the
+ * created and updated routes in http.ts. Lives here rather than there so it can be unit-tested:
+ * http.ts registers its routes at module scope and cannot be imported by a test.
+ */
+export function syncArgs(event: StripeEvent) {
+  const sub = event.data.object
+  const price = sub.items?.data?.[0]?.price
+  // `current_period_end` moved from the SUBSCRIPTION onto the subscription ITEM in the 2025 API
+  // versions. Reading only the subscription silently yields undefined on a modern account, which is
+  // how the member's renewal date (BillingPage) and users.subscriptionEndsAt came to be blank while
+  // every test still passed. Read both, newest location first.
+  const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end
+  return {
+    stripeCustomerId: String(sub.customer),
+    stripeSubscriptionId: sub.id,
+    tier: getTierFromPriceId(price?.id ?? ''),
+    status: sub.status,
+    currentPeriodEnd: periodEnd ? periodEnd * 1000 : undefined,
+    trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined,
+    // Price snapshot so a billing email can state the exact amount without a second Stripe call.
+    priceAmount: typeof price?.unit_amount === 'number' ? price.unit_amount : undefined,
+    priceCurrency: price?.currency ?? undefined,
+    priceInterval: price?.recurring?.interval ?? undefined,
+    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+    // backlog/B07 — the subscription schedule attached to this subscription, if any. Its PRESENCE is
+    // how the sync tells "downgrade still pending" from "applied or released"; the id itself is never
+    // stored (Stripe's own advice: discard a schedule id once it is released).
+    stripeScheduleId: typeof sub.schedule === 'string' ? sub.schedule : (sub.schedule?.id ?? undefined),
+    // Stripe's own creation instant: the duplicate guard voids the newest by this, not by arrival.
+    stripeCreated: typeof sub.created === 'number' ? sub.created * 1000 : undefined,
+    eventCreated: eventCreatedMs(event)
+  }
+}
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:
 // any status that does not clearly grant access (incomplete, unpaid, paused, unknown)

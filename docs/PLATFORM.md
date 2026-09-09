@@ -1202,14 +1202,19 @@ it.
 
 **50-interaction milestone (Plan 2B).** `billingNode.endTrialEarly` (internalAction) sets
 `trial_end: 'now'` on a Stripe subscription, converting the trial to a paid subscription immediately. It is scheduled by
-the `bumpTrialInteraction` helper in `interactions.ts` whenever a trialing user's **combined**
+`bumpTrialInteractionHandler` in `interactions.ts` whenever a trialing user's **combined**
 `trialInteractionsMade + trialInteractionsReceived` first reaches 50 (the `TRIAL_INTERACTION_THRESHOLD` constant,
 enforced by the pure `crossesThreshold` helper in
 `convex/lib/trialMilestone.ts`). Counters are bumped inside `incrementCommentCount` /
 `incrementLikeCount`, in the same transaction as the counter patch and the `userInteractions` row
 ([§11](#11-feed--engagement)), so the milestone can never disagree with the log it is counted from. The check fires **at
 most once** per user: the `subscriptionStatus !== 'trialing'` guard inside
-`bumpTrialInteraction` skips any increment once the trial has already converted. The combined
+`bumpTrialInteractionHandler` skips any increment once the trial has already converted. The handler is split out of
+the mutation so that wiring is unit-tested (`convex/interactions.trialMilestone.test.ts`, 9 cases): the three
+predicates it calls were always covered, but nothing pinned that **the 50th interaction is the one that charges the
+card**, on the trialing row rather than an older canceled one, exactly once, and never for a cancel-pending trial. Its
+`loadSubscriptions` argument is a lazy getter so the `by_user` index is still read only on that one interaction in
+fifty. The combined
 "50 interactions OR 7 days" rule is therefore split: the 7-day side is Stripe's
 `trial_period_days` (from Checkout); the 50-interaction side fires `endTrialEarly` to end it early. Both sides converge
 on the same webhook sync path (below) — `endTrialEarly`'s `trial_end: 'now'` is just another
@@ -1891,15 +1896,86 @@ flowchart TD
 > Stripe's answer is multiple configurations plus a `configuration` on the session. See "Per-tier portal
 > configurations" below.
 >
-> ⏳ **Proof pending — the code is written and green, the behaviour is not yet verified against Stripe.** `pnpm verify`
-> exits 0 (convex 514/514, app 433/433), but a passing suite proves our logic, not that Stripe issues no credit. What
-> closes this: a **test-mode** downgrade on a test clock, read back three times — **(A)** scheduled: `schedule` set,
-> the item still on the old price, two phases with phase 1 carrying `proration_behavior: "none"` and a `start_date`
-> equal to `current_period_end`, customer `balance: 0`, no new invoice; **(C)** undo: `schedule: null`, schedule
-> `status: "released"`, price unchanged, `balance: 0`; **(B)** after advancing the clock past the period end: the item
-> on the Starter price, `schedule: null`, and an invoice with **exactly one line** at the Starter price and **no
-> negative proration line**. Record the dated results here when they land. Every Stripe write is Henriko's — the
-> assistant's tooling permits Stripe reads and refuses writes.
+> ✅ **Proven against Stripe in test mode, 2026-09-09 — 22 of 22 read-backs passed.** `pnpm verify` exits 0 (convex
+> 514/514, app 433/433), but a passing suite proves our logic, not that Stripe issues no credit. What closed it was a
+> **test-mode** downgrade on a test clock, read back three times. **(A)** scheduled: schedule
+> `sub_sched_1UDqjVFPUrUP5vm6evplA46r`, two phases, item still on Growth `price_1UDaHSFPUrUP5vm6LcFMOYki`, phase 1
+> `proration_behavior: "none"` with `start_date` 1791572425 == `current_period_end`, `end_behavior: "release"`,
+> customer `balance: 0`, no new invoice. **(C)** undo: schedule `status: "released"`, `subscription.schedule`
+> undefined, price unchanged, `balance: 0`, still no new invoice. **(B)** after advancing past the period end: item
+> on Starter `price_1UDaHRFPUrUP5vm6HUZUaCNW`, 2 invoices vs 1, **exactly one line**, that line the Starter price,
+> **no negative line**, **no proration line**, `balance: 0`, invoice total 1000. Objects: clock
+> `clock_1UDqjQFPUrUP5vm6jwlppvOO`, customer `cus_VEJMLnIOhrpAcI`, subscription `sub_1UDqjSFPUrUP5vm6dWCHMk5I`
+> (Growth $15/mo, period end 2026-10-09T19:00:25Z), all deleted with the clock. Every Stripe write is Henriko's —
+> the assistant's tooling permits Stripe reads and refuses writes.
+>
+> **Two scripts cover this, and they answer different questions.**
+>
+> `scripts/stripe-downgrade-proof.mjs` asks **does Stripe behave?** — `--clock` builds a test clock, a customer, a
+> Growth subscription, then schedules / releases / re-schedules and advances past period end, asserting each
+> read-back and exiting non-zero on any failure. It deletes the clock afterwards (`--keep` to inspect). Without
+> `--clock` it is a **read-only** audit of a member's live test-mode subscription (`--user <convexUserId>`, found by
+> the `metadata.convexUserId` that Checkout stamps), which is the half the assistant can run.
+>
+> `scripts/billing-scenarios.mjs` asks **does the platform behave?** — everything the proof run structurally could
+> not reach. A test clock can only be attached to a customer **at creation**, so that run necessarily uses a
+> synthetic customer; and because `syncUserSubscription` finds the member by `users.by_stripe_customer`, a synthetic
+> customer matches no row, so our own webhook half never runs there. This script goes the other way round: it creates
+> the clock customer **first**, then points a **disposable probe member** at it, minted fresh each run. That detail is
+> not fussiness: `setStripeCustomerId` cannot unset, so a repointed real member would be left holding a dead customer
+> id, and `createCheckoutSession` only mints a fresh one when the field is empty. Fresh rather than reused because
+> `findLiveSubscription` scans `by_user` **oldest-first** — one aborted run would otherwise leave an `active` row that
+> shadows every later run's own subscription. It then drives our own public actions through the Convex CLI and
+> asserts on **our rows**, not only Stripe's objects. Nine scenarios: the webhook creating the row; the trial gate
+> (`TRIAL_NO_SWITCH` from both entry points); the cancel-pending mirror and `resumeSubscription`; the scheduled
+> downgrade's `pendingTier` / `pendingAt` mirror; the `PENDING_DOWNGRADE` / `ALREADY_ON_PLAN` / `Invalid price ID`
+> guards; the undo; the applied swap, with `releaseSubscriptionSchedule` handing the subscription back; and a portal
+> home session proving a per-tier configuration matched. It needs `npx convex dev` running, because it asserts on
+> webhook-delivered state. Deliberately **not** covered: `past_due` dunning, `invoice.payment_failed`, the
+> featured-post checkout, the duplicate-subscription guard, and `endTrialEarly`'s 50-interaction trigger.
+>
+> ⚠️ Spawn the Convex CLI as `node node_modules/convex/bin/main.js run …`, never `npx convex`. On Windows `npx.cmd`
+> without a shell is `EINVAL` (the CVE-2024-27980 fix), and with `shell: true` the JSON argument's quotes are mangled
+> before the CLI ever sees them. `--inline-query` binds `ctx`; top-level `await` and `return` both work in it.
+>
+> 🐞 **Fixed 2026-09-09, found by the first run of `billing-scenarios.mjs`: `currentPeriodEnd` was never populated.**
+> `current_period_end` moved from the **subscription** onto the subscription **item** in the 2025 API versions, and
+> the webhook mapping read only `sub.current_period_end` — so on a modern account it was always `undefined`, and with
+> it `users.subscriptionEndsAt` and the renewal date BillingPage shows the member. Every test still passed, because
+> nothing asserted against a real payload. `syncArgs` now reads the item as a fallback and moved from `http.ts` into
+> `stripe.ts` so it can be unit-tested (`http.ts` registers routes at module scope and cannot be imported by a test).
+> **Same shape as the `expand` trap above**: an API-version move that reads back as a missing field rather than an
+> error. When a Stripe field comes back empty, check whether it moved before assuming it is unset.
+>
+> 🐞 **Fixed 2026-09-09, found by the second run: a spent schedule locked the member out of every upgrade.**
+> `releaseSubscriptionSchedule` is a **one-shot** scheduled action and Convex does not retry actions, so a single
+> Stripe refusal leaves the schedule attached until phase 1's own `end_behavior` fires — a whole period later, a year
+> on annual. In that state `scheduleIdOf(sub)` still reads "a downgrade is pending" while `pendingTier`, the only
+> thing BillingPage renders, says nothing is: `createPlanSwitchSession` refused every upgrade with
+> `PENDING_DOWNGRADE`, whose toast asks the member to undo a downgrade the page shows no undo button for — and
+> upgrades are the revenue direction. Closed by `isSpentSchedule` (`convex/lib/downgrade.ts`): a schedule with no
+> `pendingTier` is released in place instead of raised, so the next upgrade self-heals it. **`pendingTier` is the
+> mirror this design trusts — a schedule id never was**, and that guard was the last place still disagreeing.
+>
+> ⚠️ The webhook-scheduled release **cannot be asserted under a test clock.** Stripe locks writes while a clock
+> advances (`Test clock advancement underway - cannot perform modifications`), and the swap webhook necessarily fires
+> inside that window, so the action runs and is refused a second later. `billing-scenarios.mjs` re-runs it once the
+> clock is ready; that the sync scheduled it at all is proven by `pendingTier cleared by the sync`, which is the same
+> `applied` branch. The dead end above is unit-tested rather than scripted, because proving it live would need an
+> upgrade portal session — and `portalSession` mints its own component-managed customer, which does not own the clock
+> subscription.
+>
+> ⚠️ **A stale `STRIPE_SECRET_KEY` in the deployment env is invisible until something makes an OUTBOUND Stripe call
+> from Convex.** It is the first of the four copies above — the only one the deployed backend reads, and the only one
+> no file edit reaches (`npx convex env set`). Webhooks come *in* and are verified with the **webhook** secret, so
+> they keep working perfectly while every billing action fails. Found 2026-09-09 with one character appended to the
+> deployment copy while the same key in `.env.local` was correct. Compare lengths without printing the secret:
+> `v=$(npx convex env get STRIPE_SECRET_KEY | tr -d '\r\n'); echo "len=${#v}"`, against the file's own.
+>
+> ⓘ **Audited 2026-09-09: the test-mode account holds zero subscriptions**, `henriko202`
+> (`jn79ck3zw08kdnta8veypzevch8dez99`) included — the 2026-09-08 sandbox deletion took them with it. So there is
+> nothing to audit read-only; both scripts build their own clock, which is the only way to reach these read-backs
+> today.
 >
 > ✅ **The per-tier configurations are live in test mode, 2026-09-09.** `scripts/stripe-provision.mjs` created them
 > and verified each with an expanded GET: `bpc_1UDpubFPUrUP5vm6zvLYdQmT` **(starter)** 6 prices
@@ -4315,7 +4391,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                      | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5449,6 +5525,12 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
   mock returns function definitions unchanged; `cronJobs`/`httpRouter` are no‑ops; a `components` Proxy yields
   `undefined`). Run: `pnpm --filter convex test`. Coverage spans schema, auth, oauth, feed, posts, processQueue, admin,
   parsePostUrl/Content, verifyPostOwnership.
+    - **Scheduling paths became testable on 2026-09-09.** The mock now stubs `anyApi`, which `_generated/api.js`
+      re-exports as **both** `api` and `internal`. Until then `internal` was `undefined`, so every
+      `ctx.scheduler.runAfter(0, internal.foo.bar, …)` call site threw the moment a test reached it — which quietly put
+      every scheduling branch in the backend out of reach. Each property path resolves to the **same** object every
+      time (the real `anyApi` mints a fresh reference per access), so a test can assert *which* function was queued:
+      `expect(fn).toBe(internal.billingNode.endTrialEarly)`. See `convex/interactions.trialMilestone.test.ts`.
 - **App:** Vitest config inline in `vite.config.ts` (`jsdom`, `setupFiles` import
   `@testing-library/jest-dom` + `../i18n`). Component tests for PostCard, PostComposer, LinkedInEmbed, Modal,
   BannedScreen, BanUserDialog, UsersTab, PlanLimitsTab, AdminPage, MyPostsPage, SettingsPage, i18n. Run:
@@ -5559,6 +5641,8 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                          | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
 | Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                     | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Customer Portal configurations (`convex/lib/portalConfig.ts`, `billingNode.portalConfigurationId` / `portalSession` / `createPortalSession`, the portal block in `scripts/stripe-provision.mjs`)                                                            | [§8](#8-subscriptions--billing) per-tier portal configurations + Dashboard table, [§14](#14-frontend--authenticated-app-app) BillingPage                                                                                                                                                                                                 |
+| Stripe proof runs (`scripts/stripe-downgrade-proof.mjs`)                                                                                                                                                                                                    | [§8](#8-subscriptions--billing) the (A)/(C)/(B) read-backs — keep the assertions matching `lib/downgrade.buildDowngradePhases`                                                                                                                                                                                                           |
+| Billing scenario runs (`scripts/billing-scenarios.mjs`)                                                                                                                                                                                                     | [§8](#8-subscriptions--billing) the nine scenarios — add one whenever a billing guard, mirror field or webhook effect is added                                                                                                                                                                                                           |
 | Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `notifications.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                       | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
 | Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
 | Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/RefCarrier.tsx`)                                                                                                                | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                                                                                                                                                                                                                                                |

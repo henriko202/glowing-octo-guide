@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDowngradePhases, planChangeDirection, resolvePendingDowngrade } from './downgrade'
+import { buildDowngradePhases, isSpentSchedule, planChangeDirection, resolvePendingDowngrade } from './downgrade'
 
 // A schedule as Stripe returns it right after create({ from_subscription }): ONE phase, matching
 // the period the member has already paid for.
@@ -180,5 +180,33 @@ describe('resolvePendingDowngrade', () => {
   it('reads a tier that moved somewhere other than the pending target as applied too', () => {
     // A Dashboard price edit while pending: the mirror is stale either way, so clear it.
     expect(resolvePendingDowngrade(pendingRow, { tier: 'pro', stripeScheduleId: 'sub_sched_1' })).toBe('applied')
+  })
+})
+
+describe('isSpentSchedule', () => {
+  it('leaves a genuinely pending downgrade alone, so the upgrade guard still raises', () => {
+    expect(isSpentSchedule('sub_sched_1', 'starter')).toBe(false)
+  })
+
+  it('reads an attached schedule with no pendingTier as spent — the release never landed', () => {
+    expect(isSpentSchedule('sub_sched_1', undefined)).toBe(true)
+  })
+
+  it('is false with no schedule at all: nothing to hand back', () => {
+    expect(isSpentSchedule(undefined, undefined)).toBe(false)
+    expect(isSpentSchedule(undefined, 'starter')).toBe(false)
+  })
+
+  // The dead end this closes, in the order it happens: the swap event reads `applied`, which clears
+  // pendingTier and schedules the release. If that one-shot action is refused (Convex does not retry
+  // actions), the very next read of the same subscription is a spent schedule — and before this
+  // helper existed, every upgrade from there was refused with PENDING_DOWNGRADE until phase 1 ended.
+  it('is exactly the state an applied swap leaves behind when the release is refused', () => {
+    const applied = resolvePendingDowngrade(
+      { tier: 'growth', pendingTier: 'starter' },
+      { tier: 'starter', stripeScheduleId: 'sub_sched_1' }
+    )
+    expect(applied).toBe('applied')
+    expect(isSpentSchedule('sub_sched_1', undefined)).toBe(true)
   })
 })
