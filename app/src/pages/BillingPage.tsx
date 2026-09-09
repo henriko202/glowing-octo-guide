@@ -57,7 +57,9 @@ export default function BillingPage() {
   // backlog/R19 — invited members get 14 days; every "7-day" string reads this instead.
   const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS
   const createCheckout = useAction(api.billingNode.createCheckoutSession)
-  const createPortal = useAction(api.billing.createPortalSession)
+  // Moved out of `billing.ts` (B07): the portal session must name a per-tier configuration, which the
+  // Stripe component's helper cannot do, so every member's portal home offered every plan.
+  const createPortal = useAction(api.billingNode.createPortalSession)
   const createPlanSwitch = useAction(api.billingNode.createPlanSwitchSession)
   const clearBillingNotice = useMutation(api.users.clearBillingNotice)
   const resumeSubscription = useAction(api.billingNode.resumeSubscription)
@@ -242,23 +244,18 @@ export default function BillingPage() {
     addonLimits !== undefined &&
     !isUnlimitedFeatured(addonLimits.featuredPerMonth)
 
-  // R08 / R20 / R09 — back from a portal confirm flow: /billing?switched=<tier> (the grid's "Switch
-  // to X", the tier the server resolved from the price) or /billing?downgraded=<tier left behind>
-  // (the cancel interstitial's "Move to Starter", which always lands on Starter). Latched during
-  // render like `justSubscribed`, so it survives the param being stripped. "Switching" until the
-  // webhook moves `me.tier` onto the plan; then the event fires once (a ref latch, StrictMode-safe,
-  // like cancel_completed) and the param is stripped — only then, so a refresh mid-wait re-latches
-  // from the URL (F4). A card-less member ignores both markers: their default tier could otherwise
-  // "complete" a switch that never happened.
-  const [landing, setLanding] = useState<{ to: PlanId; from?: PlanId } | null>(null)
+  // R08 / R20 — back from a portal confirm flow: /billing?switched=<tier>, the tier the server
+  // resolved from the price on the button. Latched during render like `justSubscribed`, so it
+  // survives the param being stripped. "Switching" until the webhook moves `me.tier` onto the plan;
+  // then the event fires once (a ref latch, StrictMode-safe, like cancel_completed) and the param is
+  // stripped — only then, so a refresh mid-wait re-latches from the URL (F4). A card-less member
+  // ignores the marker: their default tier could otherwise "complete" a switch that never happened.
+  // There is no downgrade counterpart: every cheaper-tier move is scheduled and never leaves the app
+  // (§8), so `?downgraded=` is not produced and not read.
+  const [landing, setLanding] = useState<PlanId | null>(null)
   const switchedParam = searchParams.get('switched')
-  const downgradedParam = searchParams.get('downgraded')
-  if (!landing && isPlanId(switchedParam)) {
-    setLanding({ to: switchedParam })
-  } else if (!landing && isPlanId(downgradedParam)) {
-    setLanding({ to: 'starter', from: downgradedParam })
-  }
-  const switchedTo = landing?.to ?? null
+  if (!landing && isPlanId(switchedParam)) setLanding(switchedParam)
+  const switchedTo = landing
   const isSwitching = !!switchedTo && hasCard && me?.tier !== switchedTo
   const switched = !!switchedTo && hasCard && me?.tier === switchedTo
   const [switchTimedOut, setSwitchTimedOut] = useState(false)
@@ -274,10 +271,7 @@ export default function BillingPage() {
   useEffect(() => {
     if (!landing || !switched || switchTrackedRef.current) return
     switchTrackedRef.current = true
-    // The downgrade pairs with cancel_alternative_taken { from }, so the interstitial's save rate is
-    // one funnel; the grid's switch keeps its own event.
-    if (landing.from) captureEvent('cancel_alternative_completed', { from: landing.from })
-    else captureEvent('plan_switch_completed', { plan: landing.to })
+    captureEvent('plan_switch_completed', { plan: landing })
     setSearchParams({}, { replace: true })
   }, [switched, landing, setSearchParams])
 
@@ -384,6 +378,9 @@ export default function BillingPage() {
       const message = friendlyError(err, String(err))
       if (message.startsWith('PENDING_DOWNGRADE')) return void toast(t('billing.pendingUndoFirst'))
       if (message.startsWith('CANCEL_PENDING')) return void toast(t('billing.pendingResumeFirst'))
+      // The grid disables its buttons during a trial, so this only lands from a stale tab. Saying so
+      // beats the portal home, which cannot change a trial's plan either.
+      if (message.startsWith('TRIAL_NO_SWITCH')) return void toast(t('billing.trialNoSwitch'))
       await handleManageSubscription()
     } finally {
       setPortalLoading(false)
@@ -665,9 +662,11 @@ export default function BillingPage() {
       {/* Plan grid — Enterprise sits outside the map, so it stays visible in both layouts */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
         {(hasCard || showAllPlans ? PLAN_IDS : PLAN_IDS.filter(p => p === targetPlan)).map(planId => {
-          // "Current plan" badge only for a card-backed, non-trialing (i.e. active) subscriber on this tier.
-          // Guarding on hasCard stops a brand-new user's default tier from being mislabeled as current.
-          const isCurrent = hasCard && me?.tier === planId && me?.subscriptionStatus !== 'trialing'
+          // "Current plan" badge for any card-backed subscriber on this tier, trialing included since
+          // 2026-09-09: a trial runs on the plan it started on, so that plan IS current. It used to be
+          // withheld while trialing only so the Switch button showed instead, and that switch no
+          // longer exists. Guarding on hasCard stops a brand-new user's default tier being mislabeled.
+          const isCurrent = hasCard && me?.tier === planId
           // Nudge new / no-card users toward the plan they chose, without hiding the other plans. A card
           // holder sent here by an upgrade-at-the-limit link (`?plan=` in the URL, R08) gets the same
           // highlight on the plan they came for — never on the plan they're already on.
@@ -723,14 +722,19 @@ export default function BillingPage() {
               ) : (
                 <Button
                   onClick={() => priceId && handlePlanClick(planId, priceId)}
-                  disabled={!priceId || portalLoading}
-                  className={`mt-auto w-full text-[13px] ${priceId ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
+                  disabled={!priceId || portalLoading || isTrialing}
+                  className={`mt-auto w-full text-[13px] ${priceId && !isTrialing ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
                 >
-                  {hasCard
-                    ? t('billing.switchPlan', { plan: t(`billing.plans.${planId}.name`) })
-                    : canTrial
-                      ? t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`), days: trialDays })
-                      : t('billing.noTrialCta', { plan: t(`billing.plans.${planId}.name`) })}
+                  {/* A trial cannot change plan (product rule, 2026-09-09) — convert early, cancel, or
+                      let it run out. The member's own tier shows the "current plan" badge instead of
+                      reaching this branch at all, so this labels the plans they are not on. */}
+                  {isTrialing
+                    ? t('billing.trialNoSwitch')
+                    : hasCard
+                      ? t('billing.switchPlan', { plan: t(`billing.plans.${planId}.name`) })
+                      : canTrial
+                        ? t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`), days: trialDays })
+                        : t('billing.noTrialCta', { plan: t(`billing.plans.${planId}.name`) })}
                 </Button>
               )}
             </div>

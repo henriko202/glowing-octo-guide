@@ -14,6 +14,7 @@ import {
   starterPriceIdFor
 } from './lib/stripePrices'
 import { buildDowngradePhases, planChangeDirection } from './lib/downgrade'
+import { PORTAL_TIER_KEY, portalTierFor } from './lib/portalConfig'
 import { findLiveSubscription, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
@@ -201,8 +202,38 @@ async function liveSubscriptionFor(
   return { user, live }
 }
 
-/** Mints the portal deep link. The flow is already decided by the caller. */
-async function portalSession(ctx: ActionCtx, user: Doc<'users'>, flow: FlowData): Promise<{ url: string }> {
+/**
+ * The portal configuration for this member's tier — the one that lists their tier and the tiers
+ * above it, and no cheaper one (lib/portalConfig). Looked up by the `metadata` stamp
+ * scripts/stripe-provision.mjs writes, deliberately not by env var: three more ids would have to
+ * reach all four env copies (§8) and drift in any one of them would silently re-open the gap.
+ * One extra GET on a click-rate operation is the cheaper price.
+ */
+async function portalConfigurationId(tier?: string): Promise<string> {
+  const want = portalTierFor(tier)
+  const { data } = await stripe().billingPortal.configurations.list({ active: true, limit: 100 })
+  const match = data.find(c => c.metadata?.[PORTAL_TIER_KEY] === want)
+  // Never fall back to the account default. On a provisioned account it carries
+  // `subscription_update: { enabled: false }`, so falling back would silently strip plan switching
+  // from a member who has every right to upgrade; on an unprovisioned one it is whatever the
+  // Dashboard holds — which is how the credited cross-tier downgrade got out (B07). A missing
+  // configuration is a provisioning error — run scripts/stripe-provision.mjs — so say so loudly
+  // rather than guess which of those two the account is.
+  if (!match) throw new ConvexError('PORTAL_NOT_CONFIGURED')
+  return match.id
+}
+
+/**
+ * Mints a portal session. The flow is already decided by the caller; omitting it opens the portal
+ * home ("Manage subscription"). `tier` chooses the configuration and is never optional in practice —
+ * an unreadable tier clamps to the most restrictive one.
+ */
+async function portalSession(
+  ctx: ActionCtx,
+  user: Doc<'users'>,
+  tier: string | undefined,
+  flow?: FlowData
+): Promise<{ url: string }> {
   const customer = await stripeComponent.getOrCreateCustomer(ctx, {
     userId: user._id,
     email: user.email,
@@ -210,11 +241,29 @@ async function portalSession(ctx: ActionCtx, user: Doc<'users'>, flow: FlowData)
   })
   const session = await stripe().billingPortal.sessions.create({
     customer: customer.customerId,
+    configuration: await portalConfigurationId(tier),
     return_url: `${appOrigin()}/billing`,
-    flow_data: flow
+    ...(flow ? { flow_data: flow } : {})
   })
   return { url: session.url }
 }
+
+/**
+ * "Manage subscription" — the portal home. Moved out of `billing.ts` on 2026-09-09: the Convex
+ * Stripe component's `createCustomerPortalSession` mints a session against the account's DEFAULT
+ * configuration and offers no way to name another, so that button was the last route to a credited
+ * cross-tier downgrade (B07). Same contract as the action it replaces: a Stripe customer is enough,
+ * no live subscription required, so a churned member can still reach their invoices.
+ */
+export const createPortalSession = action({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }): Promise<{ url: string }> => {
+    const user = await requireAuthAction(ctx, sessionToken)
+    if (!user) throw new ConvexError('User not found')
+    if (!user.stripeCustomerId) throw new ConvexError('No Stripe customer found')
+    return portalSession(ctx, user, user.tier)
+  }
+})
 
 /**
  * Stripe's copy of the subscription plus its single item. Both halves are needed on every path — the
@@ -324,7 +373,7 @@ export const createCancelFlowSession = action({
       // wins: release the schedule so the portal acts on a plain subscription. A member who then
       // abandons the portal has lost the downgrade and can schedule it again.
       await releaseScheduleOn(ctx, sub)
-      return portalSession(ctx, user, {
+      return portalSession(ctx, user, live.tier, {
         type: 'subscription_cancel',
         subscription_cancel: { subscription: sub.id },
         after_completion: { type: 'redirect', redirect: { return_url: `${appOrigin()}/billing?canceled=true` } }
@@ -332,28 +381,24 @@ export const createCancelFlowSession = action({
     }
 
     if (live.tier === 'starter') throw new ConvexError('ALREADY_STARTER')
+    // A trial runs on the plan it started on (product rule, 2026-09-09). The member converts early,
+    // cancels, or lets it run out — a tier change is not one of the moves, so this is refused rather
+    // than scheduled. CancelInterstitial hides the alternative for a trialing member; this is the
+    // server's half of the same rule.
+    if (sub.status === 'trialing') throw new ConvexError('TRIAL_NO_SWITCH')
+    if (sub.cancel_at_period_end) throw new ConvexError('CANCEL_PENDING')
+
     // The retrieved item carries the authoritative interval; our snapshot (optional) is the fallback.
     const stripeInterval = item.price.recurring?.interval
     const interval = stripeInterval === 'month' || stripeInterval === 'year' ? stripeInterval : live.priceInterval
     const price = starterPriceIdFor(process.env, interval)
     if (!price) throw new ConvexError('Starter price not configured')
 
-    if (sub.status === 'active') {
-      if (sub.cancel_at_period_end) throw new ConvexError('CANCEL_PENDING')
-      return scheduleDowngrade(ctx, sub, price, 'starter')
-    }
-    // Trialing (nothing paid, so nothing to credit — and the portal's trial_update_behavior keeps
-    // the trial) and past_due (Stripe's dunning owns the unpaid invoice) keep the immediate switch.
-    return portalSession(ctx, user, {
-      type: 'subscription_update_confirm',
-      subscription_update_confirm: { subscription: sub.id, items: [{ id: item.id, price, quantity: 1 }] },
-      // BillingPage lands this like the plan switch: "Switching you to Starter…", then
-      // cancel_alternative_completed { from } once the webhook has moved the tier.
-      after_completion: {
-        type: 'redirect',
-        redirect: { return_url: `${appOrigin()}/billing?downgraded=${live.tier}` }
-      }
-    })
+    // `active` and `past_due` both schedule. past_due used to take an immediate portal switch on the
+    // grounds that Stripe's dunning owned the unpaid invoice, but its portal configuration no longer
+    // lists a cheaper tier (lib/portalConfig), and an immediate switch there is the credited path we
+    // are closing. Scheduling settles no money either way, which is what makes it safe for both.
+    return scheduleDowngrade(ctx, sub, price, 'starter')
   }
 })
 
@@ -367,9 +412,15 @@ export const createPlanSwitchSession = action({
     if (!ALLOWED_PRICE_IDS.has(priceId)) throw new ConvexError('Invalid price ID')
     const { user, live } = await liveSubscriptionFor(ctx, sessionToken)
     const { sub, item } = await retrieveWithItem(live.stripeSubscriptionId)
-    // Nothing to confirm. A trialing member sees a Switch button for their own plan (no "current"
-    // badge during a trial), so name it; the client falls back to the portal home.
+    // Nothing to confirm. Unreachable from the grid — the member's own plan carries the "current"
+    // badge, trialing included — but a stale tab can still send it; the client falls back to the
+    // portal home.
     if (item.price.id === priceId) throw new ConvexError('ALREADY_ON_PLAN')
+    // A trial runs on the plan it started on (product rule, 2026-09-09) — no tier change and no
+    // interval change until it converts. The plan grid hides its Switch buttons during a trial; this
+    // is the server's half, and it is why `trial_update_behavior: 'continue_trial'` in the portal
+    // configuration is now only a backstop for the portal home rather than a live path.
+    if (sub.status === 'trialing') throw new ConvexError('TRIAL_NO_SWITCH')
 
     const targetTier = getTierFromPriceId(priceId)
     // Rank, never price amount: the decoy ladder makes amounts a liar (lib/downgrade).
@@ -378,15 +429,15 @@ export const createPlanSwitchSession = action({
     // `targetTier !== 'pro'` keeps pendingTier's union honest. It is unreachable in practice — only a
     // `contact` row would rank Pro as cheaper, and the sync never writes contact to a row — so the
     // fall-through to the portal is a type guard, not a member-facing path.
-    if (direction === 'down' && targetTier !== 'pro' && sub.status === 'active') {
+    if (direction === 'down' && targetTier !== 'pro') {
       if (sub.cancel_at_period_end) throw new ConvexError('CANCEL_PENDING')
       return scheduleDowngrade(ctx, sub, priceId, targetTier)
     }
     // The portal writes the same subscription our schedule owns, so an upgrade taken while one is
     // attached would race it. Ask for the undo first; BillingPage says exactly that.
-    if (direction !== 'down' && scheduleIdOf(sub)) throw new ConvexError('PENDING_DOWNGRADE')
+    if (scheduleIdOf(sub)) throw new ConvexError('PENDING_DOWNGRADE')
 
-    return portalSession(ctx, user, {
+    return portalSession(ctx, user, live.tier, {
       type: 'subscription_update_confirm',
       subscription_update_confirm: { subscription: sub.id, items: [{ id: item.id, price: priceId, quantity: 1 }] },
       // BillingPage reads the tier back: "Switching you to X…" until the webhook moves `me.tier`,

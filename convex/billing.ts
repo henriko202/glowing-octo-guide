@@ -1,32 +1,12 @@
 // convex/billing.ts
-// Portal session and customer-ID mutation. Checkout moved to billingNode.ts.
+// Subscription-row queries and the billing mutations. Checkout and every portal session live in
+// billingNode.ts — `createPortalSession` moved there on 2026-09-09 (B07) because the Stripe
+// component's `createCustomerPortalSession` always uses the account's DEFAULT portal configuration,
+// which lists all six prices, and closing the cross-tier downgrade gap needs a per-tier one
+// (lib/portalConfig). That helper was this file's only Stripe call.
 
-import { action, internalMutation, internalQuery } from './_generated/server'
-import { ConvexError, v } from 'convex/values'
-import { components } from './_generated/api'
-import { StripeSubscriptions } from '@convex-dev/stripe'
-import { requireAuthAction } from './lib/auth'
-
-const stripeClient = new StripeSubscriptions(components.stripe, {})
-
-// Customer portal session — lets users manage their subscription
-export const createPortalSession = action({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, { sessionToken }) => {
-    const user = await requireAuthAction(ctx, sessionToken)
-    if (!user) throw new ConvexError('User not found')
-    if (!user.stripeCustomerId) throw new ConvexError('No Stripe customer found')
-
-    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
-
-    const portal = await stripeClient.createCustomerPortalSession(ctx, {
-      customerId: user.stripeCustomerId,
-      returnUrl: `${appUrl}/billing`
-    })
-
-    return { url: portal.url }
-  }
-})
+import { internalMutation, internalQuery } from './_generated/server'
+import { v } from 'convex/values'
 
 // Store Stripe customer ID on user record
 export const setStripeCustomerId = internalMutation({

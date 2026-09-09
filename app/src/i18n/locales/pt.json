@@ -242,6 +242,7 @@
     "trialBanner": "Você está em um teste grátis do {{plan}}. Seu plano começa ao atingir {{threshold}} interações ou em {{date}}, o que vier primeiro.",
     "trialBannerNoDate": "Você está em um teste grátis do {{plan}}. Seu plano começa ao atingir {{threshold}} interações ou depois de {{days}} dias, o que vier primeiro.",
     "trialProgress": "{{combined}} / {{threshold}} interações",
+    "trialNoSwitch": "Indisponível durante seu período de teste",
     "whatYouLlMiss": "No Starter você perde o feed filtrado por setor, cai de 50 para 25 interações por publicação e de 2 para 1 publicação por semana.",
     "newUserLead": "Escolha um plano abaixo — o Growth é o melhor custo-benefício.",
     "newUserTrialNote": "Todos os planos começam com um teste gratuito de {{days}} dias · cancele quando quiser.",

@@ -242,6 +242,7 @@
     "trialBanner": "You're on a free {{plan}} trial. Your plan starts at {{threshold}} interactions or on {{date}}, whichever comes first.",
     "trialBannerNoDate": "You're on a free {{plan}} trial. Your plan starts at {{threshold}} interactions or after {{days}} days, whichever comes first.",
     "trialProgress": "{{combined}} / {{threshold}} interactions",
+    "trialNoSwitch": "Unavailable during your trial",
     "whatYouLlMiss": "On Starter you lose your industry-filtered feed, drop from 50 to 25 interactions per post, and from 2 to 1 posts per week.",
     "newUserLead": "Select a plan below — Growth is the best bang for your buck.",
     "newUserTrialNote": "Every plan starts with a free {{days}}-day trial · cancel anytime.",

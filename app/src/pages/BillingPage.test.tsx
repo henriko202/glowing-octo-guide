@@ -23,8 +23,9 @@ vi.mock('../convex', () => ({
       getTrialProgress: 'users.getTrialProgress',
       clearBillingNotice: 'users.clearBillingNotice'
     },
-    billing: { createPortalSession: 'billing.createPortalSession' },
     billingNode: {
+      // B07 — the portal session moved out of `billing.ts` so it can name a per-tier configuration.
+      createPortalSession: 'billingNode.createPortalSession',
       createCheckoutSession: 'billingNode.createCheckoutSession',
       createCancelFlowSession: 'billingNode.createCancelFlowSession',
       createPlanSwitchSession: 'billingNode.createPlanSwitchSession',
@@ -47,7 +48,7 @@ const mockCancelFlow = vi.fn(async () => ({ url: '' }))
 const mockSwitch = vi.fn(async () => ({ url: '' }) as { url: string | null })
 const mockUndo = vi.fn(async () => null)
 const ACTIONS: Record<string, unknown> = {
-  'billing.createPortalSession': mockPortal,
+  'billingNode.createPortalSession': mockPortal,
   'billingNode.resumeSubscription': mockResume,
   'billingNode.createCancelFlowSession': mockCancelFlow,
   'billingNode.createPlanSwitchSession': mockSwitch,
@@ -186,19 +187,24 @@ describe('plan click routing (R01)', () => {
     expect(mockPortal).not.toHaveBeenCalled()
   })
 
-  it('deep-links a trialing card holder into the portal confirm flow for the price they clicked, never a second checkout', async () => {
+  // A trial runs on the plan it started on (product rule, 2026-09-09): no tier change and no interval
+  // change until it converts. The member's own tier carries the current-plan badge; every other card
+  // is inert. This replaces a test that asserted the opposite — a trialing deep link into the portal.
+  it('offers a trialing card holder no plan switch at all', () => {
     setUser({ subscriptionStatus: 'trialing' })
     renderPage()
-    // A trialing member has no "current" card, so the first switch button is the first plan: starter.
-    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
-    await waitFor(() => expect(mockSwitch).toHaveBeenCalledWith({ sessionToken: 'tok', priceId: 'price_starter_year' }))
+    expect(screen.queryByRole('button', { name: /billing\.switchPlan/ })).not.toBeInTheDocument()
+    const blocked = screen.getAllByRole('button', { name: 'billing.trialNoSwitch' })
+    for (const button of blocked) expect(button).toBeDisabled()
+    fireEvent.click(blocked[0])
+    expect(mockSwitch).not.toHaveBeenCalled()
     expect(mockCheckout).not.toHaveBeenCalled()
     expect(mockPortal).not.toHaveBeenCalled()
   })
 
   it('falls back to the portal home when the deep link is refused', async () => {
     mockSwitch.mockRejectedValueOnce(new Error('ALREADY_ON_PLAN'))
-    setUser({ subscriptionStatus: 'trialing' })
+    setUser({ subscriptionStatus: 'active' })
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
     await waitFor(() => expect(mockPortal).toHaveBeenCalledWith({ sessionToken: 'tok' }))
@@ -638,7 +644,7 @@ describe('checkout_started (R18)', () => {
   })
 
   it('does not fire when a card holder is routed to the portal', async () => {
-    setUser({ subscriptionStatus: 'trialing' })
+    setUser({ subscriptionStatus: 'active' })
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
     await waitFor(() => expect(mockSwitch).toHaveBeenCalled())
@@ -650,11 +656,11 @@ describe('checkout_started (R18)', () => {
 // path fires nothing else — without this the cap-email funnel ended at `cap_email_billing_opened`.
 describe('plan_switch_opened', () => {
   it('fires with the plan and source "billing" when a card holder opens the portal from the page', async () => {
-    setUser({ subscriptionStatus: 'trialing' })
+    setUser({ subscriptionStatus: 'active' })
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
     await waitFor(() => expect(mockSwitch).toHaveBeenCalled())
-    // A trialing member has no "current" card, so the first switch button is the first plan: starter.
+    // The default member is on growth, whose card carries the badge, so the first switch is starter.
     expect(captureEvent).toHaveBeenCalledWith('plan_switch_opened', { plan: 'starter', source: 'billing' })
   })
 
@@ -711,33 +717,16 @@ describe('plan switch landing (R08 / R20)', () => {
     expect(captureEvent).not.toHaveBeenCalled()
   })
 
-  // R09: the cancel interstitial's "Move to Starter" returns as ?downgraded=<tier left behind> and
-  // lands the same way — same copy, its own event, so the interstitial's save rate is one funnel
-  // (cancel_alternative_taken → cancel_alternative_completed) that grid switches never touch.
-  it('lands the Starter downgrade the same way and fires cancel_alternative_completed with the tier left behind', async () => {
-    const { rerender } = renderBilling({
+  // Every cheaper-tier move is scheduled and never leaves the app (2026-09-09), so nothing produces
+  // ?downgraded= any more and the page must not resurrect the landing state from a stale link:
+  // cancel_alternative_completed belongs to CancelInterstitial now, fired when the action resolves.
+  it('ignores a stale ?downgraded= marker entirely', () => {
+    renderBilling({
       search: 'downgraded=growth',
       me: { subscriptionStatus: 'active', tier: 'growth' }
     })
-    expect(screen.getByText(/billing\.switching:.*Starter/)).toBeInTheDocument()
-    expect(captureEvent).not.toHaveBeenCalled()
-
-    setUser({ subscriptionStatus: 'active', tier: 'starter' })
-    rerender(
-      <MemoryRouter>
-        <BillingPage />
-      </MemoryRouter>
-    )
-    expect(screen.getByText(/billing\.switched:.*Starter/)).toBeInTheDocument()
-    await waitFor(() => expect(captureEvent).toHaveBeenCalledWith('cancel_alternative_completed', { from: 'growth' }))
-    expect(captureEvent).not.toHaveBeenCalledWith('plan_switch_completed', expect.anything())
-    expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true })
-  })
-
-  it('ignores a downgrade marker that names no plan', () => {
-    renderBilling({ search: 'downgraded=true', me: { subscriptionStatus: 'active', tier: 'starter' } })
     expect(screen.queryByText(/billing\.switch(ing|ed):/)).not.toBeInTheDocument()
-    expect(captureEvent).not.toHaveBeenCalled()
+    expect(captureEvent).not.toHaveBeenCalledWith('cancel_alternative_completed', expect.anything())
   })
 
   it('offers the portal after 20s if the tier never moves', () => {

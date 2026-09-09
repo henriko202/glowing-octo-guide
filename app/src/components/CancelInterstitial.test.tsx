@@ -1,4 +1,8 @@
-import { vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { captureEvent } from '@/lib/observability/analytics'
+import { toast } from '@/components/ui/toast'
+import CancelInterstitial from './CancelInterstitial'
 
 vi.mock('../convex', () => ({
   api: {
@@ -19,12 +23,6 @@ vi.mock('convex/react', () => ({
 }))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }))
-
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { captureEvent } from '@/lib/observability/analytics'
-import { toast } from '@/components/ui/toast'
-import CancelInterstitial from './CancelInterstitial'
 
 const RECAP = { received: { current: { total: 7 } } }
 const POSTS = [{ _id: 'a' }, { _id: 'b', hidden: true }, { _id: 'c' }]
@@ -86,6 +84,14 @@ describe('CancelInterstitial', () => {
   it('hides Move to Starter on the Starter tier', async () => {
     renderIt({ tier: 'starter' })
     expect(screen.queryByRole('button', { name: 'Move to Starter' })).not.toBeInTheDocument()
+  })
+
+  // A trial runs on the plan it started on (product rule, 2026-09-09), so the only saves offered here
+  // are "keep my plan" and the note. billingNode refuses the downgrade for a trialing member too.
+  it('hides Move to Starter during a trial', async () => {
+    renderIt({ isTrialing: true })
+    expect(screen.queryByRole('button', { name: 'Move to Starter' })).not.toBeInTheDocument()
+    expect(mockCancelFlow).not.toHaveBeenCalled()
   })
 
   it('downgrade: fires the alternative event and asks for the downgrade portal flow', async () => {

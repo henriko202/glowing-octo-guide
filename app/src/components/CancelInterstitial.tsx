@@ -148,7 +148,9 @@ export default function CancelInterstitial({
           <DialogDescription>{body}</DialogDescription>
         </DialogHeader>
 
-        {tier !== 'starter' && !pendingTier && (
+        {/* Hidden during a trial: a trial runs on the plan it started on (product rule, 2026-09-09),
+            so the save here is "keep my plan", not "move to Starter". billingNode refuses it too. */}
+        {tier !== 'starter' && !pendingTier && !isTrialing && (
           <div className="bg-muted rounded-xl p-4 text-sm">
             <p className="m-0">{t('billing.cancel.alternative')}</p>
             <Button
