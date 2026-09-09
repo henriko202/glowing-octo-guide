@@ -223,7 +223,8 @@
     "privacy": "Privacidad",
     "terms": "Términos",
     "cookies": "Cookies",
-    "contact": "Contacto"
+    "contact": "Contacto",
+    "easterEgg": ""
   },
   "cookieNotice": {
     "text": "Usamos solo el almacenamiento esencial del navegador para ejecutar la app (inicio de sesión + idioma). Sin cookies de rastreo.",

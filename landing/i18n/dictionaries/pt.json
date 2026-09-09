@@ -219,7 +219,8 @@
     "privacy": "Privacidade",
     "terms": "Termos",
     "cookies": "Cookies",
-    "contact": "Contato"
+    "contact": "Contato",
+    "easterEgg": ""
   },
   "cookieNotice": {
     "text": "Usamos apenas armazenamento essencial do navegador para rodar o app (login + idioma). Sem cookies de rastreamento.",

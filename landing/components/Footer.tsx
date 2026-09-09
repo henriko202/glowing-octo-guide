@@ -54,6 +54,7 @@ export default function Footer({
           />
         </div>
       </div>
+      {dict.easterEgg && <p className="mt-6 text-center text-xs text-cream/30 dark:text-cream/20">{dict.easterEgg}</p>}
     </footer>
   )
 }
