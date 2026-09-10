@@ -5282,9 +5282,10 @@ in **
 `localStorage`** (key `cookieNoticeDismissed`). The component uses **`useSyncExternalStore`** with a no-op server
 snapshot so it hydrates safely without an SSR/client mismatch — the notice is invisible on the server render and appears
 only after hydration confirms the key is absent. The banner is **not** shown to returning visitors (key already set) and
-disappears without page reload on dismiss. The notice sits in normal document flow after the footer and includes bottom
-safe-area padding; it never overlays content or focused controls. Blocked storage does not prevent dismissal for the
-current visit.
+disappears without page reload on dismiss. The notice is **fixed to the bottom of the viewport** so it stays visible
+while the page scrolls, and it includes bottom safe-area padding. Because it floats above page content it can overlap
+footer content until dismissed; dismissal remains reachable by pointer and keyboard. Blocked storage does not prevent
+dismissal for the current visit.
 
 ### Why the legal pages exist
 
@@ -5350,9 +5351,9 @@ LinkedIn endorsement or guaranteed account safety.
 #### Layout and accessibility
 
 The centered hero uses normal content height; it no longer squeezes its heading and disclosures into a fixed viewport
-height. `CookieNotice` is a normal-flow notice after the footer,
-with bottom safe-area padding, so it cannot cover text, controls, or keyboard focus. Its dismissal remains
-SSR-safe and persists when browser storage is available.
+height. `CookieNotice` is fixed to the viewport bottom with bottom safe-area padding, so it stays visible while the
+page scrolls and can overlap footer content until dismissed. Its dismissal remains SSR-safe and persists when browser
+storage is available.
 
 Navigation keeps a Pricing shortcut on narrow screens. Below `sm`, its separate trial shortcut is hidden so Pricing,
 language, theme, and brand targets fit without crowding. The hero and pricing trial actions remain available. Header

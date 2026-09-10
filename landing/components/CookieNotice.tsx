@@ -36,7 +36,7 @@ export default function CookieNotice({ dict, lang }: { dict: Dictionary['cookieN
   return (
     <aside
       aria-label={dict.label}
-      className="border-t border-cream/10 bg-ink-800 px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-cream-muted"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-cream/10 bg-ink-800 px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-cream-muted"
     >
       <div className="mx-auto flex max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center">
         <p className="m-0 flex-1">
