@@ -76,7 +76,7 @@ export default function CardGateDialog({
               {pastDue
                 ? t('feed.cardGatePastDueCta')
                 : canTrial
-                  ? t('feed.cardGateCta', { days })
+                  ? t('feed.cardGateCta')
                   : t('billing.noTrialCta', { plan: t(`billing.plans.${plan}.name`) })}
             </Link>
           </Button>

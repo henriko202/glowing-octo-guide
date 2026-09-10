@@ -15,7 +15,7 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
             {dict.headlineLine1}
             <br />
-            <span className="text-gold-text italic">{dict.headlineLine2}</span>
+            <span className="text-gold-text">{dict.headlineLine2}</span>
           </h2>
         </div>
 
@@ -32,17 +32,17 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
               />
               <div>
                 <p className="text-sm font-medium text-cream">{dict.founderName}</p>
-                <p className="text-xs text-cream/40">{dict.founderRole}</p>
+                <p className="text-sm text-cream-muted">{dict.founderRole}</p>
               </div>
             </div>
-            <p className="text-base leading-relaxed text-cream/70">{dict.founderMessage}</p>
+            <p className="text-base leading-relaxed text-cream-muted">{dict.founderMessage}</p>
           </div>
 
           {/* No link-out: the SSI page is a Sales Navigator feature since Aug 2026 (backlog/R10). */}
           <div className="flex flex-col justify-center rounded-2xl border border-gold/20 bg-gold/[0.04] p-8">
-            <p className="font-display text-2xl font-semibold text-cream">{dict.proofCardHeadline}</p>
-            <p className="mt-3 text-sm leading-relaxed text-cream/60">{dict.proofCardBody}</p>
-            <p className="mt-4 text-xs text-cream/40">{dict.proofCardNote}</p>
+            <p className="text-xl font-semibold text-cream">{dict.proofCardHeadline}</p>
+            <p className="mt-3 text-base leading-relaxed text-cream-muted">{dict.proofCardBody}</p>
+            <p className="mt-4 text-sm font-medium text-cream-muted">{dict.proofCardNote}</p>
           </div>
         </div>
 

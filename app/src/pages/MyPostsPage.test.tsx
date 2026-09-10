@@ -106,7 +106,7 @@ describe('MyPostsPage', () => {
 
   it('shows the weekly usage pill', () => {
     renderPage()
-    expect(screen.getByText(/2 of 5 posts this week/i)).toBeInTheDocument()
+    expect(screen.getByText(/2 of 5 posts in the last 7 days/i)).toBeInTheDocument()
   })
 
   it('renders the share composer', () => {
@@ -117,14 +117,14 @@ describe('MyPostsPage', () => {
   it('turns the pill amber and disables submit at the weekly limit', () => {
     mockQueryReturns['posts.getWeeklyUsage'] = { postsThisWeek: 5, postsPerWeek: 5 }
     renderPage()
-    expect(screen.getByText(/5 of 5 posts this week/i)).toBeInTheDocument()
+    expect(screen.getByText(/5 of 5 posts in the last 7 days/i)).toBeInTheDocument()
     // UpgradeAtLimit (backlog/R08) replaces the old static "weekly limit reached" copy.
     expect(screen.getByText(/weekly post cap/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /upgrade to growth/i })).toHaveAttribute(
       'href',
       '/billing?plan=growth&interval=annual'
     )
-    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /add post/i })).toBeDisabled()
   })
 
   it('shows Hide + Delete controls and a "Visible in feed" state for a visible post', () => {
@@ -243,7 +243,7 @@ describe('MyPostsPage', () => {
     ]
     renderPage()
     // backlog/R17 — at the cap the slot offers the $5 add-on instead of a disabled Feature button.
-    expect(screen.getByRole('button', { name: /feature for \$5/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /feature for US\$5/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^feature$/i })).not.toBeInTheDocument()
   })
 
@@ -330,10 +330,10 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 3, featuredPerMonth: 3 }
     mockQueryReturns['posts.getMyPosts'] = [unfeatured]
     renderPage()
-    expect(screen.getByRole('button', { name: /feature for \$5/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /feature for US\$5/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^feature$/i })).not.toBeInTheDocument()
     // starter cap 25 + starter bonus 25; the no-refund rule is visible text, not a tooltip
-    expect(screen.getByText(/room for 50 interactions/i)).toBeInTheDocument()
+    expect(screen.getByText(/raises its limit to 50 interactions/i)).toBeInTheDocument()
     expect(screen.getByText(/no refund/i)).toBeInTheDocument()
   })
 
@@ -342,10 +342,10 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     renderPage()
     expect(screen.getByText(/reached 25 and left the feed/i)).toBeInTheDocument()
     const upgrade = screen.getByRole('link', { name: /upgrade to/i })
-    const buy = screen.getByRole('button', { name: /feature for \$5/i })
+    const buy = screen.getByRole('button', { name: /feature for US\$5/i })
     expect(upgrade.compareDocumentPosition(buy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // One control per card: the Feature slot keeps its plain button on a capped post.
-    expect(screen.getAllByRole('button', { name: /feature for \$5/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /feature for US\$5/i })).toHaveLength(1)
   })
 
   // G4 — the exact state G1/G2 fix: already featured for free AND capped, with no purchase. The
@@ -358,8 +358,8 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     expect(cappedLine.textContent).not.toMatch(/featured/i)
     const upgradeLine = screen.getByText(/left the feed after reaching its interaction cap/i)
     expect(upgradeLine.textContent).not.toMatch(/featured/i)
-    expect(screen.getByRole('button', { name: /add room for \$5/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^feature for \$5$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /raise limit for US\$5/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^feature for US\$5$/i })).not.toBeInTheDocument()
   })
 
   it('tells a trialing member the charge is separate from the trial', () => {
@@ -471,7 +471,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
   it('?feature=buy shows the control on an eligible card and strips the param', () => {
     mockQueryReturns['posts.getMyPosts'] = [unfeatured]
     renderPage('/my-posts?feature=buy')
-    expect(screen.getByRole('button', { name: /feature for \$5/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /feature for US\$5/i })).toBeInTheDocument()
     expect(screen.getByTestId('search').textContent).toBe('')
   })
 
@@ -480,7 +480,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     renderPage('/my-posts?featured=paid&post=p2')
     expect(screen.getByText(/confirming your payment/i)).toBeInTheDocument()
     expect(toast).toHaveBeenCalledTimes(1)
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/room for 50 interactions/i))
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/limit to 50 interactions/i))
     expect(captureEvent).toHaveBeenCalledWith('featured_purchase_completed')
     expect(screen.getByTestId('search').textContent).toBe('')
   })
@@ -495,7 +495,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     mockQueryReturns['posts.getMyPosts'] = [{ ...unfeatured, interactionLimitReached: true }]
     renderPage('/my-posts?featured=paid&post=p2')
     expect(screen.getByText(/confirming your payment/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /\$5/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /US\$5/ })).not.toBeInTheDocument()
   })
 
   // F11 — spec §4.12's orphaned case: the post was deleted between Checkout and the webhook, so it
@@ -511,7 +511,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
   it('fires featured_purchase_started with the placement and calls the action with the post id', async () => {
     mockQueryReturns['posts.getMyPosts'] = [{ ...unfeatured, interactionLimitReached: true }]
     renderPage()
-    fireEvent.click(screen.getByRole('button', { name: /feature for \$5/i }))
+    fireEvent.click(screen.getByRole('button', { name: /feature for US\$5/i }))
     expect(captureEvent).toHaveBeenCalledWith('featured_purchase_started', { source: 'cap' })
     await waitFor(() =>
       expect(mockActions['billingNode.purchaseFeaturedPost']).toHaveBeenCalledWith({
@@ -527,8 +527,8 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
       target: { value: 'https://www.linkedin.com/posts/henri_activity-7000000000000000000-abcd' }
     })
-    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
-    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringMatching(/feature it for \$5 below/i)))
+    fireEvent.click(screen.getByRole('button', { name: /add post/i }))
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringMatching(/feature it for US\$5 below/i)))
   })
 
   // F3/C3 — every failure path (a thrown ConvexError, or a resolved-but-empty checkout url) collapses
@@ -546,7 +546,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     })
     mockQueryReturns['posts.getMyPosts'] = [capped]
     const rejected = renderPage()
-    fireEvent.click(screen.getByRole('button', { name: /feature for \$5/i }))
+    fireEvent.click(screen.getByRole('button', { name: /feature for US\$5/i }))
     await waitFor(() => expect(screen.getByText(/couldn't start that purchase/i)).toBeInTheDocument())
     expect(document.body.textContent).not.toMatch(/FEATURED_PRICE_UNSET/)
     rejected.unmount()
@@ -555,7 +555,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     mockActions['billingNode.purchaseFeaturedPost'] = vi.fn(async () => ({ url: null }))
     mockQueryReturns['posts.getMyPosts'] = [capped]
     const noUrl = renderPage()
-    fireEvent.click(screen.getByRole('button', { name: /feature for \$5/i }))
+    fireEvent.click(screen.getByRole('button', { name: /feature for US\$5/i }))
     await waitFor(() => expect(screen.getByText(/couldn't start that purchase/i)).toBeInTheDocument())
     noUrl.unmount()
 
@@ -571,7 +571,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     )
     mockQueryReturns['posts.getMyPosts'] = [capped]
     const stillPending = renderPage()
-    const buyButton = screen.getByRole('button', { name: /feature for \$5/i })
+    const buyButton = screen.getByRole('button', { name: /feature for US\$5/i })
     fireEvent.click(buyButton)
     expect(buyButton).toBeDisabled()
     resolvePurchase({ url: null })
@@ -590,7 +590,7 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     mockActions['billingNode.purchaseFeaturedPost'] = vi.fn(async () => ({ url: 'https://stripe.test/cs_1' }))
     mockQueryReturns['posts.getMyPosts'] = [capped]
     renderPage()
-    const successButton = screen.getByRole('button', { name: /feature for \$5/i })
+    const successButton = screen.getByRole('button', { name: /feature for US\$5/i })
     fireEvent.click(successButton)
     await waitFor(() => expect(window.location.href).toBe('https://stripe.test/cs_1'))
     expect(successButton).toBeDisabled()

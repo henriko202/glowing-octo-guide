@@ -8,7 +8,6 @@ import { captureEvent } from '@/lib/observability/analytics'
 import { resolveTargetPlan } from '@/lib/targetPlan'
 import { PLAN_PRICES } from '@/lib/planPrices'
 import { useCardGate } from '@/hooks/useCardGate'
-import { TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 
 /**
  * Own-post state for a card-gated member, off the same query MyPostsPage already uses: whether
@@ -37,10 +36,8 @@ export default function CardGateBanner({ className }: { className?: string }) {
   // wrong for them (F5); they need to fix a failed payment, not sign up. `canTrial` catches the
   // quieter version: a member on 'none' who still has subscription rows (incomplete/paused, or an
   // admin status reset) gets no trial at checkout either.
-  const { status, me, canTrial } = useCardGate()
+  const { status, canTrial } = useCardGate()
   const pastDue = status === 'past_due'
-  // backlog/R19 — an invited member has a 14-day trial; say so. Fallback while `me` loads.
-  const days = me?.trialDays ?? TRIAL_PERIOD_DAYS
 
   return (
     <div
@@ -62,7 +59,7 @@ export default function CardGateBanner({ className }: { className?: string }) {
           {pastDue
             ? t('feed.cardGatePastDueCta')
             : canTrial
-              ? t('feed.cardGateCta', { days })
+              ? t('feed.cardGateCta')
               : t('billing.noTrialCta', { plan: t(`billing.plans.${plan}.name`) })}
         </Link>
       </Button>

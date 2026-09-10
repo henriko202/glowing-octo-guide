@@ -72,17 +72,23 @@ export default function EmptyFeed({
   return (
     <div className="py-8 text-center">
       <h2 className="text-foreground mt-0 mb-2 text-lg font-semibold">{t('feed.emptyTitle')}</h2>
-      {/* A member who already posted has nothing to "share first" — the body says whose posts fill the
-          feed and the one action drops away (no second, weaker CTA takes its place). */}
+      {/* A member who already posted needs another member's post before the checklist can continue. */}
       <p className="text-muted-foreground mb-4 text-sm">{t(hasOwnPost ? 'feed.emptyBodyPosted' : 'feed.emptyBody')}</p>
-      {!hasOwnPost && (
+      {hasOwnPost && !showBanner ? (
+        <Button
+          asChild
+          variant="outline"
+        >
+          <Link to="/settings#invite">{t('feed.inviteLink')}</Link>
+        </Button>
+      ) : !hasOwnPost ? (
         <Button
           type="button"
           onClick={focusComposer}
         >
           {t('feed.emptyCta')}
         </Button>
-      )}
+      ) : null}
 
       {showBanner ? (
         <CardGateBanner className="mt-6 text-left" />

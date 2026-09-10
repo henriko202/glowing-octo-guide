@@ -7,12 +7,12 @@ describe('PostComposer', () => {
   it('renders the URL input and submit button', () => {
     render(<PostComposer onSubmit={async () => {}} />)
     expect(screen.getByPlaceholderText(/linkedin\.com\/posts/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add post/i })).toBeInTheDocument()
   })
 
   it('disables submit button when input is empty', () => {
     render(<PostComposer onSubmit={async () => {}} />)
-    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /add post/i })).toBeDisabled()
   })
 
   it('enables submit button when URL is typed', () => {
@@ -20,7 +20,7 @@ describe('PostComposer', () => {
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'https://www.linkedin.com/posts/test_123-XyZ' }
     })
-    expect(screen.getByRole('button', { name: /submit/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /add post/i })).not.toBeDisabled()
   })
 
   it('shows error message when onSubmit throws', async () => {
@@ -29,7 +29,7 @@ describe('PostComposer', () => {
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'https://www.linkedin.com/posts/test_123-XyZ' }
     })
-    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add post/i }))
     expect(await screen.findByText(/ownership failed/i)).toBeInTheDocument()
   })
 
@@ -40,7 +40,7 @@ describe('PostComposer', () => {
     fireEvent.change(input, {
       target: { value: 'https://www.linkedin.com/posts/test_123-XyZ' }
     })
-    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add post/i }))
     await screen.findByRole('textbox')
     expect((input as HTMLInputElement).value).toBe('')
   })
@@ -48,7 +48,7 @@ describe('PostComposer', () => {
   it('renders on a card surface', () => {
     const { container } = render(<PostComposer onSubmit={async () => {}} />)
     expect(container.querySelector('form')?.className).toContain('bg-card')
-    expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add post/i })).toBeInTheDocument()
   })
 
   it('keeps submit disabled at the weekly limit even with a URL typed', () => {
@@ -62,7 +62,7 @@ describe('PostComposer', () => {
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'https://www.linkedin.com/posts/test_123-XyZ' }
     })
-    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /add post/i })).toBeDisabled()
     expect(screen.getByText(/weekly limit reached/i)).toBeInTheDocument()
   })
 })

@@ -44,9 +44,11 @@ describe('CardGateDialog', () => {
   // number typed into the copy.
   it('links the CTA to the plan the visitor chose and says what the trial costs', () => {
     renderDialog('?plan=pro')
-    expect(screen.getByRole('link', { name: /start 7-day trial/i })).toHaveAttribute('href', '/billing?plan=pro')
+    expect(screen.getByRole('link', { name: /start free trial/i })).toHaveAttribute('href', '/billing?plan=pro')
     expect(
-      screen.getByText(new RegExp(`free for 7 days or ${TRIAL_INTERACTION_THRESHOLD} interactions`, 'i'))
+      screen.getByText(
+        new RegExp(`free until ${TRIAL_INTERACTION_THRESHOLD} interactions made or received.*7 days`, 'i')
+      )
     ).toBeInTheDocument()
   })
 
@@ -63,9 +65,11 @@ describe('CardGateDialog', () => {
   it('names the invited 14-day trial when the member joined through an invite', () => {
     mockMe = { subscriptionStatus: 'none', trialDays: 14 }
     renderDialog('?plan=pro')
-    expect(screen.getByRole('link', { name: /start 14-day trial/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /start free trial/i })).toBeInTheDocument()
     expect(
-      screen.getByText(new RegExp(`free for 14 days or ${TRIAL_INTERACTION_THRESHOLD} interactions`, 'i'))
+      screen.getByText(
+        new RegExp(`free until ${TRIAL_INTERACTION_THRESHOLD} interactions made or received.*14 days`, 'i')
+      )
     ).toBeInTheDocument()
   })
 
@@ -77,10 +81,10 @@ describe('CardGateDialog', () => {
     mockMe = { subscriptionStatus: 'none', trialEligible: false }
     renderDialog('?plan=pro')
     expect(screen.getByRole('link', { name: /subscribe to pro/i })).toHaveAttribute('href', '/billing?plan=pro')
-    expect(screen.getByText(/no trial this time/i)).toBeInTheDocument()
+    expect(screen.getByText(/already used your free trial/i)).toBeInTheDocument()
     // M6: the gate names the amount itself, both intervals, so the member never learns the price
     // one page after being asked to subscribe.
-    expect(screen.getByText(/the pro plan is \$50\/mo or \$500\/yr/i)).toBeInTheDocument()
+    expect(screen.getByText(/the pro plan is US\$50\/mo or US\$500\/yr/i)).toBeInTheDocument()
     expect(screen.queryByText(/free for/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/starting your trial/i)).not.toBeInTheDocument()
   })

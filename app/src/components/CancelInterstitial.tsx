@@ -35,7 +35,10 @@ export default function CancelInterstitial({
   tier,
   isTrialing,
   periodEndDate,
-  pendingTier
+  pendingTier,
+  starterPrice,
+  starterInteractions,
+  starterPosts
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -44,6 +47,9 @@ export default function CancelInterstitial({
   periodEndDate: string | null
   /** backlog/B07 — a downgrade already scheduled for the period end. Hides the alternative. */
   pendingTier?: string
+  starterPrice: string
+  starterInteractions: number
+  starterPosts: number
 }) {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
@@ -152,7 +158,14 @@ export default function CancelInterstitial({
             so the save here is "keep my plan", not "move to Starter". billingNode refuses it too. */}
         {tier !== 'starter' && !pendingTier && !isTrialing && (
           <div className="bg-muted rounded-xl p-4 text-sm">
-            <p className="m-0">{t('billing.cancel.alternative')}</p>
+            <p className="m-0">
+              {t(periodEndDate ? 'billing.cancel.alternative' : 'billing.cancel.alternativeNoDate', {
+                date: periodEndDate,
+                price: starterPrice,
+                interactions: starterInteractions,
+                posts: starterPosts
+              })}
+            </p>
             <Button
               variant="outline"
               className="mt-3"

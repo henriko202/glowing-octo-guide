@@ -94,7 +94,7 @@ const PLAN_LABELS: Record<string, string> = {
 // The R07 celebration/activating copy is asserted by its real English wording (not the raw key),
 // so those two keys resolve to their actual copy here; everything else keeps echoing its key.
 const REAL_COPY: Record<string, string> = {
-  'billing.successTitle': "You're in.",
+  'billing.successTitle': "You're all set.",
   'billing.activating': 'Activating your trial…'
 }
 
@@ -244,6 +244,7 @@ describe('chosen plan (R03)', () => {
     sessionStorage.setItem('chosenPlan', 'pro')
     renderPage()
     expect(screen.getByText(/billing\.chosenPlanLead.*Pro/)).toBeInTheDocument()
+    expect(screen.getByText('billing.selected')).toBeInTheDocument()
   })
 
   it('follows the ?plan= query parameter', () => {
@@ -255,6 +256,7 @@ describe('chosen plan (R03)', () => {
   it('falls back to growth with no stash and no query param', () => {
     renderPage()
     expect(screen.getByText('billing.newUserLead')).toBeInTheDocument()
+    expect(screen.getByText('billing.recommended')).toBeInTheDocument()
   })
 
   it('shows only the chosen plan until the member asks for the rest', () => {
@@ -270,8 +272,8 @@ describe('chosen plan (R03)', () => {
     // link (no OAuth stash) must land on the monthly price, not the annual default.
     mockSearchParams = new URLSearchParams('?plan=pro&interval=monthly')
     renderPage()
-    expect(screen.getByText('$50/mo')).toBeInTheDocument()
-    expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
+    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
+    expect(screen.queryByText('US$500/yr')).not.toBeInTheDocument()
   })
 
   it('seeds the toggle from the interval the member is already billed on', async () => {
@@ -285,8 +287,8 @@ describe('chosen plan (R03)', () => {
       priceInterval: 'month'
     }
     renderPage()
-    expect(screen.getByText('$50/mo')).toBeInTheDocument()
-    expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
+    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
+    expect(screen.queryByText('US$500/yr')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /billing\.switchPlan.*Pro/ }))
     await waitFor(() => expect(mockSwitch).toHaveBeenCalledWith({ sessionToken: 'tok', priceId: 'price_pro_month' }))
   })
@@ -302,8 +304,8 @@ describe('chosen plan (R03)', () => {
     }
     mockSearchParams = new URLSearchParams('?plan=pro&interval=annual')
     renderPage()
-    expect(screen.getByText('$500/yr')).toBeInTheDocument()
-    expect(screen.queryByText('$50/mo')).not.toBeInTheDocument()
+    expect(screen.getByText('US$500/yr')).toBeInTheDocument()
+    expect(screen.queryByText('US$50/mo')).not.toBeInTheDocument()
   })
 
   it('keeps a click made before the subscription row arrives', () => {
@@ -313,7 +315,7 @@ describe('chosen plan (R03)', () => {
     mockQueryReturns['users.getSubscriptionInfo'] = undefined
     const { rerender } = renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'billing.monthly' }))
-    expect(screen.getByText('$50/mo')).toBeInTheDocument()
+    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
     mockQueryReturns['users.getSubscriptionInfo'] = {
       tier: 'growth',
       status: 'active',
@@ -325,8 +327,8 @@ describe('chosen plan (R03)', () => {
         <BillingPage />
       </MemoryRouter>
     )
-    expect(screen.getByText('$50/mo')).toBeInTheDocument()
-    expect(screen.queryByText('$500/yr')).not.toBeInTheDocument()
+    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
+    expect(screen.queryByText('US$500/yr')).not.toBeInTheDocument()
   })
 
   it('shows the localized plan name as the current plan, never the capitalized tier id', () => {
@@ -467,7 +469,7 @@ describe('duplicate notice', () => {
 describe('checkout-return celebration (R07)', () => {
   it('opens the celebration once when returning from checkout with the status already flipped', () => {
     renderBilling({ search: '?success=true', me: { subscriptionStatus: 'trialing', tier: 'growth' } })
-    expect(screen.getByRole('dialog')).toHaveTextContent(/you're in/i)
+    expect(screen.getByRole('dialog')).toHaveTextContent(/you're all set/i)
     expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true })
   })
 
@@ -542,22 +544,22 @@ describe('checkout-return celebration (R07)', () => {
 })
 
 // R08: an upgrade-at-the-limit link lands a card holder on /billing?plan=<next>. The plan they came
-// for gets the same "Recommended" highlight a no-card visitor's chosen plan does — but only when the
+// for gets a "Your choice" highlight — but only when the
 // URL names one, never on a plain visit, and never on the plan they already hold.
 describe('plan highlight for card holders (R08)', () => {
   it('highlights the plan a card holder was sent to by an upgrade link', () => {
     renderBilling({ search: '?plan=pro', me: { subscriptionStatus: 'active', tier: 'growth' } })
-    expect(screen.getByText('billing.recommended')).toBeInTheDocument()
+    expect(screen.getByText('billing.selected')).toBeInTheDocument()
   })
 
   it('highlights nothing for a card holder arriving without a plan in the URL', () => {
     renderBilling({ search: '', me: { subscriptionStatus: 'active', tier: 'growth' } })
-    expect(screen.queryByText('billing.recommended')).not.toBeInTheDocument()
+    expect(screen.queryByText('billing.selected')).not.toBeInTheDocument()
   })
 
   it('never marks the plan a card holder already holds as recommended', () => {
     renderBilling({ search: '?plan=growth', me: { subscriptionStatus: 'active', tier: 'growth' } })
-    expect(screen.queryByText('billing.recommended')).not.toBeInTheDocument()
+    expect(screen.queryByText('billing.selected')).not.toBeInTheDocument()
   })
 })
 
@@ -763,14 +765,14 @@ describe('BillingPage invited member (R19)', () => {
     setUser({ trialDays: 14, inviterName: 'Ana' })
     renderPage()
     expect(screen.getByText(/billing\.giftFrom:.*"name":"Ana".*"days":14/)).toBeInTheDocument()
-    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":14\}/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /billing\.startTrialCta:.*"days":14/ }).length).toBeGreaterThan(0)
+    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":14,"threshold":50\}/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /billing\.startTrialCta:.*"plan"/ }).length).toBeGreaterThan(0)
   })
 
   it('says 7 days and shows no gift line for a plain signup', () => {
     renderPage()
     expect(screen.queryByText(/billing\.giftFrom/)).not.toBeInTheDocument()
-    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7\}/)).toBeInTheDocument()
+    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7,"threshold":50\}/)).toBeInTheDocument()
   })
 
   // A referred member who trialed, canceled and came back is still !hasCard, but getMe reports
@@ -816,7 +818,7 @@ describe('BillingPage member with no trial left', () => {
   it('still promises the trial to an eligible member', () => {
     setUser({ trialEligible: true })
     renderPage()
-    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7\}/)).toBeInTheDocument()
+    expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7,"threshold":50\}/)).toBeInTheDocument()
     expect(screen.queryByText(/billing\.noTrialNote/)).not.toBeInTheDocument()
   })
 })

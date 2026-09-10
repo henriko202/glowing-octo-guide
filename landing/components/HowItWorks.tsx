@@ -20,8 +20,8 @@ export default function HowItWorks({ dict }: { dict: Dictionary['howItWorks'] })
               <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-gold/10 transition-colors duration-300 group-hover:bg-gold/20 dark:bg-gold/15">
                 <span className="font-display text-xl font-bold text-gold-text">{String(i + 1).padStart(2, '0')}</span>
               </div>
-              <h3 className="mb-3 font-display text-2xl font-bold text-cream">{step.title}</h3>
-              <p className="text-sm leading-relaxed text-cream/70 dark:text-cream/50">{step.body}</p>
+              <h3 className="mb-3 text-xl font-semibold text-balance text-cream">{step.title}</h3>
+              <p className="text-base leading-relaxed text-pretty text-cream-muted">{step.body}</p>
             </div>
           ))}
         </div>

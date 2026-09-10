@@ -11,9 +11,9 @@ export default function PainBeat({ dict }: { dict: Dictionary['painBeat'] }) {
         <h2 className="font-display text-4xl leading-tight font-semibold text-cream md:text-5xl">
           {dict.headlineLine1}
           <br />
-          <span className="text-cream/50 italic">{dict.headlineLine2}</span>
+          <span className="text-gold-text">{dict.headlineLine2}</span>
         </h2>
-        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-cream/60">{dict.body}</p>
+        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-cream-muted">{dict.body}</p>
       </div>
     </section>
   )

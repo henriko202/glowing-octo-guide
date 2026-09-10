@@ -23,7 +23,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
                 id={`faq-btn-${i}`}
                 aria-controls={`faq-panel-${i}`}
                 aria-expanded={openIndex === i}
-                className="flex w-full items-center justify-between gap-6 py-6 text-left"
+                className="flex w-full items-center justify-between gap-6 py-6 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
               >
                 <span className="text-base font-medium text-cream">{faq.q}</span>
@@ -42,7 +42,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
                 className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
                 style={{ maxHeight: openIndex === i ? '600px' : '0px' }}
               >
-                <p className="pb-6 text-sm leading-relaxed text-cream/50">{faq.a}</p>
+                <p className="pb-6 text-base leading-relaxed text-cream-muted">{faq.a}</p>
               </div>
             </div>
           ))}

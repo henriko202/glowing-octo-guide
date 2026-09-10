@@ -59,8 +59,7 @@ export default function CheckoutSuccessDialog({
                 {t(isTrial ? 'billing.successBody' : 'billing.successBodyActive', { plan: planName })}
               </p>
               {showPostLive && <p className="mt-2">{t('billing.successPostLive')}</p>}
-              {/* The outcome they bought (spec §6): a real LinkedIn presence that gets the right people to find
-                  them. Never "the next role" or "a client" — R11's one-ICP rule: what arrives is never named. */}
+              {/* Continue directly to the first useful action; do not promise a LinkedIn result. */}
               <p className="mt-2">{t('billing.successOutcome')}</p>
             </div>
           </DialogDescription>

@@ -35,26 +35,26 @@ describe('TrialProgressCard goal sentence (fix round 1, finding 1)', () => {
     // Must NOT render the broken "...or on ." — no dangling "or on" / empty interpolation.
     expect(screen.queryByText(/or on\s*\./i)).not.toBeInTheDocument()
     expect(screen.queryByText(/or on\s*$/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/starts at 50\./)).toBeInTheDocument()
+    expect(screen.getByText(/reach 50 interactions\./)).toBeInTheDocument()
   })
 })
 
 describe('TrialProgressCard near-threshold line', () => {
   it('names the plan that is about to start, with the exact count left', () => {
     renderCard({ ...baseProgress, combined: 45, nearThreshold: true })
-    expect(screen.getByText(/5 more and your Growth plan starts/i)).toBeInTheDocument()
+    expect(screen.getByText(/5 interactions left until your Growth plan starts/i)).toBeInTheDocument()
   })
 })
 
 describe('TrialProgressCard goal sentence threshold (Item A)', () => {
   it('interpolates a non-50 threshold instead of hardcoding 50', () => {
     renderCard({ ...baseProgress, threshold: 25 })
-    expect(screen.getByText(/starts at 25/)).toBeInTheDocument()
-    expect(screen.queryByText(/starts at 50/)).not.toBeInTheDocument()
+    expect(screen.getByText(/reach 25 interactions/)).toBeInTheDocument()
+    expect(screen.queryByText(/reach 50 interactions/)).not.toBeInTheDocument()
   })
 
   it('interpolates a non-50 threshold in the no-date fallback sentence too', () => {
     renderCard({ ...baseProgress, threshold: 25, trialEndsAt: undefined })
-    expect(screen.getByText(/starts at 25\./)).toBeInTheDocument()
+    expect(screen.getByText(/reach 25 interactions\./)).toBeInTheDocument()
   })
 })

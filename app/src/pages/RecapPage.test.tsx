@@ -116,7 +116,7 @@ describe('RecapPage', () => {
     renderPage()
     expect(screen.getByText(/20 of 25 interactions\. On Growth it keeps collecting to 50/)).toBeInTheDocument()
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '20')
-    expect(screen.getByText('1 of 1 posts this week')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1 posts in the last 7 days')).toBeInTheDocument()
   })
 
   it('renders the truncated notice with the reworded copy and the row ceiling (F3, F8)', () => {
@@ -148,9 +148,9 @@ describe('RecapPage', () => {
 
   it('keeps the SSI mention behind the Sales Navigator line and links to history', () => {
     renderPage()
-    expect(screen.getByText(/Have Sales Navigator/)).toBeInTheDocument()
+    expect(screen.getByText(/Check your SSI in Sales Navigator/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See every interaction' })).toHaveAttribute('href', '/history')
-    expect(screen.getByText(/We don't read or predict your SSI/)).toBeInTheDocument()
+    expect(screen.getByText(/doesn't read or estimate your SSI/)).toBeInTheDocument()
   })
 
   it('fires recap_viewed once per loaded window and re-queries on toggle', () => {
@@ -173,7 +173,7 @@ describe('RecapPage', () => {
     expect(screen.getByRole('link', { name: 'Go to the feed' })).toHaveAttribute('href', '/feed')
     expect(screen.queryByText('Plan usage')).not.toBeInTheDocument()
     expect(captureEvent).toHaveBeenCalledWith('recap_viewed', { window: '7d', nearCap: false })
-    expect(screen.getByText(/We don't read or predict your SSI/)).toBeInTheDocument()
+    expect(screen.getByText(/doesn't read or estimate your SSI/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See every interaction' })).toHaveAttribute('href', '/history')
   })
 })

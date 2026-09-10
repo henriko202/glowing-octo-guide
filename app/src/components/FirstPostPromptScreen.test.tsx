@@ -40,7 +40,7 @@ describe('FirstPostPromptScreen', () => {
     fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
       target: { value: 'https://www.linkedin.com/posts/jane_hello-activity-123' }
     })
-    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add post/i }))
     await waitFor(() => expect(window.location.reload).toHaveBeenCalledOnce())
     expect(window.location.href).toBe('')
   })

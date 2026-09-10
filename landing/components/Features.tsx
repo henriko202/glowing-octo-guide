@@ -21,12 +21,12 @@ export default function Features({ dict, tiers }: { dict: Dictionary['features']
                 <span className="text-2xl text-gold-text opacity-70 transition-opacity duration-300 group-hover:opacity-100">
                   {f.icon}
                 </span>
-                <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-xs font-medium text-cream/50 dark:bg-cream/[0.06] dark:text-cream/40">
+                <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-[13px] font-medium text-cream-muted dark:bg-cream/[0.06]">
                   {tiers[f.tier as keyof typeof tiers]}
                 </span>
               </div>
-              <h3 className="mb-2 font-display text-xl font-bold text-cream">{f.title}</h3>
-              <p className="text-sm leading-relaxed text-cream/50">{f.body}</p>
+              <h3 className="mb-2 text-xl font-semibold text-balance text-cream">{f.title}</h3>
+              <p className="text-base leading-relaxed text-pretty text-cream-muted">{f.body}</p>
             </div>
           ))}
         </div>

@@ -34,13 +34,13 @@ export default function CookieNotice({ dict, lang }: { dict: Dictionary['cookieN
     // between the nav and this notice). The text length varies by locale — es wraps a line more than
     // en — so on short viewports the bar tightens rather than letting the Hero guess a worst-case
     // padding. Keep this query in step with the one in Hero.tsx.
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-cream/10 bg-ink/95 px-6 py-4 text-sm text-cream/80 backdrop-blur [@media(max-height:720px)]:py-2 [@media(max-height:720px)]:text-xs">
-      <div className="mx-auto flex max-w-4xl flex-col items-center gap-3 sm:flex-row [@media(max-height:720px)]:gap-2">
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-cream/10 bg-ink/95 px-6 py-4 text-sm text-cream/80 backdrop-blur [@media(max-height:720px)]:py-2 [@media(max-height:720px)]:text-xs [@media(max-width:640px)_and_(max-height:850px)]:py-2 [@media(max-width:640px)_and_(max-height:850px)]:text-xs">
+      <div className="mx-auto flex max-w-4xl flex-col items-center gap-3 sm:flex-row [@media(max-height:720px)]:gap-2 [@media(max-width:640px)_and_(max-height:850px)]:gap-2">
         <p className="m-0 flex-1">
           {dict.text}{' '}
           <a
             href={`/${lang}/cookies`}
-            className="text-gold-text hover:underline"
+            className="text-gold-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.learnMore}
           </a>
@@ -52,7 +52,7 @@ export default function CookieNotice({ dict, lang }: { dict: Dictionary['cookieN
             localStorage.setItem(KEY, '1')
             setDismissedNow(true)
           }}
-          className="rounded-md bg-gold px-4 py-2 font-semibold text-on-gold"
+          className="rounded-md bg-gold px-4 py-2 font-semibold text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
         >
           {dict.dismiss}
         </button>

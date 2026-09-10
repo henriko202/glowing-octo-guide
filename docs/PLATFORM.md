@@ -50,8 +50,8 @@
 
 ## 1. Product Overview & Business Model
 
-**Link Into The SSI** is a LinkedIn growth‑accelerator SaaS for people whose next piece of work depends on the right
-people finding them on LinkedIn — one ICP, defined by buying criteria rather than job title (see
+**Link Into The SSI** helps people stay active in relevant LinkedIn conversations so more of the right people can come
+across their work — one ICP, defined by buying criteria rather than job title (see
 [§15](#15-frontend--landing-site-landing)). The product premise:
 
 1. A user signs in with **LinkedIn OAuth** (OpenID Connect), so the app can identify them and show their posts in the
@@ -62,10 +62,11 @@ people finding them on LinkedIn — one ICP, defined by buying criteria rather t
    **hands off** to LinkedIn (opens the post, copies the draft to the clipboard); the user performs the action there
    under their own identity. The app counts the engagement **optimistically on tap** — it cannot confirm the LinkedIn
    action. See [§11](#11-feed--engagement).
-4. Consistent, relevant engagement raises the user's **Social Selling Index (SSI)** — LinkedIn's 0–100 score across four
-   25‑point pillars (brand, find the right people, engage with insights, build relationships).
+4. LinkedIn's **Social Selling Index (SSI)** scores four parts of that activity from 0 to 25: professional brand,
+   finding the right people, engaging with insights, and building relationships. The app does not access or predict the
+   score and promises no change or timeline.
 
-**Network effect:** more users → richer feed → more engagement → higher SSI → more users.
+**Network effect:** more users → richer feed → more relevant conversations available to each member.
 
 **Monetization** is subscription‑based via Stripe across four tiers (Starter / Growth / Pro / Contact‑Enterprise).
 Higher tiers unlock feed targeting (by industry/country), post‑visibility controls, featured posts, and higher
@@ -131,12 +132,21 @@ The repository is a **pnpm monorepo** with **three deployable packages sharing o
 
 | Package    | Stack                                                                                         | Deploy target                          | Domain (prod)                                |
 |------------|-----------------------------------------------------------------------------------------------|----------------------------------------|----------------------------------------------|
-| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)                                     | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
-| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next                                      | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 (CSS-first)                                     | **Cloudflare** Workers (OpenNext)      | `www.linkintothessi.com`                     |
+| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4, react‑i18next                                      | **Cloudflare** Workers (Static Assets) | `www.app.linkintothessi.com`                 |
 | `convex/`  | Convex (serverless, real‑time, TS‑native) + `@convex-dev/stripe` + `@convex-dev/rate-limiter` | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
 
 Cloudflare **hosts both frontends** (Workers) and provides DNS/CDN/TLS. External services: **LinkedIn**
 (OAuth + posting), **Stripe** (billing), **Apify** (LinkedIn post scraping).
+
+The landing Worker declares both `www.linkintothessi.com` and `linkintothessi.com` as Custom Domains in
+`landing/wrangler.jsonc`. The `www` hostname is canonical; every apex request receives a path- and query-preserving
+**308** redirect to `www` before locale routing runs.
+
+The app Worker likewise declares `www.app.linkintothessi.com` and `app.linkintothessi.com` as Custom Domains in
+`app/wrangler.jsonc`. Its Worker entrypoint (`app/src/cloudflare-worker.ts`) runs before Static Assets, permanently
+redirects the old app hostname to `www.app` while preserving path/query, and delegates canonical-host requests to the
+`ASSETS` binding so SPA fallback remains active.
 
 ### Deployment & integration topology
 
@@ -226,6 +236,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 ├── app/                         # React + Vite SaaS dashboard → Cloudflare Workers (Static Assets)
 │   ├── index.html               # mount point + pre-hydration theme guard (CSP is generated into dist/_headers
 │   │                            #   by scripts/gen-headers.mjs, not an index.html meta tag)
+│   ├── src/cloudflare-worker.ts # canonical-host 308, then delegation to the ASSETS binding
 │   ├── vite.config.ts           # dev port 5174, inline Vitest config
 │   └── src/
 │       ├── main.tsx             # ConvexProvider + BrowserRouter bootstrap
@@ -1291,7 +1302,7 @@ a first‑paid‑invoice trigger (`invoice.paid`) or a row flag for the first `a
 `formatPriceLabel`, the `INTL_TAG` map and `planName(locale, tier)` — and every branch from `lib/trialMilestone.ts`, so
 the copy and the rules are unit-tested without a database. **Plan names are localized:** `planName` mirrors
 `billing.plans.*.name` in the app
-locales (only the enterprise tier differs — Enterprise / Empresa / Empresa), so a raw tier id never reaches a member and
+locales (including the `Enterprise` tier name), so a raw tier id never reaches a member and
 an English plan name never lands inside a Portuguese email. `sendDuplicateCanceled` therefore takes a **tier id**, not a
 rendered plan name: `http.ts` deals in tier ids and the mailer localizes, so display copy never passes through the
 webhook layer.
@@ -1604,10 +1615,13 @@ No proration, no refund, no discount — the policy is unchanged.
 
 The app shows **exactly one** interstitial before Stripe (`app/src/components/CancelInterstitial.tsx`, §14): what
 leaves the feed (the member's live post count from `posts.getMyPosts` plus their 30-day received total from
-`interactions.getRecap`), a **"Move to Starter"** alternative shown only above the Starter tier **and only while no
+`interactions.getRecap`), a **"Schedule Starter"** alternative shown only above the Starter tier **and only while no
 downgrade is already pending** (the `pendingTier` prop), and one optional question stored as `feedback` category
 `cancellation` (§5, §12A). Stripe's own portal owns the **cancellation's** confirmation step — the interstitial never
-confirms the cancellation itself. A **scheduled** downgrade has no confirmation step to own: the action returns no
+confirms the cancellation itself. Before the alternative action, the interstitial names Starter's actual price for the
+member's current interval, the effective date (or "end of your current period" fallback), the current Starter weekly
+post and per-post interaction limits from `getTierLimits` (falling back to `DEFAULTS.starter`), and the loss of industry
+filtering. A **scheduled** downgrade has no confirmation step to own: the action returns no
 url, so the interstitial toasts "You move to Starter at the end of your period.", fires
 `cancel_alternative_completed { from }` and closes itself.
 
@@ -1622,7 +1636,7 @@ sequenceDiagram
     U ->> B: Cancel plan
     B ->> I: open (cancel_started)
     I ->> I: getRecap 30d + getMyPosts
-    alt Move to Starter (hidden once one is pending, and during a trial)
+    alt Schedule Starter (hidden once one is pending, and during a trial)
         I ->> N: createCancelFlowSession(downgrade) (cancel_alternative_taken)
         N ->> N: trialing? → TRIAL_NO_SWITCH · cancelling? → CANCEL_PENDING
         N ->> S: subscriptionSchedules — Starter at period end, proration none
@@ -1726,7 +1740,7 @@ re-propose it). The fix is to stop asking the portal: **we write the downgrade o
 schedule**, and the portal keeps only the upgrades and interval switches it handles correctly.
 
 **`scheduleDowngrade(ctx, sub, targetPriceId, targetTier)`** (private, `billingNode.ts`) is the whole write, shared by
-R09's "Move to Starter" and the plan grid's cheaper-tier button:
+R09's "Schedule Starter" and the plan grid's cheaper-tier button:
 
 1. **Resolve the interval from the target price**, not from the subscription — `intervalForPriceId(process.env,
    priceId)` (`convex/lib/stripePrices.ts`), because the grid can send a monthly member to an annual price. No match
@@ -1786,7 +1800,7 @@ silent success on every path.
 
 ```mermaid
 flowchart TD
-    A["Move to Starter / Switch to a cheaper tier"] --> B{"status active?"}
+    A["Schedule Starter / Switch to a cheaper tier"] --> B{"status active?"}
     B -->|no: trialing, past_due| P["portal subscription_update_confirm (nothing paid / dunning owns it)"]
     B -->|yes| C{"cancel_at_period_end?"}
     C -->|yes| X["throw CANCEL_PENDING → 'Resume your plan first.'"]
@@ -2266,7 +2280,7 @@ is no mid-trial price change to survive.
 `TRIAL_NO_SWITCH` when `sub.status === 'trialing'`, before any price is resolved. The plan grid disables every button
 and labels it `billing.trialNoSwitch` ("Unavailable during your trial"), and the member's own tier now carries the **"
 Current plan" badge while trialing** — it used to be withheld precisely so a Switch button would render in its
-place. `CancelInterstitial` hides "Move to Starter" for a trialing member, so the only saves it offers are the note
+place. `CancelInterstitial` hides "Schedule Starter" for a trialing member, so the only saves it offers are the note
 and "Keep my plan". `trial_update_behavior: 'continue_trial'` stays in every portal configuration as the backstop for
 the portal home, which is now the one surface our own gates cannot reach.
 
@@ -3786,6 +3800,8 @@ a calm working surface, in light (default) and dark.
 - **Modal footers:** `DialogFooter` uses plain inset actions with no tinted strip or negative margins. Billing,
   admin, feedback, MOTD, and deletion dialogs share it. Actions stack on mobile with 44px minimum button heights,
   wrap on desktop, and allow long labels to wrap. Card-gate pricing remains below the actions inside the dialog.
+  When the built-in close icon is visible, `DialogContent` reserves space on the right of its header so titles and
+  descriptions wrap clear of the icon. Dialogs without that icon retain the full header width.
 
 ---
 
@@ -3947,8 +3963,9 @@ sync with the compliance docs and live support inbox.
   the filter). An unfiltered empty feed instead renders **`EmptyFeed`** (R05 — never ships a blank feed: no placeholder
   posts, no invented counts): a headline, one line of body copy, and one primary button (`feed.emptyCta`, "Share your
   first post") that scrolls to and focuses the composer's `id="post-url-input"` input (no ref plumbing). Once the
-  member has a post of their own the button drops away (no second, weaker CTA replaces it) and the body swaps to
-  `feed.emptyBodyPosted` ("other members' posts show up here as they share them"); `feed.emptyBody` itself says
+  member has a post of their own but no other posts are available, the body says so and the single action becomes the
+  existing `feed.inviteLink` deep-link to `/settings#invite`; this addresses the unavailable "react twice" step by
+  helping the member bring another relevant poster into the feed. `feed.emptyBody` itself says
   "yours can be the first" and no longer claims "real posts from real members" (an unverifiable proof line, reviewed
   out 2026‑09‑06). Below, exactly one progress element — never both: a gated member with any own post
   (`hasOwnPost = hasAnyPost` from
@@ -4150,154 +4167,201 @@ sync with the compliance docs and live support inbox.
       pre-card
       member sees **one primary card** for that plan with a **"See all plans"** toggle that reveals the full grid; card
       holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead` when
-      the plan came from the URL or the stash and `billing.newUserLead` otherwise, and every pre-card CTA follows the
-      same "Start {{days}}-day {{plan}} trial" pattern — **unless the member has no trial left**, see the next bullet.
+      the plan came from the URL or the stash and `billing.newUserLead` otherwise. A chosen plan is labelled **"Your
+      choice"**; the Growth fallback is labelled **"Best for targeted feeds"**. Every pre-card CTA says "Start
+      {{plan}} trial" without promising a fixed duration — **unless the member has no trial left**, see the next bullet.
       `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
       a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle and the
       Enterprise card stay visible in every layout.
-    - **How long the trial is, everywhere on the page (R19).** `const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS` —
+    - **How long the trial can last, everywhere on the page (R19).**
+      `const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS` —
       the server's own answer (`getMe` → `toSafeMe.trialDays`, itself `trialDaysFor(user)`, §8), with the 7-day
-      constant only as the pre-load fallback. Every trial string on the page interpolates it as `{{days}}`
-      (`billing.chosenPlanLead`, `billing.newUserTrialNote`, `billing.startTrialCta`, `billing.trialBanner` /
-      `billing.trialBannerNoDate`), so an invited member is quoted **14** from the first paint and no copy anywhere
-      hard-codes a trial length. Directly under the pre-card lead, an invited member also gets the gift line
-      `billing.giftFrom` — "{{name}} invited you, so your trial runs {{days}} days instead of {{base}}" — rendered only
+      constant only as the pre-load fallback. The disclosure interpolates it as an upper bound alongside
+      `TRIAL_INTERACTION_THRESHOLD`: card required; free until 50 interactions made or received, as recorded in the app,
+      or for up to
+      `{{days}}` days, whichever comes first. CTA and chosen-plan labels omit duration rather than implying the full
+      period is guaranteed. Directly under the pre-card lead, an invited member also gets the gift line
+      `billing.giftFrom` — "{{name}} invited you, so your trial can last up to {{days}} days instead of {{base}} days" —
+      rendered only
       when `me.inviterName` is set (`getMe` resolves the inviter's **first name only** through
       `by_invite_code`, §7), only inside the `!hasCard` block, **and** only while `canTrial` (below): it is a statement
       of fact about the offer, so it disappears the moment there is a card, and it never claims the trial has started.
-    - **No trial left ⇒ no trial promise (`canTrial`).** `const canTrial = me?.trialEligible !== false` — the server's
-      own row-count answer (§8), never a status guess. `!hasCard` is `trialing || active || past_due` inverted, so it
-      covers a **canceled** member re-subscribing _and_ a member whose Stripe subscription went `incomplete`/`paused`
-      (both read as `'none'` with a row on file), and one trial per account means checkout gives all of them nothing.
-      Each of the three trial promises in the pre-card block therefore has an honest twin, swapped on `canTrial`:
-      `billing.chosenPlanLead` → **`billing.noTrialChosenPlanLead`**, `billing.newUserTrialNote` → **
-      `billing.noTrialNote`**, and the plan-card CTA `billing.startTrialCta` → **`billing.noTrialCta`**
-      ("Subscribe to {{plan}}"). None of the three carries `{{days}}` — there is no trial length to quote. The copy
-      deliberately mirrors `NO_TRIAL_MESSAGE` in `convex/lib/checkoutCopy.ts`, the line Stripe prints under its own pay
-      button two clicks later, so the page and the checkout never contradict each other. `billing.newUserLead` needs no
-      twin: "select a plan below" is true either way. The default is optimistic (`!== false`) because `me` is
-      `undefined` for one render and the majority case is a genuinely new visitor.
-        - **Reused by `UpgradeAtLimit` (R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
-          [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
-          `/billing?plan=${nextTier}&interval=${chargedInterval}` — the same `?plan=`/`?interval=` deep link this page
-          already reads via `resolveTargetPlan`/the interval toggle above, so it needs no bespoke routing. It never
-          re‑derives `hasCard` itself: landing on this page with a card already on file still routes the click through
-          `handlePlanClick`'s existing portal‑switch branch (above), so a card holder always ends up in the Customer
-          Portal regardless of which cap sent them here.
-        - **Trial banner, tier-aware and exact.** `billing.trialBanner` interpolates the member's **real** plan name
-          (`billing.plans.<tier>.name`), the real threshold (`progress.threshold`, falling back to
-          `TRIAL_INTERACTION_THRESHOLD` while the query loads) and the trial's end **date** (`me.trialEndsAt`, localized
-          via
-          `i18n.language`; `billing.trialBannerNoDate` when the row has no date) — "your {{plan}} plan starts at
-          {{threshold}} interactions or on {{date}}", the same promise `shell.trialGoal` and `feed.cardGateCost` make,
-          never
-          a typed "50" or a relative "after 7 days" that is stale from day two. It sits above the X/50 progress meter.
-          The
-          banner's SSI link‑out (`billing.ssiLink`) was removed 2026‑09‑06, and the sidebar's SSI link‑out followed on
-          2026‑09‑07: the whole app now holds **exactly one** SSI link, the qualified Sales Navigator line in the recap
-          footer (`recap.salesNav`, R15). From 40 of 50 (`progress.nearThreshold`,
-          §8) it swaps to `billing.nearThresholdBanner` —
-          "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour
-          token
-          in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
-      text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses (the `Badge` `warning` variant
-          itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system).
-            - **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible notice
-              renders
-              above the plans; **Dismiss** calls `users.clearBillingNotice`.
-            - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely
-              ended
-              subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing block
-              still
-              appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's own
-              tier,
-              and
-              the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id); the
-              "Renews on {date}" / "Access until {date}" line still comes from `getSubscriptionInfo.currentPeriodEnd`
-              ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
-              (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
-            - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email (via
-              the
-              `SUPPORT_EMAIL` constant).
-        - **Checkout return (R07 — celebrate activation; see §8 for the full flow).** A `?success=true` redirect latches
-          `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true and
-          `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
-          `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
-          `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the status
-          becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
-          `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your
-          {{plan}}
-          plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a post
-          (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were never
-          hidden); then `billing.successOutcome` (the outcome the member bought, spec §6 as amended 2026‑09‑06: a real
-          LinkedIn
-          presence that gets the right people to find them — never "the next role" or "a client", per the R11 one‑ICP
-          rule that what arrives is never named); then the plan's own description. A card holder who arrives via an
-          upgrade‑at‑the‑limit link (`?plan=` in the URL, R08) sees the same "Recommended" highlight on that plan a
-          no‑card
-          visitor's chosen plan
-          gets — never on the plan they already hold, never on a plain visit.
-        - **Cancel, downgrade and resume (R09 — see [§8](#8-subscriptions--billing) for the backend).** The subscription
-          card carries exactly one of two controls, chosen on `subscriptionInfo.cancelAtPeriodEnd`: **"Cancel plan"**
-          (`billing.cancel.link`) opens the single `CancelInterstitial` dialog, or — once the cancel is pending — **"
-          Resume
-          plan"** (`billing.cancel.resume`) calls `billingNode.resumeSubscription` and toasts
-          `billing.cancel.resumed` / `billing.cancel.resumeFailed`. A pending cancel also swaps the date line to
-          `billing.cancelsOn` (styled `text-destructive`) and adds `billing.cancel.postsLeave` naming the day the
-          member's
-          posts leave the feed. Nothing here polls: `getSubscriptionInfo` is reactive, so the webhook flip re-renders
-          the
-          card on its own.
-        - **The pending downgrade (B07 — see [§8](#8-subscriptions--billing)).** `getSubscriptionInfo` also surfaces
-          `pendingTier` / `pendingAt`, and the card reads them **only when no cancel is pending** — a cancellation
-          outranks a downgrade, and the schedule is released when the cancel flow opens, so the two states can never
-          both be shown. The date line becomes `billing.pendingChange` / `billing.pendingFrom` ("Starter from
-          <date>", `pendingAt` falling back to the period end), a **"Keep {{plan}}"** button (`billing.pendingKeep`,
-          naming the tier they are on now) calls `billingNode.undoScheduledDowngrade` and
-          toasts `billing.pendingKept`, and the footnote becomes `billing.pendingUntil`. The "Cancel plan" link stays
-          reachable beside the undo — the cancel flow releases the schedule itself, so it is never a dead end. Both
-          buttons share `resumeLoading`, since neither can be pressed while the other runs.
-            - **The `?canceled=true` return.** Stripe's hosted cancel flow redirects back to `/billing?canceled=true`.
-              The
+        - **No trial left ⇒ no trial promise (`canTrial`).** `const canTrial = me?.trialEligible !== false` — the
+          server's
+          own row-count answer (§8), never a status guess. `!hasCard` is `trialing || active || past_due` inverted, so
+          it
+          covers a **canceled** member re-subscribing _and_ a member whose Stripe subscription went `incomplete`/
+          `paused`
+          (both read as `'none'` with a row on file), and one trial per account means checkout gives all of them
+          nothing.
+          Each of the three trial promises in the pre-card block therefore has an honest twin, swapped on `canTrial`:
+          `billing.chosenPlanLead` → **`billing.noTrialChosenPlanLead`**, `billing.newUserTrialNote` → **
+          `billing.noTrialNote`**, and the plan-card CTA `billing.startTrialCta` → **`billing.noTrialCta`**
+          ("Subscribe to {{plan}}"). None of the three carries `{{days}}` — there is no trial length to quote. The copy
+          deliberately mirrors `NO_TRIAL_MESSAGE` in `convex/lib/checkoutCopy.ts`, the line Stripe prints under its own
+          pay
+          button two clicks later, so the page and the checkout never contradict each other. `billing.newUserLead` needs
+          no
+          twin: "select a plan below" is true either way. The default is optimistic (`!== false`) because `me` is
+          `undefined` for one render and the majority case is a genuinely new visitor.
+            - **Reused by `UpgradeAtLimit` (R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
+              [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
+              `/billing?plan=${nextTier}&interval=${chargedInterval}` — the same `?plan=`/`?interval=` deep link this
               page
-              latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh can't
-              lose
-              it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state, so it
-              is
-              StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so the
-              event
-              records a confirmed cancel rather than a visit to the URL. The param is stripped with
-              `setSearchParams({}, { replace: true })` in the same effect.
-            - **The `?switched=<tier>` return (R08 / R20).** The plan-switch deep link ([§8](#8-subscriptions--billing))
-              returns with the tier it was aimed at. **A scheduled downgrade appends
-              no marker** — it never leaves the app, so it can never reach the 20-second wait below or report a false
-              timeout for a tier that was never going to move on this visit. The page latches it during render
-              (`landing`,
-              the `justSubscribed` pattern), shows **"Switching you to X…"** while `me.tier` still
-              differs — the same 20-second timeout and Manage escape valve as the R07 activation, a Sentry exception on
-              timeout — and, once the tier matches, **"You're on X now."** plus exactly one **
-              `plan_switch_completed { plan }`** (a `useRef` latch), stripping the param only then (the F4 rule).
-              Card-less members ignore the marker: their default tier could otherwise "complete" a switch that never
-              happened. Three keys per locale: `billing.switching`, `billing.switched`, `billing.switchTimeout`.
-              The **`?downgraded=<tier>` counterpart was deleted on 2026-09-09** along with the last path that
-              produced it: `cancel_alternative_completed { from }` is now fired by `CancelInterstitial` the moment the
-              scheduling action resolves, so the save funnel no longer depends on a return leg that no longer exists.
-    - **The two funnel events (R18/R20).** `handleUpgrade` fires **`checkout_started { plan, interval }`** before it
-      calls `createCheckoutSession`, marking the card-entry step so the survival panel's signup → trial gap can be read
-      as a card-gate leak rather than an activation leak. Separately, the post-cap email's single link lands here as
-      `/billing?plan=…&interval=…&src=cap_email` ([§8](#8-subscriptions--billing)); a `useRef`-latched effect — the same
-      StrictMode-safe pattern as `cancel_completed` above — fires **`cap_email_billing_opened { plan }`** once per
-      landing, resolving the plan through the same `resolveTargetPlan(searchParams)`. `src` is read, never stripped: it
-      is inert for routing, and leaving it lets a refresh stay identifiable in the URL.
-    - Covered by `app/src/pages/BillingPage.test.tsx` (60 tests: plan-click routing incl. the portal deep link and its
-      fallback, `ALREADY_SUBSCRIBED` → portal,
-      Manage-button visibility, chosen-plan and chosen-interval resolution order incl. the billed-interval seed and the
-      click-before-row case, the localized current-plan label,
-      the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice, the R07
-      checkout-return celebration/activating states incl. the canceled re‑subscriber path, the R08 card‑holder
-      plan highlight, the R09 cancel/resume swap plus the `?canceled=true` latch, the R19 `{{days}}` trial length and
-      gift line, the R20 `src=cap_email` event, the `?switched=` landing and the stale `?downgraded=` being ignored,
-      and the trial gate — no Switch button, every plan button disabled, and a click firing nothing).
+              already reads via `resolveTargetPlan`/the interval toggle above, so it needs no bespoke routing. It never
+              re‑derives `hasCard` itself: landing on this page with a card already on file still routes the click
+              through
+              `handlePlanClick`'s existing portal‑switch branch (above), so a card holder always ends up in the Customer
+              Portal regardless of which cap sent them here.
+            - **Trial banner, tier-aware and exact.** `billing.trialBanner` interpolates the member's **real** plan name
+              (`billing.plans.<tier>.name`), the real threshold (`progress.threshold`, falling back to
+              `TRIAL_INTERACTION_THRESHOLD` while the query loads) and the trial's end **date** (`me.trialEndsAt`,
+              localized
+              via
+              `i18n.language`; `billing.trialBannerNoDate` when the row has no date) — "your {{plan}} plan starts at
+              {{threshold}} interactions or on {{date}}", the same promise `shell.trialGoal` and `feed.cardGateCost`
+              make,
+              never
+              a typed "50" or a relative "after 7 days" that is stale from day two. It sits above the X/50 progress
+              meter.
+              The
+              banner's SSI link‑out (`billing.ssiLink`) was removed 2026‑09‑06, and the sidebar's SSI link‑out followed
+              on
+              2026‑09‑07: the whole app now holds **exactly one** SSI link, the qualified Sales Navigator line in the
+              recap
+              footer (`recap.salesNav`, R15). From 40 of 50 (`progress.nearThreshold`,
+              §8) it swaps to `billing.nearThresholdBanner` —
+              "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour
+              token
+              in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
+      text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses (the `Badge` `warning` variant
+              itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system).
+                - **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible
+                  notice
+                  renders
+                  above the plans; **Dismiss** calls `users.clearBillingNotice`.
+                - **Unchanged states.** The red **"Your subscription has ended"** banner still shows only for genuinely
+                  ended
+                  subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing
+                  block
+                  still
+                  appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's
+                  own
+                  tier,
+                  and
+                  the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id);
+                  the
+                  "Renews on {date}" / "Access until {date}" line still comes from
+                  `getSubscriptionInfo.currentPeriodEnd`
+                  ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
+                  (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]).
+                - **Enterprise** card (all states) and the footer "Need more?" line both deep-link to the support email
+                  (via
+                  the
+                  `SUPPORT_EMAIL` constant).
+            - **Checkout return (R07 — celebrate activation; see §8 for the full flow).** A `?success=true` redirect
+              latches
+              `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true
+              and
+              `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
+              `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
+              `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the
+              status
+              becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
+              `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your
+              {{plan}}
+              plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a
+              post (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were
+              never
+              hidden); then `billing.successOutcome`, which sends the member to their first relevant conversation
+              without
+              promising a LinkedIn result; then the plan's own use-case description. A card holder who arrives via an
+              upgrade-at-the-limit link (`?plan=` in the URL, R08) sees **"Your choice"** on that plan. A no-card
+              visitor
+              with no explicit choice sees Growth's objective **"Best for targeted feeds"** rationale. Neither badge
+              appears
+              on the plan the member already holds or on an unselected plan.
+            - **Cancel, downgrade and resume (R09 — see [§8](#8-subscriptions--billing) for the backend).** The
+              subscription
+              card carries exactly one of two controls, chosen on `subscriptionInfo.cancelAtPeriodEnd`: **"Cancel
+              plan"**
+              (`billing.cancel.link`) opens the single `CancelInterstitial` dialog, or — once the cancel is pending —
+              **"
+              Resume
+              plan"** (`billing.cancel.resume`) calls `billingNode.resumeSubscription` and toasts
+              `billing.cancel.resumed` / `billing.cancel.resumeFailed`. A pending cancel also swaps the date line to
+              `billing.cancelsOn` (styled `text-destructive`) and adds `billing.cancel.postsLeave` naming the day the
+              member's
+              posts leave the feed. Nothing here polls: `getSubscriptionInfo` is reactive, so the webhook flip
+              re-renders
+              the
+              card on its own.
+            - **The pending downgrade (B07 — see [§8](#8-subscriptions--billing)).** `getSubscriptionInfo` also surfaces
+              `pendingTier` / `pendingAt`, and the card reads them **only when no cancel is pending** — a cancellation
+              outranks a downgrade, and the schedule is released when the cancel flow opens, so the two states can never
+              both be shown. The date line becomes `billing.pendingChange` / `billing.pendingFrom` ("Starter from
+              <date>", `pendingAt` falling back to the period end), a **"Keep {{plan}}"** button (`billing.pendingKeep`,
+              naming the tier they are on now) calls `billingNode.undoScheduledDowngrade` and
+              toasts `billing.pendingKept`, and the footnote becomes `billing.pendingUntil`. The "Cancel plan" link
+              stays
+              reachable beside the undo — the cancel flow releases the schedule itself, so it is never a dead end. Both
+              buttons share `resumeLoading`, since neither can be pressed while the other runs.
+                - **The `?canceled=true` return.** Stripe's hosted cancel flow redirects back to
+                  `/billing?canceled=true`.
+                  The
+                  page
+                  latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh
+                  can't
+                  lose
+                  it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state,
+                  so it
+                  is
+                  StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so
+                  the
+                  event
+                  records a confirmed cancel rather than a visit to the URL. The param is stripped with
+                  `setSearchParams({}, { replace: true })` in the same effect.
+                - **The `?switched=<tier>` return (R08 / R20).** The plan-switch deep link
+                  ([§8](#8-subscriptions--billing))
+                  returns with the tier it was aimed at. **A scheduled downgrade appends
+                  no marker** — it never leaves the app, so it can never reach the 20-second wait below or report a
+                  false
+                  timeout for a tier that was never going to move on this visit. The page latches it during render
+                  (`landing`,
+                  the `justSubscribed` pattern), shows **"Switching you to X…"** while `me.tier` still
+                  differs — the same 20-second timeout and Manage escape valve as the R07 activation, a Sentry exception
+                  on
+                  timeout — and, once the tier matches, **"You're on X now."** plus exactly one **
+                  `plan_switch_completed { plan }`** (a `useRef` latch), stripping the param only then (the F4 rule).
+                  Card-less members ignore the marker: their default tier could otherwise "complete" a switch that never
+                  happened. Three keys per locale: `billing.switching`, `billing.switched`, `billing.switchTimeout`.
+                  The **`?downgraded=<tier>` counterpart was deleted on 2026-09-09** along with the last path that
+                  produced it: `cancel_alternative_completed { from }` is now fired by `CancelInterstitial` the moment
+                  the
+                  scheduling action resolves, so the save funnel no longer depends on a return leg that no longer
+                  exists.
+        - **The two funnel events (R18/R20).** `handleUpgrade` fires **`checkout_started { plan, interval }`** before it
+          calls `createCheckoutSession`, marking the card-entry step so the survival panel's signup → trial gap can be
+          read
+          as a card-gate leak rather than an activation leak. Separately, the post-cap email's single link lands here as
+          `/billing?plan=…&interval=…&src=cap_email` ([§8](#8-subscriptions--billing)); a `useRef`-latched effect — the
+          same
+          StrictMode-safe pattern as `cancel_completed` above — fires **`cap_email_billing_opened { plan }`** once per
+          landing, resolving the plan through the same `resolveTargetPlan(searchParams)`. `src` is read, never stripped:
+          it
+          is inert for routing, and leaving it lets a refresh stay identifiable in the URL.
+        - Covered by `app/src/pages/BillingPage.test.tsx` (60 tests: plan-click routing incl. the portal deep link and
+          its
+          fallback, `ALREADY_SUBSCRIBED` → portal,
+          Manage-button visibility, chosen-plan and chosen-interval resolution order incl. the billed-interval seed and
+          the
+          click-before-row case, the localized current-plan label,
+          the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice, the R07
+          checkout-return celebration/activating states incl. the canceled re‑subscriber path, the R08 card‑holder
+          plan highlight, the R09 cancel/resume swap plus the `?canceled=true` latch, the R19 `{{days}}` trial length
+          and
+          gift line, the R20 `src=cap_email` event, the `?switched=` landing and the stale `?downgraded=` being ignored,
+          and the trial gate — no Switch button, every plan button disabled, and a click firing nothing).
 - **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
   `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
   directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
@@ -4370,8 +4434,9 @@ and the **featured** ask is only rendered by `MyPostsPage` when the member's pla
 used to fire on page load, an interruption rather than a limit moment; Starter meets the featured ask where it binds,
 the Feature button's own disabled state (the interim `upgrade.featuredNotIncluded` key is gone). When `limit ===
 'featured'` and the member is not canceled, one more line renders after the upgrade copy: `upgrade.featuredAddon`,
-naming the $5 add-on (backlog/R17) — the downsell after the upsell, text only, never shown to a canceled member (who
-has no buy control on My Posts either, `canBuy()` — [§14](#14-frontend--authenticated-app-app) MyPostsPage). An
+naming the one-time US$5 add-on (backlog/R17) — the downsell after the upsell, text only, never shown to a canceled
+member (who has no buy control on My Posts either, `canBuy()` — [§14](#14-frontend--authenticated-app-app)
+MyPostsPage). An
 optional **
 `nearCap?: { total, cap }`** prop (R15, recap only) switches the `interactionCap` copy from the past-tense
 `upgrade.interactionCap` ("this post left the feed…") to `upgrade.interactionCapNear` ("your post is at {{total}} of
@@ -4473,6 +4538,7 @@ entry above and [§8](#8-subscriptions--billing)), plus the two LinkedIn‑embed
   `feed.doneCommented` / `feed.doneBoth`), `feed.leavesIn` with the whole hours left (rounded up and bounded to
   1–24), and a ghost **Hide now** button. The reaction control disappears after reacting. After commenting, **View
   generated comment** replaces the initial Comment action and toggles `CommentBox` in read-only review mode.
+  Its label uses the same 13px text size as the Reacted/commented status.
   That mode reloads `interactions.getCommentDraft`, hides generation controls, and offers **Comment on LinkedIn
   again**. Reopening copies the draft and hands off to LinkedIn without calling `commentOnPost` again.
   `FeedPage` supplies the shared `now` prop and removes expired cards before virtualization, so countdowns and
@@ -4515,11 +4581,12 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   (`GateSource = 'react' | 'comment' | 'linkedin' | 'aiDraft'`; each `PostCard` control reports its own source —
   `'aiDraft'` is reserved for `CommentBox`'s AI-draft control, which is structurally unreachable while gated and
   untouched by R04) only tags the `card_gate_opened` PostHog event, not the copy. Its
-  primary CTA is `feed.cardGateCta` ("Start {{days}}-day trial") — **never** "Add a payment method" — linking to
+  primary CTA is `feed.cardGateCta` ("Start free trial") — **never** "Add a payment method" — linking to
   `/billing?plan={{resolveTargetPlan()}}` and firing `card_gate_cta_clicked`; a secondary "Not now" closes it.
   (`captureEvent`, consent-gated, no-op pre-init.) Under the footer, one muted line says what the CTA costs
-  (`feed.cardGateCost` — "Free for {{days}} days or {{threshold}} interactions, then your plan starts. Cancel
-  anytime.", the
+  (`feed.cardGateCost` — card required; free until `{{threshold}}` interactions made or received, as recorded in the
+  app, or for up to
+  `{{days}}` days, whichever comes first; then the selected plan starts; cancel anytime — the
   threshold interpolated from `TRIAL_INTERACTION_THRESHOLD`, never typed into the copy; R04's "the line under it says
   what it costs"). Covered by `app/src/components/CardGateDialog.test.tsx` (event fired once with the tap source, CTA
   href + cost line, `past_due` swap with no cost line, `trialEligible: false` swap with no trial promise at all).
@@ -4541,7 +4608,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -4552,7 +4619,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   is the disclosure the member is billed against one click later, and `{!pastDue && …}` meant a no-trial member read
   "Free for 7 days" directly under a button that charges them. The fixed line then still named **no amount** (review
   finding M6, closed 2026-09-07): "Subscribe to Growth" with no trial is an ask to pay, so every no-trial surface now
-  quotes the plan's two prices — "The Growth plan is $15/mo or $150/yr." — both intervals, because the gate link
+  quotes the plan's two prices — "The Growth plan is US$15/mo or US$150/yr." — both intervals, because the gate link
   carries `?plan=` but no interval. The figures come from `PLAN_PRICES` in `app/src/lib/planPrices.ts` (moved out of
   `BillingPage.tsx` together with `Interval` / `isInterval`, so the grid and the gate cannot quote different numbers;
   the Stripe webhook snapshot still wins on the Billing page itself). The banner and the inline ask carry the price
@@ -4560,12 +4627,11 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   still wins the branch where it applies (that member is fixing a card, not subscribing). The default is optimistic
   (`!== false`), because `me` is `undefined` for one render and the majority case is a genuinely new member. Covered
   by `CardGateDialog.test.tsx`, `UpgradeAtLimit.test.tsx` and `EmptyFeed.test.tsx` (the banner's own twin).
-- **The trial length is never typed into copy (R19).** Every gate surface reads the same
-  `me.trialDays ?? TRIAL_PERIOD_DAYS` — `CardGateDialog`, `CardGateBanner` and `UpgradeAtLimit`'s gated branch all
-  derive it locally from their own `getMe`, and `BillingPage` does the same (§14 above) — and interpolates it as
-  `{{days}}`. Six strings carry it: `feed.cardGateCta`, `feed.cardGateCost`, `billing.chosenPlanLead`,
-  `billing.newUserTrialNote`, `billing.startTrialCta` and `billing.trialBannerNoDate` (plus `billing.giftFrom` and
-  `recap.inviteLine`, which are R19's own). `billing.trialBanner` stays on the exact `{{date}}` — a real end date beats
+- **The trial length is never typed into disclosure copy (R19).** `CardGateDialog` and `BillingPage` read
+  `me.trialDays ?? TRIAL_PERIOD_DAYS` and interpolate it as an **upper bound** (`up to {{days}} days`) beside the
+  interaction threshold. CTA labels no longer promise a fixed duration. `feed.cardGateCost`,
+  `billing.newUserTrialNote`, `billing.trialBannerNoDate`, `billing.giftFrom` and `recap.inviteLine` carry the dynamic
+  duration; `billing.trialBanner` stays on the exact `{{date}}` — a real end date beats
   a duration whenever the row has one. `TRIAL_PERIOD_DAYS` is imported from `convex/lib/trialMilestone.ts` purely as
   the pre-load fallback, so an **invited** member (14 days, §8) is quoted their real length on every one of these
   surfaces without a second copy variant existing anywhere.
@@ -4662,6 +4728,23 @@ render correctly.
 cookie and `localStorage`. On the first authenticated load, if neither the cookie nor `localStorage` `i18nextLng` key is
 present, the UI language is seeded once from
 `me.primaryLocale` (the scraped LinkedIn language); the `LanguageMenu` switcher still overrides it thereafter.
+
+**Copy standard (2026-09-09):** all three app dictionaries were reviewed together. Product UI now names the action or
+state directly instead of using motivational language: trial surfaces state the exact interaction/date trigger, feed
+surfaces describe what is recorded rather than calling it an "SSI habit", plan cards list concrete limits, and recap
+copy states that the app neither reads nor estimates SSI. Brazilian Portuguese and neutral Latin-American Spanish use
+the same meaning and placeholders as English; legal retention, deletion, export, and consent statements remain
+substantively unchanged. This was a value-only pass, so the key and leaf counts below did not change.
+
+**Conversion copy standard (2026-09-10):** trial durations are upper bounds, not promises. Decisive surfaces pair
+"Start trial" with the card requirement and exact first trigger: 50 interactions made or received as recorded in the
+app, or up to the
+member's `trialDays`, whichever comes first. Pricing describes the observable cap consequence (when a post leaves the
+feed), scopes visibility controls to the shared feed, and uses `US$` on client-side fallback labels. Explicit plan
+choices use `billing.selected`; only the unchosen Growth fallback uses the reasoned `billing.recommended`. The
+cancellation downsell gained `billing.cancel.alternativeNoDate` so both dated and no-date states disclose Starter's
+price, current limits, timing, and lost filter before **Schedule Starter**. These two new keys exist in all three
+locales with identical placeholders.
 
 **Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and confirmation copy used
 by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
@@ -4767,8 +4850,9 @@ two loose keys, and removed two:
   `history.*`.
 - **`history.*` — 9 keys** (`title`, `lead`, `commented`, `by`, `removed`, `showMore`, `showLess`, `empty`,
   `emptyCta`).
-- **`billing.cancel.*` — 18 keys** (`link`, `title`, `trialBody`/`trialBodyNoDate`, `body_one`/`body_other`,
-  `bodyNoPosts`, `bodyNoDate`, `alternative`, `alternativeCta`, `question`, `questionPlaceholder`, `keep`, `continue`,
+- **`billing.cancel.*` — 19 keys** (`link`, `title`, `trialBody`/`trialBodyNoDate`, `body_one`/`body_other`,
+  `bodyNoPosts`, `bodyNoDate`, `alternative`, `alternativeNoDate`, `alternativeCta`, `question`, `questionPlaceholder`,
+  `keep`, `continue`,
   `resume`, `postsLeave`, `resumed`, `resumeFailed`). The `*NoDate` and `bodyNoPosts` variants exist because
   `currentPeriodEnd` and a member's live-post count are both genuinely optional — no sentence ever interpolates an
   empty date or a bare "0 posts".
@@ -4807,8 +4891,8 @@ is a second thing to keep in sync with `NO_TRIAL_MESSAGE`, and the gate contradi
 being fixed. Cross-namespace `t()` is already the pattern here — `UpgradeAtLimit` reads `billing.plans.*.name`. Neither
 new key carries `{{days}}`, for the same reason as the three above. No keys were removed.
 
-**State the counting method with the number.** All three files hold **392 keys with arrays counted once** — the same
-files are **402 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
+**State the counting method with the number.** All three files hold **409 keys with arrays counted once** — the same
+files are **419 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
 pt and es show **zero drift** under a recursive key-diff in either counting mode, and the same diff compares the
 `{{placeholder}}` set of every leaf — a translated string that drops or renames one is a runtime hole no key-diff
 alone would catch. There is still no automated parity test, so both are run by hand whenever keys change.
@@ -4829,9 +4913,9 @@ Every string on this site is written for **one** ICP, defined by buying criteria
 |-------------------|---------------------------------------------------------------------------------------|
 | **Who**           | Someone whose next piece of work depends on the right people finding them on LinkedIn |
 | **Trigger**       | Income or next role depends on being found, and nothing is arriving                   |
-| **Pain**          | Good at the work, invisible to the algorithm                                          |
+| **Pain**          | Good at the work, but easy to miss when the LinkedIn profile is inactive              |
 | **Prior attempt** | Posted more. Applied, or pitched. Cold DMs. Silence                                   |
-| **Proof needed**  | That engagement is the lever, visible on their own account                            |
+| **Proof needed**  | A clear record of their own activity, without invented scores or promised results     |
 
 The employed specialist and the independent consultant are the **same buyer** here: only *what arrives* differs (an
 offer or a client). Two rules follow, and they are why this subsection exists:
@@ -4840,15 +4924,15 @@ offer or a client). Two rules follow, and they are why this subsection exists:
   *the right people come to you*.
 - **Never list job titles.** A page that talks to everyone convinces no one.
 
-`hero.subLine2` ("Every action is yours. Nothing automated.") is the **omission filter**: it deliberately repels
+`hero.subLine2` ("You choose every action. Nothing is automated.") is the **omission filter**: it deliberately repels
 automation seekers and quota-carrying sales teams.
 
 **Awareness level: problem-aware, SSI-unaware.** The visitor feels invisible and has never heard of the SSI. Two
 consequences bind the page:
 
 1. Section order is fixed at Hero → PainBeat → HowItWorks → SSIExplainer. The SSI is the **mechanism reveal**, not the
-   promise, and `SSIExplainer` is where the acronym is first taught (`ssiExplainer.intro` defines it as "LinkedIn's own
-   0–100 measure of how findable you are").
+   promise, and `SSIExplainer` is where the acronym is first taught. Its intro lists the four scored areas without
+   claiming that SSI controls search ranking or profile discovery.
 2. The hero **must not lead with the SSI** — "raise your SSI" is solution-aware copy for an audience that isn't.
    `hero` and `painBeat` speak only in outcomes; the acronym's first appearance is two sections down.
 
@@ -4859,14 +4943,22 @@ All pages live under `app/[lang]/` where `lang ∈ { en, pt, es }` (default `en`
 
 #### Middleware (`landing/middleware.ts`)
 
-`middleware.ts` handles locale routing only (static/API paths are excluded via the matcher config):
+`middleware.ts` canonicalizes the production hostname and then handles locale routing:
 
+- **Canonical-host redirect** — every `linkintothessi.com` request is 308-redirected to the equivalent
+  `www.linkintothessi.com` URL, preserving the path and query string, including for static assets.
 - **Locale redirect** — a request with no known locale prefix is 307-redirected to `/<lang>/original-path`, choosing
   `<lang>` in priority order below. A request that already carries a locale prefix passes through untouched.
+- **Bypass** — on `www`, API routes, Next internals, `favicon.ico`, and paths containing a file extension pass through
+  without locale routing.
 
 ```mermaid
 flowchart TD
-    REQ["Incoming request"] --> HAS{"has /en|pt|es\nprefix?"}
+    REQ["Incoming request"] --> APEX{"apex hostname?"}
+    APEX -->|yes| WWW["308 to same path/query\non www"]
+    APEX -->|no| BYPASS{"API, Next internal,\nor static asset?"}
+    BYPASS -->|yes| PASS["pass through\n(serve as-is)"]
+    BYPASS -->|no| HAS{"has /en|pt|es\nprefix?"}
     HAS -->|yes| PASS["pass through\n(serve as-is)"]
     HAS -->|no| CK{"lang cookie\npresent?"}
     CK -->|yes| USE["use cookie value"]
@@ -4879,8 +4971,8 @@ flowchart TD
 
 The `Accept-Language` matcher is hand-rolled (no `negotiator`/`@formatjs/intl-localematcher` deps)
 — it checks the first token of each `Accept-Language` entry against the three supported locales, in header priority
-order. Paths starting with `/api/`, `/_next/`, and static file extensions are excluded from interception (Next's
-built-in exclusion list is replicated in the matcher config).
+order. The matcher sees every path so apex assets are canonicalized too; the middleware itself bypasses locale routing
+for `/api`, `/_next`, `favicon.ico`, and paths containing a file extension after the hostname check.
 
 ##### Flash-free refresh (no-flash script)
 
@@ -4910,8 +5002,8 @@ at `/<lang>`.)
 
 #### Dictionary (`landing/i18n/`)
 
-UI strings live in `i18n/dictionaries/{en,pt,es}.json` — **87 keys with arrays counted once**, or **155 string leaves**
-when every string inside every array is counted individually (measured 2026‑09‑08 over `en.json`; **state which method
+UI strings live in `i18n/dictionaries/{en,pt,es}.json` — **88 keys with arrays counted once**, or **152 string leaves**
+when every string inside every array is counted individually (measured 2026‑09‑10 over `en.json`; **state which method
 you mean whenever you quote a number here**, because the two differ by more than 40%). Note the second method descends
 _into_ the objects an array holds: `pricing.plans` is three entries but twenty-seven leaves. All three files carry the
 same key set — zero drift under a recursive key-diff, run by hand: there is no automated parity test on this side
@@ -4965,12 +5057,12 @@ section of the Home page (`Pricing` component), not a standalone route.
 
 `app/[lang]/layout.tsx` renders `<CookieNotice>` (see below) and contains the no-flash theme script. **Notable section
 content** (encodes the business rules):
-`Hero` leads with the outcome and never the mechanism — "Stop chasing work. / Let them find you." over the decorative
-rings — so the SSI is absent from the headline and both sub-lines (see "Audience & awareness" above). `PainBeat`
-frames the core problem (algorithm invisibility) in the visitor's own two beats, "You post. You reach out." →
-"Silence.", with a body that covers the employed and the independent half in one sentence ("The best work never
-reaches you, because LinkedIn never surfaces you. Recruiters and clients search, and the algorithm ranks.").
-`HowItWorks` describes the three-step engagement flow (connect → engage → get found) plus the network-effect line.
+`Hero` leads with the immediate product value — "Relevant LinkedIn posts. / One focused feed." Its visible subline
+qualifies the buying situation ("Your next opportunity depends on LinkedIn") and states the actual flow: find relevant
+posts in the shared feed, use a comment draft, and complete each action on LinkedIn. It makes no claim that the app
+controls LinkedIn's ranking. `PainBeat` says an
+inactive profile is easy to miss without assigning intent to the algorithm. `HowItWorks` describes the three-step flow
+(connect → join conversations → track activity) and keeps SSI out until the explainer.
 `SSIExplainer` teaches the four 25-point areas and closes with a **one-line source caption** (`ssiExplainer.sourceLine`
 
 + `sourceLabel`) linking LinkedIn's own page at
@@ -4980,24 +5072,28 @@ reaches you, because LinkedIn never surfaces you. Recruiters and clients search,
   their own score, so presenting them as this product's proof was a claim we could not stand behind. The `stats` key is
   gone from all three dictionaries; the pillar copy that remains is descriptive, never promissory. `Proof`
   is an honest pre-launch block: a founder note, one card, and an early-access line — no fabricated counts, no
-  testimonials. The card says the only proof that matters is the member's own recap (`proofCardHeadline` /
-  `proofCardBody`) and carries `proofCardNote` — "Have Sales Navigator? Your SSI is still on LinkedIn." — which **links
-  nowhere**. The former `proofCardLink` to `linkedin.com/sales/ssi` was deleted with it: the SSI page became a Sales
+  testimonials. The card describes the member's weekly activity recap and says the product adds no score or unverifiable
+  result (`proofCardHeadline` / `proofCardBody`). `proofCardNote` tells Sales Navigator members that they can check SSI
+  on LinkedIn and **links nowhere**. The former `proofCardLink` to `linkedin.com/sales/ssi` was deleted: the SSI page
+  became a Sales
   Navigator feature in August 2026, so sending a free visitor there sends them to a paywall.
   `Features` markets exactly three shipped capabilities (industry feed, AI-assisted comment/reaction, post targeting),
-  outcome-framed and tier-labelled, with no "coming soon"
+  mechanism-framed and tier-labelled, with Pro visibility explicitly scoped to the Link Into The SSI feed and no
+  "coming soon"
   items. `Pricing` is a `'use client'` component. Three cards, annual price shown, one axis line under the price (
-  "25/50/200
-  interactions counted per post" — the only number the three plans are compared on), then the feature list (featured
+  "Posts stay in the feed until 25/50/200 reactions and comments" — the only number the three plans are compared on),
+  then the feature list (featured
   posts on Growth/Pro after "Everything in …", posts/week last). Monthly pricing sits behind a text link ("Prefer to pay
   monthly? See monthly prices" / "Back to annual · 2 months free") that flips a local `annual` boolean; the CTA carries
   `?plan=<id>&interval=<annual|monthly>` exactly as before. **Pricing structure (backlog/R13):** Starter $10 → Growth
   $15 → Pro $50. At $5 → $15 → $50 every step was ~3× for a linear feature gain, so no card read as the deal; at $10 →
   $15 Growth costs 1.5× Starter for double the cap (50 vs 25), double the posts (2 vs 1) and a featured post, and Pro is
-  3.3× Growth for 4× the cap — Growth is the deal by construction, which is why it wears the "Recommended" badge. No
-  free plan, no fourth card, no struck-through prices. Trial copy reads "no charge until 50 interactions or 7 days,
-  whichever comes first; card required, cancel anytime" (the card-capture and milestone-gate mechanics are implemented
-  in Plan 2). Each tier's trial CTA (`Start 7-day <Plan> trial`) links directly to OAuth and appends
+  3.3× Growth for 4× the cap — Growth is the deal by construction, which is why it wears the "Best for targeted feeds"
+  badge. No
+  free plan, no fourth card, no struck-through prices. Trial copy says a card is required and access is free until 50
+  interactions made or received or up to 7 days, whichever comes first; cancellation remains available at any time (the
+  card-capture and milestone-gate mechanics are implemented
+  in Plan 2). Each tier's trial CTA (`Start <Plan> trial`) links directly to OAuth and appends
   `?plan=<starter|growth|pro>&interval=<monthly|annual>` so the chosen tier is carried through the OAuth flow and
   pre-selected in `BillingPage`'s no-card CTA (see §7 and §14). `FAQ` is objection-led (safety first) with honest
   trial-scope and SSI answers; no "no credit card required" or "3-day free trial" claims. Two answers were rewritten on
@@ -5009,9 +5105,8 @@ reaches you, because LinkedIn never surfaces you. Recruiters and clients search,
   count
   belongs to Stripe's hosted portal and would go stale the first time Stripe changed that flow, so it now says only that
   cancelling happens from the subscription page and access lasts to the end of the current period.
-  `finalCta.subheadline`
-  reads "Seven days free. Real engagement from day one." — the previous line promised to "build real SSI from day one",
-  which is exactly the outcome the app cannot guarantee. `Footer` links to
+  `finalCta.subheadline` repeats the exact billing trigger (up to seven days or 50 interactions, whichever happens
+  first) instead of calling the full period free. `Footer` links to
   `/<lang>/privacy`, `/<lang>/terms`, `/<lang>/cookies`, and `mailto:contact@linkintothessi.com`.
 
 ### Legal pages — pt/es drafts
@@ -5188,59 +5283,66 @@ There is no invite landing page and no interstitial: the referred visitor sees t
   matches — the component is inert rather than wrong. A malformed `href` is left exactly as it was.
 - **`middleware.ts` keeps the query.** The locale redirect uses `request.nextUrl.clone()` and only rewrites
   `pathname`, so `/?ref=<code>` arrives at `/en?ref=<code>` with the parameter intact.
-- **The CTA labels still say "7-day".** The landing dictionaries are not aware of the referral — an invited visitor
-  reads "Start 7-day trial" on the button and is told about the 14 days *after* sign-in, on the Billing page
-  (`billing.giftFrom`, [§14](#14-frontend--authenticated-app-app)) and in the Terms clause above. This is deliberate:
-  a static page cannot know at build time whether a given visitor was invited, and promising 14 days in a
-  cached-and-shared marketing string would be a promise the site cannot keep for everyone who reads it.
+- **CTA labels do not promise a fixed duration.** The static landing dictionaries cannot know whether a visitor has a
+  7- or 14-day upper bound, and either trial can end first at 50 recorded interactions. Buttons therefore say "Start
+  trial" / "Start <Plan> trial"; the adjacent disclosure gives the default upper bound and interaction trigger. After
+  sign-in, `billing.giftFrom` and the Billing disclosure use the invited member's real `trialDays` value as "up to
+  {{days}} days".
 
-**CTA inventory** (labels are R12 — every one names the trial length, the plan cards also name the plan, and no CTA
-says "Start free" in any locale):
+**CTA inventory** (labels name the action without promising a fixed trial duration; plan cards also name the plan):
 
-| Location               | Label (`en`)                       | Trigger line beside it                       | `href`                                          |
-|------------------------|------------------------------------|----------------------------------------------|-------------------------------------------------|
-| `Nav`                  | Start 7-day trial                  | (none, by design)                            | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
-| `Hero`                 | Start my 7-day trial with LinkedIn | `ctaDisclaimer` (cost) + `ctaTrust` (safety) | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
-| `Pricing` (Starter)    | Start 7-day Starter trial          | `trialNote`, shared under the grid           | `${SIGN_IN_URL}?plan=starter&interval=<picked>` |
-| `Pricing` (Growth)     | Start 7-day Growth trial           | (same)                                       | `${SIGN_IN_URL}?plan=growth&interval=<picked>`  |
-| `Pricing` (Pro)        | Start 7-day Pro trial              | (same)                                       | `${SIGN_IN_URL}?plan=pro&interval=<picked>`     |
-| `Pricing` (Enterprise) | Talk to us                         | `enterpriseNote` + the toggled price         | `mailto:contact@linkintothessi.com`             |
-| `FinalCTA`             | Start my 7-day trial with LinkedIn | `ctaTrust` (safety), then `earlyAccess`      | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| Location               | Label (`en`)        | Trigger line beside it                       | `href`                                          |
+|------------------------|---------------------|----------------------------------------------|-------------------------------------------------|
+| `Nav`                  | Start trial         | (none, by design)                            | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| `Hero`                 | Start my trial      | `ctaDisclaimer` (cost) + `ctaTrust` (safety) | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
+| `Pricing` (Starter)    | Start Starter trial | `trialNote`, shared under the grid           | `${SIGN_IN_URL}?plan=starter&interval=<picked>` |
+| `Pricing` (Growth)     | Start Growth trial  | (same)                                       | `${SIGN_IN_URL}?plan=growth&interval=<picked>`  |
+| `Pricing` (Pro)        | Start Pro trial     | (same)                                       | `${SIGN_IN_URL}?plan=pro&interval=<picked>`     |
+| `Pricing` (Enterprise) | Talk to us          | `enterpriseNote` + the toggled price         | `mailto:contact@linkintothessi.com`             |
+| `FinalCTA`             | Start my trial      | `ctaTrust` (safety), then `earlyAccess`      | `${SIGN_IN_URL}?plan=growth&interval=annual`    |
 
 `<picked>` is the interval the visitor chose via the annual/monthly text link (`seeMonthly` / `seeAnnual`; annual by
 default); `Nav`, `Hero` and `FinalCTA` pin Growth/annual. The Enterprise floor follows that same choice —
-`enterprisePriceMonth` ($100/mo) or `enterprisePriceYear` ($1,000/yr, the page's own ×10 annual rule) — because a
+`enterprisePriceMonth` (US$100/mo) or `enterprisePriceYear` (US$1,000/yr, the page's own ×10 annual rule) — because a
 monthly floor quoted under an annual grid read as "$100" against Starter's "$100/yr", making the anchor tier look
 like the cheapest number on the page. Enterprise itself is still negotiated per account (§8); the floor is an anchor,
-not a Price. `ctaTrust` ("Official LinkedIn sign-in · Name, photo and
-email only · Nothing posted for you") is the fear answered two centimetres from the button, and every clause of it is
+not a Price. `ctaTrust` ("Official LinkedIn sign-in · We receive only your name, photo and email · We never post for
+you") is the fear answered beside the button, and every clause of it is
 verifiable: OIDC-only scopes are asserted in `convex/linkedin/oauth.test.ts`, and the platform performs no API writes
 on the member's behalf ([§1](#1-product-overview--business-model)).
 
-Because those two lines answer the top objection and carry the card-required disclosure, **they must stay visible
+**Readability standard (2026-09-09).** Body, card, plan, FAQ, proof, footer, and CTA-support copy uses the semantic
+`text-cream-muted` token instead of low-opacity `text-cream/30`–`/60`. The token measures **4.85:1 in light mode** and
+**6.07:1 in dark mode** against the main page background. Trust and billing lines render at 13px with compact line
+height rather than 12px with letter spacing; ordinary card copy renders at 16px. Cormorant remains the large display
+face, while card-level headings use DM Sans at 600 so its finer strokes do not disappear at 20–24px. Decorative
+italics were removed, headings use balanced wrapping, and touched links/buttons have visible keyboard focus outlines.
+
+Because the two CTA-support lines answer the top objection and carry the card-required disclosure, **they must stay
+visible
 above the fixed `CookieNotice` on a first mobile visit**, and the headline must stay clear of the opaque `Nav` — the
 visitor who most needs those lines is exactly the one who still has the banner on screen. Two fixed overlays eat the
 viewport: `Nav` (`fixed top-0`, `h-16`, 65px) and the notice at the bottom. `Hero` is `min-h-screen … justify-center`,
 so it centres its content in the **whole** viewport unless told otherwise, and the deficit is vertical, not
-horizontal — `pt`/`es` wrap both the headline and `subLine1` a line longer than `en`. The fix is therefore keyed to **
-`[@media(max-height:720px)]`**, not to `sm:`:
+horizontal — `pt`/`es` wrap both the headline and `subLine1` a line longer than `en`. The compact layout applies to all
+viewports below 720px tall and, separately, to narrow screens below 641px wide and 851px tall. The second condition
+catches common 375×812 phones without shrinking a 1280×800 desktop hero.
 
-| Where          | Short-viewport override                                              | Why                                                                 |
-|----------------|----------------------------------------------------------------------|---------------------------------------------------------------------|
-| `Hero` section | `pt-16` + `pb-32` (paired with the existing `pb-24 sm:pb-0`)         | `justify-center` then centres inside the band, not the raw viewport |
-| `Hero` content | `space-y-3`, `h1` → `text-2xl`, `subLine1` → `text-base`, CTA `pt-0` | `pt` content is 526px unaided but the band is 461px at 375×667      |
-| `CookieNotice` | `py-2`, `text-xs`, `gap-2`                                           | Bar height is locale-dependent, so a fixed `pb` cannot reserve it   |
+| Where          | Short-viewport override                                                    | Why                                                                 |
+|----------------|----------------------------------------------------------------------------|---------------------------------------------------------------------|
+| `Hero` section | `pt-18` + `pb-32` (paired with the existing `pb-24 sm:pb-0`)               | `justify-center` then centres inside the band, not the raw viewport |
+| `Hero` content | `space-y-3`, `h1` → `text-2xl`, `subLine1` → `text-base`, CTA `gap-2 pt-0` | Keeps translated trust and billing lines inside the available band  |
+| `CookieNotice` | `py-2`, `text-xs`, `gap-2` under the same two media conditions as the Hero | Its locale-dependent height remains part of the layout calculation  |
 
-The notice is the reason a padding-only fix fails: it measures **89px in `en` but 105px in `pt`/`es`** once tightened
-(141px / 161px untightened), so any single `pb` value either clips the headline into the `Nav` or lets the disclosure
-slide under the bar. Tightening the bar itself removes the guess. Measured clearances (headline-to-`Nav`,
-block-to-notice) after the fix:
+The notice is the reason a padding-only fix fails: its height varies by locale, so any single `pb` value either clips
+the headline into the `Nav` or lets the disclosure slide under the bar. Tightening the bar itself removes the guess.
+Measured clearances (headline-to-`Nav`, block-to-notice) after the 2026-09-09 copy and type pass:
 
-| Viewport | `en`                                                 | `pt`    | `es`    |
-|----------|------------------------------------------------------|---------|---------|
-| 360×640  | +28/+68                                              | +13/+37 | +28/+52 |
-| 375×667  | +19/+39                                              | +55/+79 | +42/+66 |
-| 375×812  | unchanged (query does not apply; +30/+50, bar 141px) |         |         |
+| Viewport | `en`      | `pt`     | `es`     |
+|----------|-----------|----------|----------|
+| 360×640  | +22/+38   | +7/+6    | +7/+6    |
+| 375×667  | +45/+61   | +12/+28  | +12/+28  |
+| 375×812  | +117/+133 | +84/+100 | +84/+100 |
 
 A landscape phone (≥`sm` wide, ≤720px tall) resolves to the height query, not `sm:text-5xl` — verified at 800×600 (h1
 24px, +62/+142). **Re-measure at all three viewports in all three locales** after touching `hero.*` copy, the
@@ -5273,7 +5375,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `LINKEDIN_CLIENT_ID`             |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client id (authorize URL + token exchange **and** the token-refresh call — no separate var).                                                                                                                                                                                                                                                                                                                                        |
 | `LINKEDIN_CLIENT_SECRET`         |                   ✓                    | `linkedin/oauth.ts`                                 | OAuth client secret (server‑side token exchange **and** refresh — `refreshAccessToken` reuses the same env pair, nothing new was added for the refresh cron).                                                                                                                                                                                                                                                                             |
 | `LINKEDIN_REDIRECT_URI`          |                   ✓                    | `linkedin/oauth.ts`                                 | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                                                                                                                                                                                                                                                              |
-| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing*.ts`, `notifications.ts`        | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs.                                                                                                                                                                                                                                                                                                                                                           |
+| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing*.ts`, `notifications.ts`        | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs. Production: `https://www.app.linkintothessi.com` with no trailing slash.                                                                                                                                                                                                                                                                                  |
 | `STRIPE_STARTER_PRICE_ID`        |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                                                                                                                                                                                                                                                   |
 | `STRIPE_GROWTH_PRICE_ID`         |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `growth` tier.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `STRIPE_PRO_PRICE_ID`            |              ✓ (billing)               | `lib/stripePrices.ts`                               | Monthly price id → `pro` tier.                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -5324,11 +5426,11 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 
 **Landing Worker (`NEXT_PUBLIC_*`):**
 
-| Var                         | Value                            |
-|-----------------------------|----------------------------------|
-| `NEXT_PUBLIC_APP_URL`       | `https://app.linkintothessi.com` |
-| `NEXT_PUBLIC_CONVEX_SITE`   | `https://<prod>.convex.site`     |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` | `.linkintothessi.com`            |
+| Var                         | Value                                |
+|-----------------------------|--------------------------------------|
+| `NEXT_PUBLIC_APP_URL`       | `https://www.app.linkintothessi.com` |
+| `NEXT_PUBLIC_CONVEX_SITE`   | `https://<prod>.convex.site`         |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | `.linkintothessi.com`                |
 
 **App Worker (`VITE_*`):**
 
@@ -5336,7 +5438,7 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 |-------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
 | `VITE_CONVEX_URL`                               | `https://<prod>.convex.cloud`                                                                                  |
 | `VITE_CONVEX_SITE`                              | `https://<prod>.convex.site`                                                                                   |
-| `VITE_LANDING_URL`                              | `https://linkintothessi.com`                                                                                   |
+| `VITE_LANDING_URL`                              | `https://www.linkintothessi.com`                                                                               |
 | `VITE_COOKIE_DOMAIN`                            | `.linkintothessi.com`                                                                                          |
 | `VITE_STRIPE_*_PRICE_ID` (+ `_ANNUAL_PRICE_ID`) | the 6 Stripe price ids — **must equal the matching Convex `STRIPE_*_PRICE_ID`** (see danger/parity note above) |
 
@@ -5360,11 +5462,11 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
-| Variable                    |                       Required                       | Consumed in      | Purpose                                                                                                                                                                                     |
-|-----------------------------|:----------------------------------------------------:|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `NEXT_PUBLIC_APP_URL`       |         – (default `http://localhost:5173`)          | `lib/links.ts`   | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset. The `.example` already ships the real prod URL (`https://app.linkintothessi.com`) — **no change needed.** |
-| `NEXT_PUBLIC_CONVEX_SITE`   | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts`   | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly.                                                                                       |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` |   – (unset in dev; `.linkintothessi.com` in prod)    | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                      |
+| Variable                    |                       Required                       | Consumed in      | Purpose                                                                                                                                                               |
+|-----------------------------|:----------------------------------------------------:|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NEXT_PUBLIC_APP_URL`       |         – (default `http://localhost:5173`)          | `lib/links.ts`   | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset. The `.example` ships the canonical prod URL (`https://www.app.linkintothessi.com`). |
+| `NEXT_PUBLIC_CONVEX_SITE`   | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts`   | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly.                                                                 |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` |   – (unset in dev; `.linkintothessi.com` in prod)    | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
 > default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the
@@ -5496,65 +5598,81 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
       post‑cap one.
     - `recap_viewed` — `RecapPage`, **once per loaded window** (R15). Props: `window` (`7d`/`30d`), `nearCap` (boolean).
     - `cancel_started` — `CancelInterstitial` on open (R09). Props: `plan`, `trial`.
-    - `cancel_alternative_taken` — `CancelInterstitial`'s "Move to Starter" (R09). Props: `from` (the tier left behind).
-    - `cancel_alternative_completed` — the save actually landing (R09). Props: `from` (the tier left behind — the same
-      prop as `cancel_alternative_taken`, so the interstitial's save rate is that one funnel). **One firing point since
-      2026-09-09:** `CancelInterstitial`, the moment the scheduled downgrade returns no url (B07 — there is no return
-      leg to wait for, in any subscription status). The second firing point, `BillingPage` on a `?downgraded=<tier>`
-      return, went away with the immediate portal downgrade it belonged to.
-    - `downgrade_scheduled` — `BillingPage.handlePlanSwitch`, when a **plan-grid** move down a tier comes back with no
-      url because the server scheduled it for the period end (**B07**). Props: `from` (the tier they hold now,
-      defaulting to `starter` so the prop is never undefined), `to` (the tier they will move to). The grid's own
-      counterpart to `cancel_alternative_completed`: it records the intent that the period-end webhook later fulfils,
-      which is why it fires here and not on a tier change.
-        - `cancel_completed` — `BillingPage`, on the `?canceled=true` return **after** `cancelAtPeriodEnd` has actually
-          flipped, latched to fire once (R09). Props: `plan`.
-        - `checkout_started` — `BillingPage.handleUpgrade`, immediately before `createCheckoutSession` (**R18**). Props:
-          `plan`, `interval`. This is the card-entry step, so the survival panel's signup → started-trial gap can be
-          read
-          as a card-gate leak rather than an activation leak.
-        - `cap_email_billing_opened` — `BillingPage`, when the post-cap email's link lands with `?src=cap_email`
-          (**R20**), `useRef`-latched to fire once per landing. Props: `plan` (from the same `resolveTargetPlan`).
-        - `plan_switch_opened` — `BillingPage.handlePlanClick`, on a **card holder's** plan click, right before the
-          Customer
-          Portal's confirm flow opens — or its home, on the fallback (the portal path never fires `checkout_started`).
-          **A
-          trialing card holder cannot fire it at all** since 2026-09-09: every plan button is disabled during a trial
-          (§8), so the event now means "a member with a settled subscription asked to change plan".
-          Props: `plan`, and `source` — `cap_email` when
-          the landing carried `?src=cap_email`, otherwise `billing`. The step after `cap_email_billing_opened`, so the
-          R20
-          funnel no longer ends at the landing.
-            - `plan_switch_completed` — `BillingPage`, on the `?switched=<tier>` return **after** the webhook has moved
-              `me.tier` onto that plan, latched to fire once (**R08 / R20**). Props: `plan`. The cap-email funnel's last
-              step;
-              a wait that times out fires a Sentry exception instead, never this event.
-                - `post_hidden` — `FeedPage`, after `interactions.hidePost` resolves (**R21**). Props: **`after`** —
-                  whole
-                  hours
-                  between the interaction and the tap, derived from `INTERACTED_TTL_MS - (hidesAt - now)`. The one
-                  number
-                  R21
-                  wants: whether people clear a handled post immediately or leave it to age out.
-                - `invite_copied` — `SettingsPage`, after the invite link reaches the clipboard (**R19**). **No
-                  props** —
-                  the
-                  code
-                  itself would be a user identifier, and the count is the whole signal. It fires on the Clipboard-API
-                  path
-                  only:
-                  the manual-selection fallback (no Clipboard API, non-secure context, denied permission) is not a copy
-                  that
-                  happened, so it stays silent rather than inflating the number.
-                - `featured_purchase_started` — `MyPostsPage`, on the buy tap, before `purchaseFeaturedPost` runs
-                  (**R17**).
-                  Props: `source` (`'cap' | 'billing' | 'quota'`).
-                - `featured_purchase_completed` — `MyPostsPage`, on the `?featured=paid` return leg as soon as `newCap`
-                  and
-                  the post list have loaded — off the param itself, **not** the post's `featuredPurchase`, which arrives
-                  later
-                  with the webhook — through the same ref-latch pattern as the other return-leg events (**R17**). **No
-                  props.**
+    - `cancel_alternative_taken` — `CancelInterstitial`'s "Schedule Starter" (R09). Props: `from` (the tier left
+      behind).
+        - `cancel_alternative_completed` — the save actually landing (R09). Props: `from` (the tier left behind — the
+          same
+          prop as `cancel_alternative_taken`, so the interstitial's save rate is that one funnel). **One firing point
+          since
+          2026-09-09:** `CancelInterstitial`, the moment the scheduled downgrade returns no url (B07 — there is no
+          return
+          leg to wait for, in any subscription status). The second firing point, `BillingPage` on a `?downgraded=<tier>`
+          return, went away with the immediate portal downgrade it belonged to.
+        - `downgrade_scheduled` — `BillingPage.handlePlanSwitch`, when a **plan-grid** move down a tier comes back with
+          no
+          url because the server scheduled it for the period end (**B07**). Props: `from` (the tier they hold now,
+          defaulting to `starter` so the prop is never undefined), `to` (the tier they will move to). The grid's own
+          counterpart to `cancel_alternative_completed`: it records the intent that the period-end webhook later
+          fulfils,
+          which is why it fires here and not on a tier change.
+            - `cancel_completed` — `BillingPage`, on the `?canceled=true` return **after** `cancelAtPeriodEnd` has
+              actually
+              flipped, latched to fire once (R09). Props: `plan`.
+            - `checkout_started` — `BillingPage.handleUpgrade`, immediately before `createCheckoutSession` (**R18**).
+              Props:
+              `plan`, `interval`. This is the card-entry step, so the survival panel's signup → started-trial gap can be
+              read
+              as a card-gate leak rather than an activation leak.
+            - `cap_email_billing_opened` — `BillingPage`, when the post-cap email's link lands with `?src=cap_email`
+              (**R20**), `useRef`-latched to fire once per landing. Props: `plan` (from the same `resolveTargetPlan`).
+            - `plan_switch_opened` — `BillingPage.handlePlanClick`, on a **card holder's** plan click, right before the
+              Customer
+              Portal's confirm flow opens — or its home, on the fallback (the portal path never fires
+              `checkout_started`). **A
+              trialing card holder cannot fire it at all** since 2026-09-09: every plan button is disabled during a
+              trial (§8), so the event now means "a member with a settled subscription asked to change plan".
+              Props: `plan`, and `source` — `cap_email` when
+              the landing carried `?src=cap_email`, otherwise `billing`. The step after `cap_email_billing_opened`, so
+              the
+              R20
+              funnel no longer ends at the landing.
+                - `plan_switch_completed` — `BillingPage`, on the `?switched=<tier>` return **after** the webhook has
+                  moved
+                  `me.tier` onto that plan, latched to fire once (**R08 / R20**). Props: `plan`. The cap-email funnel's
+                  last
+                  step;
+                  a wait that times out fires a Sentry exception instead, never this event.
+                    - `post_hidden` — `FeedPage`, after `interactions.hidePost` resolves (**R21**). Props: **`after`** —
+                      whole
+                      hours
+                      between the interaction and the tap, derived from `INTERACTED_TTL_MS - (hidesAt - now)`. The one
+                      number
+                      R21
+                      wants: whether people clear a handled post immediately or leave it to age out.
+                    - `invite_copied` — `SettingsPage`, after the invite link reaches the clipboard (**R19**). **No
+                      props** —
+                      the
+                      code
+                      itself would be a user identifier, and the count is the whole signal. It fires on the
+                      Clipboard-API
+                      path
+                      only:
+                      the manual-selection fallback (no Clipboard API, non-secure context, denied permission) is not a
+                      copy
+                      that
+                      happened, so it stays silent rather than inflating the number.
+                    - `featured_purchase_started` — `MyPostsPage`, on the buy tap, before `purchaseFeaturedPost` runs
+                      (**R17**).
+                      Props: `source` (`'cap' | 'billing' | 'quota'`).
+                    - `featured_purchase_completed` — `MyPostsPage`, on the `?featured=paid` return leg as soon as
+                      `newCap`
+                      and
+                      the post list have loaded — off the param itself, **not** the post's `featuredPurchase`, which
+                      arrives
+                      later
+                      with the webhook — through the same ref-latch pattern as the other return-leg events (**R17**).
+                      **No
+                      props.**
 
   `HistoryPage` fires **nothing**, by design: reviewing one's own log is not a funnel step. No event marks the moment a
   scheduled downgrade **applies** either — that is a Stripe webhook landing days later, with no client to fire from;
@@ -5689,7 +5807,9 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 - **CI/deploy:** no `.github/` workflows — deploys run via **Cloudflare Workers Builds** (Git push-to-`master`:
   landing = `opennextjs-cloudflare build`/`deploy`, app = `vite build` + `wrangler deploy`); Convex via
   `npx convex deploy`. New deploy config: `app/wrangler.jsonc`, `landing/wrangler.jsonc`, `landing/open-next.config.ts`,
-  `app/scripts/gen-headers.mjs`; root scripts `deploy:app`/`deploy:landing`/`preview:landing`.
+  `app/scripts/gen-headers.mjs`; root scripts `deploy:app`/`deploy:landing`/`preview:landing`. Each Wrangler config owns
+  both its canonical `www` Custom Domain and its legacy hostname; deployment provisions DNS/TLS, while the Worker keeps
+  the legacy hostname attached solely for its path- and query-preserving 308.
 
 ### Pre-launch requirements
 
@@ -5819,13 +5939,27 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑09‑09. **The portal home stopped offering the credited downgrade, and a trial can no longer
+_Last updated: 2026‑09‑10. **Revenue copy now matches the product and the billing state.** The landing and app
+dictionaries were reviewed as one funnel in en, pt-BR and es-419. Fixed-duration CTA promises were removed: buttons
+say "Start trial", while adjacent disclosures say free until 50 interactions made or received as recorded in the app,
+or for up to the member's 7/14-day bound, whichever comes first. The landing now qualifies the ICP in the hero subline
+and leads with the provable shared-feed/draft/recap mechanism. Pro visibility is
+explicitly scoped to the shared feed, post limits name when posts leave that feed, Growth's badge explains the use case,
+and explicit choices read "Your choice". `EmptyFeed` offers the invite action when a member has posted but has nothing
+to respond to. `CancelInterstitial` now shows Starter's effective date, interval price, live limits and lost filtering
+before **Schedule Starter**, with a no-date fallback. PT/ES retain `Enterprise`; all fallback prices use `US$`. Two i18n
+keys were added (`billing.selected`, `billing.cancel.alternativeNoDate`), while the unused `hero.eyebrow` key was
+removed:
+app **409 keys / 419 string leaves**, landing **88 / 152**, with identical key and placeholder sets across locales.
+Sections updated: §8, §14, §15, §21. Gates: convex **539/539**, app **445/445**, `pnpm verify` exit 0._
+
+Prior: 2026‑09‑09 — **The portal home stopped offering the credited downgrade, and a trial can no longer
 change plan.** Taking cross-tier downgrades off our own code paths (below) left the other half of the same gap open:
 the Customer Portal's own "Update plan" still listed all three products, so any Growth or Pro member could pick
 Starter there, be credited under `always_invoice`, and overwrite the schedule we had attached.
 `features.subscription_update.products` belongs to the **configuration**, so it cannot vary by member any other way —
-Stripe's answer is **multiple configurations** plus a `configuration` on the session, and there are now four: Starter (
-all six prices), Growth (four), Pro (two), and the account default with `subscription_update` **off**, since a portal
+Stripe's answer is **multiple configurations** plus a `configuration` on the session, and there are now four: Starter
+(all six prices), Growth (four), Pro (two), and the account default with `subscription_update` **off**, since a portal
 link Stripe itself emails carries no tier. Each offers its own tier and the ones **above** it, never a cheaper one;
 the Starter configuration is byte-identical to the single configuration that existed before, which is what makes the
 change additive. Selection is a runtime `metadata.lits_tier` lookup (`portalConfigurationId`), not three more env vars
@@ -6063,7 +6197,7 @@ interval — it fell back to monthly, the one place that disagreed with the page
 `UpgradeAtLimit` reusing it instead of keeping its own copy. And the no-trial card gate now **names the amount**
 (review finding M6): `billing.noTrialCta` asked a member with no trial left to "Subscribe to Growth" with no price
 anywhere on the dialog, the banner or `UpgradeAtLimit`'s inline ask, so all three now quote the plan's two prices
-from one new `feed.cardGatePriceNoTrial` key ("The Growth plan is $15/mo or $150/yr." — both intervals, because the
+from one new `feed.cardGatePriceNoTrial` key ("The Growth plan is US$15/mo or US$150/yr." — both intervals, because the
 gate link carries none), read from `PLAN_PRICES` in the new shared `app/src/lib/planPrices.ts` (moved out of
 `BillingPage.tsx` with `Interval` / `isInterval`, so the grid and the gate cannot quote different figures); locales
 377 arrays-as-one / 387 leaves. It depends on the same open Portal rows in

@@ -229,7 +229,7 @@ describe('PostCard done footer (R21)', () => {
     expect(screen.getByText(/reacted/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
-    expect(screen.getByText(/leaves your feed within 5 h/i)).toBeInTheDocument()
+    expect(screen.getByText(/leaves your feed in 5 h/i)).toBeInTheDocument()
   })
 
   it('offers the saved comment once the viewer reacted and commented', () => {
@@ -269,7 +269,7 @@ describe('PostCard done footer (R21)', () => {
           onReact={onReact}
         />
       )
-      expect(screen.getByText(/leaves your feed within 24 h/i)).toBeInTheDocument()
+      expect(screen.getByText(/leaves your feed in 24 h/i)).toBeInTheDocument()
     } finally {
       clock.mockRestore()
     }
@@ -284,7 +284,7 @@ describe('PostCard done footer (R21)', () => {
         onHide={() => {}}
       />
     )
-    expect(screen.getByText(/leaves your feed within 1 h/i)).toBeInTheDocument()
+    expect(screen.getByText(/leaves your feed in 1 h/i)).toBeInTheDocument()
   })
 
   it('calls onHide from the Hide now button', () => {

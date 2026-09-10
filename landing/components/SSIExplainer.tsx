@@ -14,9 +14,9 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
             {dict.headlineLine1}
             <br />
-            <span className="text-gold-text italic">{dict.headlineLine2}</span>
+            <span className="text-gold-text">{dict.headlineLine2}</span>
           </h2>
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-cream/60">{dict.intro}</p>
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-cream-muted">{dict.intro}</p>
         </div>
 
         <div className="mb-16 grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -27,23 +27,23 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
             >
               <div className="mb-5 flex items-start justify-between">
                 <span className="text-2xl">{pillar.icon}</span>
-                <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-xs font-medium text-cream/50 dark:bg-cream/[0.06] dark:text-cream/40">
+                <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-[13px] font-medium text-cream-muted dark:bg-cream/[0.06]">
                   {pillar.pts} pts
                 </span>
               </div>
-              <h3 className="mb-2 font-display text-xl font-bold text-cream">{pillar.title}</h3>
-              <p className="text-sm leading-relaxed text-cream/50">{pillar.body}</p>
+              <h3 className="mb-2 text-xl font-semibold text-balance text-cream">{pillar.title}</h3>
+              <p className="text-base leading-relaxed text-pretty text-cream-muted">{pillar.body}</p>
             </div>
           ))}
         </div>
 
-        <p className="mx-auto mt-10 max-w-2xl text-center text-xs text-cream/50">
+        <p className="mx-auto mt-10 max-w-2xl text-center text-sm text-cream-muted">
           {dict.sourceLine}{' '}
           <a
             href={SSI_SOURCE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline underline-offset-4 hover:text-cream/80"
+            className="underline underline-offset-4 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.sourceLabel}
           </a>

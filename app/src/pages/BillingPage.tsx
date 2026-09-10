@@ -20,7 +20,7 @@ import { formatPriceLabel } from '../../../convex/lib/billingEmails'
 import { resolveBillingLocale } from '../../../convex/lib/checkoutCopy'
 import { canEngage } from '../../../convex/lib/access'
 import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
-import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
+import { DEFAULTS, FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
 import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
 import { isPlanId, PLAN_IDS, type PlanId, resolveTargetPlan } from '@/lib/targetPlan'
 import { FEATURED_POST_PRICE, type Interval, isInterval, PLAN_PRICES } from '@/lib/planPrices'
@@ -243,6 +243,7 @@ export default function BillingPage() {
     me.subscriptionStatus !== 'canceled' &&
     addonLimits !== undefined &&
     !isUnlimitedFeatured(addonLimits.featuredPerMonth)
+  const starterLimits = tierLimits?.starter ?? DEFAULTS.starter
 
   // R08 / R20 — back from a portal confirm flow: /billing?switched=<tier>, the tier the server
   // resolved from the price on the button. Latched during render like `justSubscribed`, so it
@@ -614,11 +615,13 @@ export default function BillingPage() {
             {!chosenPlan
               ? t('billing.newUserLead')
               : canTrial
-                ? t('billing.chosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`), days: trialDays })
+                ? t('billing.chosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`) })
                 : t('billing.noTrialChosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`) })}
           </p>
           <p className="text-muted-foreground mt-1 text-[13px]">
-            {canTrial ? t('billing.newUserTrialNote', { days: trialDays }) : t('billing.noTrialNote')}
+            {canTrial
+              ? t('billing.newUserTrialNote', { days: trialDays, threshold: TRIAL_INTERACTION_THRESHOLD })
+              : t('billing.noTrialNote')}
           </p>
           {/* backlog/R19 — a statement of fact, not a CTA: they were given a longer trial, and this
               says so without claiming it has already started. Gated on `canTrial` like every other
@@ -690,7 +693,7 @@ export default function BillingPage() {
                   variant="primary"
                   className="absolute -top-2.5 left-1/2 -translate-x-1/2"
                 >
-                  {t('billing.recommended')}
+                  {t(chosenPlan ? 'billing.selected' : 'billing.recommended')}
                 </Badge>
               )}
               <h2 className="text-foreground mt-0 text-lg font-bold">{t(`billing.plans.${planId}.name`)}</h2>
@@ -733,7 +736,7 @@ export default function BillingPage() {
                     : hasCard
                       ? t('billing.switchPlan', { plan: t(`billing.plans.${planId}.name`) })
                       : canTrial
-                        ? t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`), days: trialDays })
+                        ? t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`) })
                         : t('billing.noTrialCta', { plan: t(`billing.plans.${planId}.name`) })}
                 </Button>
               )}
@@ -797,6 +800,9 @@ export default function BillingPage() {
         isTrialing={isTrialing}
         periodEndDate={periodEndDate}
         pendingTier={subscriptionInfo?.pendingTier}
+        starterPrice={PLAN_PRICES[chargedInterval].starter}
+        starterInteractions={starterLimits.interactionsPerPost}
+        starterPosts={starterLimits.postsPerWeek}
       />
     </div>
   )

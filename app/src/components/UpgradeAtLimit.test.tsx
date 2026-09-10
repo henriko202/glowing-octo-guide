@@ -97,7 +97,7 @@ describe('UpgradeAtLimit', () => {
   it('asks a never-started member to start their trial instead of pitching an upgrade', () => {
     mockMe = { tier: 'starter', subscriptionStatus: 'none' }
     renderComponent('weeklyPosts')
-    expect(screen.getByRole('link', { name: /start 7-day trial/i })).toHaveAttribute('href', '/billing?plan=growth')
+    expect(screen.getByRole('link', { name: /start free trial/i })).toHaveAttribute('href', '/billing?plan=growth')
     expect(screen.queryByText(/weekly post cap/i)).not.toBeInTheDocument()
   })
 
@@ -108,7 +108,7 @@ describe('UpgradeAtLimit', () => {
     mockMe = { tier: 'starter', subscriptionStatus: 'none', trialEligible: false }
     renderComponent('weeklyPosts')
     expect(screen.getByRole('link', { name: /subscribe to growth/i })).toHaveAttribute('href', '/billing?plan=growth')
-    expect(screen.getByText(/the growth plan is \$15\/mo or \$150\/yr/i)).toBeInTheDocument()
+    expect(screen.getByText(/the growth plan is US\$15\/mo or US\$150\/yr/i)).toBeInTheDocument()
     expect(screen.queryByText(/trial/i)).not.toBeInTheDocument()
   })
 
@@ -153,30 +153,30 @@ describe('UpgradeAtLimit', () => {
     })
   })
 
-  it('names the $5 add-on after the featured upgrade line (backlog/R17)', () => {
+  it('names the one-time US$5 add-on after the featured upgrade line (backlog/R17)', () => {
     mockMe = { tier: 'growth', subscriptionStatus: 'active' }
     renderComponent('featured')
     const upgrade = screen.getByRole('link', { name: /upgrade to/i })
-    const addon = screen.getByText(/feature any post below for \$5/i)
+    const addon = screen.getByText(/one-time US\$5 purchase to feature one post/i)
     expect(upgrade.compareDocumentPosition(addon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   // F2 — a canceled member has no buy control on My Posts (MyPostsPage.tsx canBuy), so the add-on
   // line has nothing to point at there. Mirrors the test above with only the status changed.
-  it('never names the $5 add-on for a canceled member', () => {
+  it('never names the US$5 add-on for a canceled member', () => {
     mockMe = { tier: 'growth', subscriptionStatus: 'canceled' }
     renderComponent('featured')
     expect(screen.getByRole('link', { name: /upgrade to/i })).toBeInTheDocument()
-    expect(screen.queryByText(/feature any post below for \$5/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/one-time US\$5 purchase to feature one post/i)).not.toBeInTheDocument()
   })
 
   it('keeps the add-on off the contact line and off every other limit kind', () => {
     mockMe = { tier: 'contact', subscriptionStatus: 'active' }
     const contact = renderComponent('featured')
-    expect(screen.queryByText(/\$5/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/US\$5/)).not.toBeInTheDocument()
     contact.unmount()
     mockMe = { tier: 'growth', subscriptionStatus: 'active' }
     renderComponent('weeklyPosts')
-    expect(screen.queryByText(/\$5/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/US\$5/)).not.toBeInTheDocument()
   })
 })

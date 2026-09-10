@@ -30,7 +30,7 @@ export default function PolicyUpdateScreen() {
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{t('privacy.policyUpdate.body')}</p>
         <div className="mt-5 flex items-center gap-3">
           <a
-            href="https://linkintothessi.com/privacy"
+            href="https://www.linkintothessi.com/privacy"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm font-semibold text-gold-text hover:underline"

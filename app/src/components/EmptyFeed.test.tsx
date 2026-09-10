@@ -90,7 +90,7 @@ describe('EmptyFeed', () => {
     expect(screen.getByText(/1 \/ 3|1 of 3/i)).toBeInTheDocument()
   })
 
-  it('drops the "share your first post" action once the member has a post', () => {
+  it('offers an invite action when a member has posted but no other posts are available', () => {
     render(
       <EmptyFeed
         gated={false}
@@ -100,7 +100,8 @@ describe('EmptyFeed', () => {
       />
     )
     expect(screen.queryByRole('button', { name: /share your first post/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/other members' posts/i)).toBeInTheDocument()
+    expect(screen.getByText(/no other posts are available yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /invite a peer/i })).toHaveAttribute('href', '/settings#invite')
   })
 
   // F12: trialInteractionsMade freezes the moment subscriptionStatus stops being 'trialing' (convex/
@@ -154,7 +155,7 @@ describe('EmptyFeed', () => {
       />
     )
     expect(screen.getByText(/hidden until you subscribe/i)).toBeInTheDocument()
-    expect(screen.getByText(/the growth plan is \$15\/mo or \$150\/yr/i)).toBeInTheDocument()
+    expect(screen.getByText(/the growth plan is US\$15\/mo or US\$150\/yr/i)).toBeInTheDocument()
     expect(screen.queryByText(/trial/i)).not.toBeInTheDocument()
   })
 

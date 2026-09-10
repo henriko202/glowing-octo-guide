@@ -25,8 +25,8 @@ pnpm monorepo — three deployable packages sharing one Convex backend:
 
 | Package    | Stack                                         | Deploy target                          | Domain (prod)                                |
 |------------|-----------------------------------------------|----------------------------------------|----------------------------------------------|
-| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
-| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4     | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 | **Cloudflare** Workers (OpenNext)      | `www.linkintothessi.com`                     |
+| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4     | **Cloudflare** Workers (Static Assets) | `www.app.linkintothessi.com`                 |
 | `convex/`  | Convex (serverless, real-time, TS-native)     | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
 
 Cloudflare hosts both frontends and provides DNS/CDN/TLS. External services: **LinkedIn** (OAuth + profile/posts),

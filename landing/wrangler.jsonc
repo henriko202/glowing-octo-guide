@@ -4,6 +4,10 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-03-25",
   "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    { "pattern": "www.linkintothessi.com", "custom_domain": true },
+    { "pattern": "linkintothessi.com", "custom_domain": true }
+  ],
   "assets": {
     "binding": "ASSETS",
     "directory": ".open-next/assets"

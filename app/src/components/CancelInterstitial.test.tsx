@@ -34,6 +34,9 @@ function renderIt(over: Partial<Parameters<typeof CancelInterstitial>[0]> = {}) 
       tier="growth"
       isTrialing={false}
       periodEndDate="10/1/2026"
+      starterPrice="US$10/mo"
+      starterInteractions={25}
+      starterPosts={1}
       onOpenChange={vi.fn()}
       {...over}
     />
@@ -70,6 +73,9 @@ describe('CancelInterstitial', () => {
         tier="pro"
         isTrialing={false}
         periodEndDate="10/1/2026"
+        starterPrice="US$10/mo"
+        starterInteractions={25}
+        starterPosts={1}
         onOpenChange={vi.fn()}
       />
     )
@@ -81,24 +87,32 @@ describe('CancelInterstitial', () => {
     expect(screen.getByText(/You won't be charged\. Your trial ends on 10\/1\/2026/)).toBeInTheDocument()
   })
 
-  it('hides Move to Starter on the Starter tier', async () => {
+  it('hides Schedule Starter on the Starter tier', async () => {
     renderIt({ tier: 'starter' })
-    expect(screen.queryByRole('button', { name: 'Move to Starter' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Schedule Starter' })).not.toBeInTheDocument()
   })
 
   // A trial runs on the plan it started on (product rule, 2026-09-09), so the only saves offered here
   // are "keep my plan" and the note. billingNode refuses the downgrade for a trialing member too.
-  it('hides Move to Starter during a trial', async () => {
+  it('hides Schedule Starter during a trial', async () => {
     renderIt({ isTrialing: true })
-    expect(screen.queryByRole('button', { name: 'Move to Starter' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Schedule Starter' })).not.toBeInTheDocument()
     expect(mockCancelFlow).not.toHaveBeenCalled()
   })
 
   it('downgrade: fires the alternative event and asks for the downgrade portal flow', async () => {
     renderIt()
-    fireEvent.click(screen.getByRole('button', { name: 'Move to Starter' }))
+    expect(screen.getByText(/Starter on 10\/1\/2026 for US\$10\/mo/)).toHaveTextContent(
+      /Weekly post limit: 1.*25 reactions and comments.*Industry filters are removed/
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule Starter' }))
     await waitFor(() => expect(mockCancelFlow).toHaveBeenCalledWith({ sessionToken: 'tok', flow: 'downgrade' }))
     expect(captureEvent).toHaveBeenCalledWith('cancel_alternative_taken', { from: 'growth' })
+  })
+
+  it('uses the current-period fallback when the effective date is unavailable', () => {
+    renderIt({ periodEndDate: null })
+    expect(screen.getByText(/Starter at the end of your current period for US\$10\/mo/)).toBeInTheDocument()
   })
 
   it('continue: saves a non-blank note as cancellation feedback, then opens the cancel flow', async () => {
@@ -141,14 +155,14 @@ describe('CancelInterstitial', () => {
 describe('scheduled downgrade (B07)', () => {
   it('hides the Starter alternative when a downgrade is already scheduled', () => {
     renderIt({ pendingTier: 'starter' })
-    expect(screen.queryByRole('button', { name: 'Move to Starter' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Schedule Starter' })).not.toBeInTheDocument()
   })
 
   it('closes, toasts and completes the save funnel when the downgrade returns no url', async () => {
     const onOpenChange = vi.fn()
     mockCancelFlow.mockResolvedValueOnce({ url: null })
     renderIt({ onOpenChange })
-    fireEvent.click(screen.getByRole('button', { name: 'Move to Starter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule Starter' }))
     await waitFor(() => expect(captureEvent).toHaveBeenCalledWith('cancel_alternative_completed', { from: 'growth' }))
     expect(captureEvent).toHaveBeenCalledWith('cancel_alternative_taken', { from: 'growth' })
     expect(toast).toHaveBeenCalledWith('You move to Starter at the end of your period.')

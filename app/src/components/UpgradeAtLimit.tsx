@@ -6,7 +6,6 @@ import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
 import { nextTier } from '../../../convex/lib/planLimits'
 import { billingIntervalParam } from '../../../convex/lib/postCapNotice'
-import { TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 import { api } from '../convex'
 import { SUPPORT_EMAIL } from '@/lib/support'
 import { captureEvent } from '@/lib/observability/analytics'
@@ -73,11 +72,10 @@ export default function UpgradeAtLimit({
           className="text-primary hover:underline"
           onClick={() => captureEvent('card_gate_cta_clicked', { plan, source: limit })}
         >
-          {/* backlog/R19 — an invited member has a 14-day trial; say so. */}
           {pastDue
             ? t('feed.cardGatePastDueCta')
             : canTrial
-              ? t('feed.cardGateCta', { days: me.trialDays ?? TRIAL_PERIOD_DAYS })
+              ? t('feed.cardGateCta')
               : t('billing.noTrialCta', { plan: t(`billing.plans.${plan}.name`) })}
         </Link>
       </span>

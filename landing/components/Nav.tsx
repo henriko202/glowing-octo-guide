@@ -35,7 +35,8 @@ export default function Nav({
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-6">
         <Link
           href={`/${lang}`}
-          className="group flex shrink-0 items-center gap-2.5"
+          aria-label="Link Into The SSI"
+          className="group flex shrink-0 items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gold transition-[border-color,box-shadow] duration-300 group-hover:border-gold-light group-hover:shadow-[0_0_12px_rgba(201,150,62,0.4)]">
             <div className="h-2 w-2 rounded-full bg-gold transition-colors duration-300 group-hover:bg-gold-light" />
@@ -49,19 +50,19 @@ export default function Nav({
         <div className="hidden items-center gap-8 md:flex">
           <Link
             href={`/${lang}#how-it-works`}
-            className="text-sm text-cream/60 transition-colors duration-300 hover:text-cream"
+            className="text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.howItWorks}
           </Link>
           <Link
             href={`/${lang}#features`}
-            className="text-sm text-cream/60 transition-colors duration-300 hover:text-cream"
+            className="text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.features}
           </Link>
           <Link
             href={`/${lang}#pricing`}
-            className="text-sm text-cream/60 transition-colors duration-300 hover:text-cream"
+            className="text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.pricing}
           </Link>
@@ -75,7 +76,7 @@ export default function Nav({
           <ThemeToggle dict={themeToggleDict} />
           <a
             href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="rounded-full border border-gold/60 px-4 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold md:px-5"
+            className="rounded-full border border-gold/60 px-4 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold md:px-5"
           >
             {dict.cta}
           </a>

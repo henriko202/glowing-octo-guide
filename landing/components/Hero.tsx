@@ -3,7 +3,7 @@ import type { Dictionary } from '@/i18n/getDictionary'
 
 export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
   return (
-    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-ink px-6 pb-24 text-center sm:pb-0 [@media(max-height:720px)]:pt-16 [@media(max-height:720px)]:pb-32">
+    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-ink px-6 pb-24 text-center sm:pb-0 [@media(max-height:720px)]:pt-18 [@media(max-height:720px)]:pb-32 [@media(max-width:640px)_and_(max-height:850px)]:pt-18 [@media(max-width:640px)_and_(max-height:850px)]:pb-32">
       {/* Radial glow */}
       <div
         className="pointer-events-none absolute inset-0"
@@ -32,25 +32,27 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
         }}
       />
 
-      <div className="relative z-10 mx-auto max-w-3xl space-y-8 [@media(max-height:720px)]:space-y-3">
+      <div className="relative z-10 mx-auto max-w-3xl space-y-8 [@media(max-height:720px)]:space-y-3 [@media(max-width:640px)_and_(max-height:850px)]:space-y-3">
         {/* Outcome-led headline */}
-        <h1 className="font-display text-4xl leading-tight font-semibold text-cream sm:text-5xl md:text-7xl [@media(max-height:720px)]:text-2xl">
+        <h1 className="font-display text-4xl leading-tight font-semibold text-balance text-cream sm:text-5xl md:text-7xl [@media(max-height:720px)]:text-2xl [@media(max-width:640px)_and_(max-height:850px)]:text-2xl">
           {dict.headlineLine1}
           <br />
-          <span className="text-gold-text italic">{dict.headlineLine2}</span>
+          <span className="text-gold-text">{dict.headlineLine2}</span>
         </h1>
 
         {/* Sub-headline: tangible, credible, viable */}
         <div className="mx-auto max-w-xl space-y-3">
-          <p className="text-lg leading-relaxed text-cream/70 [@media(max-height:720px)]:text-base">{dict.subLine1}</p>
-          <p className="text-base leading-relaxed text-cream/50">{dict.subLine2}</p>
+          <p className="text-lg leading-relaxed text-cream/70 [@media(max-height:720px)]:text-base [@media(max-width:640px)_and_(max-height:850px)]:text-base">
+            {dict.subLine1}
+          </p>
+          <p className="text-base leading-relaxed font-medium text-cream-muted">{dict.subLine2}</p>
         </div>
 
         {/* CTA */}
-        <div className="flex flex-col items-center justify-center gap-3 pt-2 [@media(max-height:720px)]:pt-0">
+        <div className="flex flex-col items-center justify-center gap-3 pt-2 [@media(max-height:720px)]:gap-2 [@media(max-height:720px)]:pt-0 [@media(max-width:640px)_and_(max-height:850px)]:gap-2 [@media(max-width:640px)_and_(max-height:850px)]:pt-0">
           <a
             href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-on-gold shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-[background-color,box-shadow] duration-300 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)]"
+            className="group relative rounded-full bg-gold px-8 py-3.5 font-medium text-on-gold shadow-[0_0_32px_rgba(201,150,62,0.35)] transition-[background-color,box-shadow] duration-300 hover:bg-gold-light hover:shadow-[0_0_48px_rgba(201,150,62,0.5)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.cta}
             <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
@@ -67,8 +69,8 @@ export default function Hero({ dict }: { dict: Dictionary['hero'] }) {
               and a fixed pb cannot reserve a worst case that varies. Re-measure after any copy or
               spacing change: at 360x640, 375x667 and 375x812, in all three locales, the gap above
               the headline and below this block must both be positive. */}
-          <p className="text-xs tracking-wide text-cream/40">{dict.ctaTrust}</p>
-          <p className="text-xs tracking-wide text-cream/40">{dict.ctaDisclaimer}</p>
+          <p className="text-[13px] leading-snug font-medium text-cream-muted">{dict.ctaTrust}</p>
+          <p className="text-[13px] leading-snug text-cream-muted">{dict.ctaDisclaimer}</p>
         </div>
       </div>
 
