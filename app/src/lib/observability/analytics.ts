@@ -26,7 +26,8 @@ export function initPostHog(): void {
     opt_out_capturing_by_default: true, // no capture and no cookies until analytics consent is granted
     disable_session_recording: true, // no session replay
     capture_pageview: true,
-    autocapture: true
+    autocapture: true,
+    defaults: '2026-05-30'
   })
   initialized = true
 }

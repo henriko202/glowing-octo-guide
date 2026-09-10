@@ -5,7 +5,7 @@
 // text (message + exception values) is passed through the SAME `scrubError` redactor the backend uses
 // on its console.error seams. Product analytics (PostHog) is the consent-gated path — see analytics.ts.
 import * as Sentry from '@sentry/react'
-import { scrubError } from '../../../../convex/lib/scrubError'
+import { scrubError } from '../../../../convex/lib/scrubError' // Structural subset of a Sentry event — kept SDK-agnostic so sentryBeforeSend is a pure, unit-testable
 
 // Structural subset of a Sentry event — kept SDK-agnostic so sentryBeforeSend is a pure, unit-testable
 // function with no Sentry types in the test. Cast to the SDK's event type only at the init call site.
@@ -39,11 +39,34 @@ export function sentryBeforeSend(event: ScrubbableEvent): ScrubbableEvent {
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined
   if (!import.meta.env.PROD || !dsn) return
+
   Sentry.init({
     dsn,
     environment: 'production',
-    sendDefaultPii: false,
-    tracesSampleRate: 0, // error monitoring only — no performance tracing (less data, no cost)
+    dataCollection: {
+      // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
+      // https://docs.sentry.io/platforms/javascript/guides/react/configuration/options/#dataCollection
+      // userInfo: false,
+      // httpBodies: []
+    },
+    integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
+    // Tracing
+    tracesSampleRate: 1.0, //  Capture 100% of the transactions
+    // Attach `sentry-trace`/`baggage` to every first-party request the app can make: Convex (data
+    // plane + HTTP-action site), the origin this bundle is served from (prod custom domain or a
+    // Workers preview), any linkintothessi.com host (app + landing), and local dev. Third-party
+    // hosts (Sentry, PostHog, Stripe, LinkedIn) are deliberately excluded — tracing them adds
+    // nothing and their CORS policies may reject the extra headers.
+    tracePropagationTargets: [
+      'localhost',
+      window.location.origin,
+      'linkintothessi.com',
+      '.convex.cloud',
+      '.convex.site'
+    ],
+    // Session Replay
+    replaysSessionSampleRate: 0.1, // This sets the sample rate at 10%. You may want to change it to 100% while in development and then sample at a lower rate in production.
+    replaysOnErrorSampleRate: 1.0, // If you're not already sampling the entire session, change the sample rate to 100% when sampling sessions where errors occur.
     // sentryBeforeSend mutates and returns the same object; the runtime value IS the real event.
     beforeSend: event => sentryBeforeSend(event as unknown as ScrubbableEvent) as unknown as typeof event
   })
