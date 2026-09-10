@@ -12,6 +12,7 @@ import type { Id } from '../../../convex/_generated/dataModel'
 import { Flash, useFlash } from './useFlash'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { friendlyError } from '@/lib/errors'
@@ -331,7 +332,7 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
           <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
             They'll regain access to the app immediately.
           </p>
-          <div className="mt-5 flex justify-end gap-2">
+          <DialogFooter className="mt-5">
             <Button
               type="button"
               variant="outline"
@@ -346,7 +347,7 @@ export default function UsersTab({ sessionToken, isAdmin, postSyncOn, profileScr
             >
               {pendingId === unbanTarget._id ? '…' : 'Unban'}
             </Button>
-          </div>
+          </DialogFooter>
         </Modal>
       )}
     </div>

@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
@@ -490,7 +491,7 @@ export default function MyPostsPage() {
           title={t('myPosts.delete')}
         >
           <p className="text-foreground m-0 text-sm">{t('myPosts.deleteConfirm')}</p>
-          <div className="mt-5 flex items-center justify-end gap-3">
+          <DialogFooter className="mt-5">
             <Button
               type="button"
               variant="ghost"
@@ -507,7 +508,7 @@ export default function MyPostsPage() {
             >
               {t('myPosts.delete')}
             </Button>
-          </div>
+          </DialogFooter>
         </Modal>
       )}
     </div>

@@ -1089,6 +1089,20 @@ queries, no public action and no Stripe client at all. `createPortalSession` mov
 because the component's `createCustomerPortalSession` cannot name a portal configuration (see "Per-tier portal
 configurations", §8).
 
+> ⚠️ **The Stripe customer id is mirrored TWICE, and the two paths read different copies.** `createCheckoutSession`
+> takes it from the **component's** `customers` table via `getOrCreateCustomer`; `createPortalSession` reads **our**
+> `users.stripeCustomerId` (`billingNode.ts:263`). On the checkout path our mirror is write-only — set at
+> `billingNode.ts:86` only when absent, never read there — so the two can drift apart silently. **Neither validates the
+> id against Stripe.** `getOrCreateCustomer` returns whatever it stored, so a customer that no longer exists produces
+> an uncaught `No such customer: 'cus_…'` at `checkout.sessions.create` — the payment step, the worst place to fail —
+> and the component ships **no repair path**: it has no delete, and `createOrUpdateCustomer` is keyed by
+> `stripeCustomerId`, so writing a fresh id *inserts a second row for the same user* rather than replacing the stale
+> one. Fixing it properly means resolving customers ourselves and bypassing the component. **Deliberately not done**
+> (pre-launch, no prod data; the only live trigger is an admin deleting a customer in the Dashboard). Hit in **dev on
+> 2026-09-09** after the test sandbox was deleted out from under the stored ids; cleared by hand in the Convex
+> dashboard — the component's `customers` row *and* `users.stripeCustomerId`, since one alone leaves the other path
+> broken. Revisit if a live customer is ever deleted, or if it recurs.
+
 Key checkout parameters:
 
 - `trial_period_days: trialDaysFor(user)` — **conditional**, not unconditional: set only when
@@ -2699,6 +2713,14 @@ sets `users.defaultVisibilityIndustries`/`defaultVisibilityCountries`, which eve
 default does not retroactively change posts already written. Absent/empty on either field ⇒ visible to everyone (same
 invariant `F2` already relied on before this was wired up to a UI).
 
+The feed also checks each post against its **author's current interaction cap** on every query.
+`getPlanLimitsHelper` resolves limits once per author on the page, including Contact overrides and tier defaults.
+A post is excluded when `likeCount + commentCount >= effectiveInteractionCap(interactionsPerPost, interactionCapBonus)`
+or its stored `interactionLimitReached` flag is true. For an author with a cap of 50 and no bonus, both 50 and 80 total
+interactions exclude the post. The viewer's cap does not affect this check. Purchased bonuses still extend the cap.
+This check covers stale `inFeed` flags after count updates or plan changes, using the latest counts stored in Convex.
+It runs before the per-post viewer-state reads and preserves the index page's cursor and pagination metadata.
+
 ```mermaid
 flowchart TD
     G["getFeed(paginationOpts, sessionToken)"] --> AU{"valid session?"}
@@ -2706,7 +2728,8 @@ flowchart TD
     AU -->|yes| BASE["paginate posts by_feed_rank(inFeed=true) desc — one page"]
     BASE --> F1["drop the viewer's OWN posts (authorId === viewer._id)"]
     F1 --> AUTHF["fetch this page's authors (≤ numItems)"]
-    AUTHF --> F2["post visibility: visibilityIndustries/Countries must include viewer's"]
+    AUTHF --> CAP["resolve author limits and drop posts at their effective cap"]
+    CAP --> F2["post visibility: visibilityIndustries/Countries must include viewer's"]
     F2 --> F3["viewer industry filter (growth/pro)"]
     F3 --> F4["viewer country filter (pro)"]
     F4 --> F5["drop posts whose author is pending deletion"]
@@ -2716,8 +2739,8 @@ flowchart TD
 ```
 
 **Per-viewer hygiene (R21).** Before enriching, `fetchFeedPage` reads the viewer's own `userPostState` row for each item
-on the page — one `by_user_and_post` `.unique()` point read per item, so at most `numItems` extra indexed reads per
-page — and then:
+remaining after the author-cap check — one `by_user_and_post` `.unique()` point read per item, so at most `numItems`
+extra indexed reads per page — and then:
 
 - **drops** every post whose `viewerPostStatus(state, now)` is `'gone'`: hidden through "Hide now", or last interacted
   with more than `INTERACTED_TTL_MS` (**24 h**) ago;
@@ -2893,7 +2916,9 @@ flowchart TD
     ST --> DONE["done footer: ✓ Reacted / Commented / Reacted · commented<br/>+ the remaining action + View on LinkedIn<br/>+ 'Leaves your feed in N h' + Hide now"]
     DONE --> W{"viewerPostStatus(state, now)"}
     W -->|" &lt; 24 h "| DONE
-    W -->|" ≥ 24 h "| GONE["'gone' — the next feed query drops it"]
+    W -->|" ≥ 24 h "| GONE["'gone' — the open feed removes it at hidesAt;<br/>subsequent feed queries also exclude it"]
+    DONE -->|" View generated comment "| SAVED["CommentBox reloads the saved generated text"]
+    SAVED -->|" Comment on LinkedIn again "| LINKEDIN["Copy text and reopen LinkedIn;<br/>no new count or expiry reset"]
     DONE -->|" Hide now "| HIDE["interactions.hidePost → hiddenAt<br/>(ConvexError NOT_INTERACTED unless canHide)"]
     HIDE --> GONE
     GONE --> EMPTY{"page empty after ≤ 5 auto-loads?"}
@@ -2918,8 +2943,16 @@ without a `?? 0` sentinel, which `Math.max` would otherwise floor at zero and sw
 - `toFeedViewerState(row)` — the `{ reacted, commented, hidesAt }` the card renders. It deliberately takes **no `now`**:
   `hidesAt` is an absolute instant (`lastInteractedAt + INTERACTED_TTL_MS`), and the client turns it into "in N h".
 
-The card's remaining action stays live: a viewer who reacted still sees the Comment button, and vice versa. Hiding is
-reactive — Convex removes the card without a reload.
+The card's remaining action stays live: a viewer who reacted still sees the Comment button, and vice versa.
+Commented posts also offer **View generated comment**. This opens the saved AI draft read-only with **Comment on
+LinkedIn again**, which copies the text and reopens the post without recording another interaction
+or resetting the 24-hour window. A missing saved draft gets an explicit empty state and still permits reopening
+LinkedIn. Clipboard failure leaves the text available for manual copying.
+
+`FeedPage` filters out cards at `viewerState.hidesAt`, including while the feed stays open without database updates.
+One shared clock refreshes the countdown every minute, at the nearest expiry, and when the tab regains focus or
+changes visibility. The countdown rounds up and stays between 1 and 24 hours while a card is visible. Hiding is
+reactive: Convex removes the card without a reload.
 
 **`feed.getCaughtUp({ sessionToken })` → `{ caughtUp }`** answers the question an empty page cannot: *did I clear the
 feed, or is there nothing here?* It is `true` when the viewer's newest `userInteractions` row (`by_user`, descending,
@@ -3750,6 +3783,9 @@ a calm working surface, in light (default) and dark.
   architecture.
 - **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar, Table) are shadcn-style (cva + `cn`);
   `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline used by every screen.
+- **Modal footers:** `DialogFooter` uses plain inset actions with no tinted strip or negative margins. Billing,
+  admin, feedback, MOTD, and deletion dialogs share it. Actions stack on mobile with 44px minimum button heights,
+  wrap on desktop, and allow long labels to wrap. Card-gate pricing remains below the actions inside the dialog.
 
 ---
 
@@ -4434,13 +4470,14 @@ entry above and [§8](#8-subscriptions--billing)), plus the two LinkedIn‑embed
   reported. **R21** adds a `viewerState?: FeedViewerState | null` prop (the server's `{ reacted, commented, hidesAt }`,
   attached per post by `feed.getFeed` — [§11](#11-feed--engagement)) and an `onHide?: () => void`. When it is present
   the card renders its **done footer**: a "✓ you reacted / commented / both" line (`feed.doneReacted` /
-  `feed.doneCommented` / `feed.doneBoth`), `feed.leavesIn` with the whole hours left (rounded up, so the copy says
-  "within"), and a ghost **Hide now**
-  button. The already-taken action's control is removed rather than disabled — `!done?.reacted` gates
-  `ReactionButton`, `!done?.commented` gates the Comment button — so a viewer who reacted can still comment, and
-  neither can be double-counted from the card. `hoursLeft` is computed from a `now` captured **once at mount** and
-  floored at 1: the label is a fact ("leaves in 3 h"), not a live countdown, and a per-second ticking card would be
-  noise on every post in the list.
+  `feed.doneCommented` / `feed.doneBoth`), `feed.leavesIn` with the whole hours left (rounded up and bounded to
+  1–24), and a ghost **Hide now** button. The reaction control disappears after reacting. After commenting, **View
+  generated comment** replaces the initial Comment action and toggles `CommentBox` in read-only review mode.
+  That mode reloads `interactions.getCommentDraft`, hides generation controls, and offers **Comment on LinkedIn
+  again**. Reopening copies the draft and hands off to LinkedIn without calling `commentOnPost` again.
+  `FeedPage` supplies the shared `now` prop and removes expired cards before virtualization, so countdowns and
+  empty-feed handling update while the page remains open. English, Portuguese, and Spanish include the saved-comment
+  action, loading, empty-state, and close labels.
 
 > As of `1fcc123`, `MyPostsPage` uses this shared `LinkedInEmbed` directly (its old local
 > `buildEmbedUrl` that force‑normalized to `activity` was removed, eliminating the previous
@@ -4504,7 +4541,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                          | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |

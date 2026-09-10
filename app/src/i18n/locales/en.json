@@ -95,7 +95,8 @@
       "clear": "Clear filters",
       "selectPlaceholder": "Select…",
       "noResults": "No results."
-    }
+    },
+    "viewGeneratedComment": "View generated comment"
   },
   "myPosts": {
     "featuredPill": "{{used}} of {{limit}} featured this month",
@@ -163,7 +164,12 @@
     "generating": "Generating…",
     "language": "Comment language",
     "languageAuto": "Auto — match the post",
-    "generateError": "Couldn't generate a comment. Please try again."
+    "generateError": "Couldn't generate a comment. Please try again.",
+    "generatedComment": "Generated comment",
+    "loadingSaved": "Loading saved comment…",
+    "noSavedComment": "No generated comment was saved for this post.",
+    "reopenLinkedIn": "Comment on LinkedIn again",
+    "closeSaved": "Close"
   },
   "settings": {
     "title": "Settings",

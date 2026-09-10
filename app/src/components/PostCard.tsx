@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, MessageSquare } from 'lucide-react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { REACTIONS, type Reaction } from '../../../convex/lib/reactions'
 import type { FeedViewerState } from '../../../convex/lib/feedHygiene'
@@ -89,7 +89,8 @@ export default function PostCard({
   gated,
   onGated,
   reacting,
-  onHide
+  onHide,
+  now: feedNow
 }: {
   post: PostWithAuthor
   onComment: (postId: Id<'posts'>) => void
@@ -99,13 +100,13 @@ export default function PostCard({
   reacting?: boolean
   /** backlog/R21 — "Hide now" on a post the viewer already handled. */
   onHide?: () => void
+  now?: number
 }) {
   const { t } = useTranslation()
-  // backlog/R21 — the done footer. `now` is fixed at mount (react-hooks/purity): the label is
-  // "leaves in N h", a live countdown would be noise.
-  const [now] = useState(() => Date.now())
+  const [mountedAt] = useState(() => Date.now())
+  const now = feedNow ?? mountedAt
   const done = post.viewerState ?? null
-  const hoursLeft = done ? Math.max(1, Math.ceil((done.hidesAt - now) / 3_600_000)) : 0
+  const hoursLeft = done ? Math.min(24, Math.max(1, Math.ceil((done.hidesAt - now) / 3_600_000))) : 0
   const doneLabel =
     done?.reacted && done.commented ? 'feed.doneBoth' : done?.reacted ? 'feed.doneReacted' : 'feed.doneCommented'
 
@@ -163,7 +164,20 @@ export default function PostCard({
                 loading={reacting}
               />
             )}
-            {!done?.commented && (
+            {done?.commented ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onComment(post._id)}
+                className="text-muted-foreground min-h-11 cursor-pointer text-[13px]"
+              >
+                <MessageSquare
+                  className="size-4"
+                  aria-hidden="true"
+                />
+                {t('feed.viewGeneratedComment')}
+              </Button>
+            ) : (
               <Button
                 type="button"
                 variant="ghost"

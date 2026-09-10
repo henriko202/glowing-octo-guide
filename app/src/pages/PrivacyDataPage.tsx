@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import ConsentToggles from '../components/ConsentToggles'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
 export default function PrivacyDataPage() {
@@ -124,7 +125,7 @@ export default function PrivacyDataPage() {
             aria-label={t('privacy.confirmInputLabel')}
             className="mb-3 text-[13px]"
           />
-          <div className="flex items-center justify-end gap-3">
+          <DialogFooter>
             <Button
               type="button"
               variant="ghost"
@@ -141,7 +142,7 @@ export default function PrivacyDataPage() {
             >
               {deleting ? t('privacy.deleting') : t('privacy.confirmDeleteButton')}
             </Button>
-          </div>
+          </DialogFooter>
         </Modal>
       )}
     </div>

@@ -1,7 +1,7 @@
 // app/src/pages/FeedPage.test.tsx
 import type { ReactNode } from 'react'
-import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FeedPage from './FeedPage'
 
 // Mock the Convex API module so each query/action has a stable, identifiable reference — the same
@@ -33,7 +33,16 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()]
 }))
 
-// Only the R21 budget test renders a post at all, and it cares about the load calls, not the card.
+// jsdom has no layout; render the loaded rows so feed visibility can be exercised with a clock.
+vi.mock('@tanstack/react-virtual', () => ({
+  useWindowVirtualizer: ({ count, scrollMargin }: { count: number; scrollMargin: number }) => ({
+    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, key: index, start: 0 })),
+    getTotalSize: () => count * 220,
+    measureElement: vi.fn(),
+    options: { scrollMargin }
+  })
+}))
+
 vi.mock('../components/PostCard', () => ({
   default: ({ post }: { post: { _id: string } }) => <article data-testid={`post-${post._id}`} />
 }))
@@ -57,6 +66,11 @@ beforeEach(() => {
     },
     'posts.getMyPosts': []
   }
+})
+
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
 })
 
 describe('FeedPage empty states (R05)', () => {
@@ -83,6 +97,64 @@ describe('FeedPage empty states (R05)', () => {
 
 // backlog/R21 — an empty page is not proof the feed is empty: handled posts are dropped per viewer.
 describe('FeedPage feed hygiene (R21)', () => {
+  it.each(['reacted', 'commented'] as const)(
+    'removes a %s post exactly 24 hours after interaction without query updates',
+    state => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-09-09T12:00:00Z'))
+      mockPaginated.results = [
+        {
+          _id: 'handled',
+          viewerState: {
+            reacted: state === 'reacted',
+            commented: state === 'commented',
+            hidesAt: Date.now() + 86_400_000
+          }
+        },
+        { _id: 'untouched' }
+      ]
+      renderPage()
+      expect(screen.getByTestId('post-handled')).toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(86_399_999))
+      expect(screen.getByTestId('post-handled')).toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(1))
+      expect(screen.queryByTestId('post-handled')).not.toBeInTheDocument()
+      expect(screen.getByTestId('post-untouched')).toBeInTheDocument()
+    }
+  )
+
+  it('schedules expiry for an interaction received after the feed mounted', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-09T12:00:00Z'))
+    mockPaginated.results = [{ _id: 'handled' }]
+    const { rerender } = renderPage()
+    act(() => vi.advanceTimersByTime(3_600_000))
+    mockPaginated.results = [
+      { _id: 'handled', viewerState: { reacted: true, commented: false, hidesAt: Date.now() + 86_400_000 } }
+    ]
+    rerender(<FeedPage />)
+
+    act(() => vi.advanceTimersByTime(86_399_999))
+    expect(screen.getByTestId('post-handled')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.queryByTestId('post-handled')).not.toBeInTheDocument()
+  })
+
+  it('removes expired posts when the user returns from a suspended tab', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-09T12:00:00Z'))
+    mockPaginated.results = [
+      { _id: 'handled', viewerState: { reacted: true, commented: false, hidesAt: Date.now() + 30_000 } }
+    ]
+    renderPage()
+    expect(screen.getByTestId('post-handled')).toBeInTheDocument()
+
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z'))
+    act(() => window.dispatchEvent(new Event('focus')))
+    expect(screen.queryByTestId('post-handled')).not.toBeInTheDocument()
+  })
+
   it('keeps loading while empty pages can still load more, instead of showing the empty state', () => {
     mockPaginated = { results: [], status: 'CanLoadMore', loadMore: vi.fn() }
     renderPage()

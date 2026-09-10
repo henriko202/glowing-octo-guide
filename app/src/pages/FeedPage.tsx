@@ -41,7 +41,32 @@ export default function FeedPage() {
     { sessionToken },
     { initialNumItems: FEED_PAGE_SIZE }
   )
-  const posts = results as unknown as PostWithAuthor[]
+  const feedPosts = results as unknown as PostWithAuthor[]
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const refresh = () => {
+      clearTimeout(timer)
+      const current = Date.now()
+      setNow(current)
+      const nextExpiry = feedPosts.reduce(
+        (next, post) =>
+          post.viewerState && post.viewerState.hidesAt > current ? Math.min(next, post.viewerState.hidesAt) : next,
+        Infinity
+      )
+      if (nextExpiry !== Infinity) timer = setTimeout(refresh, Math.min(60_000, nextExpiry - current))
+    }
+    // Convex queries do not invalidate when only time passes. Keep the deadline and label current.
+    refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [feedPosts])
+  const posts = feedPosts.filter(post => !post.viewerState || post.viewerState.hidesAt > now)
   // Own-post state backs both the R04 banner (gated + hidden, feed non-empty) and the R05 empty-feed
   // checklist/banner below — enabled whenever either could render, so a non-gated member sees the
   // checklist's "shared a first post" step too, not only gated members.
@@ -218,6 +243,7 @@ export default function FeedPage() {
                 <div className="pb-4">
                   <PostCard
                     post={post}
+                    now={now}
                     onComment={id => handleToggleComment(id)}
                     onReact={async (id, reactionType) => {
                       setReactError(null)
@@ -268,6 +294,7 @@ export default function FeedPage() {
                   {isCommentOpen && (
                     <CommentBox
                       postId={post._id}
+                      commented={post.viewerState?.commented}
                       postUrl={buildPostUrl(post.linkedinPostUrn, post.sourceUrl)}
                       sessionToken={sessionToken ?? ''}
                       onClose={() => setCommentingOn(null)}

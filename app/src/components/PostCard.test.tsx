@@ -232,18 +232,47 @@ describe('PostCard done footer (R21)', () => {
     expect(screen.getByText(/leaves your feed within 5 h/i)).toBeInTheDocument()
   })
 
-  it('drops both actions and names both once the viewer reacted and commented', () => {
+  it('offers the saved comment once the viewer reacted and commented', () => {
+    const onComment = vi.fn()
     render(
       <PostCard
         post={{ ...mockPost, viewerState: { reacted: true, commented: true, hidesAt: inFiveHours } }}
-        onComment={() => {}}
+        onComment={onComment}
         onReact={() => {}}
         onHide={() => {}}
       />
     )
     expect(screen.getByText(/reacted · commented/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /comment/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /view generated comment/i }))
+    expect(onComment).toHaveBeenCalledWith(mockPost._id)
+  })
+
+  it('shows at most 24 hours when an interaction arrives after the card mounted', () => {
+    const mountedAt = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(mountedAt)
+    try {
+      const onComment = vi.fn()
+      const onReact = vi.fn()
+      const { rerender } = render(
+        <PostCard
+          post={mockPost}
+          onComment={onComment}
+          onReact={onReact}
+        />
+      )
+      clock.mockReturnValue(mountedAt + 3_600_000)
+      rerender(
+        <PostCard
+          post={{ ...mockPost, viewerState: { reacted: true, commented: false, hidesAt: Date.now() + 24 * 3_600_000 } }}
+          onComment={onComment}
+          onReact={onReact}
+        />
+      )
+      expect(screen.getByText(/leaves your feed within 24 h/i)).toBeInTheDocument()
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it('rounds the remaining time up so it never says 0 h', () => {

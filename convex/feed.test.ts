@@ -18,6 +18,8 @@ const post = (id: string, authorId: string, over: Record<string, unknown> = {}) 
     visibilityCountries: [] as string[],
     isFeatured: false,
     publishedAt: 1,
+    likeCount: 0,
+    commentCount: 0,
     ...over
   }) as unknown as Doc<'posts'>
 
@@ -26,12 +28,27 @@ const user = (id: string, over: Record<string, unknown> = {}) =>
 
 // Minimal QueryCtx mock: the by_feed_rank page walk returns `page`, get() resolves authors, and the
 // per-post userPostState lookup (backlog/R21) answers from `states` keyed by post id.
-function feedCtx(page: Doc<'posts'>[], authors: Doc<'users'>[], states: Record<string, unknown> = {}) {
+function feedCtx(
+  page: Doc<'posts'>[],
+  authors: Doc<'users'>[],
+  states: Record<string, unknown> = {},
+  limits: Array<{ tier: string; userId?: string; interactionsPerPost: number }> = []
+) {
   const byId = new Map(authors.map(a => [a._id, a]))
   return {
     db: {
       query: (table: string) => ({
         withIndex: (_name: string, fn?: (q: any) => any) => {
+          if (table === 'planLimits') {
+            let matches = limits
+            fn?.({
+              eq: (field: 'tier' | 'userId', value: string) => {
+                matches = limits.filter(row => row[field] === value)
+                return null
+              }
+            })
+            return { unique: async () => matches[0] ?? null, take: async (n: number) => matches.slice(0, n) }
+          }
           if (table === 'userPostState') {
             let postId = ''
             fn?.({
@@ -56,6 +73,89 @@ const opts = (filter: ReturnType<typeof buildFeedFilter>) => ({
   paginationOpts: { numItems: 50, cursor: null },
   filter,
   now: NOW
+})
+
+describe('fetchFeedPage author interaction cap', () => {
+  const filter = buildFeedFilter({ tier: 'starter' })
+  const author = user('author', { tier: 'growth' })
+
+  it.each([false, undefined])('excludes 80 reactions at cap 50 with stored flag %s', async interactionLimitReached => {
+    const result = await fetchFeedPage(
+      feedCtx([post('over', 'author', { likeCount: 80, interactionLimitReached, inFeed: true })], [author]),
+      user('viewer', { tier: 'pro' }),
+      opts(filter)
+    )
+    expect(result.page).toEqual([])
+  })
+
+  it('excludes counts equal to the cap and counts reactions plus comments', async () => {
+    const result = await fetchFeedPage(
+      feedCtx(
+        [
+          post('equal', 'author', { likeCount: 50 }),
+          post('combined', 'author', { likeCount: 40, commentCount: 10 }),
+          post('under', 'author', { likeCount: 40, commentCount: 9 })
+        ],
+        [author]
+      ),
+      user('viewer', { tier: 'pro' }),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['under'])
+  })
+
+  it('uses the author cap even when the viewer has a lower cap', async () => {
+    const result = await fetchFeedPage(
+      feedCtx([post('under', 'author', { likeCount: 49 })], [author]),
+      user('viewer', { tier: 'starter' }),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['under'])
+  })
+
+  it('uses current database tier limits rather than hardcoded defaults', async () => {
+    const result = await fetchFeedPage(
+      feedCtx([post('over', 'author', { likeCount: 40 })], [author], {}, [{ tier: 'growth', interactionsPerPost: 30 }]),
+      user('viewer'),
+      opts(filter)
+    )
+    expect(result.page).toEqual([])
+  })
+
+  it('uses a contact author override before the tier default', async () => {
+    const result = await fetchFeedPage(
+      feedCtx(
+        [post('over', 'author', { likeCount: 80 }), post('under', 'author', { likeCount: 49 })],
+        [user('author', { tier: 'contact' })],
+        {},
+        [
+          { tier: 'contact', interactionsPerPost: 200 },
+          { tier: 'contact', userId: 'author', interactionsPerPost: 50 }
+        ]
+      ),
+      user('viewer'),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['under'])
+  })
+
+  it('includes purchased bonus in the cap without reviving previously capped posts', async () => {
+    const result = await fetchFeedPage(
+      feedCtx(
+        [
+          post('bonus', 'author', { likeCount: 80, interactionCapBonus: 50 }),
+          post('bonus-full', 'author', { likeCount: 100, interactionCapBonus: 50 }),
+          post('sticky', 'author', { likeCount: 20, interactionLimitReached: true, inFeed: true })
+        ],
+        [author]
+      ),
+      user('viewer'),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['bonus'])
+    expect(result.isDone).toBe(true)
+    expect(result.continueCursor).toBe('END')
+  })
 })
 
 describe('buildFeedFilter', () => {

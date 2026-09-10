@@ -95,7 +95,8 @@
       "clear": "Borrar filtros",
       "selectPlaceholder": "Seleccionar…",
       "noResults": "Sin resultados."
-    }
+    },
+    "viewGeneratedComment": "Ver comentario generado"
   },
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mes",
@@ -163,7 +164,12 @@
     "generating": "Generando…",
     "language": "Idioma del comentario",
     "languageAuto": "Automático — idioma de la publicación",
-    "generateError": "No se pudo generar un comentario. Inténtalo de nuevo."
+    "generateError": "No se pudo generar un comentario. Inténtalo de nuevo.",
+    "generatedComment": "Comentario generado",
+    "loadingSaved": "Cargando comentario guardado…",
+    "noSavedComment": "No se guardó ningún comentario generado para esta publicación.",
+    "reopenLinkedIn": "Comentar en LinkedIn de nuevo",
+    "closeSaved": "Cerrar"
   },
   "settings": {
     "title": "Configuración",

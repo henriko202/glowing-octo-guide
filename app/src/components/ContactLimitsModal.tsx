@@ -6,6 +6,7 @@ import Modal from './Modal'
 import LoadingSpinner from './LoadingSpinner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { friendlyError } from '@/lib/errors'
 
 type PlanLimitRow = {
@@ -135,7 +136,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
 
       {error && <p className="text-destructive mt-2 text-xs">{error}</p>}
 
-      <div className="mt-4 flex gap-2">
+      <DialogFooter className="mt-4 flex-col">
         <Button
           onClick={handleSave}
           disabled={!isValid || saving}
@@ -150,7 +151,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
         >
           Cancel
         </Button>
-      </div>
+      </DialogFooter>
 
       {!isNew && (
         <Button
