@@ -15,12 +15,25 @@ describe('extractInlineScriptHashes', () => {
   it('skips empty scripts', () => {
     expect(extractInlineScriptHashes('<script>  </script>')).toEqual([])
   })
+
+  it('normalizes CRLF the way the HTML parser does, so the hash matches the browser', () => {
+    const lf = '<script>window.__t = 1\nwindow.__u = 2</script>'
+    const crlf = '<script>window.__t = 1\r\nwindow.__u = 2</script>'
+    expect(extractInlineScriptHashes(crlf)).toEqual(extractInlineScriptHashes(lf))
+  })
 })
 
 describe('buildHeadersContent', () => {
-  it('embeds hashes in script-src and includes the hardening headers', () => {
+  it('quotes hashes, allows the vendor origins, and includes the hardening headers', () => {
     const out = buildHeadersContent(['sha256-abc'])
-    expect(out).toContain("script-src 'self' sha256-abc")
+    expect(out).toContain(
+      "script-src 'self' 'sha256-abc' https://static.cloudflareinsights.com/beacon.min.js https://*.posthog.com"
+    )
+    expect(out).toContain(
+      "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://*.sentry.io"
+    )
+    expect(out).toContain("worker-src 'self' blob:")
+    expect(out).toContain("child-src 'self' blob:")
     expect(out).toContain("frame-ancestors 'none'")
     expect(out).toContain('Strict-Transport-Security: max-age=63072000; includeSubDomains; preload')
     expect(out.startsWith('/*')).toBe(true)

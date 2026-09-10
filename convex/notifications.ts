@@ -181,12 +181,12 @@ export const sendPostCapReached = internalAction({
     }
 
     const tier: Tier = c.tier ?? 'starter'
-    const limits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId: post.authorId, tier })
+    const limits = await ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, { userId: post.authorId, tier })
     // A bought featured post is measured (and reported here) against plan cap + its bonus (backlog/R17).
     const cap = effectiveInteractionCap(limits.interactionsPerPost, post.interactionCapBonus)
     const next = nextTier(tier)
     const nextLimits = next
-      ? await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId: post.authorId, tier: next })
+      ? await ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, { userId: post.authorId, tier: next })
       : null
     // capNoticeMode's `planCap` compares plan cap to plan cap to decide if there's a bigger plan
     // worth naming — feed it the plain limit, not the effective `cap` above, or this post's one-time

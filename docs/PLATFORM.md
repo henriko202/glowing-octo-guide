@@ -1358,7 +1358,7 @@ flowchart TD
     CAP -->|" not yet "| STOP["nothing"]
     CAP -->|" reached "| FLIP["patch interactionLimitReached + computeFeedFields<br/>(post leaves the feed)"]
     FLIP --> SCHED["scheduler.runAfter(0, internal.notifications.sendPostCapReached)"]
-    SCHED --> RR["re-read: interactions.getPost · billing.getBillingContext · lib.planLimits.getPlanLimits"]
+    SCHED --> RR["re-read: interactions.getPost · billing.getBillingContext · lib.planLimitsQuery.getPlanLimits"]
     RR --> G1{"post still capped<br/>and not soft-deleted?"}
     G1 -->|" no "| DROP["silent"]
     G1 -->|" yes "| G2{"shouldSendCapNotice:<br/>email + trialing/active + no scheduled cancel"}
@@ -1402,7 +1402,8 @@ it is currently measured against.
 
 **Everything that could make the email wrong is re-checked at send time.** The action re-reads the post
 (`internal.interactions.getPost`), the author's billing context (`internal.billing.getBillingContext`) and the effective
-limits (`internal.lib.planLimits.getPlanLimits`, for the author's tier and for `nextTier(tier)`), and drops silently
+limits (`internal.lib.planLimitsQuery.getPlanLimits`, for the author's tier and for `nextTier(tier)`), and drops
+silently
 when the post is gone, no longer capped, or soft-deleted. `shouldSendCapNotice` (`lib/postCapNotice.ts`) then requires
 an address on file **and** a `trialing`/`active` status **and** no `cancelAtPeriodEnd` on the live subscription row
 (`findLiveSubscription`). `none`, `past_due` and `canceled` members see the card-gate or expired banners in the app
@@ -2339,7 +2340,10 @@ verified domain every billing notice no-ops (loudly logged, but not delivered).
 > shim or special-case lookup is needed.
 
 Three enforced limits per tier, stored in `planLimits` and looked up via
-`lib/planLimits.getPlanLimitsHelper`:
+`lib/planLimits.getPlanLimitsHelper`. That module is pure and is imported by the browser, so the
+action-facing `ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, …)` wrapper lives in the separate
+server-only `lib/planLimitsQuery.ts` — registering a function in `planLimits.ts` would pull `convex/server` into the
+client bundle (and log Convex's "functions should not be imported in the browser" warning):
 
 - **`interactionsPerPost`** — the cap counts **total engagement** (the LinkedIn‑seeded `likeCount + commentCount` at
   import **plus** in‑app taps): once `likeCount + commentCount ≥ interactionsPerPost`, the post is flagged
@@ -4654,7 +4658,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5553,11 +5557,16 @@ The codebase follows a consistent, defensible security model:
   500 chars; checkout validates the price id against an allowlist before any work; the ⌘K `search` query ignores inputs
   over 200 chars (resource guard); MOTD authoring rejects body keys outside the supported `en`/`pt`/`es` locales.
 - **CSP + security headers (served at the Cloudflare HTTP layer).** The **app** generates `dist/_headers`
-  at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the **SHA-256 hash** of the one pre-paint inline
-  theme script (no `'unsafe-inline'`), plus `frame-src https://www.linkedin.com` and a
-  `connect-src` allowlist (Convex `.cloud`/`.site` + Stripe). The **landing** sets its CSP via
+  at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the quoted **SHA-256 hash** of the one pre-paint
+  inline theme script (no `'unsafe-inline'`) plus the third-party scripts it loads (Cloudflare's beacon and
+  `https://*.posthog.com`); `connect-src` allows Convex `.cloud`/`.site`, Stripe, `https://*.posthog.com`, and
+  `https://*.sentry.io`; `worker-src`/`child-src` allow `blob:` workers (Sentry Replay compresses off the main thread);
+  `frame-src` allows `https://www.linkedin.com`. The **landing** sets its CSP via
   `next.config.js` `headers()` with `script-src 'self' 'unsafe-inline'` (it renders only static copy, so the pages stay
-  prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data). In **dev only**
+  prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data). Both CSPs also allow
+  Cloudflare's analytics beacon (`https://static.cloudflareinsights.com/beacon.min.js`) — the zone's Web Analytics
+  automatic setup injects it into proxied HTML responses, and the beacon POSTs to same-origin `/cdn-cgi/rum` (covered by
+  `connect-src 'self'`). In **dev only**
   (`NODE_ENV !== 'production'`) the landing adds `'unsafe-eval'` to `script-src` because `next dev` evals every module
   (eval-source-map devtool + Fast Refresh) — without it the client bundle throws and nothing hydrates; the deployed
   Worker (built with `NODE_ENV=production`) never gets this relaxation. Landing fonts are **self-hosted** via
@@ -5592,8 +5601,10 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   within ~20s — a genuinely lost webhook must be visible even though the member is never told the word. Treated
   as a **necessary security/reliability** function — runs regardless of analytics consent — so PII is stripped **before
   send**: `sendDefaultPii:false`, plus a `beforeSend` that drops `request.cookies`/`request.headers` and any `user`
-  identity and runs the message + exception values through the same `scrubError` redactor. No performance tracing
-  (`tracesSampleRate:0`).
+  identity and runs the message + exception values through the same `scrubError` redactor. Performance tracing runs at
+  `tracesSampleRate:1.0`; Session Replay records 10% of sessions (100% of error sessions) with Sentry's default masking
+  (all text masked, media blocked, no canvas recording). Replay compresses in a blob WebWorker, which is why the app CSP
+  allows `blob:` workers (CSP bullet above).
 - **Prod backend errors — Sentry via Convex (no code):** Convex functions can't host the Sentry SDK; the backend path is
   Convex's native **Exception Reporting** integration (runbook below). `scrubError` remains the pre‑log redactor, so the
   same redaction applies to what Convex forwards.

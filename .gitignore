@@ -4,6 +4,7 @@ node_modules/
 !.env.local.example
 dist/
 .next/
+.wrangler/
 .convex/
 *.log
 .DS_Store

@@ -275,7 +275,7 @@ export const submitPost = action({
 
       // Weekly post limit (per plan tier)
       const effectiveTier = user.tier ?? 'starter'
-      const planLimits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, {
+      const planLimits = await ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, {
         userId: user._id,
         tier: effectiveTier
       })

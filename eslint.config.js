@@ -15,6 +15,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/.next/**',
       '**/.open-next/**',
+      '**/.wrangler/**',
       '**/build/**',
       '**/_generated/**',
       'convex-mocks/**',

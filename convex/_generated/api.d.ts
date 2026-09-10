@@ -45,6 +45,7 @@ import type * as lib_interactionLimit from "../lib/interactionLimit.js";
 import type * as lib_invite from "../lib/invite.js";
 import type * as lib_languages from "../lib/languages.js";
 import type * as lib_planLimits from "../lib/planLimits.js";
+import type * as lib_planLimitsQuery from "../lib/planLimitsQuery.js";
 import type * as lib_policy from "../lib/policy.js";
 import type * as lib_portalConfig from "../lib/portalConfig.js";
 import type * as lib_postCapNotice from "../lib/postCapNotice.js";
@@ -126,6 +127,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invite": typeof lib_invite;
   "lib/languages": typeof lib_languages;
   "lib/planLimits": typeof lib_planLimits;
+  "lib/planLimitsQuery": typeof lib_planLimitsQuery;
   "lib/policy": typeof lib_policy;
   "lib/portalConfig": typeof lib_portalConfig;
   "lib/postCapNotice": typeof lib_postCapNotice;

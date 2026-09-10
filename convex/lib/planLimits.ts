@@ -1,16 +1,15 @@
 // convex/lib/planLimits.ts
-// Centralized plan-limit lookup helper.
+// Centralized plan-limit lookup helper. Pure: the app imports these constants in the browser,
+// so the registered Convex query that wraps getPlanLimitsHelper lives in ./planLimitsQuery.ts.
 //
 // Usage from a mutation/query:
 //   import { getPlanLimitsHelper } from './lib/planLimits'
 //   const limits = await getPlanLimitsHelper(ctx, userId, tier)
 //
 // Usage from an action:
-//   const limits = await ctx.runQuery(internal.lib.planLimits.getPlanLimits, { userId, tier })
+//   const limits = await ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, { userId, tier })
 
 import type { MutationCtx, QueryCtx } from '../_generated/server'
-import { internalQuery } from '../_generated/server'
-import { v } from 'convex/values'
 import { UNLIMITED_FEATURED_SENTINEL } from './postLimit'
 import type { Id } from '../_generated/dataModel'
 
@@ -144,17 +143,3 @@ export function tierToRank(tier?: string): number {
       return 1
   }
 }
-
-/**
- * Internal query so actions can retrieve plan limits via ctx.runQuery.
- * Actions cannot use ctx.db directly, so they delegate here.
- */
-export const getPlanLimits = internalQuery({
-  args: {
-    userId: v.id('users'),
-    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))
-  },
-  handler: async (ctx, { userId, tier }): Promise<PlanLimits> => {
-    return getPlanLimitsHelper(ctx, userId, tier)
-  }
-})
