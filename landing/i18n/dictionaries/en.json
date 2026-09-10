@@ -1,9 +1,37 @@
 {
   "meta": {
-    "title": "Link Into The SSI · Find Relevant LinkedIn Posts",
-    "description": "Find relevant posts in one shared feed, get help drafting comments, and complete every action on LinkedIn.",
-    "ogTitle": "Link Into The SSI",
-    "ogDescription": "Find relevant LinkedIn posts faster and choose every reaction or comment yourself."
+    "title": "LinkedIn SSI Tool · Find Relevant LinkedIn Posts",
+    "description": "Find relevant LinkedIn posts in one focused feed, get AI comment drafts, and understand your LinkedIn Social Selling Index (SSI). Every action stays yours.",
+    "ogTitle": "Link Into The SSI · LinkedIn SSI Tool",
+    "ogDescription": "Find relevant LinkedIn posts, get comment drafts, and understand your Social Selling Index (SSI). Every reaction and comment stays yours.",
+    "keywords": [
+      "LinkedIn SSI",
+      "Social Selling Index",
+      "SSI score",
+      "LinkedIn SSI tool",
+      "increase SSI",
+      "LinkedIn engagement",
+      "LinkedIn post feed",
+      "LinkedIn comment generator",
+      "social selling",
+      "LinkedIn growth",
+      "SSI",
+      "improve LinkedIn SSI"
+    ]
+  },
+  "legalMeta": {
+    "privacy": {
+      "title": "Privacy Policy · Link Into The SSI",
+      "description": "How Link Into The SSI collects, uses, and protects your data when you sign in with LinkedIn and engage with the shared feed."
+    },
+    "terms": {
+      "title": "Terms of Service · Link Into The SSI",
+      "description": "The terms that govern your use of Link Into The SSI, including the LinkedIn SSI tool, subscriptions, and your free trial."
+    },
+    "cookies": {
+      "title": "Cookie & Storage Policy · Link Into The SSI",
+      "description": "Link Into The SSI uses essential browser storage only for sign-in and preferences. We do not use tracking or advertising cookies."
+    }
   },
   "nav": {
     "howItWorks": "How it works",
@@ -13,6 +41,7 @@
     "skipToContent": "Skip to content"
   },
   "hero": {
+    "eyebrow": "LinkedIn SSI tool",
     "headlineLine1": "Relevant LinkedIn posts.",
     "headlineLine2": "One focused feed.",
     "subLine1": "Your next opportunity depends on LinkedIn. Find relevant posts, get a comment draft, and complete every action there yourself.",

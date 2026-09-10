@@ -10,6 +10,7 @@ import Pricing from '@/components/Pricing'
 import FAQ from '@/components/FAQ'
 import FinalCTA from '@/components/FinalCTA'
 import Footer from '@/components/Footer'
+import StructuredData from '@/components/StructuredData'
 
 export default async function HomePage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: rawLang } = await params
@@ -17,6 +18,10 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
   const dict = await getDictionary(lang)
   return (
     <div className="min-h-screen bg-ink">
+      <StructuredData
+        dict={dict}
+        lang={lang}
+      />
       <a
         href="#main-content"
         className="fixed top-2 left-2 z-[60] -translate-y-24 rounded-md bg-gold px-4 py-3 font-semibold text-on-gold focus:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"

@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },
@@ -26,6 +27,7 @@
     "postcss": "^8.5.15",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.9",
     "wrangler": "^4.103.0"
   }
 }

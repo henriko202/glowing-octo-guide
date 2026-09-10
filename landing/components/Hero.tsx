@@ -15,6 +15,7 @@ export default function Hero({
     <section className="bg-ink px-6 pt-28 pb-16 text-center md:pt-40 md:pb-24">
       <div className="mx-auto max-w-3xl">
         <div className="space-y-6">
+          <p className="text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
           <h1 className="font-display text-4xl leading-tight font-semibold text-balance text-cream sm:text-5xl md:text-7xl">
             {dict.headlineLine1}
             <br />

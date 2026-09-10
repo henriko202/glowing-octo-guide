@@ -3,6 +3,7 @@ import { Cormorant_Garamond, DM_Sans } from 'next/font/google'
 import '../globals.css'
 import { getDictionary } from '@/i18n/getDictionary'
 import { i18n, type Locale } from '@/i18n/config'
+import { OG_LOCALE, SITE_NAME, SITE_URL } from '@/lib/site'
 import CookieNotice from '@/components/CookieNotice'
 import TrialProvider from '@/components/TrialProvider'
 
@@ -32,17 +33,45 @@ export async function generateStaticParams() {
   return i18n.locales.map(lang => ({ lang }))
 }
 
+function resolveLocale(raw: string): Locale {
+  return (i18n.locales as readonly string[]).includes(raw) ? (raw as Locale) : i18n.defaultLocale
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }): Promise<Metadata> {
   const { lang: rawLang } = await params
-  const lang = rawLang as Locale
+  const lang = resolveLocale(rawLang)
   const dict = await getDictionary(lang)
+  const languages = {
+    ...Object.fromEntries(i18n.locales.map(l => [l, `/${l}`])),
+    'x-default': `/${i18n.defaultLocale}`
+  }
   return {
+    metadataBase: new URL(SITE_URL),
     title: dict.meta.title,
     description: dict.meta.description,
-    openGraph: { title: dict.meta.ogTitle, description: dict.meta.ogDescription, type: 'website', locale: lang },
-    alternates: {
-      canonical: `/${lang}`,
-      languages: { ...Object.fromEntries(i18n.locales.map(l => [l, `/${l}`])), 'x-default': '/en' }
+    keywords: dict.meta.keywords,
+    applicationName: SITE_NAME,
+    category: 'Business',
+    alternates: { canonical: `/${lang}`, languages },
+    openGraph: {
+      type: 'website',
+      url: `/${lang}`,
+      siteName: SITE_NAME,
+      title: dict.meta.ogTitle,
+      description: dict.meta.ogDescription,
+      locale: OG_LOCALE[lang],
+      images: [{ url: '/og.png', width: 1200, height: 630, alt: dict.meta.ogTitle }]
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: dict.meta.ogTitle,
+      description: dict.meta.ogDescription,
+      images: [{ url: '/og.png', alt: dict.meta.ogTitle }]
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1, 'max-video-preview': -1 }
     }
   }
 }
@@ -55,7 +84,7 @@ export default async function RootLayout({
   params: Promise<{ lang: string }>
 }) {
   const { lang: rawLang } = await params
-  const lang = rawLang as Locale
+  const lang = resolveLocale(rawLang)
   const dict = await getDictionary(lang)
   return (
     <html

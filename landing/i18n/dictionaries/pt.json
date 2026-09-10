@@ -1,9 +1,37 @@
 {
   "meta": {
-    "title": "Link Into The SSI · Encontre publicações relevantes no LinkedIn",
-    "description": "Encontre publicações relevantes em um feed compartilhado, receba ajuda para escrever comentários e conclua cada ação no LinkedIn.",
-    "ogTitle": "Link Into The SSI",
-    "ogDescription": "Encontre publicações relevantes no LinkedIn mais rápido e escolha cada reação ou comentário."
+    "title": "Ferramenta de SSI do LinkedIn · Publicações relevantes",
+    "description": "Encontre publicações relevantes do LinkedIn em um feed focado, receba rascunhos de comentários com IA e entenda seu Social Selling Index (SSI). Cada ação é sua.",
+    "ogTitle": "Link Into The SSI · Ferramenta de SSI do LinkedIn",
+    "ogDescription": "Encontre publicações relevantes do LinkedIn, receba rascunhos de comentários e entenda seu Social Selling Index (SSI). Cada reação e comentário é seu.",
+    "keywords": [
+      "SSI LinkedIn",
+      "Social Selling Index",
+      "pontuação SSI",
+      "ferramenta de SSI do LinkedIn",
+      "aumentar SSI",
+      "engajamento no LinkedIn",
+      "feed de publicações do LinkedIn",
+      "gerador de comentários do LinkedIn",
+      "vendas sociais",
+      "crescimento no LinkedIn",
+      "SSI",
+      "melhorar o SSI do LinkedIn"
+    ]
+  },
+  "legalMeta": {
+    "privacy": {
+      "title": "Política de Privacidade · Link Into The SSI",
+      "description": "Como o Link Into The SSI coleta, usa e protege seus dados ao entrar com o LinkedIn e interagir com o feed compartilhado."
+    },
+    "terms": {
+      "title": "Termos de Serviço · Link Into The SSI",
+      "description": "Os termos que regem o uso do Link Into The SSI, incluindo a ferramenta de SSI do LinkedIn, as assinaturas e o período de teste."
+    },
+    "cookies": {
+      "title": "Política de Cookies e Armazenamento · Link Into The SSI",
+      "description": "O Link Into The SSI usa apenas armazenamento essencial do navegador para login e preferências. Não usamos cookies de rastreamento ou publicidade."
+    }
   },
   "nav": {
     "howItWorks": "Como funciona",
@@ -13,6 +41,7 @@
     "skipToContent": "Pular para o conteúdo"
   },
   "hero": {
+    "eyebrow": "Ferramenta de SSI do LinkedIn",
     "headlineLine1": "Publicações relevantes do LinkedIn.",
     "headlineLine2": "Em um só feed.",
     "subLine1": "Sua próxima oportunidade depende do LinkedIn. Encontre publicações relevantes, receba um rascunho e conclua cada ação por lá.",

@@ -1,9 +1,23 @@
+import type { Metadata } from 'next'
 import type { Locale } from '@/i18n/config'
+import { getDictionary } from '@/i18n/getDictionary'
+import { pageMetadata } from '@/lib/seo'
 import En from './content/en'
 import Pt from './content/pt'
 import Es from './content/es'
 
 const CONTENT = { en: En, pt: Pt, es: Es } as const
+
+export async function generateMetadata({ params }: { params: Promise<{ lang: Locale }> }): Promise<Metadata> {
+  const { lang } = await params
+  const dict = await getDictionary(lang)
+  return pageMetadata({
+    lang,
+    path: '/privacy',
+    title: dict.legalMeta.privacy.title,
+    description: dict.legalMeta.privacy.description
+  })
+}
 
 export default async function PrivacyPage({ params }: { params: Promise<{ lang: Locale }> }) {
   const { lang } = await params
