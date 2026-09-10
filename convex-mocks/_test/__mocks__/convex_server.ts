@@ -62,3 +62,32 @@ export function httpAction(fn: any) {
 export function makeFunctionReference<_T extends string>(path: string) {
   return path as any
 }
+
+// `anyApi` — _generated/api.js re-exports it as BOTH `api` and `internal`, so every source file that
+// schedules work (`ctx.scheduler.runAfter(0, internal.foo.bar, …)`) reads it. Without a stub here
+// `internal` is undefined and every such call site throws, which put all scheduling paths out of
+// reach of a unit test.
+//
+// Each property path resolves to the SAME object every time, so a test can assert WHICH function was
+// scheduled: `expect(fn).toBe(internal.billingNode.endTrialEarly)`. The real anyApi mints a fresh
+// reference per access; the cache is what makes that comparison mean something. `String(ref)` gives
+// the dotted path, matching makeFunctionReference above.
+const apiNodes = new Map<string, any>()
+
+function apiNode(path: string): any {
+  const cached = apiNodes.get(path)
+  if (cached) return cached
+  const target = { _path: path, toString: () => path }
+  const node = new Proxy(target, {
+    get(t, prop) {
+      // `then` is excluded so an accidental `await` on a reference cannot make it a thenable and
+      // hang; symbols and the target's own keys fall through to the real object.
+      if (typeof prop !== 'string' || prop === 'then' || prop in t) return Reflect.get(t, prop)
+      return apiNode(path === '' ? prop : `${path}.${prop}`)
+    }
+  })
+  apiNodes.set(path, node)
+  return node
+}
+
+export const anyApi: any = apiNode('')

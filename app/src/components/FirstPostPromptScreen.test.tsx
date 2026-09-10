@@ -10,9 +10,7 @@ vi.mock('../convex', () => ({
 }))
 
 const mockDismiss = vi.fn(async () => {})
-// useCardGate() reads getMe via useQuery; a 'none' member is card-gated → funnel to billing.
 vi.mock('convex/react', () => ({
-  useQuery: vi.fn(() => ({ subscriptionStatus: 'none' })),
   useAction: vi.fn(() => async () => {}),
   useMutation: vi.fn(() => mockDismiss)
 }))
@@ -37,12 +35,13 @@ describe('FirstPostPromptScreen', () => {
     await waitFor(() => expect(mockDismiss).toHaveBeenCalledOnce())
   })
 
-  it('funnels a card-gated member to billing after submitting', async () => {
+  it('reloads into the feed after submitting, even for a card-gated member', async () => {
     render(<FirstPostPromptScreen />)
     fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
       target: { value: 'https://www.linkedin.com/posts/jane_hello-activity-123' }
     })
-    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
-    await waitFor(() => expect(window.location.href).toBe('/billing'))
+    fireEvent.click(screen.getByRole('button', { name: /add post/i }))
+    await waitFor(() => expect(window.location.reload).toHaveBeenCalledOnce())
+    expect(window.location.href).toBe('')
   })
 })

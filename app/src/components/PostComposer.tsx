@@ -1,16 +1,16 @@
 // app/src/components/PostComposer.tsx
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { friendlyError } from '@/lib/errors'
+import { friendlyError, mapLimitError } from '@/lib/errors'
 
 interface PostComposerProps {
   onSubmit: (url: string) => Promise<void>
   /** When true, the user has hit their weekly post limit — Submit is disabled. */
   atLimit?: boolean
-  /** Helper text shown in place of the usual hint when atLimit is true. */
-  limitHint?: string
+  /** Helper content shown in place of the usual hint when atLimit is true (e.g. UpgradeAtLimit). */
+  limitHint?: ReactNode
 }
 
 export default function PostComposer({ onSubmit, atLimit = false, limitHint }: PostComposerProps) {
@@ -31,7 +31,7 @@ export default function PostComposer({ onSubmit, atLimit = false, limitHint }: P
       await onSubmit(url.trim())
       setUrl('')
     } catch (err: unknown) {
-      setError(friendlyError(err, t('composer.submitError')))
+      setError(mapLimitError(friendlyError(err, t('composer.submitError')), t))
     } finally {
       setSubmitting(false)
     }
@@ -44,6 +44,7 @@ export default function PostComposer({ onSubmit, atLimit = false, limitHint }: P
     >
       <div className="text-muted-foreground mb-2 text-[10px] tracking-wider uppercase">{t('composer.shareLabel')}</div>
       <Input
+        id="post-url-input"
         type="url"
         inputMode="url"
         value={url}

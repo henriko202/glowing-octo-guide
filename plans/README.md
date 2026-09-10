@@ -39,6 +39,14 @@ source edits and did not commit/merge.
 **Verdicts**: 002, 003, 004, 006, 007, 008 → **APPROVE**. 005 → **APPROVE with a required follow-up** (below).
 Plan 008 greened the gate — **`pnpm verify` now exits 0** (re-verified).
 
+> **2026-09-06:** the gate had drifted red again (39 offenders accumulated since 2026-06-18, mostly
+> from the UI revamp). Re-greened by applying 008's own split rather than reformatting everything:
+> 27 code/config files Prettier-formatted, and `plans/`, `README.md` and the gitignored
+> `landing/.open-next/` added to `.prettierignore` (Prettier does not read `.gitignore`). Every rewrite
+> was verified non-semantic — 7 files are byte-identical with all whitespace stripped, and the other 20
+> changed only by `prettier-plugin-tailwindcss` reordering classes *within* a literal, checked
+> literal-by-literal in source order. The rule is now written down in `docs/PLATFORM.md` §"Lint / format / TS".
+
 1. **(001) RESOLVED by plan 008.** Plan 008 Prettier-formatted the 6 source files, excluded `docs/` from
    Prettier (repo convention — preserves `PLATFORM.md`'s hand-aligned tables), and
    suppressed-with-justification the pre-existing react-hooks errors: `react-hooks/set-state-in-effect`

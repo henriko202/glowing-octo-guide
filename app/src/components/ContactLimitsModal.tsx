@@ -6,6 +6,7 @@ import Modal from './Modal'
 import LoadingSpinner from './LoadingSpinner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { friendlyError } from '@/lib/errors'
 
 type PlanLimitRow = {
@@ -109,7 +110,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
 
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+          <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
             Interactions per post
           </span>
           <Input
@@ -121,7 +122,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+          <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
             Posts per week
           </span>
           <Input
@@ -135,7 +136,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
 
       {error && <p className="text-destructive mt-2 text-xs">{error}</p>}
 
-      <div className="mt-4 flex gap-2">
+      <DialogFooter className="mt-4 flex-col">
         <Button
           onClick={handleSave}
           disabled={!isValid || saving}
@@ -150,7 +151,7 @@ function ContactLimitsForm({ user, sessionToken, rows, onClose }: Props & { rows
         >
           Cancel
         </Button>
-      </div>
+      </DialogFooter>
 
       {!isNew && (
         <Button

@@ -57,3 +57,11 @@ describe('toSafeMe', () => {
     expect(safe.bannedReason).toBe('Spam')
   })
 })
+
+// backlog/R19 — the client renders "{{days}}-day trial" from this, so it must follow referredByCode.
+describe('toSafeMe trial days (R19)', () => {
+  it('is 7 for a plain signup and 14 for an invited member', () => {
+    expect((toSafeMe(makeUser()) as Record<string, unknown>).trialDays).toBe(7)
+    expect((toSafeMe(makeUser({ referredByCode: 'abc12345' })) as Record<string, unknown>).trialDays).toBe(14)
+  })
+})

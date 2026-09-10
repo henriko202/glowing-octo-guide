@@ -7,9 +7,13 @@
     "privacy": "Privacy & Data",
     "signOut": "Sign out",
     "openMenu": "Open user menu",
-    "groups": { "main": "Main", "manage": "Manage" },
+    "groups": {
+      "main": "Main",
+      "manage": "Manage"
+    },
     "primary": "Primary navigation",
-    "viewSsi": "View your SSI on LinkedIn"
+    "recap": "Recap",
+    "history": "History"
   },
   "shell": {
     "search": "Search posts, people",
@@ -24,31 +28,62 @@
     "theme": "Toggle theme",
     "profile": "Profile & settings",
     "openSidebar": "Open navigation",
-    "skipToContent": "Skip to content"
-  },
-  "login": {
-    "title": "Link Into The SSI",
-    "tagline": "Grow your LinkedIn SSI by engaging with your community.",
-    "signInButton": "Sign in with LinkedIn"
+    "skipToContent": "Skip to content",
+    "trialGoal": "Your {{plan}} plan starts when you reach {{threshold}} interactions or on {{date}}.",
+    "trialGoalNoDate": "Your {{plan}} plan starts when you reach {{threshold}} interactions.",
+    "trialStartsAt": "Your plan starts at {{threshold}} interactions or on {{date}}.",
+    "trialNearEnd": "{{remaining}} interactions left until your {{plan}} plan starts.",
+    "trialMadeReceived": "made {{made}} · received {{received}}",
+    "trialPill": "{{combined}}/{{threshold}}",
+    "trialPillAriaLabel": "Trial progress: {{combined}} of {{threshold}} interactions"
   },
   "onboarding": {
     "firstPost": {
       "title": "Share your best recent post",
-      "intro": "Add one of your LinkedIn posts to bring your feed to life and let others engage with it. You can add more anytime.",
+      "intro": "Add one of your LinkedIn posts so it appears in the feed and others can interact with it. You can add more anytime.",
       "skip": "I'll do this later"
     }
   },
   "feed": {
     "title": "Your Feed",
     "loading": "Loading feed...",
-    "empty": "No posts yet. Invite colleagues to join Link Into The SSI!",
+    "emptyTitle": "Your feed fills as members post",
+    "emptyBody": "Members' posts show up here as they share them. Yours can be the first.",
+    "emptyBodyPosted": "No other posts are available yet. Invite a colleague from your industry or check back later.",
+    "emptyCta": "Share your first post",
     "loadMore": "Load more",
     "featured": "★ Featured",
     "like": "Like",
     "comment": "Comment",
     "cardGate": "Add a payment method on the Billing page to start engaging.",
+    "cardGateTitle": "Show your posts in the feed and count interactions",
+    "cardGateBody": "During your trial, your posts appear in the feed, and reactions and comments count toward your interaction total.",
+    "cardGateCta": "Start free trial",
+    "cardGateLater": "Not now",
+    "cardGateCost": "Card required. Free until {{threshold}} interactions made or received, as recorded in the app, or for up to {{days}} days, whichever comes first. Then your plan starts. Cancel anytime.",
+    "hiddenPostBanner": "Your first post is saved and hidden until you start your trial.",
+    "cardGateBodyPastDue": "Your last payment didn't go through. Update your payment method to get your posts back in the feed.",
+    "cardGatePastDueCta": "Update payment method",
+    "hiddenPostBannerPastDue": "Your post is hidden until you update your payment method.",
+    "cardGateBodyNoTrial": "Your posts appear in the feed, and reactions and comments count toward your interaction total.",
+    "hiddenPostBannerNoTrial": "Your first post is saved and hidden until you subscribe.",
+    "cardGatePriceNoTrial": "The {{plan}} plan is {{monthly}} or {{annual}}.",
     "viewOnLinkedIn": "View on LinkedIn ↗",
     "emptyFiltered": "No posts match your filter yet. Adjust it or clear it to see more.",
+    "doneReacted": "Reacted",
+    "doneCommented": "Commented",
+    "doneBoth": "Reacted · commented",
+    "leavesIn": "Leaves your feed in {{hours}} h",
+    "hideNow": "Hide now",
+    "caughtUpTitle": "You're caught up",
+    "caughtUpBody": "Posts you've reacted to or commented on leave after 24 hours. New posts appear as members share them.",
+    "inviteLink": "Invite a peer",
+    "checklist": {
+      "title": "Getting started",
+      "signedIn": "Signed in with LinkedIn",
+      "firstPost": "Share a post",
+      "reactTwice": "React to two posts"
+    },
     "filter": {
       "toggle": "Filter feed",
       "note": "Show only posts from the industries and countries you choose. Leave empty to see everyone.",
@@ -60,7 +95,8 @@
       "clear": "Clear filters",
       "selectPlaceholder": "Select…",
       "noResults": "No results."
-    }
+    },
+    "viewGeneratedComment": "View generated comment"
   },
   "myPosts": {
     "featuredPill": "{{used}} of {{limit}} featured this month",
@@ -68,14 +104,15 @@
     "featuredPillHint": "This calendar month",
     "feature": "Feature",
     "unfeature": "Unfeature",
+    "unfeatureConfirmTitle": "Unfeature this post?",
+    "unfeatureConfirm": "This removes the post from the featured position. You can feature it again later without using another plan allowance or paying again.",
     "featureLimitReached": "Monthly featured limit reached",
     "today": "Today",
     "daysAgo_one": "{{count}} day ago",
     "daysAgo_other": "{{count}} days ago",
     "tierPlan": "{{tier}} plan",
     "weeklyUsageHint": "In the last 7 days",
-    "weeklyUsage": "{{used}} of {{limit}} posts this week",
-    "weeklyLimitReached": "Weekly limit reached",
+    "weeklyUsage": "{{used}} of {{limit}} posts in the last 7 days",
     "heading": "Your posts ({{count}})",
     "emptyState": "Share your first post using the composer above ↑",
     "hiddenFromFeed": "Hidden from feed",
@@ -85,15 +122,28 @@
     "delete": "Delete",
     "deleteConfirm": "Delete this post? It will be removed from the feed and from My Posts. It still counts toward your weekly post limit.",
     "updateError": "Could not update the post.",
-    "deleteError": "Could not delete the post."
+    "deleteError": "Could not delete the post.",
+    "interactionCapBadge": "Reached {{limit}} interactions and left the feed",
+    "buyFeatured": "Feature for {{price}}",
+    "buyFeaturedRoom": "Raise limit for {{price}}",
+    "buyFeaturedHint": "One-time purchase for this post. Raises its limit to {{newCap}} interactions. No refund if you unfeature it.",
+    "buyFeaturedTrial": "Charged today, separate from your trial.",
+    "buyFeaturedCapped": "Reached {{cap}} and left the feed. Buying room for {{newCap}} brings it back to the top.",
+    "featuredPaidBadge": "Featured · paid · cap {{cap}}",
+    "featuredPaidToast": "Payment confirmed. We're raising this post's limit to {{newCap}} interactions.",
+    "confirmingPayment": "Confirming your payment…",
+    "postAddedBuy": "Post added. Feature it for {{price}} below.",
+    "postAddedFeature": "Post added. Feature it below.",
+    "buyFeaturedError": "We couldn't start that purchase. Refresh and try again.",
+    "featuredCappedTitle": "This post reached its interaction cap. Featuring it won't bring it back to the feed."
   },
   "composer": {
     "shareLabel": "Share a post",
     "placeholder": "https://www.linkedin.com/posts/your-name_…",
     "hint": "Paste your LinkedIn post URL",
     "submitting": "Submitting…",
-    "submit": "Submit →",
-    "submitError": "Failed to submit post"
+    "submit": "Add post →",
+    "submitError": "Couldn't add the post. Try again."
   },
   "reactions": {
     "react": "React",
@@ -116,7 +166,12 @@
     "generating": "Generating…",
     "language": "Comment language",
     "languageAuto": "Auto — match the post",
-    "generateError": "Couldn't generate a comment. Please try again."
+    "generateError": "Couldn't generate a comment. Please try again.",
+    "generatedComment": "Generated comment",
+    "loadingSaved": "Loading saved comment…",
+    "noSavedComment": "No generated comment was saved for this post.",
+    "reopenLinkedIn": "Comment on LinkedIn again",
+    "closeSaved": "Close"
   },
   "settings": {
     "title": "Settings",
@@ -138,7 +193,7 @@
     "refreshing": "Refreshing…",
     "profileNote": "Edit your industry and country below.",
     "visibility": "Who can see your posts",
-    "visibilityNote": "Restrict which industries and countries can see your posts in the feed. Leave empty to show to all users.",
+    "visibilityNote": "Limit visibility to people in the selected industries and countries. Leave empty to show your posts to everyone.",
     "feedFilter": "What you see in your feed",
     "feedFilterNote": "Show only posts from these industries and countries. Leave empty to see posts from everyone.",
     "visibilityIndustries": "Industries",
@@ -146,19 +201,30 @@
     "visibilityAddIndustry": "Add an industry…",
     "visibilityAddCountry": "Add a country…",
     "visibilityRemove": "Remove {{label}}",
-    "upgradePrompt": "Upgrade to Pro to control who sees your posts.",
     "aiComments": "AI Comments",
     "aiCommentsNote": "Default language for AI-drafted comments. You can override it per comment.",
-    "commentLanguage": "Default comment language"
+    "commentLanguage": "Default comment language",
+    "inviteTitle": "Invite a peer",
+    "inviteBody": "Invite a colleague from your industry to add more relevant posts to the feed. They get a free trial for up to {{days}} days instead of {{base}} days.",
+    "inviteLinkLabel": "Your invite link",
+    "inviteCopy": "Copy link",
+    "inviteCopied": "Link copied",
+    "inviteCopyManual": "Copying isn't available here. The link is selected; copy it manually.",
+    "inviteJoined_one": "{{count}} member joined through your link",
+    "inviteJoined_other": "{{count}} members joined through your link",
+    "inviteJoinedMany": "100+ members joined through your link",
+    "inviteNone": "No one has joined through it yet.",
+    "inviteError": "Couldn't create your invite link. Refresh and try again."
   },
   "billing": {
     "title": "Subscription",
     "currentPlan": "Current plan",
     "trial": "(trial)",
-    "upgrade": "Upgrade to {{plan}}",
     "currentPlanLabel": "Current plan",
     "contact": "Contact us",
-    "enterprise": "Need more? Contact us for custom enterprise plans.",
+    "enterprise": "Need higher limits? Contact us about a Custom plan.",
+    "featuredAddon": "One-time {{price}} add-on · pin one post at the top until {{newCap}} reactions and comments",
+    "featuredAddonCta": "Pick a post",
     "subscriptionInfo": "Your Subscription",
     "status": "Status",
     "nextBilling": "Next Billing Date",
@@ -167,67 +233,116 @@
     "accessUntil": "Access until {{date}}",
     "cancelPending": "Your subscription will not renew.",
     "renewal": "Renewal",
+    "pendingChange": "Plan change",
+    "pendingFrom": "{{plan}} from {{date}}",
+    "pendingKeep": "Keep {{plan}}",
+    "pendingKept": "Your plan stays as it is.",
+    "pendingUntil": "You keep {{plan}} until then.",
+    "pendingScheduled": "You move to {{plan}} at the end of your period.",
+    "pendingUndoFirst": "Undo your scheduled change first.",
+    "pendingResumeFirst": "Resume your plan first.",
     "manageSubscription": "Manage Subscription",
     "freeTrial": "Free Trial",
     "daysRemaining_one": "{{count}} day remaining",
     "daysRemaining_other": "{{count}} days remaining",
     "expiredBanner": "Your subscription has ended. Choose a plan below to continue.",
     "none": "None",
-    "noActivePlan": "No active plan",
-    "trialBanner": "You're on a free Growth trial. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
+    "trialBanner": "You're on a free {{plan}} trial. Your plan starts at {{threshold}} interactions or on {{date}}, whichever comes first.",
+    "trialBannerNoDate": "You're on a free {{plan}} trial. Your plan starts at {{threshold}} interactions or after {{days}} days, whichever comes first.",
     "trialProgress": "{{combined}} / {{threshold}} interactions",
-    "ssiLink": "View your SSI on LinkedIn",
-    "whatYouLlMiss": "On Starter you lose your industry-filtered feed, drop from 50 to 25 interactions per post, and from 2 to 1 posts per week.",
-    "startTrialCta": "Start your free 7-day {{plan}} trial",
-    "trialCtaNote": "Then {{price}} · cancel anytime. You'll be billed once you reach 50 interactions or after 7 days, whichever comes first.",
-    "trialIncludes": "Full {{plan}} access during your trial. The full plan comparison appears once you start.",
-    "comparisonNote": "Compare plans after your trial — upgrade, downgrade, or cancel anytime.",
-    "newUserLead": "Select a plan below — Growth is the best bang for your buck.",
-    "newUserTrialNote": "Every plan starts with a free 7-day trial · cancel anytime.",
-    "recommended": "Recommended",
+    "trialNoSwitch": "Unavailable during your trial",
+    "whatYouLlMiss": "Starter includes 25 interactions per post and 1 post per week, instead of 50 and 2 on Growth, and doesn't include industry filtering.",
+    "newUserLead": "Growth filters the feed to your industry and country and raises your post limits.",
+    "newUserTrialNote": "Card required. Free until {{threshold}} interactions made or received, as recorded in the app, or for up to {{days}} days, whichever comes first. Cancel anytime.",
+    "noTrialNote": "You've already used your free trial. Billing starts when you subscribe. Cancel anytime.",
+    "recommended": "Best for targeted feeds",
+    "selected": "Your choice",
     "annual": "Annual · 2 months free",
     "monthly": "Monthly",
     "checkoutFailed": "Checkout failed: {{error}}",
     "portalFailed": "Failed to open portal: {{error}}",
     "customPrice": "Custom",
+    "switchPlan": "Switch to {{plan}}",
+    "startTrialCta": "Start {{plan}} trial",
+    "noTrialCta": "Subscribe to {{plan}}",
+    "seeAllPlans": "See all plans",
+    "hideAllPlans": "Hide other plans",
+    "chosenPlanLead": "You chose {{plan}} on the site. Start its free trial below.",
+    "noTrialChosenPlanLead": "You picked {{plan}} on the site. Billing starts as soon as you subscribe below.",
+    "giftFrom": "{{name}} invited you, so your trial can last up to {{days}} days instead of {{base}} days.",
+    "alreadySubscribed": "You already have a plan. Manage it from the billing portal.",
+    "nearThresholdBanner": "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}",
+    "duplicateCanceledNotice": "A duplicate subscription was created by mistake and we cancelled it right away. You were not charged for it.",
+    "dismiss": "Dismiss",
+    "successTitle": "You're all set.",
+    "successBody": "Your {{plan}} trial is live.",
+    "successBodyActive": "Your {{plan}} plan is live.",
+    "successPostLive": "Your first post is now in the feed.",
+    "successOutcome": "Open the feed and join your first relevant LinkedIn conversation.",
+    "successCta": "Find a post",
+    "successStay": "Stay here",
+    "activating": "Activating your trial…",
+    "activatingPlan": "Activating your plan…",
+    "activatingTimeout": "Your payment went through; your plan will show here shortly.",
+    "switching": "Switching you to {{plan}}…",
+    "switched": "You're on {{plan}} now.",
+    "switchTimeout": "Your plan change went through; it will show here shortly.",
+    "cancel": {
+      "link": "Cancel plan",
+      "title": "Before you go",
+      "trialBody": "You won't be charged. Your trial ends on {{date}} and your posts leave the feed then.",
+      "trialBodyNoDate": "You won't be charged. Your posts leave the feed when your trial ends.",
+      "body_one": "Your post leaves the feed on {{date}}. In the last 30 days it received {{received}} reactions and comments.",
+      "body_other": "Your {{count}} posts leave the feed on {{date}}. In the last 30 days they received {{received}} reactions and comments.",
+      "bodyNoPosts": "Your plan ends on {{date}}. In the last 30 days your posts received {{received}} reactions and comments.",
+      "bodyNoDate": "Your posts leave the feed at the end of your billing period. In the last 30 days they received {{received}} reactions and comments.",
+      "alternative": "Move to Starter on {{date}} for {{price}}. Weekly post limit: {{posts}}. Each post stays in the feed until {{interactions}} reactions and comments. Industry filters are removed.",
+      "alternativeNoDate": "Move to Starter at the end of your current period for {{price}}. Weekly post limit: {{posts}}. Each post stays in the feed until {{interactions}} reactions and comments. Industry filters are removed.",
+      "alternativeCta": "Schedule Starter",
+      "question": "What would have made you stay?",
+      "questionPlaceholder": "Optional. One line is enough.",
+      "keep": "Keep my plan",
+      "continue": "Continue to cancel",
+      "resume": "Resume plan",
+      "postsLeave": "Your posts leave the feed on {{date}}.",
+      "resumed": "Your plan continues.",
+      "resumeFailed": "Couldn't resume your plan: {{error}}."
+    },
     "plans": {
       "starter": {
         "name": "Starter",
-        "description": "Get started and start engaging",
+        "description": "For sharing posts and browsing the full feed",
         "features": [
+          "Posts stay in the feed until 25 reactions and comments",
           "See the full live feed",
-          "Comment & react with AI",
-          "25 interactions counted per post",
-          "1 post into the feed / week"
-        ],
-        "cta": "Start free trial"
+          "AI comment drafts and reaction suggestions",
+          "1 post in the feed per week"
+        ]
       },
       "growth": {
         "name": "Growth",
-        "description": "Targeted feed for faster results",
+        "description": "For a feed filtered to your industry and country",
         "features": [
+          "Posts stay in the feed until 50 reactions and comments",
           "Feed filtered to your industry + country",
           "Everything in Starter",
-          "50 interactions counted per post",
-          "2 posts into the feed / week"
-        ],
-        "cta": "Get Growth"
+          "2 posts in the feed per week"
+        ]
       },
       "pro": {
         "name": "Pro",
-        "description": "Maximum visibility and control",
+        "description": "For custom filters and feed visibility controls",
         "features": [
+          "Posts stay in the feed until 200 reactions and comments",
           "Custom industry + country filters",
-          "Control who sees your posts",
+          "Control who sees your posts in the shared feed",
           "Everything in Growth",
-          "200 interactions counted per post",
-          "5 posts into the feed / week"
-        ],
-        "cta": "Get Pro"
+          "5 posts in the feed per week"
+        ]
       },
       "contact": {
-        "name": "Enterprise",
-        "description": "Tailored for teams and agencies",
+        "name": "Custom",
+        "description": "Tailored for higher usage",
         "cta": "Contact us"
       }
     }
@@ -257,7 +372,7 @@
     "cancel": "Cancel",
     "close": "Close",
     "thanks": "Thanks! We've received your feedback.",
-    "error": "Something went wrong. Please try again."
+    "error": "We couldn't send your feedback. Try again."
   },
   "motd": {
     "dismiss": "Dismiss",
@@ -330,5 +445,61 @@
   },
   "linkedInEmbed": {
     "title": "LinkedIn post"
+  },
+  "upgrade": {
+    "weeklyPosts": "You've reached your plan's weekly post cap of {{used}}. {{nextPlan}} gives you {{next}} per week, each able to collect up to {{interactions}} interactions.",
+    "featured": "You've used all your featured posts this month. {{nextPlan}} gives you {{next}} per month.",
+    "interactionCap": "This post left the feed after reaching its interaction cap. On {{nextPlan}}, your next posts collect up to {{next}} each.",
+    "interactionCapNear": "Your post is at {{total}} of {{cap}} interactions. On {{nextPlan}} it keeps collecting to {{next}}.",
+    "visibility": "Choosing who sees your posts is a {{nextPlan}} feature.",
+    "cta": "Upgrade to {{nextPlan}}",
+    "proContact": "Need more than Pro offers? Contact us for a Custom plan.",
+    "contactCustom": "Your plan already has a custom limit. Contact us to adjust it.",
+    "featuredAddon": "Or make a one-time {{price}} purchase to feature one post."
+  },
+  "recap": {
+    "title": "Recap",
+    "lead": "See the reactions and comments you've made and received, plus your plan usage.",
+    "window": {
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "all": "All time"
+    },
+    "made": "You made",
+    "received": "Your posts received",
+    "reactionsCount_one": "{{count}} reaction",
+    "reactionsCount_other": "{{count}} reactions",
+    "commentsCount_one": "{{count}} comment",
+    "commentsCount_other": "{{count}} comments",
+    "postsCount_one": "across {{count}} post",
+    "postsCount_other": "across {{count}} posts",
+    "delta": "{{delta}} vs the previous {{days}} days",
+    "celebrate": "More than the previous {{days}} days. Keep going.",
+    "truncated": "Showing your most recent {{count}} interactions.",
+    "planUsage": "Plan usage",
+    "postUsage": "{{total}} of {{cap}} interactions",
+    "noPosts": "No posts added in this window. Posts you share show up here with their interaction count.",
+    "emptyTitle": "Nothing recorded in the last {{days}} days",
+    "emptyBody": "Your first reaction or comment in the feed shows up here, along with what your posts receive.",
+    "emptyCta": "Go to the feed",
+    "honest": "This recap only includes interactions recorded in the app; it doesn't read or estimate your SSI.",
+    "salesNav": "Check your SSI in Sales Navigator:",
+    "seeAll": "See every interaction",
+    "inviteLine": "Invite a colleague from your industry to bring more relevant posts into the feed. They'll get a free trial for up to {{days}} days."
+  },
+  "history": {
+    "title": "History",
+    "lead": "Every reaction and comment you recorded here.",
+    "commented": "Commented",
+    "by": "by {{name}}",
+    "removed": "Post removed",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "empty": "No interactions in this window.",
+    "emptyCta": "Go to the feed"
+  },
+  "errors": {
+    "weeklyLimit": "You've reached your weekly post limit of {{limit}}.",
+    "featuredLimit": "You've reached your monthly featured-post limit of {{limit}}."
   }
 }

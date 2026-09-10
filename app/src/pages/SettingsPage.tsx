@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
+import { useLocation } from 'react-router-dom'
 import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { COUNTRY_CODES, countryLabel, INDUSTRIES } from '../../../convex/lib/profileOptions'
@@ -10,7 +11,12 @@ import { AUTO_LANGUAGE, LANGUAGE_CODES, languageLabel, resolveCommentLanguage } 
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import UpgradeAtLimit from '@/components/UpgradeAtLimit'
+import { toast } from '@/components/ui/toast'
 import { friendlyError } from '@/lib/errors'
+import { captureEvent } from '@/lib/observability/analytics'
+import { LANDING_URL } from '../lib/session'
+import { INVITED_TRIAL_PERIOD_DAYS, TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 
 /** Safe user profile as returned by the getMe query (no token fields) */
 interface MeProfile {
@@ -80,6 +86,37 @@ export default function SettingsPage() {
   const setCommentLanguage = useMutation(api.users.setCommentLanguage)
   const setPostVisibility = useMutation(api.users.setPostVisibility)
   const setFeedFilter = useMutation(api.users.setFeedFilter)
+
+  // backlog/R19 — one invite link per member. The code is minted lazily on the first visit here;
+  // the ref makes StrictMode's double effect (and a slow query round-trip) a single mint.
+  const inviteSummary = useQuery(api.users.getInviteSummary, sessionToken ? { sessionToken } : 'skip')
+  const getOrCreateInviteCode = useMutation(api.users.getOrCreateInviteCode)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteCopied, setInviteCopied] = useState(false)
+  const mintedRef = useRef(false)
+  const inviteLinkRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!sessionToken || !inviteSummary || inviteSummary.inviteCode || mintedRef.current) return
+    mintedRef.current = true
+    void (async () => {
+      try {
+        await getOrCreateInviteCode({ sessionToken })
+      } catch (err) {
+        // INVITE_CODE_RETRY (a code collision on both attempts) — say so instead of leaving a
+        // permanently disabled button with no explanation; a reload retries the mint.
+        mintedRef.current = false
+        setInviteError(friendlyError(err, t('settings.inviteError')))
+      }
+    })()
+  }, [sessionToken, inviteSummary, getOrCreateInviteCode, t])
+
+  // Deep link from the recap page and the caught-up feed state: /settings#invite.
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash === '#invite') document.getElementById('invite')?.scrollIntoView({ block: 'start' })
+    // `me` is deliberate: the section only exists once the page renders past its loading spinner,
+    // so the effect has to re-run when `me` arrives.
+  }, [hash, me])
 
   const [industry, setIndustry] = useState<string>('')
   const [country, setCountry] = useState<string>('')
@@ -171,6 +208,44 @@ export default function SettingsPage() {
       a.label.localeCompare(b.label)
     )
   ]
+
+  // The landing page reads ?ref= (its RefCarrier) and carries the code through to signup. Strip a
+  // trailing slash from VITE_LANDING_URL first — this is the first place that appends a path to it.
+  const inviteLink = inviteSummary?.inviteCode
+    ? `${LANDING_URL.replace(/\/$/, '')}/${lang}?ref=${inviteSummary.inviteCode}`
+    : null
+  const joined = inviteSummary?.joined ?? 0
+  const joinedLine =
+    joined === 0
+      ? t('settings.inviteNone')
+      : joined > 100
+        ? t('settings.inviteJoinedMany')
+        : t('settings.inviteJoined', { count: joined })
+
+  // Select the link text so it's ready to copy by hand, and say why: LinkedIn's in-app webview
+  // (where most members arrive from) and any non-secure context expose no Clipboard API, and a
+  // permission-denied writeText() rejection lands here too rather than surfacing a raw DOMException.
+  function copyInviteManually() {
+    inviteLinkRef.current?.select()
+    toast(t('settings.inviteCopyManual'))
+  }
+
+  async function copyInvite() {
+    if (!inviteLink) return
+    if (!navigator.clipboard) {
+      copyInviteManually()
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(inviteLink)
+      // One feedback, where the eye already is: the button reads "Link copied" for two seconds.
+      captureEvent('invite_copied')
+      setInviteCopied(true)
+      setTimeout(() => setInviteCopied(false), 2000)
+    } catch {
+      copyInviteManually()
+    }
+  }
 
   async function handleSaveProfile() {
     if (!sessionToken) return
@@ -439,7 +514,10 @@ export default function SettingsPage() {
         </section>
       ) : (
         <section className="border-border bg-accent rounded-xl border p-5">
-          <p className="text-accent-foreground m-0 text-sm">{t('settings.upgradePrompt')}</p>
+          <UpgradeAtLimit
+            limit="visibility"
+            className="text-accent-foreground text-sm"
+          />
         </section>
       )}
 
@@ -478,6 +556,42 @@ export default function SettingsPage() {
           {ffError && <p className="text-destructive mt-2 mb-0 text-xs">{ffError}</p>}
         </section>
       )}
+
+      {/* backlog/R19 — invite a peer: one link, one gift (a 14-day trial for them). Deep-linked as
+          /settings#invite from the recap page and the caught-up feed state. */}
+      <section
+        className="border-border bg-card mt-4 rounded-xl border p-5"
+        id="invite"
+      >
+        <h2 className="text-foreground mt-0 mb-2 text-base font-semibold">{t('settings.inviteTitle')}</h2>
+        <p className="text-muted-foreground mb-3 text-sm">
+          {t('settings.inviteBody', { days: INVITED_TRIAL_PERIOD_DAYS, base: TRIAL_PERIOD_DAYS })}
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {/* No skeleton input while the code mints — an empty box reads as broken. The button
+              carries the waiting state instead. */}
+          {inviteLink && (
+            <Input
+              ref={inviteLinkRef}
+              readOnly
+              value={inviteLink}
+              aria-label={t('settings.inviteLinkLabel')}
+              onFocus={e => e.currentTarget.select()}
+              className="font-mono text-xs sm:flex-1"
+            />
+          )}
+          <Button
+            type="button"
+            disabled={!inviteLink}
+            onClick={() => void copyInvite()}
+            className="min-h-11 sm:min-h-0"
+          >
+            {inviteCopied ? t('settings.inviteCopied') : t('settings.inviteCopy')}
+          </Button>
+        </div>
+        {inviteError && <p className="text-destructive mt-2 mb-0 text-xs">{inviteError}</p>}
+        <p className="text-muted-foreground mt-3 mb-0 text-xs">{joinedLine}</p>
+      </section>
     </div>
   )
 }

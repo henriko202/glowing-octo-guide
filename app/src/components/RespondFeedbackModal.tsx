@@ -4,6 +4,7 @@ import { api } from '../convex'
 import type { Id } from '../../../convex/_generated/dataModel'
 import Modal from './Modal'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { friendlyError } from '@/lib/errors'
 
@@ -115,7 +116,7 @@ export default function RespondFeedbackModal({ feedback, sessionToken, onClose }
 
       {error && <p className="text-destructive mt-2 text-xs">{error}</p>}
 
-      <div className="mt-4 flex justify-end gap-2">
+      <DialogFooter className="mt-4">
         <Button
           type="button"
           variant="outline"
@@ -130,7 +131,7 @@ export default function RespondFeedbackModal({ feedback, sessionToken, onClose }
         >
           {sending ? '…' : 'Send reply'}
         </Button>
-      </div>
+      </DialogFooter>
     </Modal>
   )
 }

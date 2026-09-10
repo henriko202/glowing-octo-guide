@@ -7,6 +7,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { ThemeProvider } from './components/ThemeProvider'
 import ErrorBoundary from './components/ErrorBoundary'
+import { TooltipProvider } from './components/ui/tooltip'
 import { initSentry } from './lib/observability/sentry'
 import { initPostHog } from './lib/observability/analytics'
 
@@ -20,13 +21,15 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string)
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <ConvexProvider client={convex}>
-        <BrowserRouter>
-          <ErrorBoundary>
-            <App />
-          </ErrorBoundary>
-        </BrowserRouter>
-      </ConvexProvider>
+      <TooltipProvider>
+        <ConvexProvider client={convex}>
+          <BrowserRouter>
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
+          </BrowserRouter>
+        </ConvexProvider>
+      </TooltipProvider>
     </ThemeProvider>
   </React.StrictMode>
 )

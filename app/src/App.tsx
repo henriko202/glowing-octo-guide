@@ -9,6 +9,8 @@ import SettingsPage from './pages/SettingsPage'
 import BillingPage from './pages/BillingPage'
 import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
+import RecapPage from './pages/RecapPage'
+import HistoryPage from './pages/HistoryPage'
 import AdminPage from './pages/AdminPage'
 import AppShell from './components/shell/AppShell'
 import ScrollToTop from './components/ScrollToTop'
@@ -99,6 +101,22 @@ export default function App() {
           element={
             <RequireAuth>
               <MyPostsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/recap"
+          element={
+            <RequireAuth>
+              <RecapPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <RequireAuth>
+              <HistoryPage />
             </RequireAuth>
           }
         />

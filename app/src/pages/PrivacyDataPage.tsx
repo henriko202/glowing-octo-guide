@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import ConsentToggles from '../components/ConsentToggles'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
 export default function PrivacyDataPage() {
@@ -54,7 +55,7 @@ export default function PrivacyDataPage() {
     return (
       <div className="mx-auto max-w-[560px] px-4 py-8 font-sans">
         <section className="border-border bg-accent rounded-xl border p-5">
-          <h2 className="text-accent-foreground mb-2 mt-0 text-base font-semibold">
+          <h2 className="text-accent-foreground mt-0 mb-2 text-base font-semibold">
             {t('privacy.deletionScheduledTitle')}
           </h2>
           <p className="text-foreground m-0 text-sm">
@@ -70,8 +71,8 @@ export default function PrivacyDataPage() {
       <PageHeader title={t('privacy.title')} />
 
       <section className="border-border bg-card mb-4 rounded-xl border p-5">
-        <h2 className="text-foreground mb-2 mt-0 text-base font-semibold">{t('privacy.exportTitle')}</h2>
-        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('privacy.exportNote')}</p>
+        <h2 className="text-foreground mt-0 mb-2 text-base font-semibold">{t('privacy.exportTitle')}</h2>
+        <p className="text-muted-foreground mt-0 mb-3 text-[13px]">{t('privacy.exportNote')}</p>
         <div className="flex items-center gap-3">
           <Button
             type="button"
@@ -86,7 +87,7 @@ export default function PrivacyDataPage() {
           {exportStatus?.status === 'ready' && downloadUrl && (
             <a
               href={downloadUrl}
-              className="text-gold-text text-[13px] font-semibold no-underline hover:underline"
+              className="text-[13px] font-semibold text-gold-text no-underline hover:underline"
               download
             >
               {t('privacy.download')}
@@ -101,8 +102,8 @@ export default function PrivacyDataPage() {
       <ConsentToggles />
 
       <section className="border-destructive/40 bg-card rounded-xl border p-5">
-        <h2 className="text-destructive mb-2 mt-0 text-base font-semibold">{t('privacy.deleteTitle')}</h2>
-        <p className="text-muted-foreground mb-3 mt-0 text-[13px]">{t('privacy.deleteNote')}</p>
+        <h2 className="text-destructive mt-0 mb-2 text-base font-semibold">{t('privacy.deleteTitle')}</h2>
+        <p className="text-muted-foreground mt-0 mb-3 text-[13px]">{t('privacy.deleteNote')}</p>
         <Button
           type="button"
           variant="destructive"
@@ -114,7 +115,7 @@ export default function PrivacyDataPage() {
 
       {confirmOpen && (
         <Modal onClose={() => setConfirmOpen(false)}>
-          <h2 className="text-foreground mb-2 mt-0 text-base font-semibold">{t('privacy.confirmTitle')}</h2>
+          <h2 className="text-foreground mt-0 mb-2 text-base font-semibold">{t('privacy.confirmTitle')}</h2>
           <p className="text-muted-foreground mb-3 text-sm">{t('privacy.confirmBody')}</p>
           <Input
             type="text"
@@ -124,7 +125,7 @@ export default function PrivacyDataPage() {
             aria-label={t('privacy.confirmInputLabel')}
             className="mb-3 text-[13px]"
           />
-          <div className="flex items-center justify-end gap-3">
+          <DialogFooter>
             <Button
               type="button"
               variant="ghost"
@@ -141,7 +142,7 @@ export default function PrivacyDataPage() {
             >
               {deleting ? t('privacy.deleting') : t('privacy.confirmDeleteButton')}
             </Button>
-          </div>
+          </DialogFooter>
         </Modal>
       )}
     </div>

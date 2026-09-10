@@ -11,6 +11,8 @@ import { writeAuditLog } from '../lib/audit'
 import { sendEmail } from '../lib/email'
 import { feedbackReplyEmail } from './emails'
 
+// 'cancellation' is written only by the cancel interstitial (app CancelInterstitial.tsx); it is
+// deliberately NOT in the FeedbackModal picker.
 export const FEEDBACK_CATEGORIES = [
   'feature_request',
   'bug',
@@ -19,7 +21,8 @@ export const FEEDBACK_CATEGORIES = [
   'praise',
   'question',
   'suggestion',
-  'other'
+  'other',
+  'cancellation'
 ] as const
 
 export const MAX_FEEDBACK_LENGTH = 4000
@@ -33,7 +36,8 @@ const categoryValidator = v.union(
   v.literal('praise'),
   v.literal('question'),
   v.literal('suggestion'),
-  v.literal('other')
+  v.literal('other'),
+  v.literal('cancellation')
 )
 
 // Pure validator — exported for unit testing. Returns the trimmed message or throws.

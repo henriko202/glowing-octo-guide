@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from './Modal'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 
 type Props = {
   userName: string
@@ -35,7 +36,7 @@ export default function BanUserDialog({ userName, pending, onConfirm, onCancel }
         className="mt-1 resize-none"
       />
 
-      <div className="mt-5 flex justify-end gap-2">
+      <DialogFooter className="mt-5">
         <Button
           type="button"
           variant="outline"
@@ -52,7 +53,7 @@ export default function BanUserDialog({ userName, pending, onConfirm, onCancel }
         >
           {pending ? '…' : 'Ban user'}
         </Button>
-      </div>
+      </DialogFooter>
     </Modal>
   )
 }

@@ -30,7 +30,7 @@ function DropdownMenuItem({ className, ...props }: React.ComponentProps<typeof P
   return (
     <Primitive.Item
       className={cn(
-        'focus:bg-accent focus:text-accent-foreground flex cursor-default select-none items-center gap-2 rounded-md px-2.5 py-1.5 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        'focus:bg-accent focus:text-accent-foreground flex cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         className
       )}
       {...props}

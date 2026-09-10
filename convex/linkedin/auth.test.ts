@@ -2,16 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { upsertUserHandler, updateTokensHandler, type UpsertUserArgs } from './auth'
 import { POLICY_VERSION } from '../lib/policy'
 
-// Minimal in-memory mock for Convex db context
-function createMockDb(existingUser?: any) {
+// Minimal in-memory mock for Convex db context. `by_linkedin_id` answers with the existing user,
+// `by_invite_code` (backlog/R19) with the inviter — both optional.
+function createMockDb(existingUser?: any, inviter?: any) {
   const records: any[] = existingUser ? [existingUser] : []
   const patches: any[] = []
   const inserts: any[] = []
 
   return {
     query: (_table: string) => ({
-      withIndex: (_name: string, _fn: any) => ({
-        first: async () => records[0] ?? null
+      withIndex: (name: string, _fn: any) => ({
+        first: async () => (name === 'by_invite_code' ? (inviter ?? null) : (records[0] ?? null))
       })
     }),
     get: async (_id: string) => records.find(r => r._id === _id) ?? null,
@@ -80,6 +81,33 @@ describe('upsertUserHandler', () => {
     const db = createMockDb(existing)
     await upsertUserHandler(db, { ...BASE_ARGS, headline: undefined })
     expect('headline' in db._patches[0].data).toBe(false)
+  })
+
+  // backlog/R19 — attribution is insert-only and only for a code that belongs to a member.
+  it('stamps referredByCode on a new user when the code belongs to a member', async () => {
+    const db = createMockDb(undefined, { _id: 'inviter-id', inviteCode: 'abc12345' })
+    await upsertUserHandler(db, { ...BASE_ARGS, referredByCode: 'abc12345' })
+    expect(db._inserts[0].referredByCode).toBe('abc12345')
+  })
+
+  it('drops the code when the inviter is banned', async () => {
+    const db = createMockDb(undefined, { _id: 'inviter-id', inviteCode: 'abc12345', isBanned: true })
+    await upsertUserHandler(db, { ...BASE_ARGS, referredByCode: 'abc12345' })
+    expect(db._inserts[0].referredByCode).toBeUndefined()
+  })
+
+  it('drops a code that matches no member', async () => {
+    const db = createMockDb()
+    await upsertUserHandler(db, { ...BASE_ARGS, referredByCode: 'abc12345' })
+    expect(db._inserts[0].referredByCode).toBeUndefined()
+  })
+
+  it('never attributes an existing member on a later login', async () => {
+    const existing = { _id: 'existing-id', linkedinId: 'li-123' }
+    const db = createMockDb(existing, { _id: 'inviter-id', inviteCode: 'abc12345' })
+    await upsertUserHandler(db, { ...BASE_ARGS, referredByCode: 'abc12345' })
+    expect(db._inserts).toHaveLength(0)
+    expect(db._patches[0].data).not.toHaveProperty('referredByCode')
   })
 })
 

@@ -1,39 +1,41 @@
-import { SIGN_IN_URL } from '@/lib/links'
+import { SelectedOffer, TrialLink } from './TrialProvider'
 import type { Dictionary } from '@/i18n/getDictionary'
+import type { Locale } from '@/i18n/config'
 
-export default function FinalCTA({ dict }: { dict: Dictionary['finalCta'] }) {
+export default function FinalCTA({
+  dict,
+  offer,
+  lang
+}: {
+  dict: Dictionary['finalCta']
+  offer: Dictionary['trialOffer']
+  lang: Locale
+}) {
   return (
-    <section className="relative overflow-hidden bg-ink px-6 py-32 text-center">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, var(--glow-gold) 0%, transparent 70%)' }}
-      />
-      <div
-        className="circle-ring"
-        style={{
-          width: 500,
-          height: 500,
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          borderColor: 'var(--ring-gold)'
-        }}
-      />
-      <div className="relative z-10 mx-auto max-w-xl space-y-6">
-        <h2 className="font-display text-5xl font-semibold text-cream md:text-6xl">
+    <section className="bg-ink px-6 py-16 text-center md:py-24">
+      <div className="mx-auto max-w-xl space-y-6">
+        <h2 className="font-display text-4xl font-semibold text-balance text-cream md:text-5xl">
           {dict.headlineLine1}
           <br />
-          <span className="text-gold-text italic">{dict.headlineLine2}</span>
+          <span className="text-gold-text">{dict.headlineLine2}</span>
         </h2>
-        <p className="text-base text-cream/50">{dict.subheadline}</p>
         <div className="flex flex-col items-center gap-3">
-          <a
-            href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="inline-block rounded-full bg-gold px-10 py-4 font-semibold text-on-gold shadow-[0_0_40px_rgba(201,150,62,0.4)] transition-[background-color,box-shadow] duration-300 hover:bg-gold-light hover:shadow-[0_0_60px_rgba(201,150,62,0.55)]"
-          >
-            {dict.cta} →
-          </a>
-          <p className="text-sm text-gold-text">{dict.earlyAccess}</p>
+          <TrialLink className="inline-flex min-h-11 items-center rounded-full bg-gold px-8 py-4 font-semibold text-on-gold transition-colors hover:bg-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold">
+            {dict.cta}
+            <span
+              aria-hidden="true"
+              className="ml-2"
+            >
+              →
+            </span>
+          </TrialLink>
+          <SelectedOffer
+            dict={offer}
+            lang={lang}
+          />
+          <p className="text-[13px] leading-relaxed text-cream-muted">{dict.subheadline}</p>
+          <p className="text-[13px] leading-relaxed text-cream-muted">{dict.ctaTrust}</p>
+          <p className="text-sm font-medium text-cream-muted">{dict.earlyAccess}</p>
         </div>
       </div>
     </section>

@@ -24,7 +24,7 @@ export default function LanguageSelector({ dict, lang }: { dict: Dictionary['lan
         value={lang}
         onChange={e => switchTo(e.target.value as Locale)}
         aria-label={dict.label}
-        className="cursor-pointer appearance-none rounded-md border border-cream/15 bg-transparent py-1 pr-7 pl-2.5 text-sm font-medium text-cream/70 uppercase hover:border-cream/30 hover:text-cream focus:outline-none focus-visible:ring-1 focus-visible:ring-gold/40"
+        className="min-h-11 min-w-11 cursor-pointer appearance-none rounded-md border border-cream/15 bg-transparent py-1 pr-7 pl-2.5 text-sm font-medium text-cream/70 uppercase hover:border-cream/30 hover:text-cream focus:outline-none focus-visible:ring-1 focus-visible:ring-gold/40"
       >
         {i18n.locales.map(l => (
           <option

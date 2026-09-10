@@ -6,7 +6,7 @@ export default function Es({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Términos de Servicio</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última actualización:</strong> Junio 2026
+          <strong className="text-cream">Última actualización:</strong> Septiembre 2026
         </p>
 
         {/* 1. Aceptación */}
@@ -31,6 +31,13 @@ export default function Es({ lang }: { lang: Locale }) {
           publica, comenta ni reacciona en LinkedIn en su nombre. Su propósito es ayudar a los profesionales a aumentar
           su Índice de Ventas Sociales (SSI) de LinkedIn mediante una interacción auténtica y mutua dentro de la
           comunidad.
+        </p>
+        <p>
+          <strong className="text-cream">Qué compra usted.</strong> Usted compra acceso a este software. Su suscripción
+          cubre el feed compartido, las sugerencias de reacción y comentario, y las funciones de cuenta incluidas en su
+          plan. No vendemos reacciones, comentarios, conexiones ni seguidores, y no entregamos interacciones a su cuenta
+          de LinkedIn ni a ninguna otra cuenta. Su SSI depende de lo que usted haga en LinkedIn, así que no prometemos
+          puntaje, posición ni resultado.
         </p>
 
         {/* 3. Su cuenta LinkedIn y autorización */}
@@ -80,8 +87,32 @@ export default function Es({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. Suscripciones &amp; Facturación</h2>
         <p>
           El acceso al Servicio requiere una suscripción de pago activa. Las suscripciones se facturan de forma{' '}
-          <strong className="text-cream">mensual</strong> a través de Stripe. Al suscribirse autoriza a Stripe a cargar
-          el método de pago proporcionado de forma recurrente mensual hasta que cancele.
+          <strong className="text-cream">mensual o anual</strong>, según el plan y el intervalo que elija, a través de
+          Stripe. Al suscribirse autoriza a Stripe a cargar el método de pago proporcionado de forma recurrente hasta
+          que cancele.
+        </p>
+        <p>
+          <strong className="text-cream">Planes y entrega.</strong> Ofrecemos cuatro planes: Starter, Growth, Pro y un
+          plan Enterprise personalizado, acordado por contacto. Usted ve el precio actual de cada plan e intervalo en
+          nuestra página de inicio, y de nuevo en el checkout, antes de pagar. El Servicio funciona como una aplicación
+          web alojada, habilitamos su acceso apenas comienza la suscripción, y no enviamos productos físicos.
+        </p>
+        <p>
+          <strong className="text-cream">Compras únicas.</strong> Algunas funciones se venden por separado de la
+          suscripción. Destacar una de sus publicaciones cuesta <strong className="text-cream">$5</strong>, cobrados una
+          sola vez por Stripe cuando confirma la compra. Se aplica a la{' '}
+          <strong className="text-cream">publicación que elija</strong>, no se renueva y no es reembolsable una vez que
+          esa publicación ha sido destacada.
+        </p>
+        <p>
+          <strong className="text-cream">Prueba gratuita.</strong> Las cuentas nuevas comienzan con una{' '}
+          <strong className="text-cream">prueba gratuita de 7 días</strong> (14 días cuando se une mediante el enlace de
+          invitación de un miembro) y se requiere un método de pago para iniciarla. La prueba termina —y la facturación
+          comienza— en cuanto alcanza <strong className="text-cream">50 interacciones</strong> (hechas y recibidas) o
+          cuando termina el período de prueba, lo que ocurra primero. Le avisamos por correo antes del primer cobro.
+          Puede cancelar en cualquier momento antes de que termine la prueba desde la página Suscripción de su cuenta, y
+          no se le cobrará. Hay una prueba gratuita por cuenta; si se suscribe de nuevo tras cancelar, el cobro comienza
+          de inmediato y se indica en el checkout.
         </p>
         <p>
           <strong className="text-cream">Cancelación.</strong> Puede cancelar su suscripción en cualquier momento desde

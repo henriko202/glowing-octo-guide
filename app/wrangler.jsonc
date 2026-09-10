@@ -1,9 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "link-into-the-ssi-app",
+  "main": "./src/cloudflare-worker.ts",
   "compatibility_date": "2025-03-25",
+  "routes": [
+    { "pattern": "www.app.linkintothessi.com", "custom_domain": true },
+    { "pattern": "app.linkintothessi.com", "custom_domain": true }
+  ],
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": true
   }
 }

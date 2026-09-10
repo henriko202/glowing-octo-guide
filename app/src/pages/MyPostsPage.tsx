@@ -1,7 +1,8 @@
 // app/src/pages/MyPostsPage.tsx
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAction, useMutation, useQuery } from 'convex/react'
+import { useSearchParams } from 'react-router-dom'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 
@@ -9,11 +10,23 @@ import { PageHeader } from '@/components/PageHeader'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
 import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
-import { friendlyError } from '@/lib/errors'
+import PlanUsagePills, { type FeaturedUsage, type WeeklyUsage } from '@/components/PlanUsagePills'
+import UpgradeAtLimit from '../components/UpgradeAtLimit'
+import { friendlyError, mapLimitError } from '@/lib/errors'
+import { timeAgo } from '@/lib/relativeDay'
+import { toast } from '@/components/ui/toast'
+import { captureEvent } from '@/lib/observability/analytics'
+import { useCardGate } from '@/hooks/useCardGate'
+import { FEATURED_POST_PRICE } from '@/lib/planPrices'
+import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
+import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
+import { hasPermanentFeaturedEntitlement, isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -25,25 +38,60 @@ interface MyPost {
   commentCount: number
   hidden?: boolean
   isFeatured?: boolean
+  featuredAt?: number
   sourceUrl?: string
+  // Set when this post's engagement met the author's per-post interaction cap and it left the
+  // feed (convex/posts.ts:439,473,533,567 — Option A, total engagement counts toward the cap).
+  interactionLimitReached?: boolean
+  // backlog/R17 — set by posts.applyPurchasedFeature when this post's featured slot was bought.
+  interactionCapBonus?: number
+  featuredPurchase?: { checkoutSessionId: string; amountCents: number; paidAt: number }
 }
 
-// The shape returned by getWeeklyUsage (null when not signed in).
-interface WeeklyUsage {
-  postsThisWeek: number
-  postsPerWeek: number
-}
+type BuySource = 'cap' | 'billing' | 'quota'
 
-// The shape returned by getFeaturedUsage (null when not signed in).
-interface FeaturedUsage {
-  usedCount: number
-  featuredPerMonth: number
-}
-
-function timeAgo(ts: number, t: ReturnType<typeof useTranslation>['t']): string {
-  const days = Math.floor((Date.now() - ts) / 86400000)
-  if (days <= 0) return t('myPosts.today')
-  return t('myPosts.daysAgo', { count: days })
+// backlog/R17 — the $5 control. The value details live in its tooltip so the card action bar stays
+// compact, while the solid button makes the paid action explicit.
+function BuyFeaturedButton({
+  post,
+  source,
+  newCap,
+  isTrialing,
+  pending,
+  onBuy
+}: {
+  post: MyPost
+  source: BuySource
+  newCap: number
+  isTrialing: boolean
+  pending: boolean
+  onBuy: (post: MyPost, source: BuySource) => void
+}) {
+  const { t } = useTranslation()
+  const hint = `${t('myPosts.buyFeaturedHint', { newCap })}${isTrialing ? ` ${t('myPosts.buyFeaturedTrial')}` : ''}`
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          disabled={pending}
+          className={pending ? 'cursor-wait' : 'cursor-pointer'}
+          onClick={() => onBuy(post, source)}
+        >
+          {pending
+            ? '...'
+            : t(post.isFeatured ? 'myPosts.buyFeaturedRoom' : 'myPosts.buyFeatured', {
+                price: FEATURED_POST_PRICE
+              })}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>{hint}</p>
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 export default function MyPostsPage() {
@@ -53,21 +101,93 @@ export default function MyPostsPage() {
   const me = useQuery(api.users.getMe, { sessionToken })
   const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
   const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken }) as FeaturedUsage | null | undefined
+  // Current tier's interaction cap, for the "reached N interactions" badge below — a post's own
+  // cap isn't stored (it's evaluated against the author's tier at write time), so this shows the
+  // CURRENT tier limit, same convention as getFeaturedUsage/getWeeklyUsage above.
+  const tierLimits = useQuery(api.posts.getTierLimits, {})
   const posts = useQuery(api.posts.getMyPosts, { sessionToken }) as unknown as MyPost[] | undefined
   const submitPost = useAction(api.posts.submitPost)
   const setPostHidden = useMutation(api.posts.setPostHidden)
   const deletePost = useMutation(api.posts.deletePost)
   const featurePost = useMutation(api.posts.featurePost)
   const unfeaturePost = useMutation(api.posts.unfeaturePost)
+  const purchaseFeaturedPost = useAction(api.billingNode.purchaseFeaturedPost)
+  const { gated, isTrialing } = useCardGate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // backlog/R17 — two one-shot URL params, latched during render (BillingPage's `justSubscribed`
+  // pattern) so they survive being stripped a moment later:
+  //   ?feature=buy            Billing's "Pick a post": selects the billing source once plan slots are exhausted.
+  //   ?featured=paid&post=ID  Stripe's success_url: that card reads "Confirming…" until the
+  //                           webhook writes featuredPurchase onto it. No timeout, by decision.
+  const paidPostId = searchParams.get('featured') === 'paid' ? searchParams.get('post') : null
+  const wantsBuy = searchParams.get('feature') === 'buy'
+  const [buyMode, setBuyMode] = useState(false)
+  const [confirmingPostId, setConfirmingPostId] = useState<string | null>(null)
+  if (wantsBuy && !buyMode) setBuyMode(true)
+  if (paidPostId && confirmingPostId !== paidPostId) setConfirmingPostId(paidPostId)
+
+  const tier: Tier = me?.tier ?? 'starter'
+  const planCap = tierLimits?.[tier]?.interactionsPerPost
+  // The cap a bought post gets: plan cap + this tier's bonus. Undefined until the limits load.
+  const newCap = planCap === undefined ? undefined : effectiveInteractionCap(planCap, FEATURED_CAP_BONUS[tier])
+  const featuredUnlimited = featuredUsage != null && isUnlimitedFeatured(featuredUsage.featuredPerMonth)
+  const atLimit = usage != null && usage.postsThisWeek >= usage.postsPerWeek
+  const featuredAtCap = featuredUsage != null && featuredUsage.usedCount >= featuredUsage.featuredPerMonth
+  // Hidden for a bought post, an unlimited tier, anyone the card gate would stop at the purchase,
+  // a canceled member (backlog/R17 A2): assertCanEngage lets them buy server-side — they're
+  // still inside their paid window — but a $5 feature for a post that leaves the feed once that
+  // window ends is a bad sale. The server stays permissive; the UI is what actually says no.
+  // Also hidden while the post is itself hidden (F1): a hidden post's inFeed stays false even once
+  // bought (convex/lib/featuredPurchase.ts), so the $5 promise can't hold until the member unhides.
+  // canBuy is recomputed per render, so unhiding re-enables the control on its own.
+  const canBuy = (post: MyPost) =>
+    !post.hidden &&
+    !hasPermanentFeaturedEntitlement(post) &&
+    // Spec §4.9: the confirming state replaces ANY buy control. The entitlement helper above
+    // cannot carry this yet — neither purchase field has arrived during the confirming window,
+    // which is the only window where a second Checkout Session is possible.
+    confirmingPostId !== post._id &&
+    !featuredUnlimited &&
+    !gated &&
+    me?.subscriptionStatus !== 'canceled' &&
+    newCap !== undefined
+
+  useEffect(() => {
+    if (paidPostId || wantsBuy) setSearchParams({}, { replace: true })
+  }, [paidPostId, wantsBuy, setSearchParams])
+
+  // One toast per return leg, once the numbers it names AND the list it names them for have loaded;
+  // the ref survives StrictMode's double effect. It waits on `posts` too, so the latch is never
+  // spent on a render where the id could not have matched yet.
+  const paidToastFired = useRef(false)
+  useEffect(() => {
+    if (!confirmingPostId || newCap === undefined || posts === undefined || paidToastFired.current) return
+    paidToastFired.current = true
+    captureEvent('featured_purchase_completed')
+    // The toast promises room on one specific post, so it only fires for a post still in the list:
+    // in spec §4.12's orphaned case (deleted between Checkout and the webhook) it would otherwise
+    // promise room on a post that will never be featured. The event stays unconditional — the
+    // member did pay, orphaned or not.
+    if (posts.some(p => p._id === confirmingPostId)) toast(t('myPosts.featuredPaidToast', { newCap }))
+  }, [confirmingPostId, newCap, posts, t])
 
   // Transient error surfaced above the list when a hide/delete action fails.
   const [actionError, setActionError] = useState<string | null>(null)
+  const [confirmUnfeaturePost, setConfirmUnfeaturePost] = useState<MyPost | null>(null)
   // The post awaiting delete confirmation in the themed Dialog below (null = closed).
   const [confirmDeletePost, setConfirmDeletePost] = useState<MyPost | null>(null)
+  // backlog/R17 F4 — the post id mid-Checkout-redirect, so only the clicked card's button disables
+  // (not every buy button on the page) and a second click can't fire a second Checkout Session.
+  const [buyingPostId, setBuyingPostId] = useState<Id<'posts'> | null>(null)
 
   async function handleSubmit(postUrl: string) {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl })
+    // backlog/R17 order bump: one line, no second action — the new card below carries the control.
+    // Members who cannot buy (card-gated, unlimited tier, canceled — F2) get the plain "feature it" line.
+    const bump = featuredAtCap && !gated && !featuredUnlimited && me?.subscriptionStatus !== 'canceled'
+    toast(t(bump ? 'myPosts.postAddedBuy' : 'myPosts.postAddedFeature', { price: FEATURED_POST_PRICE }))
   }
 
   // Toggle a post's feed visibility. Convex queries are reactive, so getMyPosts
@@ -92,12 +212,43 @@ export default function MyPostsPage() {
     setActionError(null)
     try {
       if (post.isFeatured) {
-        await unfeaturePost({ sessionToken, postId: post._id })
+        setConfirmUnfeaturePost(post)
       } else {
         await featurePost({ sessionToken, postId: post._id })
       }
     } catch (err) {
+      setActionError(mapLimitError(friendlyError(err, t('myPosts.updateError')), t))
+    }
+  }
+
+  async function handleConfirmUnfeature() {
+    if (!sessionToken || !confirmUnfeaturePost) return
+    const postId = confirmUnfeaturePost._id
+    setConfirmUnfeaturePost(null)
+    setActionError(null)
+    try {
+      await unfeaturePost({ sessionToken, postId })
+    } catch (err) {
       setActionError(friendlyError(err, t('myPosts.updateError')))
+    }
+  }
+
+  async function handleBuyFeatured(post: MyPost, source: BuySource) {
+    if (!sessionToken) return
+    setActionError(null)
+    setBuyingPostId(post._id)
+    captureEvent('featured_purchase_started', { source })
+    try {
+      const { url } = await purchaseFeaturedPost({ sessionToken, postId: post._id })
+      if (!url) throw new Error('NO_CHECKOUT_URL')
+      // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
+      window.location.href = url
+    } catch {
+      // F3 — every failure here (a thrown ConvexError code, or a missing url) is a state the UI
+      // already prevents, so none of them need telling apart for the buyer; friendlyError would
+      // otherwise leak a raw server code like FEATURED_PRICE_UNSET verbatim.
+      setActionError(t('myPosts.buyFeaturedError'))
+      setBuyingPostId(null)
     }
   }
 
@@ -127,12 +278,6 @@ export default function MyPostsPage() {
     return <LoadingSpinner />
   }
 
-  // Hit the weekly cap once usage loads and the count meets the plan limit.
-  const atLimit = usage != null && usage.postsThisWeek >= usage.postsPerWeek
-  // Hit the monthly featured cap — mirrors the same >= boundary featurePost enforces
-  // server-side (isFeaturedLimitReached), so the button disables in lockstep with the API.
-  const featuredAtCap = featuredUsage != null && featuredUsage.usedCount >= featuredUsage.featuredPerMonth
-
   return (
     <div className="mx-auto max-w-160 px-4 py-8 font-sans">
       <PageHeader title={t('nav.myPosts')} />
@@ -153,39 +298,29 @@ export default function MyPostsPage() {
               <div className="text-muted-foreground text-xs capitalize">{t('myPosts.tierPlan', { tier: me.tier })}</div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {usage && (
-              <Badge
-                title={t('myPosts.weeklyUsageHint')}
-                variant={atLimit ? 'warning' : 'primary'}
-                className="shrink-0 rounded-full px-3 py-1 text-xs"
-              >
-                {t('myPosts.weeklyUsage', { used: usage.postsThisWeek, limit: usage.postsPerWeek })}
-              </Badge>
-            )}
-            {featuredUsage && (
-              <Badge
-                title={t('myPosts.featuredPillHint')}
-                variant={featuredAtCap ? 'warning' : 'primary'}
-                className="shrink-0 rounded-full px-3 py-1 text-xs"
-              >
-                {/* featuredPerMonth >= 999 is the contact/enterprise "unlimited" sentinel
-                    (see convex/lib/planLimits.ts DEFAULTS.contact) — never show the raw
-                    number to the user. */}
-                {featuredUsage.featuredPerMonth >= 999
-                  ? t('myPosts.featuredPillUnlimited', { used: featuredUsage.usedCount })
-                  : t('myPosts.featuredPill', { used: featuredUsage.usedCount, limit: featuredUsage.featuredPerMonth })}
-              </Badge>
-            )}
-          </div>
+          <PlanUsagePills
+            usage={usage}
+            featuredUsage={featuredUsage}
+          />
         </div>
+      )}
+
+      {/* Upgrade ask at the moment of the featured cap (backlog/R08) — under the pill row, not
+          inside the pill itself, so the pill stays a short badge. Only for a plan that includes
+          featured posts at all: on Starter (0/month) `featuredAtCap` is 0 >= 0 on every visit, and
+          an ask that fires on page load is an interruption, not a limit moment. Starter meets the
+          featured ask where it binds — the Feature button's own disabled state. */}
+      {featuredUsage != null && featuredAtCap && featuredUsage.featuredPerMonth > 0 && (
+        <p className="text-muted-foreground mb-6 text-[13px]">
+          <UpgradeAtLimit limit="featured" />
+        </p>
       )}
 
       {/* Manual share — copied from the Feed page, re-themed light to match this page.
           Disabled at the weekly limit so we don't trigger a guaranteed-to-fail submit. */}
       <PostComposer
         atLimit={atLimit}
-        limitHint={t('myPosts.weeklyLimitReached')}
+        limitHint={<UpgradeAtLimit limit="weeklyPosts" />}
         onSubmit={handleSubmit}
       />
 
@@ -222,7 +357,11 @@ export default function MyPostsPage() {
                       variant="warning"
                       className="rounded-full px-2 py-0.5 text-[11px]"
                     >
-                      {t('feed.featured')}
+                      {post.featuredPurchase && planCap !== undefined
+                        ? t('myPosts.featuredPaidBadge', {
+                            cap: effectiveInteractionCap(planCap, post.interactionCapBonus)
+                          })
+                        : t('feed.featured')}
                     </Badge>
                   )}
                   {post.hidden ? (
@@ -237,18 +376,52 @@ export default function MyPostsPage() {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-pressed={post.isFeatured ?? false}
-                    disabled={!post.isFeatured && featuredAtCap}
-                    title={!post.isFeatured && featuredAtCap ? t('myPosts.featureLimitReached') : undefined}
-                    onClick={() => handleToggleFeatured(post)}
-                    className="cursor-pointer"
-                  >
-                    {post.isFeatured ? t('myPosts.unfeature') : t('myPosts.feature')}
-                  </Button>
+                  {confirmingPostId === post._id && !post.featuredPurchase ? (
+                    <span
+                      role="status"
+                      className="text-muted-foreground text-[11px]"
+                    >
+                      {t('myPosts.confirmingPayment')}
+                    </span>
+                  ) : !post.isFeatured &&
+                    !post.interactionLimitReached &&
+                    featuredAtCap &&
+                    canBuy(post) &&
+                    newCap !== undefined ? (
+                    <BuyFeaturedButton
+                      post={post}
+                      source={buyMode ? 'billing' : 'quota'}
+                      newCap={newCap}
+                      isTrialing={isTrialing}
+                      pending={buyingPostId === post._id}
+                      onBuy={handleBuyFeatured}
+                    />
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-pressed={post.isFeatured ?? false}
+                      disabled={
+                        !post.isFeatured &&
+                        ((featuredAtCap && !hasPermanentFeaturedEntitlement(post)) ||
+                          post.interactionLimitReached === true)
+                      }
+                      title={
+                        post.isFeatured
+                          ? undefined
+                          : post.interactionLimitReached === true
+                            ? t('myPosts.featuredCappedTitle')
+                            : featuredAtCap && !hasPermanentFeaturedEntitlement(post)
+                              ? t('myPosts.featureLimitReached')
+                              : undefined
+                      }
+                      onClick={() => handleToggleFeatured(post)}
+                      className="cursor-pointer"
+                    >
+                      {post.isFeatured ? t('myPosts.unfeature') : t('myPosts.feature')}
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
@@ -269,6 +442,41 @@ export default function MyPostsPage() {
                   </Button>
                 </div>
               </div>
+              {/* Interaction cap reached — the post left the feed silently (no toast, no notice on
+                  the next feed visit); this row is the only place it's surfaced. */}
+              {post.interactionLimitReached && me && planCap !== undefined && (
+                <div className="border-border flex flex-col gap-2 border-b px-3.5 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="warning"
+                      className="rounded-full px-2 py-0.5 text-[11px]"
+                    >
+                      {t('myPosts.interactionCapBadge', {
+                        limit: effectiveInteractionCap(planCap, post.interactionCapBonus)
+                      })}
+                    </Badge>
+                    <span className="text-muted-foreground text-[11px]">
+                      <UpgradeAtLimit limit="interactionCap" />
+                    </span>
+                  </div>
+                  {/* Upgrade first, add-on second (backlog/R17): a featured slot brings the post back. */}
+                  {canBuy(post) && newCap !== undefined && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-[11px]">
+                        {t('myPosts.buyFeaturedCapped', { cap: planCap, newCap })}
+                      </span>
+                      <BuyFeaturedButton
+                        post={post}
+                        source="cap"
+                        newCap={newCap}
+                        isTrialing={isTrialing}
+                        pending={buyingPostId === post._id}
+                        onBuy={handleBuyFeatured}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
               <LinkedInEmbed
                 urn={post.linkedinPostUrn}
                 footer={
@@ -305,7 +513,7 @@ export default function MyPostsPage() {
           title={t('myPosts.delete')}
         >
           <p className="text-foreground m-0 text-sm">{t('myPosts.deleteConfirm')}</p>
-          <div className="mt-5 flex items-center justify-end gap-3">
+          <DialogFooter className="mt-5">
             <Button
               type="button"
               variant="ghost"
@@ -322,7 +530,34 @@ export default function MyPostsPage() {
             >
               {t('myPosts.delete')}
             </Button>
-          </div>
+          </DialogFooter>
+        </Modal>
+      )}
+
+      {confirmUnfeaturePost && (
+        <Modal
+          onClose={() => setConfirmUnfeaturePost(null)}
+          title={t('myPosts.unfeatureConfirmTitle')}
+        >
+          <p className="text-foreground m-0 text-sm">{t('myPosts.unfeatureConfirm')}</p>
+          <DialogFooter className="mt-5">
+            <Button
+              type="button"
+              variant="ghost"
+              className="cursor-pointer"
+              onClick={() => setConfirmUnfeaturePost(null)}
+            >
+              {t('privacy.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="cursor-pointer"
+              onClick={() => void handleConfirmUnfeature()}
+            >
+              {t('myPosts.unfeature')}
+            </Button>
+          </DialogFooter>
         </Modal>
       )}
     </div>

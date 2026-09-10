@@ -131,4 +131,187 @@ describe('PostCard', () => {
     )
     expect(screen.getByText('Fintech')).toBeInTheDocument()
   })
+
+  it('calls onGated with source "react" instead of onReact when the member is card-gated', () => {
+    const onReact = vi.fn()
+    const onGated = vi.fn()
+    render(
+      <PostCard
+        post={mockPost}
+        gated
+        onGated={onGated}
+        onComment={() => {}}
+        onReact={onReact}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /react/i }))
+    expect(onGated).toHaveBeenCalledExactlyOnceWith('react')
+    expect(onReact).not.toHaveBeenCalled()
+  })
+
+  it('calls onGated with source "comment" instead of onComment when the member is card-gated', () => {
+    const onComment = vi.fn()
+    const onGated = vi.fn()
+    render(
+      <PostCard
+        post={mockPost}
+        gated
+        onGated={onGated}
+        onComment={onComment}
+        onReact={() => {}}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /comment/i }))
+    expect(onGated).toHaveBeenCalledExactlyOnceWith('comment')
+    expect(onComment).not.toHaveBeenCalled()
+  })
+
+  it('calls onGated with source "linkedin" instead of navigating when "View on LinkedIn" is tapped while gated', () => {
+    const onGated = vi.fn()
+    render(
+      <PostCard
+        post={{ ...mockPost, sourceUrl: 'https://www.linkedin.com/posts/test' }}
+        gated
+        onGated={onGated}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
+    fireEvent.click(screen.getByRole('link', { name: /view on linkedin/i }))
+    expect(onGated).toHaveBeenCalledExactlyOnceWith('linkedin')
+  })
+
+  it('leaves the engagement buttons enabled while gated so the tap is never dead', () => {
+    render(
+      <PostCard
+        post={mockPost}
+        gated
+        onGated={() => {}}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
+    expect(screen.getByRole('button', { name: /react/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /comment/i })).toBeEnabled()
+  })
+
+  it('calls the real handlers when not gated', () => {
+    const onReact = vi.fn()
+    const onGated = vi.fn()
+    render(
+      <PostCard
+        post={mockPost}
+        onGated={onGated}
+        onComment={() => {}}
+        onReact={onReact}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /react/i }))
+    expect(onReact).toHaveBeenCalledOnce()
+    expect(onGated).not.toHaveBeenCalled()
+  })
+})
+
+// backlog/R21 — a post the viewer already handled shows what they did, keeps only the action they
+// have not taken yet, says when it leaves their feed, and offers Hide now.
+describe('PostCard done footer (R21)', () => {
+  const inFiveHours = Date.now() + 5 * 3_600_000
+
+  it('names what was done, keeps the remaining action and says when the post leaves', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: true, commented: false, hidesAt: inFiveHours } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByText(/reacted/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
+    expect(screen.getByText(/leaves your feed in 5 h/i)).toBeInTheDocument()
+  })
+
+  it('offers the saved comment once the viewer reacted and commented', () => {
+    const onComment = vi.fn()
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: true, commented: true, hidesAt: inFiveHours } }}
+        onComment={onComment}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByText(/reacted · commented/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /view generated comment/i }))
+    expect(onComment).toHaveBeenCalledWith(mockPost._id)
+  })
+
+  it('shows at most 24 hours when an interaction arrives after the card mounted', () => {
+    const mountedAt = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(mountedAt)
+    try {
+      const onComment = vi.fn()
+      const onReact = vi.fn()
+      const { rerender } = render(
+        <PostCard
+          post={mockPost}
+          onComment={onComment}
+          onReact={onReact}
+        />
+      )
+      clock.mockReturnValue(mountedAt + 3_600_000)
+      rerender(
+        <PostCard
+          post={{ ...mockPost, viewerState: { reacted: true, commented: false, hidesAt: Date.now() + 24 * 3_600_000 } }}
+          onComment={onComment}
+          onReact={onReact}
+        />
+      )
+      expect(screen.getByText(/leaves your feed in 24 h/i)).toBeInTheDocument()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('rounds the remaining time up so it never says 0 h', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: false, commented: true, hidesAt: Date.now() + 1000 } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByText(/leaves your feed in 1 h/i)).toBeInTheDocument()
+  })
+
+  it('calls onHide from the Hide now button', () => {
+    const onHide = vi.fn()
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: true, commented: false, hidesAt: inFiveHours } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={onHide}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /hide now/i }))
+    expect(onHide).toHaveBeenCalledOnce()
+  })
+
+  it('renders the normal footer, with no Hide now, for an untouched post', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: null }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    expect(screen.getByRole('button', { name: /react/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /hide now/i })).not.toBeInTheDocument()
+  })
 })

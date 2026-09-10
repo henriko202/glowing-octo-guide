@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPriceMap, resolveTier } from './stripePrices'
+import { buildPriceMap, intervalForPriceId, resolveTier, starterPriceIdFor } from './stripePrices'
 
 const ENV = {
   STRIPE_STARTER_PRICE_ID: 'price_s_m',
@@ -28,5 +28,40 @@ describe('stripePrices', () => {
     const map = buildPriceMap({ STRIPE_GROWTH_PRICE_ID: 'price_g_m' })
     expect(Object.keys(map)).toEqual(['price_g_m'])
     expect(map['']).toBeUndefined()
+  })
+
+  it('never maps the one-time featured-post price to a tier (backlog/R17)', () => {
+    const map = buildPriceMap({ ...ENV, STRIPE_FEATURED_POST_PRICE_ID: 'price_feat' })
+    expect(resolveTier(map, 'price_feat')).toBe('starter') // the "unknown id" default, not a tier of its own
+    expect(Object.keys(map)).not.toContain('price_feat')
+  })
+})
+
+describe('starterPriceIdFor', () => {
+  it('picks the annual Starter price only for year, monthly otherwise', () => {
+    expect(starterPriceIdFor(ENV, 'year')).toBe('price_s_y')
+    expect(starterPriceIdFor(ENV, 'month')).toBe('price_s_m')
+    expect(starterPriceIdFor(ENV, undefined)).toBe('price_s_m')
+    expect(starterPriceIdFor({}, 'year')).toBeUndefined()
+  })
+})
+
+describe('intervalForPriceId', () => {
+  it('names the interval of every one of the six prices', () => {
+    expect(intervalForPriceId(ENV, 'price_s_m')).toBe('month')
+    expect(intervalForPriceId(ENV, 'price_g_m')).toBe('month')
+    expect(intervalForPriceId(ENV, 'price_p_m')).toBe('month')
+    expect(intervalForPriceId(ENV, 'price_s_y')).toBe('year')
+    expect(intervalForPriceId(ENV, 'price_g_y')).toBe('year')
+    expect(intervalForPriceId(ENV, 'price_p_y')).toBe('year')
+  })
+
+  it('returns undefined for an unknown or blank id rather than guessing monthly', () => {
+    expect(intervalForPriceId(ENV, 'price_featured')).toBeUndefined()
+    expect(intervalForPriceId(ENV, '')).toBeUndefined()
+  })
+
+  it('returns undefined when the env has no prices configured', () => {
+    expect(intervalForPriceId({}, 'price_s_m')).toBeUndefined()
   })
 })

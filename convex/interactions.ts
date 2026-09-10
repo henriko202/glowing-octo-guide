@@ -1,21 +1,65 @@
 // convex/interactions.ts
-import { action, internalMutation, internalQuery, query } from './_generated/server'
+import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { assertCanEngage } from './lib/access'
 import { assertPostEngageable } from './feed'
-import { getPlanLimitsHelper } from './lib/planLimits'
+import { getPlanLimitsHelper, nextTier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
-import { shouldFlipInteractionLimit } from './lib/interactionLimit'
-import { crossesThreshold } from './lib/trialMilestone'
+import { effectiveInteractionCap, shouldFlipInteractionLimit } from './lib/interactionLimit'
+import { canHide } from './lib/feedHygiene'
+import {
+  crossesThreshold,
+  pickTrialingSubscription,
+  shouldEndTrialEarly,
+  TRIAL_WARNING_THRESHOLD
+} from './lib/trialMilestone'
 import { reactionValidator } from './lib/reactions'
+import { toHistoryRow, type HistoryRow } from './lib/history'
+import {
+  countInteractions,
+  excerpt,
+  excludeSelf,
+  pickNearCapPost,
+  RECAP_POST_CEILING,
+  RECAP_ROW_CEILING,
+  windowBounds
+} from './lib/recap'
 
-// Bump one side of a trialing user's interaction counter; when their combined count first
-// reaches the threshold, schedule the early end of their Stripe trial (billing starts now).
-async function bumpTrialInteraction(ctx: MutationCtx, userId: Id<'users'>, kind: 'made' | 'received'): Promise<void> {
+/** The slice of the member's row the milestone reads — narrow so a test can build one inline. */
+type TrialCounts = { subscriptionStatus?: string; trialInteractionsMade?: number; trialInteractionsReceived?: number }
+
+/** The slice of a subscription row `pickTrialingSubscription` and `shouldEndTrialEarly` need. */
+type TrialSubscriptionRow = { status: string; stripeSubscriptionId?: string; cancelAtPeriodEnd?: boolean }
+
+/** The slice of MutationCtx the handler touches. Same narrowing as users.setPostVisibilityHandler. */
+export interface TrialBumpCtx {
+  db: {
+    get: (id: string) => Promise<TrialCounts | null>
+    patch: (id: string, fields: Record<string, number>) => Promise<void>
+  }
+  scheduler: { runAfter: (delay: number, fn: unknown, args: Record<string, unknown>) => Promise<unknown> }
+}
+
+/**
+ * Bump one side of a trialing user's interaction counter; when their combined count first reaches
+ * the threshold, schedule the early end of their Stripe trial (billing starts now).
+ *
+ * Split out of the mutation so it can be unit-tested: the three predicates it calls were already
+ * covered, but nothing pinned the wiring between them — that the 50th interaction is the one that
+ * charges the card. `loadSubscriptions` is lazy on purpose, so the index read still happens only on
+ * that one interaction in fifty.
+ */
+export async function bumpTrialInteractionHandler(
+  ctx: TrialBumpCtx,
+  userId: string,
+  kind: 'made' | 'received',
+  loadSubscriptions: () => Promise<readonly TrialSubscriptionRow[]>
+): Promise<void> {
   const u = await ctx.db.get(userId)
   if (!u || u.subscriptionStatus !== 'trialing') return
   const made = u.trialInteractionsMade ?? 0
@@ -24,18 +68,32 @@ async function bumpTrialInteraction(ctx: MutationCtx, userId: Id<'users'>, kind:
   if (kind === 'made') await ctx.db.patch(userId, { trialInteractionsMade: made + 1 })
   else await ctx.db.patch(userId, { trialInteractionsReceived: received + 1 })
 
+  // 80% of the way: one heads-up before the plan starts, never an alarm. crossesThreshold's
+  // semantics guarantee it fires exactly once per member.
+  if (crossesThreshold(combined, 1, TRIAL_WARNING_THRESHOLD)) {
+    await ctx.scheduler.runAfter(0, internal.notifications.sendTrialNearEnd, { userId })
+  }
+
   if (crossesThreshold(combined, 1)) {
-    const sub = await ctx.db
-      .query('subscriptions')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .first()
-    if (sub?.stripeSubscriptionId) {
+    const sub = pickTrialingSubscription(await loadSubscriptions())
+    if (shouldEndTrialEarly(sub)) {
       await ctx.scheduler.runAfter(0, internal.billingNode.endTrialEarly, {
         stripeSubscriptionId: sub.stripeSubscriptionId
       })
     }
   }
 }
+
+// The Convex half: the index read stays here, where the generated types check the index name.
+const bumpTrialInteraction = (ctx: MutationCtx, userId: Id<'users'>, kind: 'made' | 'received'): Promise<void> =>
+  bumpTrialInteractionHandler(ctx as unknown as TrialBumpCtx, userId, kind, () =>
+    // NOT .first(): by_user is ordered by _creationTime, so .first() is the OLDEST row — after a
+    // cancel + re-subscribe that is the canceled subscription, and ending its trial does nothing.
+    ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .collect()
+  )
 
 // Internal query to get a post by ID
 export const getPost = internalQuery({
@@ -58,22 +116,6 @@ export const getEngageablePost = internalQuery({
     const author = await ctx.db.get(post.authorId)
     assertPostEngageable(post, viewer, author, Date.now())
     return post
-  }
-})
-
-// Append a per-user engagement record (one reaction or comment) to `userInteractions`. Feeds the
-// DSR export + a future admin dashboard. Callers wrap this best-effort so a logging failure never
-// fails the user's already-completed LinkedIn action.
-export const recordInteraction = internalMutation({
-  args: {
-    userId: v.id('users'),
-    postId: v.id('posts'),
-    kind: v.union(v.literal('reaction'), v.literal('comment')),
-    reaction: v.optional(reactionValidator),
-    comment: v.optional(v.string())
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert('userInteractions', { ...args, createdAt: Date.now() })
   }
 })
 
@@ -105,10 +147,43 @@ export const saveCommentDraft = internalMutation({
   }
 })
 
+/**
+ * Flip `interactionLimitReached` the moment a post reaches its plan cap, recompute the feed fields
+ * (the post leaves the feed) and — once per post — tell the author by email (backlog/R20). A
+ * purchase (posts.applyPurchasedFeature) re-decides the flag against the bigger cap, so a bought
+ * post can reach a second cap and get a second notice — a new event at a new number, never a
+ * repeat of the first.
+ */
+async function flipCapIfReached(
+  ctx: MutationCtx,
+  post: Doc<'posts'>,
+  likeCount: number,
+  commentCount: number
+): Promise<void> {
+  const author = await ctx.db.get(post.authorId)
+  if (!author) return
+  const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
+  // A bought featured post is measured against plan cap + its bonus (backlog/R17).
+  const cap = effectiveInteractionCap(limits.interactionsPerPost, post.interactionCapBonus)
+  // The callers already returned when the post was capped, so it's provably not-yet-reached here.
+  if (!shouldFlipInteractionLimit(likeCount, commentCount, cap, false)) return
+  // Hitting the interaction limit removes the post from the feed — refresh feed fields.
+  const feed = computeFeedFields({
+    isFeatured: post.isFeatured,
+    publishedAt: post.publishedAt,
+    authorTierRank: post.authorTierRank,
+    hidden: post.hidden,
+    interactionLimitReached: true,
+    deletedAt: post.deletedAt
+  })
+  await ctx.db.patch(post._id, { interactionLimitReached: true, ...feed })
+  await ctx.scheduler.runAfter(0, internal.notifications.sendPostCapReached, { postId: post._id })
+}
+
 // Internal mutation to increment comment count
 export const incrementCommentCount = internalMutation({
-  args: { postId: v.id('posts'), actorId: v.id('users') },
-  handler: async (ctx, { postId, actorId }) => {
+  args: { postId: v.id('posts'), actorId: v.id('users'), comment: v.string() },
+  handler: async (ctx, { postId, actorId, comment }) => {
     const post = await ctx.db.get(postId)
     if (!post) return
     // Already at the cap — never overshoot. Under concurrent engagement, OCC retries this mutation
@@ -116,46 +191,44 @@ export const incrementCommentCount = internalMutation({
     // featurePost's `if (post.isFeatured) return`). getEngageablePost gates the happy path; this
     // closes the race window.
     if (post.interactionLimitReached) return
+    const now = Date.now()
     const newCommentCount = post.commentCount + 1
     await ctx.db.patch(postId, { commentCount: newCommentCount })
+
+    // Same transaction as the counter: the log is the source for recap/history (backlog/R15).
+    await ctx.db.insert('userInteractions', {
+      userId: actorId,
+      postId,
+      authorId: post.authorId,
+      kind: 'comment',
+      comment,
+      createdAt: now
+    })
+
+    // backlog/R21 — the per-viewer state that starts the 24 h "done" window. Upsert like
+    // saveCommentDraft: the row may already hold a draft or a reaction.
+    const state = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', actorId).eq('postId', postId))
+      .unique()
+    if (state) await ctx.db.patch(state._id, { commentedAt: now })
+    else await ctx.db.insert('userPostState', { userId: actorId, postId, commentedAt: now })
 
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
 
     // Check if combined interactions have reached the author's limit
-    const author = await ctx.db.get(post.authorId)
-    if (author) {
-      const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
-      if (
-        shouldFlipInteractionLimit(
-          post.likeCount,
-          newCommentCount,
-          limits.interactionsPerPost,
-          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
-          false
-        )
-      ) {
-        // Hitting the interaction limit removes the post from the feed — refresh feed fields.
-        const feed = computeFeedFields({
-          isFeatured: post.isFeatured,
-          publishedAt: post.publishedAt,
-          authorTierRank: post.authorTierRank,
-          hidden: post.hidden,
-          interactionLimitReached: true,
-          deletedAt: post.deletedAt
-        })
-        await ctx.db.patch(postId, { interactionLimitReached: true, ...feed })
-      }
-    }
+    await flipCapIfReached(ctx, post, post.likeCount, newCommentCount)
   }
 })
 
 // Internal mutation to increment like count. Deduped: at most one reaction per user per post — a
 // repeat tap is a no-op (a LinkedIn member can only hold one reaction on a post, so we must not
-// double-count or double-bill). Returns { counted } so the caller skips the engagement log on a repeat.
+// double-count or double-bill). The dedup lives here: the engagement-log row below is written only on
+// a first tap. `counted` is returned for callers that want to distinguish a repeat tap.
 export const incrementLikeCount = internalMutation({
-  args: { postId: v.id('posts'), actorId: v.id('users') },
-  handler: async (ctx, { postId, actorId }): Promise<{ counted: boolean }> => {
+  args: { postId: v.id('posts'), actorId: v.id('users'), reaction: reactionValidator },
+  handler: async (ctx, { postId, actorId, reaction }): Promise<{ counted: boolean }> => {
     const state = await ctx.db
       .query('userPostState')
       .withIndex('by_user_and_post', q => q.eq('userId', actorId).eq('postId', postId))
@@ -175,35 +248,40 @@ export const incrementLikeCount = internalMutation({
     const newLikeCount = post.likeCount + 1
     await ctx.db.patch(postId, { likeCount: newLikeCount })
 
+    await ctx.db.insert('userInteractions', {
+      userId: actorId,
+      postId,
+      authorId: post.authorId,
+      kind: 'reaction',
+      reaction,
+      createdAt: now
+    })
+
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
 
     // Check if combined interactions have reached the author's limit
-    const author = await ctx.db.get(post.authorId)
-    if (author) {
-      const limits = await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')
-      if (
-        shouldFlipInteractionLimit(
-          newLikeCount,
-          post.commentCount,
-          limits.interactionsPerPost,
-          // The guard above already returned when the post was capped, so it's provably not-yet-reached here.
-          false
-        )
-      ) {
-        // Hitting the interaction limit removes the post from the feed — refresh feed fields.
-        const feed = computeFeedFields({
-          isFeatured: post.isFeatured,
-          publishedAt: post.publishedAt,
-          authorTierRank: post.authorTierRank,
-          hidden: post.hidden,
-          interactionLimitReached: true,
-          deletedAt: post.deletedAt
-        })
-        await ctx.db.patch(postId, { interactionLimitReached: true, ...feed })
-      }
-    }
+    await flipCapIfReached(ctx, post, newLikeCount, post.commentCount)
     return { counted: true }
+  }
+})
+
+/**
+ * backlog/R21 — "Hide now": the post leaves the viewer's feed at once instead of after 24 h.
+ * Only for a post the viewer already reacted to or commented on (there is no hide for untouched
+ * posts, and no unhide — /history keeps the record). Idempotent: a second call changes nothing.
+ */
+export const hidePost = mutation({
+  args: { sessionToken: v.string(), postId: v.id('posts') },
+  handler: async (ctx, { sessionToken, postId }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const state = await ctx.db
+      .query('userPostState')
+      .withIndex('by_user_and_post', q => q.eq('userId', user._id).eq('postId', postId))
+      .unique()
+    if (!state || !canHide(state)) throw new ConvexError('NOT_INTERACTED')
+    if (state.hiddenAt === undefined) await ctx.db.patch(state._id, { hiddenAt: Date.now() })
+    return null
   }
 })
 
@@ -238,17 +316,11 @@ export const commentOnPost = action({
     // viewer) — the same rule the feed, search and AI-draft paths use, so none can diverge.
     await ctx.runQuery(internal.interactions.getEngageablePost, { postId, viewerId: user._id })
 
-    await ctx.runMutation(internal.interactions.incrementCommentCount, { postId, actorId: user._id })
-    try {
-      await ctx.runMutation(internal.interactions.recordInteraction, {
-        userId: user._id,
-        postId,
-        kind: 'comment',
-        comment: commentText
-      })
-    } catch (e) {
-      console.error('recordInteraction (comment) failed:', e)
-    }
+    await ctx.runMutation(internal.interactions.incrementCommentCount, {
+      postId,
+      actorId: user._id,
+      comment: commentText
+    })
     return { success: true }
   }
 })
@@ -281,21 +353,109 @@ export const reactToPost = action({
 
     const { counted }: { counted: boolean } = await ctx.runMutation(internal.interactions.incrementLikeCount, {
       postId,
-      actorId: user._id
+      actorId: user._id,
+      reaction: reactionType
     })
-    // Skip the engagement log on a repeat reaction (already counted — see incrementLikeCount dedup).
-    if (counted) {
-      try {
-        await ctx.runMutation(internal.interactions.recordInteraction, {
-          userId: user._id,
-          postId,
-          kind: 'reaction',
-          reaction: reactionType
-        })
-      } catch (e) {
-        console.error('recordInteraction (reaction) failed:', e)
-      }
-    }
     return { success: true, counted }
+  }
+})
+
+// ── Recap (backlog/R15) ────────────────────────────────────────────────────────────────────────
+// `now` comes from the client floored to the hour so args are stable across renders. The current
+// window is [since, +∞) so interactions inside the partial hour count immediately; the previous
+// window is [prevSince, since). Reads are newest-first with a hard ceiling, so truncation drops the
+// oldest rows first and `truncated` tells the page.
+export const getRecap = query({
+  args: {
+    sessionToken: v.string(),
+    window: v.union(v.literal('7d'), v.literal('30d')),
+    now: v.number()
+  },
+  handler: async (ctx, { sessionToken, window, now }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const { since, prevSince, until } = windowBounds(window, now)
+
+    const made = await ctx.db
+      .query('userInteractions')
+      .withIndex('by_user', q => q.eq('userId', user._id).gte('_creationTime', prevSince))
+      .order('desc')
+      .take(RECAP_ROW_CEILING)
+    const receivedRaw = await ctx.db
+      .query('userInteractions')
+      .withIndex('by_author', q => q.eq('authorId', user._id).gte('_creationTime', prevSince))
+      .order('desc')
+      .take(RECAP_ROW_CEILING)
+    const received = excludeSelf(receivedRaw)
+
+    const tier = user.tier ?? 'starter'
+    const limits = await getPlanLimitsHelper(ctx, user._id, tier)
+
+    const recent = await ctx.db
+      .query('posts')
+      .withIndex('by_author', q => q.eq('authorId', user._id).gte('_creationTime', since))
+      .order('desc')
+      .take(RECAP_POST_CEILING)
+    const posts = recent.filter(p => p.deletedAt === undefined && !p.hidden)
+    const near = pickNearCapPost(posts, limits.interactionsPerPost)
+
+    const OPEN_END = Number.POSITIVE_INFINITY
+    return {
+      window,
+      since,
+      until,
+      made: {
+        current: countInteractions(made, since, OPEN_END),
+        previous: countInteractions(made, prevSince, since)
+      },
+      received: {
+        current: countInteractions(received, since, OPEN_END),
+        previous: countInteractions(received, prevSince, since)
+      },
+      truncated: made.length >= RECAP_ROW_CEILING || receivedRaw.length >= RECAP_ROW_CEILING,
+      plan: { tier, ...limits, nextTier: nextTier(tier) },
+      posts: posts.map(p => ({
+        id: p._id,
+        linkedinPostUrn: p.linkedinPostUrn,
+        sourceUrl: p.sourceUrl,
+        excerpt: excerpt(p.content),
+        likeCount: p.likeCount,
+        commentCount: p.commentCount,
+        isFeatured: p.isFeatured,
+        interactionLimitReached: p.interactionLimitReached === true,
+        interactionCapBonus: p.interactionCapBonus
+      })),
+      nearCapPost: near
+        ? {
+            id: near._id,
+            excerpt: excerpt(near.content),
+            total: near.likeCount + near.commentCount,
+            // backlog/R17 A1 — a bought post's own cap can exceed the plan cap; RecapPage needs the
+            // bonus to compute it, the same way the `posts` projection above already does.
+            interactionCapBonus: near.interactionCapBonus
+          }
+        : null
+    }
+  }
+})
+
+// ── History (backlog/R16) ──────────────────────────────────────────────────────────────────────
+// `since` = 0 means all time. Newest first; 20 per page from the client.
+export const listMyInteractions = query({
+  args: { sessionToken: v.string(), since: v.number(), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { sessionToken, since, paginationOpts }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const result = await ctx.db
+      .query('userInteractions')
+      .withIndex('by_user', q => q.eq('userId', user._id).gte('_creationTime', since))
+      .order('desc')
+      .paginate(paginationOpts)
+    const page: HistoryRow[] = await Promise.all(
+      result.page.map(async row => {
+        const post = await ctx.db.get(row.postId)
+        const author = post ? await ctx.db.get(post.authorId) : null
+        return toHistoryRow(row, post, author)
+      })
+    )
+    return { ...result, page }
   }
 })

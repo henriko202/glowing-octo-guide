@@ -7,7 +7,7 @@ import { computeFeedFields } from '../lib/feedRank'
 import { type ApifyFlags, isApifyPostSyncEnabled } from '../lib/apify'
 import { articleValidator } from '../lib/articleValidator'
 import { isWeeklyLimitReached } from '../lib/postLimit'
-import { hasReachedInteractionLimit } from '../lib/interactionLimit'
+import { effectiveInteractionCap, hasReachedInteractionLimit } from '../lib/interactionLimit'
 
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
@@ -187,7 +187,11 @@ export const applyEngagementCounts = internalMutation({
             cap = (await getPlanLimitsHelper(ctx, author._id, author.tier ?? 'starter')).interactionsPerPost
             capCache.set(key, cap)
           }
-          reached = hasReachedInteractionLimit(u.likeCount, u.commentCount, cap)
+          reached = hasReachedInteractionLimit(
+            u.likeCount,
+            u.commentCount,
+            effectiveInteractionCap(cap, post.interactionCapBonus)
+          )
         }
       }
       const feed = computeFeedFields({

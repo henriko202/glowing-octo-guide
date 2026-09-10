@@ -1,4 +1,5 @@
 import { ConvexError } from 'convex/values'
+import type { TFunction } from 'i18next'
 
 /**
  * Turn a Convex/client error into a short, human-readable message.
@@ -40,4 +41,20 @@ export function friendlyError(err: unknown, fallback: string): string {
     .trim()
 
   return !msg || msg === 'Server Error' ? fallback : msg
+}
+
+/**
+ * Turn a prefixed backend limit code (backlog/R08 — WEEKLY_LIMIT:<n>, FEATURED_LIMIT:<n>, same
+ * pattern as PAYMENT_REQUIRED:) into localized copy naming the number. Anything else — an
+ * already-friendly message, or a code this client doesn't recognize — passes through untouched.
+ */
+export function mapLimitError(msg: string, t: TFunction): string {
+  // Admin-set plan limits (convex/admin.ts's validateLimitArgs) only rejects values below 1 — it
+  // never enforces an integer, so postsPerWeek/featuredPerMonth can land here as e.g. "2.5". A
+  // \d+-only pattern would then fail to match and leak the raw "WEEKLY_LIMIT:2.5" code to the
+  // member instead of localized copy (F7).
+  const m = msg.match(/^(WEEKLY_LIMIT|FEATURED_LIMIT):([^:]+)$/)
+  if (!m) return msg
+  const key = m[1] === 'WEEKLY_LIMIT' ? 'errors.weeklyLimit' : 'errors.featuredLimit'
+  return t(key, { limit: Number(m[2]) })
 }

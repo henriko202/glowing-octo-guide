@@ -19,13 +19,15 @@ export default function CommentBox({
   postUrl,
   sessionToken,
   onClose,
-  gated
+  gated,
+  commented = false
 }: {
   postId: Id<'posts'>
   postUrl: string
   sessionToken: string
   onClose: () => void
   gated?: boolean
+  commented?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const [text, setText] = useState('')
@@ -84,23 +86,25 @@ export default function CommentBox({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const draft = text.trim()
-    if (!draft) return
+    if ((!draft && !commented) || (commented && savedDraft === undefined)) return
     setSubmitting(true)
     setError(null)
     // Ask for clipboard permission and wait; only confirm with a toast once the copy succeeds
     // (LinkedIn has no member API to comment on another member's post — the user pastes it there).
     let copied = false
     try {
-      await navigator.clipboard.writeText(draft)
-      copied = true
-      toast(t('comment.copiedHint'))
+      if (draft) {
+        await navigator.clipboard.writeText(draft)
+        copied = true
+        toast(t('comment.copiedHint'))
+      }
     } catch {
       // Copy blocked/denied — no toast; the draft stays in the box so it can be copied manually.
     }
     let submitted = false
     try {
       // Optimistic: record + count the engagement now; the API can't confirm the LinkedIn post.
-      await comment({ postId, commentText: draft, sessionToken })
+      if (!commented) await comment({ postId, commentText: draft, sessionToken })
       // Keep the toast + spinner on screen for a beat, THEN open LinkedIn.
       await delay(HANDOFF_DELAY_MS)
       openLinkedIn(postUrl)
@@ -118,35 +122,52 @@ export default function CommentBox({
       onSubmit={handleSubmit}
       className="border-border bg-card mt-2 rounded-xl border p-4 font-sans"
     >
-      <div className="mb-2 flex items-center gap-2">
-        <div className="w-56">
-          <VirtualizedCombobox
-            options={languageOptions}
-            value={language}
-            onChange={value => setLanguageOverride(value === '' ? AUTO_LANGUAGE : value)}
-            ariaLabel={t('comment.language')}
-            placeholder={t('comment.languageAuto')}
-          />
+      {commented ? (
+        <p className="mb-2 text-sm font-semibold">{t('comment.generatedComment')}</p>
+      ) : (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div className="w-56 max-w-full">
+            <VirtualizedCombobox
+              options={languageOptions}
+              value={language}
+              onChange={value => setLanguageOverride(value === '' ? AUTO_LANGUAGE : value)}
+              ariaLabel={t('comment.language')}
+              placeholder={t('comment.languageAuto')}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGenerate}
+            disabled={generating || gated || submitting}
+            title={gated ? t('feed.cardGate') : undefined}
+            className="cursor-pointer px-3 py-1.5 text-[13px] font-semibold"
+          >
+            {generating ? t('comment.generating') : hasDraft ? t('comment.regenerate') : t('comment.generate')}
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleGenerate}
-          disabled={generating || gated || submitting}
-          title={gated ? t('feed.cardGate') : undefined}
-          className="cursor-pointer px-3 py-1.5 text-[13px] font-semibold"
+      )}
+      {commented && savedDraft === undefined ? (
+        <p
+          role="status"
+          className="text-muted-foreground text-sm"
         >
-          {generating ? t('comment.generating') : hasDraft ? t('comment.regenerate') : t('comment.generate')}
-        </Button>
-      </div>
-      <Textarea
-        value={text}
-        onChange={e => setText(e.target.value)}
-        placeholder={t('comment.placeholder')}
-        className="min-h-[72px] resize-y text-[13px]"
-        disabled={submitting}
-        rows={3}
-      />
+          {t('comment.loadingSaved')}
+        </p>
+      ) : commented && !text ? (
+        <p className="text-muted-foreground text-sm">{t('comment.noSavedComment')}</p>
+      ) : (
+        <Textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder={t('comment.placeholder')}
+          aria-label={t(commented ? 'comment.generatedComment' : 'feed.comment')}
+          readOnly={commented}
+          className="min-h-[72px] resize-y text-[13px]"
+          disabled={submitting}
+          rows={3}
+        />
+      )}
       {error &&
         (error.startsWith('PAYMENT_REQUIRED') ? (
           <p className="text-destructive my-1 text-xs">
@@ -161,12 +182,22 @@ export default function CommentBox({
         ) : (
           <p className="text-destructive my-1 text-xs">{error}</p>
         ))}
-      <div className="mt-2 flex justify-end gap-2">
+      <div className="mt-2 flex flex-wrap justify-end gap-2">
+        {commented && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="min-h-11 cursor-pointer"
+          >
+            {t('comment.closeSaved')}
+          </Button>
+        )}
         <Button
           type="submit"
-          disabled={submitting || !text.trim() || gated}
+          disabled={submitting || (commented ? savedDraft === undefined : !text.trim()) || gated}
           title={gated ? t('feed.cardGate') : undefined}
-          className="cursor-pointer px-4 py-1.5 text-[13px] font-semibold"
+          className="min-h-11 cursor-pointer px-4 py-1.5 text-[13px] font-semibold whitespace-normal"
         >
           {submitting && (
             <Loader2
@@ -174,7 +205,7 @@ export default function CommentBox({
               aria-hidden="true"
             />
           )}
-          {submitting ? t('comment.submitting') : t('comment.submit')}
+          {submitting ? t('comment.submitting') : t(commented ? 'comment.reopenLinkedIn' : 'comment.submit')}
         </Button>
       </div>
     </form>

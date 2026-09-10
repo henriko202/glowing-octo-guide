@@ -32,3 +32,28 @@ export const ALLOWED_PRICE_IDS = new Set(Object.keys(PRICE_MAP))
 export function getTierFromPriceId(priceId: string): Tier {
   return resolveTier(PRICE_MAP, priceId)
 }
+
+/** Starter price for the downgrade portal flow (backlog/R09): annual stays annual. */
+export function starterPriceIdFor(env: Env, interval: string | undefined): string | undefined {
+  return interval === 'year' ? env.STRIPE_STARTER_ANNUAL_PRICE_ID : env.STRIPE_STARTER_PRICE_ID
+}
+
+/**
+ * The billing interval of one of our six prices. A downgrade schedule's second phase needs the
+ * TARGET price's interval for its `duration`, and the plan grid can send a monthly member to an
+ * annual price — so this cannot be read off the current subscription. `undefined` for anything that
+ * is not one of the six, which the caller turns into a refusal rather than a guess.
+ */
+export function intervalForPriceId(env: Env, priceId: string): 'month' | 'year' | undefined {
+  if (!priceId) return undefined
+  const annual = [env.STRIPE_STARTER_ANNUAL_PRICE_ID, env.STRIPE_GROWTH_ANNUAL_PRICE_ID, env.STRIPE_PRO_ANNUAL_PRICE_ID]
+  if (annual.includes(priceId)) return 'year'
+  const monthly = [env.STRIPE_STARTER_PRICE_ID, env.STRIPE_GROWTH_PRICE_ID, env.STRIPE_PRO_PRICE_ID]
+  if (monthly.includes(priceId)) return 'month'
+  return undefined
+}
+
+// backlog/R17 — the one-time $5 "Featured post" Price (Checkout mode: payment). Deliberately NOT
+// part of buildPriceMap: it maps to no tier, so it can never enter ALLOWED_PRICE_IDS or resolve
+// through getTierFromPriceId. billingNode.purchaseFeaturedPost is its only consumer.
+export const FEATURED_POST_PRICE_ID = process.env.STRIPE_FEATURED_POST_PRICE_ID

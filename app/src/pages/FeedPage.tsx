@@ -1,28 +1,39 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useAction, usePaginatedQuery, useQuery } from 'convex/react'
+import { useAction, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
 import PostCard, { type PostWithAuthor } from '../components/PostCard'
-import { buildPostUrl } from '../components/LinkedInEmbed'
-import { toast } from '../components/ui/toast'
-import { delay, HANDOFF_DELAY_MS, openLinkedIn } from '../lib/handoff'
-import CommentBox from '../components/CommentBox'
-import PostComposer from '../components/PostComposer'
-import LoadingSpinner from '../components/LoadingSpinner'
-import { FeedFilterPanel } from '../components/FeedFilterPanel'
+import { buildPostUrl } from '@/components/LinkedInEmbed'
+import { toast } from '@/components/ui/toast'
+import { delay, HANDOFF_DELAY_MS, openLinkedIn } from '@/lib/handoff'
+import CommentBox from '@/components/CommentBox'
+import PostComposer from '@/components/PostComposer'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import { FeedFilterPanel } from '@/components/FeedFilterPanel'
+import CardGateBanner, { useOwnPostState } from '@/components/CardGateBanner'
+import CardGateDialog, { type GateSource } from '@/components/CardGateDialog'
+import EmptyFeed from '@/components/EmptyFeed'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useCardGate } from '@/hooks/useCardGate'
 import { friendlyError } from '@/lib/errors'
+import { captureEvent } from '@/lib/observability/analytics'
+import { INTERACTED_TTL_MS } from '../../../convex/lib/feedHygiene'
 
 const FEED_PAGE_SIZE = 20
+// backlog/R21 — how many empty pages to auto-load before trusting that the feed is empty.
+// ponytail: 5 auto-loads (100 posts) then the manual Load more button takes over.
+const MAX_EMPTY_LOADS = 5
 
 export default function FeedPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const { gated } = useCardGate()
+  // Which control opened the gate dialog — drives its copy/analytics. PostCard reports its own
+  // source per control (react/comment/linkedin).
+  const [gateSource, setGateSource] = useState<GateSource | null>(null)
   // Cursor-paginated feed (convex/feed.ts getFeed over the by_feed_rank index). `results`
   // accumulates loaded pages; `loadMore` advances the cursor on demand.
   const { results, status, loadMore } = usePaginatedQuery(
@@ -30,6 +41,40 @@ export default function FeedPage() {
     { sessionToken },
     { initialNumItems: FEED_PAGE_SIZE }
   )
+  const feedPosts = results as unknown as PostWithAuthor[]
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const refresh = () => {
+      clearTimeout(timer)
+      const current = Date.now()
+      setNow(current)
+      const nextExpiry = feedPosts.reduce(
+        (next, post) =>
+          post.viewerState && post.viewerState.hidesAt > current ? Math.min(next, post.viewerState.hidesAt) : next,
+        Infinity
+      )
+      if (nextExpiry !== Infinity) timer = setTimeout(refresh, Math.min(60_000, nextExpiry - current))
+    }
+    // Convex queries do not invalidate when only time passes. Keep the deadline and label current.
+    refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [feedPosts])
+  const posts = feedPosts.filter(post => !post.viewerState || post.viewerState.hidesAt > now)
+  // Own-post state backs both the R04 banner (gated + hidden, feed non-empty) and the R05 empty-feed
+  // checklist/banner below — enabled whenever either could render, so a non-gated member sees the
+  // checklist's "shared a first post" step too, not only gated members.
+  const { hasHiddenPost, hasAnyPost } = useOwnPostState(gated || posts.length === 0)
+  // Backs the R05 empty-feed checklist's "reacted to two posts" step (and its trial-reachability
+  // gate, F12) — EmptyFeed only ever renders when the feed is empty, so skip this query the rest of
+  // the time instead of firing it on every feed page load (F14).
+  const progress = useQuery(api.users.getTrialProgress, sessionToken && posts.length === 0 ? { sessionToken } : 'skip')
   // Viewer profile — drives the Pro/Contact feed filter (tier gate + saved industries/countries).
   const me = useQuery(api.users.getMe, { sessionToken }) as
     | {
@@ -44,6 +89,7 @@ export default function FeedPage() {
   const filterCountries = me?.feedFilterCountries ?? []
   const filterActive = filterIndustries.length + filterCountries.length > 0
   const react = useAction(api.interactions.reactToPost)
+  const hidePost = useMutation(api.interactions.hidePost)
   const submitPost = useAction(api.posts.submitPost)
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
   const [reactingPostId, setReactingPostId] = useState<Id<'posts'> | null>(null)
@@ -53,8 +99,6 @@ export default function FeedPage() {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl: url })
   }
-
-  const posts = results as unknown as PostWithAuthor[]
 
   // ─── Virtualizer ────────────────────────────────────────────────────────────
   // We use useWindowVirtualizer so the page itself scrolls (no nested
@@ -101,6 +145,25 @@ export default function FeedPage() {
     }
   }, [virtualItems, posts.length, status])
 
+  // ─── backlog/R21: keep loading while pages come back empty ──────────────────
+  // fetchFeedPage drops posts the viewer already handled (24 h window / Hide now), so a page can
+  // come back empty while more exist. Load a few more before showing any empty state.
+  const [emptyLoads, setEmptyLoads] = useState(0)
+  const autoLoading = posts.length === 0 && status === 'CanLoadMore' && emptyLoads < MAX_EMPTY_LOADS
+  useEffect(() => {
+    // The budget covers one RUN of empty pages, so a page that comes back with posts starts it
+    // over — otherwise a session that burned all five once shows the empty state next to a "Load
+    // more" button the next time the feed legitimately empties (the viewer hides their last cards).
+    // The two cases never overlap: autoLoading already requires posts.length === 0.
+    if (posts.length === 0 && !autoLoading) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: bound the auto-load loop, and reset it on a non-empty page
+    setEmptyLoads(n => (posts.length > 0 ? 0 : n + 1))
+    if (autoLoading) loadMoreRef.current(FEED_PAGE_SIZE)
+  }, [autoLoading, posts.length])
+  // Only read while the feed is really empty — tells the R05 empty state and the R21 caught-up
+  // state apart.
+  const caughtUp = useQuery(api.feed.getCaughtUp, sessionToken && posts.length === 0 ? { sessionToken } : 'skip')
+
   // ─── Re-measure when comment box toggles ────────────────────────────────────
   const handleToggleComment = useCallback((id: Id<'posts'>) => {
     setCommentingOn(prev => (prev === id ? null : id))
@@ -116,6 +179,10 @@ export default function FeedPage() {
     <div className="mx-auto max-w-[640px] px-4 py-8 font-sans">
       <PageHeader title={t('feed.title')} />
 
+      {/* One attention point per screen: never stacks with the empty state (Task 5) or the pulsing
+          Billing nav item plus a dialog. */}
+      {gated && hasHiddenPost && posts.length > 0 && <CardGateBanner />}
+
       <PostComposer onSubmit={handlePostSubmit} />
 
       {canFilter && sessionToken && (
@@ -126,11 +193,22 @@ export default function FeedPage() {
         />
       )}
 
-      {posts.length === 0 && (
-        <p className="text-muted-foreground py-8 text-center">
-          {filterActive ? t('feed.emptyFiltered') : t('feed.empty')}
-        </p>
-      )}
+      {/* Only an exhausted feed gets an empty state. While pages can still load — the auto-load chase,
+          or its budget spent with the manual button showing — nothing sits above that button, so
+          "You're caught up" never renders next to "Load more". */}
+      {posts.length === 0 &&
+        status === 'Exhausted' &&
+        (filterActive ? (
+          <p className="text-muted-foreground py-8 text-center">{t('feed.emptyFiltered')}</p>
+        ) : (
+          <EmptyFeed
+            gated={gated}
+            hasOwnPost={hasAnyPost}
+            made={progress?.made ?? 0}
+            trialStatus={progress?.status}
+            caughtUp={caughtUp?.caughtUp ?? false}
+          />
+        ))}
 
       {/* Outer list ref used for scrollMargin calculation */}
       <div ref={listRef}>
@@ -165,6 +243,7 @@ export default function FeedPage() {
                 <div className="pb-4">
                   <PostCard
                     post={post}
+                    now={now}
                     onComment={id => handleToggleComment(id)}
                     onReact={async (id, reactionType) => {
                       setReactError(null)
@@ -189,7 +268,25 @@ export default function FeedPage() {
                       setReactingPostId(null)
                     }}
                     gated={gated}
+                    onGated={setGateSource}
                     reacting={reactingPostId === post._id}
+                    onHide={async () => {
+                      const state = post.viewerState
+                      if (!state) return
+                      try {
+                        await hidePost({ sessionToken: sessionToken ?? '', postId: post._id })
+                        // How long after the interaction they hid it — the only number R21 wants.
+                        captureEvent('post_hidden', {
+                          after: Math.round((INTERACTED_TTL_MS - (state.hidesAt - Date.now())) / 3_600_000)
+                        })
+                      } catch (err: unknown) {
+                        // NOT_INTERACTED means the viewer's row for this post is gone (an author
+                        // erasure cascade beat the tap), so the card leaves on the next feed
+                        // update either way — a raw backend code in a toast helps nobody.
+                        const msg = friendlyError(err, String(err))
+                        if (msg !== 'NOT_INTERACTED') toast(msg)
+                      }
+                    }}
                   />
                   {reactError?.postId === post._id && (
                     <p className="text-destructive px-1 pt-1 text-xs">{reactError.msg}</p>
@@ -197,6 +294,7 @@ export default function FeedPage() {
                   {isCommentOpen && (
                     <CommentBox
                       postId={post._id}
+                      commented={post.viewerState?.commented}
                       postUrl={buildPostUrl(post.linkedinPostUrn, post.sourceUrl)}
                       sessionToken={sessionToken ?? ''}
                       onClose={() => setCommentingOn(null)}
@@ -227,6 +325,12 @@ export default function FeedPage() {
           <LoadingSpinner />
         </div>
       )}
+
+      <CardGateDialog
+        open={gateSource !== null}
+        onOpenChange={open => !open && setGateSource(null)}
+        source={gateSource ?? 'react'}
+      />
     </div>
   )
 }

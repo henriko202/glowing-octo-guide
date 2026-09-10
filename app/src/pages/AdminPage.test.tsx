@@ -23,6 +23,27 @@ vi.mock('react-router-dom', () => ({
 
 import AdminPage from './AdminPage'
 
+const SURVIVAL_FIXTURE = {
+  days: 7,
+  since: 0,
+  generatedAt: 0,
+  cohort: {
+    signups: 1,
+    startedTrial: 0,
+    activated: 0,
+    medianMinutesToFirstInteraction: null,
+    returnedDay1: 0,
+    returnedDays2to7: 0,
+    trialsEnded: 0,
+    converted: 0,
+    canceled: 0,
+    activatedEligible: 1,
+    returnedDay1Eligible: 0,
+    returnedDays2to7Eligible: 0
+  },
+  payingByTier: { starter: 0, growth: 0, pro: 0, contact: 0 }
+}
+
 // Route each query by its function reference (robust to query count / order):
 //   checkIsAdmin → true, getSettings → undefined, all list* queries → []
 beforeEach(() => {
@@ -33,6 +54,7 @@ beforeEach(() => {
     const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
     if (name === 'admin:checkIsAdmin') return true as never
     if (name === 'admin:getSettings') return undefined as never
+    if (name === 'admin:survivalMetrics') return SURVIVAL_FIXTURE as never
     return [] as never
   })
 })
@@ -63,6 +85,14 @@ describe('AdminPage tabs', () => {
     render(<AdminPage />)
     expect(screen.getByText(/apify \(master\)/i)).toBeInTheDocument()
     expect(screen.getByText(/apify profile scrape/i)).toBeInTheDocument()
+  })
+
+  it('renders the Survival tab and reads ?tab=survival', () => {
+    mockSearchParams.set('tab', 'survival')
+    render(<AdminPage />)
+    expect(screen.getByRole('tab', { name: /survival/i })).toBeInTheDocument()
+    expect(screen.getByText(/paying by tier/i)).toBeInTheDocument()
+    expect(screen.queryByText(/apify post sync/i)).not.toBeInTheDocument()
   })
 })
 

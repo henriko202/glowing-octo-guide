@@ -1,5 +1,13 @@
 // convex/posts.ts
-import { action, internalQuery, mutation, query } from './_generated/server'
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  type MutationCtx,
+  query,
+  type QueryCtx
+} from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
@@ -13,10 +21,12 @@ import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPost
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { fetchWithTimeout } from './lib/fetchWithTimeout'
 import { postCreatedHidden } from './lib/access'
-import { getPlanLimitsHelper } from './lib/planLimits'
+import { DEFAULTS, getPlanLimitsHelper, type PlanLimits, type Tier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
-import { currentUtcMonthKey, isFeaturedLimitReached } from './lib/postLimit'
+import { currentUtcMonthKey, hasPermanentFeaturedEntitlement, isFeaturedLimitReached } from './lib/postLimit'
 import { hasReachedInteractionLimit } from './lib/interactionLimit'
+import { featuredPurchaseBlocker, fulfilmentAction, purchasedFeaturePatch } from './lib/featuredPurchase'
+import { writeAuditLog } from './lib/audit'
 import {
   appendMediaLinks,
   extractPostUrn,
@@ -173,6 +183,52 @@ export const getFeaturedUsage = query({
   }
 })
 
+/**
+ * Finds the tier-wide default planLimits row (userId undefined) for `tier`, mirroring
+ * getPlanLimitsHelper's contact branch in lib/planLimits.ts. The userId===undefined check is
+ * pushed into the query itself rather than run JS-side over a bounded `.take` — a contact tier
+ * with more than 20 per-user override rows sharing the by_tier index value used to be able to push
+ * the one true default row past the cap, silently falling back to DEFAULTS[tier] (F11). Split out
+ * of getTierLimits so it's unit-testable with a mock ctx (the query wrapper itself isn't callable
+ * in unit tests) — same pattern as fetchFeedPage in feed.ts.
+ */
+export async function findTierDefaultRow(ctx: QueryCtx, tier: Tier): Promise<Doc<'planLimits'> | null> {
+  const rows = await ctx.db
+    .query('planLimits')
+    .withIndex('by_tier', q => q.eq('tier', tier))
+    .filter(q => q.eq(q.field('userId'), undefined))
+    .take(20)
+  return rows[0] ?? null
+}
+
+/**
+ * Public: tier-default plan limits for every tier, keyed by tier name. Backs the
+ * "upgrade at the limit" prompts (backlog/R08) so their copy always names the
+ * DB-configured number (an admin override in PlanLimitsTab shows up immediately),
+ * never a hardcoded one. Contact's per-user overrides are per-user, not tier-wide,
+ * so this always returns the contact tier's DEFAULT row, not any member's override.
+ */
+export const getTierLimits = query({
+  args: {},
+  handler: async (ctx): Promise<Record<Tier, PlanLimits>> => {
+    const tiers: Tier[] = ['starter', 'growth', 'pro', 'contact']
+    const entries = await Promise.all(
+      tiers.map(async tier => {
+        const row = await findTierDefaultRow(ctx, tier)
+        const limits: PlanLimits = row
+          ? {
+              interactionsPerPost: row.interactionsPerPost,
+              postsPerWeek: row.postsPerWeek,
+              featuredPerMonth: row.featuredPerMonth ?? DEFAULTS[tier].featuredPerMonth
+            }
+          : DEFAULTS[tier]
+        return [tier, limits] as const
+      })
+    )
+    return Object.fromEntries(entries) as Record<Tier, PlanLimits>
+  }
+})
+
 export const submitPost = action({
   args: {
     sessionToken: v.string(),
@@ -230,9 +286,9 @@ export const submitPost = action({
         since: sevenDaysAgo
       })
       if (recentPostCount >= planLimits.postsPerWeek) {
-        throw new ConvexError(
-          `Weekly post limit reached. Your plan allows ${planLimits.postsPerWeek} post${planLimits.postsPerWeek === 1 ? '' : 's'} per week.`
-        )
+        // Prefixed code, not English prose: survives production error redaction and is
+        // localized client-side by lib/errors.ts's mapLimitError (backlog/R08).
+        throw new ConvexError(`WEEKLY_LIMIT:${planLimits.postsPerWeek}`)
       }
     }
 
@@ -488,86 +544,201 @@ export const deletePost = mutation({
  * it, a retried call would re-run the whole feature flow (including the usage increment) a second
  * time even though the post was already featured by the call it raced against — this guard is the
  * actual double-increment fix, not just an optimization. Authorized for the post's author or any
- * admin (`canModifyPost`, same as `setPostHidden`/`deletePost`). No quota refund on unfeature
- * (below) — featuring permanently consumes one monthly slot by design (product decision, backlog/B07).
+ * admin (`canModifyPost`, same as `setPostHidden`/`deletePost`). The first feature permanently
+ * assigns that allowance to this post; later unfeature/re-feature cycles reuse it.
  */
+type FeaturedToggleArgs = { sessionToken: string; postId: Id<'posts'> }
+
+export async function featurePostHandler(
+  ctx: MutationCtx,
+  { sessionToken, postId }: FeaturedToggleArgs
+): Promise<void> {
+  const user = await requireAuth(ctx, sessionToken)
+  const post = await ctx.db.get(postId)
+  if (!post) throw new ConvexError('Post not found')
+  if (!canModifyPost(user, post)) {
+    throw new ConvexError('Forbidden: you can only modify your own posts')
+  }
+  // A soft-deleted post must never be resurfaced by featuring it.
+  if (post.deletedAt !== undefined) {
+    throw new ConvexError('Post has been deleted')
+  }
+  // Idempotent no-op if already featured — see the concurrency note above.
+  if (post.isFeatured) return
+
+  // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
+  const feed = computeFeedFields({
+    isFeatured: true,
+    publishedAt: post.publishedAt,
+    authorTierRank: post.authorTierRank,
+    hidden: post.hidden,
+    interactionLimitReached: post.interactionLimitReached,
+    deletedAt: post.deletedAt
+  })
+  // A plan allowance or paid slot belongs to this post permanently. `featuredAt` survives
+  // unfeaturing, so re-featuring never checks or increments the current month's quota.
+  if (hasPermanentFeaturedEntitlement(post)) {
+    await ctx.db.patch(postId, { isFeatured: true, featuredAt: post.featuredAt ?? Date.now(), ...feed })
+    return
+  }
+
+  const tier = user.tier ?? 'starter'
+  const limits = await getPlanLimitsHelper(ctx, user._id, tier)
+  const month = currentUtcMonthKey()
+  const usageRow = await ctx.db
+    .query('featuredPostUsage')
+    .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
+    .unique()
+  const usedCount = usageRow?.usedCount ?? 0
+  if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
+    // Prefixed code, not English prose: survives production error redaction and is
+    // localized client-side by lib/errors.ts's mapLimitError (backlog/R08).
+    throw new ConvexError(`FEATURED_LIMIT:${limits.featuredPerMonth}`)
+  }
+
+  await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
+
+  if (usageRow) await ctx.db.patch(usageRow._id, { usedCount: usedCount + 1 })
+  else await ctx.db.insert('featuredPostUsage', { userId: user._id, month, usedCount: 1 })
+}
+
 export const featurePost = mutation({
   args: {
     sessionToken: v.string(),
     postId: v.id('posts')
   },
-  handler: async (ctx, { sessionToken, postId }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    const post = await ctx.db.get(postId)
-    if (!post) throw new ConvexError('Post not found')
-    if (!canModifyPost(user, post)) {
-      throw new ConvexError('Forbidden: you can only modify your own posts')
-    }
-    // A soft-deleted post must never be resurfaced by featuring it.
-    if (post.deletedAt !== undefined) {
-      throw new ConvexError('Post has been deleted')
-    }
-    // Idempotent no-op if already featured — see the concurrency note above.
-    if (post.isFeatured) return
-
-    const tier = user.tier ?? 'starter'
-    const limits = await getPlanLimitsHelper(ctx, user._id, tier)
-    const month = currentUtcMonthKey()
-    const usageRow = await ctx.db
-      .query('featuredPostUsage')
-      .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
-      .unique()
-    const usedCount = usageRow?.usedCount ?? 0
-    if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
-      throw new ConvexError(
-        `Monthly featured-post limit reached. Your plan allows ${limits.featuredPerMonth} featured post${limits.featuredPerMonth === 1 ? '' : 's'} per month.`
-      )
-    }
-
-    // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
-    const feed = computeFeedFields({
-      isFeatured: true,
-      publishedAt: post.publishedAt,
-      authorTierRank: post.authorTierRank,
-      hidden: post.hidden,
-      interactionLimitReached: post.interactionLimitReached,
-      deletedAt: post.deletedAt
-    })
-    await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
-
-    if (usageRow) await ctx.db.patch(usageRow._id, { usedCount: usedCount + 1 })
-    else await ctx.db.insert('featuredPostUsage', { userId: user._id, month, usedCount: 1 })
-  }
+  handler: featurePostHandler
 })
 
 /**
- * Reverse `featurePost`. Does NOT decrement `featuredPostUsage` — see the no-refund decision in
- * the doc comment above `featurePost`. Authorized for the post's author or any admin. Idempotent.
+ * Reverse `featurePost`. Does NOT decrement `featuredPostUsage` and retains `featuredAt` as the
+ * permanent entitlement marker. Authorized for the post's author or any admin. Idempotent.
  */
+export async function unfeaturePostHandler(
+  ctx: MutationCtx,
+  { sessionToken, postId }: FeaturedToggleArgs
+): Promise<void> {
+  const user = await requireAuth(ctx, sessionToken)
+  const post = await ctx.db.get(postId)
+  if (!post) throw new ConvexError('Post not found')
+  if (!canModifyPost(user, post)) {
+    throw new ConvexError('Forbidden: you can only modify your own posts')
+  }
+  if (!post.isFeatured) return // already unfeatured — idempotent no-op
+
+  // Unfeaturing changes feed rank — refresh the denormalized feed fields.
+  const feed = computeFeedFields({
+    isFeatured: false,
+    publishedAt: post.publishedAt,
+    authorTierRank: post.authorTierRank,
+    hidden: post.hidden,
+    interactionLimitReached: post.interactionLimitReached,
+    deletedAt: post.deletedAt
+  })
+  await ctx.db.patch(postId, { isFeatured: false, ...feed })
+  // No usedCount decrement; retained featuredAt lets this post reuse the same allowance later.
+}
+
 export const unfeaturePost = mutation({
   args: {
     sessionToken: v.string(),
     postId: v.id('posts')
   },
-  handler: async (ctx, { sessionToken, postId }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    const post = await ctx.db.get(postId)
-    if (!post) throw new ConvexError('Post not found')
-    if (!canModifyPost(user, post)) {
-      throw new ConvexError('Forbidden: you can only modify your own posts')
-    }
-    if (!post.isFeatured) return // already unfeatured — idempotent no-op
+  handler: unfeaturePostHandler
+})
 
-    // Unfeaturing changes feed rank — refresh the denormalized feed fields.
-    const feed = computeFeedFields({
-      isFeatured: false,
-      publishedAt: post.publishedAt,
-      authorTierRank: post.authorTierRank,
-      hidden: post.hidden,
-      interactionLimitReached: post.interactionLimitReached,
-      deletedAt: post.deletedAt
-    })
-    await ctx.db.patch(postId, { isFeatured: false, featuredAt: undefined, ...feed })
-    // No usedCount decrement — unfeaturing does not refund the monthly quota.
+// ── Featured post add-on (backlog/revenue/R17) ───────────────────────────────────────────────────
+
+// billingNode.purchaseFeaturedPost asks before opening Checkout. Throws the blocker's code; the
+// client shows it through friendlyError.
+export const assertFeaturedPurchasable = internalQuery({
+  args: { postId: v.id('posts'), userId: v.id('users') },
+  handler: async (ctx, { postId, userId }): Promise<null> => {
+    const [post, user] = await Promise.all([ctx.db.get(postId), ctx.db.get(userId)])
+    const blocker = featuredPurchaseBlocker(post, userId, user?.tier ?? 'starter')
+    if (blocker) throw new ConvexError(blocker)
+    return null
   }
+})
+
+type AuditDb = Parameters<typeof writeAuditLog>[0]
+
+export interface ApplyPurchasedFeatureArgs {
+  postId: string
+  checkoutSessionId: string
+  amountCents: number
+  paidAt: number
+}
+
+/**
+ * Fulfilment, called by http.ts on checkout.session.completed. `postId` is a plain string on
+ * purpose: Stripe retries a failing webhook for days, so a bad id must log and return, never fail
+ * the validator. Idempotent — a redelivered event finds `featuredPurchase` set and stops. Never
+ * touches featuredPostUsage: the purchase is outside the monthly quota by design.
+ *
+ * Extracted from the mutation below so every branch of a money path is unit-testable with a mock
+ * ctx (posts.test.ts), the same shape as users.ts's setPostVisibilityHandler.
+ */
+export async function applyPurchasedFeatureHandler(
+  ctx: MutationCtx,
+  { postId, checkoutSessionId, amountCents, paidAt }: ApplyPurchasedFeatureArgs
+): Promise<null> {
+  const id = ctx.db.normalizeId('posts', postId)
+  const post = id ? await ctx.db.get(id) : null
+  // A hard-deleted post (not merely soft-deleted) means the author ran the erasure cascade
+  // (convex/privacy/deletion.ts); by design, no audit row is written against an erased subject.
+  if (!id || !post) {
+    console.error('[posts] featured purchase for unknown post', { postId, checkoutSessionId })
+    return null
+  }
+  // Stripe redelivers checkout.session.completed: the same session id is a replay (already
+  // applied, nothing left to do); a different one is a second payment for a post that can only
+  // be featured — and billed — once.
+  const existing = post.featuredPurchase
+  const fulfilment = fulfilmentAction(existing, checkoutSessionId)
+  if (fulfilment === 'replay') return null
+  if (fulfilment === 'duplicate_payment') {
+    // Stripe already has the $5 and won't take it back on our say-so — never throw (that would
+    // just make Stripe retry this same charge forever). Log loudly and leave an audit row naming
+    // both sessions; the owner refunds the second one from there.
+    const existingCheckoutSessionId = existing!.checkoutSessionId
+    console.error('[posts] duplicate featured purchase', {
+      postId: id,
+      existingCheckoutSessionId,
+      checkoutSessionId
+    })
+    await writeAuditLog(ctx.db as unknown as AuditDb, {
+      actor: 'system',
+      action: 'post.featured_purchase_duplicate',
+      targetUserId: post.authorId,
+      metadata: JSON.stringify({ existingCheckoutSessionId, checkoutSessionId, amountCents })
+    })
+    return null
+  }
+  const author = await ctx.db.get(post.authorId)
+  const tier: Tier = author?.tier ?? 'starter'
+  const limits = await getPlanLimitsHelper(ctx, post.authorId, tier)
+  const purchase = { checkoutSessionId, amountCents, paidAt }
+  const { patch, action } = purchasedFeaturePatch({
+    post,
+    tier,
+    planCap: limits.interactionsPerPost,
+    purchase,
+    now: Date.now()
+  })
+  await ctx.db.patch(id, patch)
+  // Money moved without a member action in our app, so the row says what it bought (or why
+  // nothing was featured: the post was deleted between Checkout and the webhook).
+  await writeAuditLog(ctx.db as unknown as AuditDb, {
+    actor: 'system',
+    action,
+    targetUserId: post.authorId,
+    metadata: JSON.stringify({ postId: id, checkoutSessionId, amountCents, bonus: patch.interactionCapBonus ?? 0 })
+  })
+  return null
+}
+
+export const applyPurchasedFeature = internalMutation({
+  args: { postId: v.string(), checkoutSessionId: v.string(), amountCents: v.number(), paidAt: v.number() },
+  handler: (ctx, args): Promise<null> => applyPurchasedFeatureHandler(ctx, args)
 })

@@ -1,107 +1,102 @@
 'use client'
-import { useState } from 'react'
-import { SIGN_IN_URL } from '@/lib/links'
+import { TrialLink, useTrial } from './TrialProvider'
+import { formatPrice, planPrice } from '@/lib/trial'
 import type { Dictionary } from '@/i18n/getDictionary'
+import type { Locale } from '@/i18n/config'
 
-type PlanEntry = Dictionary['pricing']['plans'][number]
-
-const MONTHLY_PRICES: Record<string, number> = {
-  starter: 5,
-  growth: 15,
-  pro: 50
-}
-
-function priceLabel(plan: PlanEntry, annual: boolean, dict: Dictionary['pricing']) {
-  const monthly = MONTHLY_PRICES[plan.id] ?? 0
-  if (annual) {
-    const perMonth = (monthly * 10) / 12
-    const sub = dict.annualSubLabel.replace('{{perMonth}}', `$${perMonth.toFixed(2)}`)
-    return { big: `$${monthly * 10}`, period: dict.periodYear, sub }
-  }
-  return { big: `$${monthly}`, period: dict.periodMonth, sub: dict.monthlySubLabel }
-}
-
-export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
-  const [annual, setAnnual] = useState(true) // default annual
+export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; lang: Locale }) {
+  const { interval, setInterval } = useTrial()
+  const annual = interval === 'annual'
 
   return (
     <section
       id="pricing"
-      className="bg-ink px-6 py-28"
+      className="bg-ink px-6 py-16 md:py-20"
     >
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
           <p className="mb-3 text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
-          <p className="mx-auto mt-4 max-w-lg text-base text-cream/50">{dict.subheadline}</p>
+          <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-cream-muted">{dict.subheadline}</p>
 
-          {/* Annual / monthly toggle (annual default) */}
-          <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-cream/10 bg-ink-800 p-1 text-sm">
-            <button
-              onClick={() => setAnnual(true)}
-              className={`rounded-full px-4 py-1.5 transition-colors duration-300 ${annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
-            >
-              {dict.toggleAnnual} <span className="text-xs opacity-80">{dict.toggleAnnualSuffix}</span>
-            </button>
-            <button
-              onClick={() => setAnnual(false)}
-              className={`rounded-full px-4 py-1.5 transition-colors duration-300 ${!annual ? 'bg-gold text-on-gold' : 'text-cream/60 hover:text-cream'}`}
-            >
-              {dict.toggleMonthly}
-            </button>
-          </div>
+          {/* Annual is the price on the cards; monthly sits behind this text link so the yearly
+              number is what every visitor reads first (backlog/R13). The label names where it
+              goes, so it needs no aria-pressed; min-h-11 keeps a 44 px target on phones. */}
+          <button
+            type="button"
+            onClick={() => setInterval(annual ? 'monthly' : 'annual')}
+            className="mt-8 inline-flex min-h-11 items-center rounded-md px-3 text-sm text-cream-muted underline-offset-4 transition-colors duration-300 hover:text-cream hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+          >
+            {annual ? dict.seeMonthly : dict.seeAnnual}
+          </button>
         </div>
 
         <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
           {dict.plans.map(plan => {
             const highlight = plan.id === 'growth'
-            const p = priceLabel(plan, annual, dict)
+            const amount = planPrice(plan.id, interval)
+            const price = formatPrice(amount, lang)
+            const sub = annual
+              ? dict.annualSubLabel.replace('{{perMonth}}', formatPrice(amount / 12, lang, 2))
+              : dict.monthlySubLabel
             return (
               <div
                 key={plan.id}
-                className={`relative flex flex-col rounded-2xl p-7 transition-all duration-300 ${
+                className={`relative flex flex-col rounded-2xl p-7 transition-[border-color,box-shadow] duration-300 ${
                   highlight
                     ? 'border border-lnblue bg-lnblue/[0.08] shadow-[0_0_48px_rgba(0,119,181,0.2)]'
                     : 'border border-cream/[0.08] bg-ink-600 hover:border-cream/15'
                 }`}
               >
                 {highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="rounded-full bg-lnblue px-3 py-1 text-xs font-semibold tracking-wide text-on-lnblue">
+                  <div className="absolute -top-3 left-1/2 w-max max-w-[calc(100%-2rem)] -translate-x-1/2">
+                    <span className="block rounded-full bg-lnblue px-3 py-1 text-center text-xs font-semibold text-on-lnblue">
                       {dict.recommended}
                     </span>
                   </div>
                 )}
                 <div className="mb-6">
-                  <h3 className="font-display text-xl font-semibold text-cream">{plan.name}</h3>
-                  <p className="mt-1 text-sm text-cream/40">{plan.description}</p>
+                  <h3 className="text-xl font-semibold text-cream">{plan.name}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-cream-muted">{plan.description}</p>
                 </div>
                 <div className="mb-6">
-                  <span className="font-display text-4xl font-semibold text-cream">{p.big}</span>
-                  <span className="ml-1 text-sm text-cream/40">{p.period}</span>
-                  <p className="mt-2 text-xs text-gold-text">{p.sub}</p>
+                  <span className="font-display text-4xl font-semibold text-cream">{price}</span>
+                  <span className="ml-1 text-sm text-cream-muted">{annual ? dict.periodYear : dict.periodMonth}</span>
+                  <p className="mt-2 text-xs text-gold-text">{sub}</p>
                 </div>
+                {/* The one axis the three plans are compared on (backlog/R13): the number the ladder
+                    sells, in body-weight cream so it reads before the checklist. */}
+                <p className="mb-5 text-sm font-medium text-cream">{plan.axis}</p>
                 <ul className="mb-8 flex-1 space-y-2.5">
                   {plan.features.map(f => (
                     <li
                       key={f}
-                      className="flex items-start gap-2.5 text-sm text-cream/60"
+                      className="flex items-start gap-2.5 text-sm text-cream-muted"
                     >
-                      <span className="mt-0.5 flex-shrink-0 text-gold-text">✓</span>
+                      <span
+                        aria-hidden="true"
+                        className="mt-0.5 flex-shrink-0 text-gold-text"
+                      >
+                        ✓
+                      </span>
                       {f}
                     </li>
                   ))}
                 </ul>
-                <a
-                  href={`${SIGN_IN_URL}?plan=${plan.id}&interval=${annual ? 'annual' : 'monthly'}`}
-                  className={`block rounded-xl py-3 text-center text-sm font-semibold transition-all duration-300 ${
+                <TrialLink
+                  plan={plan.id}
+                  className={`block rounded-xl py-3 text-center text-sm font-semibold transition-[background-color,border-color] duration-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${
                     highlight
-                      ? 'bg-lnblue text-on-lnblue shadow-[0_0_20px_rgba(0,119,181,0.4)] hover:bg-lnblue-light'
+                      ? 'bg-lnblue text-on-lnblue shadow-[0_0_20px_rgba(0,119,181,0.4)] hover:bg-lnblue-hover'
                       : 'border border-cream/15 text-cream hover:border-cream/30 hover:bg-cream/5'
                   }`}
                 >
                   {plan.cta}
-                </a>
+                </TrialLink>
+                <p className="mt-3 text-xs leading-relaxed text-cream-muted">{dict.trialNote}</p>
+                <p className="mt-2 text-xs leading-relaxed text-cream-muted">
+                  {(annual ? dict.renewalAnnual : dict.renewalMonthly).replace('{{price}}', price)}
+                </p>
               </div>
             )
           })}
@@ -109,12 +104,17 @@ export default function Pricing({ dict }: { dict: Dictionary['pricing'] }) {
 
         {/* Trial framing + Enterprise line */}
         <div className="mt-8 space-y-3 text-center">
-          <p className="text-sm text-cream/50">{dict.trialNote}</p>
-          <p className="text-sm text-cream/40">
-            {dict.enterpriseNote} <span className="text-cream/70">{dict.enterprisePrice}</span>.{' '}
+          {/* The Enterprise floor follows the toggle, for the same reason the cards do. Quoted
+              monthly beside an annual grid it read as "$100" against Starter's "$100/yr" — the
+              anchor tier showing the cheapest number on the page, which inverts the ladder R13
+              exists to build. Same negotiated floor, quoted in the period being compared; the
+              annual form is the page's own ×10 rule (`monthlySubLabel`: 2 months free). */}
+          <p className="text-sm text-cream-muted">
+            {dict.enterpriseNote}{' '}
+            <span className="text-cream/70">{annual ? dict.enterprisePriceYear : dict.enterprisePriceMonth}</span>.{' '}
             <a
               href="mailto:contact@linkintothessi.com"
-              className="text-gold-text underline underline-offset-4 hover:text-gold-light"
+              className="text-gold-text underline underline-offset-4 hover:text-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
             >
               {dict.enterpriseCta}
             </a>

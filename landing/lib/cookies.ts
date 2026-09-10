@@ -1,6 +1,6 @@
 // landing/lib/cookies.ts
 // SSR-safe cookie I/O for the cross-site theme + language preferences.
-// Prod: NEXT_PUBLIC_COOKIE_DOMAIN='.linkintothessi.com' (shared with the app). Dev: unset (host-only).
+// Prod: NEXT_PUBLIC_COOKIE_DOMAIN='.linkintothessi.com' (shared with www.app). Dev: unset (host-only).
 const COOKIE_DOMAIN = process.env.NEXT_PUBLIC_COOKIE_DOMAIN || undefined
 
 export function getCookie(name: string): string | null {

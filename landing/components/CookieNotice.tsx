@@ -16,7 +16,11 @@ function subscribe(callback: () => void) {
 // HTML) and then re-renders with the client value, avoiding a hydration mismatch, unlike a lazy
 // useState initializer.
 function getSnapshot(): boolean {
-  return localStorage.getItem(KEY) === '1'
+  try {
+    return localStorage.getItem(KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 function getServerSnapshot(): boolean {
@@ -30,13 +34,16 @@ export default function CookieNotice({ dict, lang }: { dict: Dictionary['cookieN
   if (dismissedInStorage || dismissedNow) return null
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-cream/10 bg-ink/95 px-6 py-4 text-sm text-cream/80 backdrop-blur">
-      <div className="mx-auto flex max-w-4xl flex-col items-center gap-3 sm:flex-row">
+    <aside
+      aria-label={dict.label}
+      className="border-t border-cream/10 bg-ink-800 px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm text-cream-muted"
+    >
+      <div className="mx-auto flex max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center">
         <p className="m-0 flex-1">
           {dict.text}{' '}
           <a
             href={`/${lang}/cookies`}
-            className="text-gold-text hover:underline"
+            className="text-gold-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.learnMore}
           </a>
@@ -45,14 +52,18 @@ export default function CookieNotice({ dict, lang }: { dict: Dictionary['cookieN
         <button
           type="button"
           onClick={() => {
-            localStorage.setItem(KEY, '1')
+            try {
+              localStorage.setItem(KEY, '1')
+            } catch {
+              /* Dismiss for this visit when storage is unavailable. */
+            }
             setDismissedNow(true)
           }}
-          className="rounded-md bg-gold px-4 py-2 font-semibold text-on-gold"
+          className="min-h-11 rounded-md bg-gold px-4 py-2 font-semibold text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
         >
           {dict.dismiss}
         </button>
       </div>
-    </div>
+    </aside>
   )
 }

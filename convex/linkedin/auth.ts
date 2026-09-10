@@ -10,7 +10,10 @@ interface UpsertIndexQuery {
 }
 interface UpsertDb {
   query(table: string): {
-    withIndex(name: string, fn: (q: UpsertIndexQuery) => UpsertIndexQuery): { first(): Promise<{ _id: string } | null> }
+    withIndex(
+      name: string,
+      fn: (q: UpsertIndexQuery) => UpsertIndexQuery
+    ): { first(): Promise<{ _id: string; isBanned?: boolean } | null> }
   }
   patch(id: string, fields: Record<string, unknown>): Promise<void>
   insert(table: string, doc: Record<string, unknown>): Promise<string>
@@ -25,6 +28,8 @@ export interface UpsertUserArgs {
   refreshToken?: string // LinkedIn standard OAuth may omit refresh_token
   tokenExpiresAt: number
   email?: string
+  /** backlog/R19 — the inviter's code from ?ref=; honoured on insert only, after verification. */
+  referredByCode?: string
 }
 
 // Plain handler function — used by the registered mutation and testable in isolation
@@ -53,6 +58,19 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     return existing._id
   }
 
+  // backlog/R19 — attribution is insert-only: an existing member who opens a friend's link is not
+  // "invited", and a code that matches no member (typo, deleted inviter) is dropped, never stored.
+  let referredByCode: string | undefined
+  if (args.referredByCode) {
+    const inviter = await db
+      .query('users')
+      .withIndex('by_invite_code', q => q.eq('inviteCode', args.referredByCode))
+      .first()
+    // A banned member's link mints nothing: the longer trial and the "invited you" line on Billing
+    // would otherwise keep working for an account moderation has already closed.
+    if (inviter && !inviter.isBanned) referredByCode = args.referredByCode
+  }
+
   return await db.insert('users', {
     // SECURITY: isAdmin is intentionally excluded — only settable via direct DB edit
     linkedinId: args.linkedinId,
@@ -65,6 +83,7 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     linkedinRefreshToken: args.refreshToken,
     tokenExpiresAt: args.tokenExpiresAt,
     email: args.email,
+    referredByCode,
     lastLoginAt: Date.now(),
     acknowledgedPolicyVersion: POLICY_VERSION,
     createdAt: Date.now()
@@ -81,7 +100,8 @@ export const upsertUser = internalMutation({
     accessToken: v.string(),
     refreshToken: v.optional(v.string()), // optional — LinkedIn may not return it
     tokenExpiresAt: v.number(),
-    email: v.optional(v.string())
+    email: v.optional(v.string()),
+    referredByCode: v.optional(v.string())
   },
   handler: async (ctx, args) => upsertUserHandler(ctx.db as unknown as UpsertDb, args as UpsertUserArgs)
 })

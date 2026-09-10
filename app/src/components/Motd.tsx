@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import MarkdownView from './MarkdownView'
 import Modal from './Modal'
 
@@ -54,14 +55,14 @@ export default function Motd() {
             className="text-foreground text-sm leading-relaxed"
           />
         </div>
-        <div className="mt-5 flex justify-end">
+        <DialogFooter className="mt-5">
           <Button
             type="button"
             onClick={dismiss}
           >
             {t('motd.ok')}
           </Button>
-        </div>
+        </DialogFooter>
       </Modal>
     )
   }

@@ -110,20 +110,22 @@ export const createOAuthState = internalMutation({
   args: {
     state: v.string(),
     plan: v.optional(v.string()),
-    interval: v.optional(v.string())
+    interval: v.optional(v.string()),
+    ref: v.optional(v.string())
   },
-  handler: async (ctx, { state, plan, interval }) => {
+  handler: async (ctx, { state, plan, interval, ref }) => {
     await ctx.db.insert('oauthStates', {
       state,
       expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
       plan,
-      interval
+      interval,
+      ref
     })
   }
 })
 
 /** Validates the state and deletes it (single-use).
- * Returns { valid: true, plan?, interval? } on success, or { valid: false } if invalid/expired.
+ * Returns { valid: true, plan?, interval?, ref? } on success, or { valid: false } if invalid/expired.
  */
 export const validateAndConsumeOAuthState = internalMutation({
   args: { state: v.string() },
@@ -137,10 +139,11 @@ export const validateAndConsumeOAuthState = internalMutation({
     // Read plan/interval BEFORE deleting (single-use token)
     const plan = record.plan
     const interval = record.interval
+    const ref = record.ref
     await ctx.db.delete(record._id)
 
     if (record.expiresAt < Date.now()) return { valid: false }
-    return { valid: true, plan, interval }
+    return { valid: true, plan, interval, ref }
   }
 })
 

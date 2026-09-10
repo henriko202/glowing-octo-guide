@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { assertPostEngageable, buildFeedFilter, fetchFeedPage, isAuthorFeedEligible, toFeedAuthor } from './feed'
 import { computeFeedFields } from './lib/feedRank'
+import { INTERACTED_TTL_MS } from './lib/feedHygiene'
 import type { Doc, Id } from './_generated/dataModel'
 
 const NOW = 1_000_000
@@ -17,19 +18,51 @@ const post = (id: string, authorId: string, over: Record<string, unknown> = {}) 
     visibilityCountries: [] as string[],
     isFeatured: false,
     publishedAt: 1,
+    likeCount: 0,
+    commentCount: 0,
     ...over
   }) as unknown as Doc<'posts'>
 
 const user = (id: string, over: Record<string, unknown> = {}) =>
   ({ _id: id, name: id, subscriptionStatus: 'active', ...over }) as unknown as Doc<'users'>
 
-// Minimal QueryCtx mock: the by_feed_rank page walk returns `page`, and get() resolves authors.
-function feedCtx(page: Doc<'posts'>[], authors: Doc<'users'>[]) {
+// Minimal QueryCtx mock: the by_feed_rank page walk returns `page`, get() resolves authors, and the
+// per-post userPostState lookup (backlog/R21) answers from `states` keyed by post id.
+function feedCtx(
+  page: Doc<'posts'>[],
+  authors: Doc<'users'>[],
+  states: Record<string, unknown> = {},
+  limits: Array<{ tier: string; userId?: string; interactionsPerPost: number }> = []
+) {
   const byId = new Map(authors.map(a => [a._id, a]))
   return {
     db: {
-      query: () => ({
-        withIndex: () => ({ order: () => ({ paginate: async () => ({ page, isDone: true, continueCursor: 'END' }) }) })
+      query: (table: string) => ({
+        withIndex: (_name: string, fn?: (q: any) => any) => {
+          if (table === 'planLimits') {
+            let matches = limits
+            fn?.({
+              eq: (field: 'tier' | 'userId', value: string) => {
+                matches = limits.filter(row => row[field] === value)
+                return null
+              }
+            })
+            return { unique: async () => matches[0] ?? null, take: async (n: number) => matches.slice(0, n) }
+          }
+          if (table === 'userPostState') {
+            let postId = ''
+            fn?.({
+              eq: (_field: string, _value: string) => ({
+                eq: (_f2: string, v2: string) => {
+                  postId = v2
+                  return null
+                }
+              })
+            })
+            return { unique: async () => states[postId] ?? null }
+          }
+          return { order: () => ({ paginate: async () => ({ page, isDone: true, continueCursor: 'END' }) }) }
+        }
       }),
       get: async (id: Id<'users'>) => byId.get(id) ?? null
     }
@@ -40,6 +73,89 @@ const opts = (filter: ReturnType<typeof buildFeedFilter>) => ({
   paginationOpts: { numItems: 50, cursor: null },
   filter,
   now: NOW
+})
+
+describe('fetchFeedPage author interaction cap', () => {
+  const filter = buildFeedFilter({ tier: 'starter' })
+  const author = user('author', { tier: 'growth' })
+
+  it.each([false, undefined])('excludes 80 reactions at cap 50 with stored flag %s', async interactionLimitReached => {
+    const result = await fetchFeedPage(
+      feedCtx([post('over', 'author', { likeCount: 80, interactionLimitReached, inFeed: true })], [author]),
+      user('viewer', { tier: 'pro' }),
+      opts(filter)
+    )
+    expect(result.page).toEqual([])
+  })
+
+  it('excludes counts equal to the cap and counts reactions plus comments', async () => {
+    const result = await fetchFeedPage(
+      feedCtx(
+        [
+          post('equal', 'author', { likeCount: 50 }),
+          post('combined', 'author', { likeCount: 40, commentCount: 10 }),
+          post('under', 'author', { likeCount: 40, commentCount: 9 })
+        ],
+        [author]
+      ),
+      user('viewer', { tier: 'pro' }),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['under'])
+  })
+
+  it('uses the author cap even when the viewer has a lower cap', async () => {
+    const result = await fetchFeedPage(
+      feedCtx([post('under', 'author', { likeCount: 49 })], [author]),
+      user('viewer', { tier: 'starter' }),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['under'])
+  })
+
+  it('uses current database tier limits rather than hardcoded defaults', async () => {
+    const result = await fetchFeedPage(
+      feedCtx([post('over', 'author', { likeCount: 40 })], [author], {}, [{ tier: 'growth', interactionsPerPost: 30 }]),
+      user('viewer'),
+      opts(filter)
+    )
+    expect(result.page).toEqual([])
+  })
+
+  it('uses a contact author override before the tier default', async () => {
+    const result = await fetchFeedPage(
+      feedCtx(
+        [post('over', 'author', { likeCount: 80 }), post('under', 'author', { likeCount: 49 })],
+        [user('author', { tier: 'contact' })],
+        {},
+        [
+          { tier: 'contact', interactionsPerPost: 200 },
+          { tier: 'contact', userId: 'author', interactionsPerPost: 50 }
+        ]
+      ),
+      user('viewer'),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['under'])
+  })
+
+  it('includes purchased bonus in the cap without reviving previously capped posts', async () => {
+    const result = await fetchFeedPage(
+      feedCtx(
+        [
+          post('bonus', 'author', { likeCount: 80, interactionCapBonus: 50 }),
+          post('bonus-full', 'author', { likeCount: 100, interactionCapBonus: 50 }),
+          post('sticky', 'author', { likeCount: 20, interactionLimitReached: true, inFeed: true })
+        ],
+        [author]
+      ),
+      user('viewer'),
+      opts(filter)
+    )
+    expect(result.page.map(p => p._id)).toEqual(['bonus'])
+    expect(result.isDone).toBe(true)
+    expect(result.continueCursor).toBe('END')
+  })
 })
 
 describe('buildFeedFilter', () => {
@@ -399,5 +515,35 @@ describe('fetchFeedPage — seeded feed-state parity', () => {
     for (const kept of ['zara-banned', 'elena-lapsed', 'tom-deleting']) {
       expect(staged).toContain(kept)
     }
+  })
+})
+
+describe('fetchFeedPage — per-viewer hygiene (R21)', () => {
+  const viewer = user('viewer', { tier: 'starter' })
+  const author = user('a1', { subscriptionStatus: 'active' })
+  const page = [post('p1', 'a1'), post('p2', 'a1'), post('p3', 'a1'), post('p4', 'a1')]
+  const filter = buildFeedFilter({ tier: 'starter' })
+
+  it('attaches viewerState and drops posts that are hidden or past the 24 h window', async () => {
+    const ctx = feedCtx(page, [author], {
+      p1: { reactedAt: NOW - 1000 },
+      p2: { reactedAt: NOW - INTERACTED_TTL_MS - 1 },
+      p3: { commentedAt: NOW - 1000, hiddenAt: NOW - 500 }
+    })
+    const result = await fetchFeedPage(ctx, viewer, opts(filter))
+    expect(result.page.map(p => p._id)).toEqual(['p1', 'p4'])
+    expect(result.page[0].viewerState).toEqual({
+      reacted: true,
+      commented: false,
+      hidesAt: NOW - 1000 + INTERACTED_TTL_MS
+    })
+    expect(result.page[1].viewerState).toBeNull()
+  })
+
+  it('treats a row that only holds a comment draft as untouched', async () => {
+    const ctx = feedCtx([post('p1', 'a1')], [author], { p1: { commentDraft: 'hello' } })
+    const result = await fetchFeedPage(ctx, viewer, opts(filter))
+    expect(result.page).toHaveLength(1)
+    expect(result.page[0].viewerState).toBeNull()
   })
 })

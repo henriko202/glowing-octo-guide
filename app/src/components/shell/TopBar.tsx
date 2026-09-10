@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { Menu, Search } from 'lucide-react'
+import { useTrialProgress } from '../../hooks/useTrialProgress'
 import LanguageMenu from './LanguageMenu'
 import ThemeToggle from './ThemeToggle'
 
@@ -25,7 +27,8 @@ export default function TopBar({
   onOpenSidebar: () => void
   onOpenSearch: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const { isTrialing, progress } = useTrialProgress()
 
   return (
     <header className="border-border bg-background sticky top-0 z-30 flex h-14 items-center gap-2 border-b px-3 sm:px-4">
@@ -57,6 +60,26 @@ export default function TopBar({
           <span className="flex self-center pt-0.5">K</span>
         </kbd>
       </button>
+
+      {/* The sidebar's trial card is a drawer away (closed by default) below lg — this compact
+          pill carries the same X/50 meter on every page until the drawer is open. */}
+      {isTrialing && progress != null && (
+        <Link
+          to="/billing"
+          title={
+            progress.trialEndsAt
+              ? t('shell.trialStartsAt', {
+                  threshold: progress.threshold,
+                  date: new Date(progress.trialEndsAt).toLocaleDateString(i18n.language)
+                })
+              : undefined
+          }
+          aria-label={t('shell.trialPillAriaLabel', { combined: progress.combined, threshold: progress.threshold })}
+          className="border-border bg-accent text-accent-foreground hover:bg-accent/80 flex h-8 shrink-0 items-center rounded-full border px-2.5 text-xs font-semibold lg:hidden"
+        >
+          {t('shell.trialPill', { combined: progress.combined, threshold: progress.threshold })}
+        </Link>
+      )}
 
       <LanguageMenu />
       <ThemeToggle />

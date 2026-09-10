@@ -16,6 +16,15 @@ export default defineSchema({
     location: v.optional(v.string()),
     // Scraped LinkedIn primary-locale language code (e.g. "en"). Drives the UI i18n seed only.
     primaryLocale: v.optional(v.string()),
+    // The UI language the member last checked out in ('en' | 'pt' | 'es'). Written by
+    // billingNode.createCheckoutSession and read by the billing mailers — the member's UI language
+    // choice otherwise lives only in a browser cookie the backend never sees. Distinct from
+    // primaryLocale (the scraped LinkedIn locale, which only seeds the initial UI language).
+    language: v.optional(v.string()),
+    // One-shot billing notice key, rendered as a dismissible banner on /billing (currently only
+    // 'duplicate_canceled'). Set by the duplicate-subscription webhook, cleared by
+    // users.clearBillingNotice. Absent ⇒ no notice. A voided subscription is never silent.
+    billingNotice: v.optional(v.string()),
     // Default language for AI-generated comments: an ISO 639-1 code or 'auto'. Absent ⇒ 'auto'.
     // Validated against convex/lib/languages.ts in setCommentLanguage. Distinct from primaryLocale
     // (which only seeds the UI i18n language, not what the AI writes comments in).
@@ -90,6 +99,11 @@ export default defineSchema({
     // When the first-post onboarding step was resolved — set once, either by submitting any post
     // (server-side in posts.submitPost) or by skipping the prompt. Unset ⇒ show FirstPostPromptScreen.
     firstPostPromptedAt: v.optional(v.number()),
+    // backlog/R19 — the member's own invite code (minted on first visit to Settings › Invite, never
+    // reissued: shared links must keep working) and the code they joined through (stamped at insert
+    // only, after verifying it belongs to a member — see linkedin/auth.upsertUserHandler).
+    inviteCode: v.optional(v.string()),
+    referredByCode: v.optional(v.string()),
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
@@ -106,6 +120,9 @@ export default defineSchema({
     // Because flagging a dormant user SETS deletionScheduledAt, that row immediately leaves
     // the dormancy range — so the retention cron can self-reschedule without re-reading it.
     .index('by_deletion_and_last_login', ['deletionScheduledAt', 'lastLoginAt'])
+    // backlog/R19 — inviter lookup (getMe's gift line, upsert verification) + the "N joined" count.
+    .index('by_invite_code', ['inviteCode'])
+    .index('by_referred_by_code', ['referredByCode'])
     // Full-text people search for the ⌘K command palette (convex/search.ts). Results are
     // projected through toSearchPerson (safe display fields only — never tokens/PII).
     .searchIndex('search_name', { searchField: 'name' }),
@@ -133,6 +150,14 @@ export default defineSchema({
     // Set to true when likeCount + commentCount >= the author's interactionsPerPost
     // plan limit. Optional so existing posts without this field remain valid.
     interactionLimitReached: v.optional(v.boolean()),
+    // backlog/R17 — a bought featured post counts against planCap + this bonus (FEATURED_CAP_BONUS
+    // for the author's tier at fulfilment). Absent on every other post.
+    interactionCapBonus: v.optional(v.number()),
+    // backlog/R17 — the one-time Stripe Checkout that featured this post. Present ⇒ bought once:
+    // re-featuring is free (featurePost skips the monthly quota) and a redelivered webhook is a no-op.
+    featuredPurchase: v.optional(
+      v.object({ checkoutSessionId: v.string(), amountCents: v.number(), paidAt: v.number() })
+    ),
     // Original URL submitted by the user — stored so we can link back correctly
     // without reconstructing URNs (activity IDs ≠ ugcPost IDs across LinkedIn namespaces).
     // Absent for cron-synced posts (those use urnToLinkedInUrl fallback).
@@ -176,7 +201,32 @@ export default defineSchema({
     stripeSubscriptionId: v.string(),
     tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')),
     status: v.string(),
-    currentPeriodEnd: v.optional(v.number())
+    currentPeriodEnd: v.optional(v.number()),
+    // Price snapshot from the Stripe webhook payload (items.data[0].price), so a billing email can
+    // state the exact amount without a second Stripe call and without a hardcoded price table that
+    // drifts the day pricing changes. Minor units, e.g. 15000 + 'usd' + 'year'.
+    priceAmount: v.optional(v.number()),
+    priceCurrency: v.optional(v.string()),
+    priceInterval: v.optional(v.string()),
+    // Mirrors Stripe's cancel_at_period_end. Stripe keeps status 'trialing' after a member
+    // cancels mid-trial, so this is the only signal that tells the trial mailers not to
+    // promise a charge that will never happen.
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    // backlog/B07 — a cross-tier downgrade is SCHEDULED, never prorated: our own Stripe subscription
+    // schedule swaps the item price at current_period_end with proration_behavior 'none'. These two
+    // mirror that pending swap so the billing page can show "Starter from <date>" and offer an undo.
+    // Stripe stays the source of truth (the actions read sub.schedule); this is a mirror, cleared by
+    // the webhook once the swap applies or the schedule is released. Never 'pro' — nothing sits above
+    // it on a Stripe-synced row, since contact is admin-assigned and has no price.
+    pendingTier: v.optional(v.union(v.literal('starter'), v.literal('growth'))),
+    pendingAt: v.optional(v.number()),
+    // Stripe's own `created` (ms). The duplicate-subscription guard voids the NEWEST live row by
+    // this stamp, never by webhook arrival order, which Stripe does not guarantee.
+    stripeCreated: v.optional(v.number()),
+    // Stripe `created` (ms) of the newest webhook EVENT applied to this row. Stripe does not deliver
+    // events in order: syncUserSubscription and markPastDue skip an event older than this stamp, so
+    // it can never rewind status (or re-fire the trial-converted email). See lib/trialMilestone.
+    lastEventAt: v.optional(v.number())
   })
     .index('by_user', ['userId'])
     .index('by_stripe_id', ['stripeSubscriptionId']),
@@ -222,7 +272,9 @@ export default defineSchema({
     state: v.string(),
     expiresAt: v.number(),
     plan: v.optional(v.string()),
-    interval: v.optional(v.string())
+    interval: v.optional(v.string()),
+    // backlog/R19 — the inviter's code from the landing's ?ref=, carried through the OAuth round-trip.
+    ref: v.optional(v.string())
   })
     .index('by_state', ['state'])
     // Indexed range for the expired-OAuth-state cleanup cron — replaces a full-table .filter() scan.
@@ -310,7 +362,8 @@ export default defineSchema({
       v.literal('praise'),
       v.literal('question'),
       v.literal('suggestion'),
-      v.literal('other')
+      v.literal('other'),
+      v.literal('cancellation')
     ),
     message: v.string(),
     status: v.union(v.literal('new'), v.literal('responded'), v.literal('archived')),
@@ -343,21 +396,27 @@ export default defineSchema({
     updatedAt: v.number()
   }).index('by_enabled_and_created', ['enabled', 'createdAt']),
 
-  // Per-user engagement log: one row per reaction or comment the user made on a post. Powers the
-  // DSR export (user data request) and a future admin dashboard. Distinct from the aggregate
-  // posts.likeCount/commentCount. `reaction` is set when kind==='reaction'; `comment` when 'comment'.
+  // Per-user engagement log: one row per reaction or comment the user made on a post, written in
+  // the SAME transaction as the post counter bump (interactions.ts incrementLikeCount /
+  // incrementCommentCount) so counts and log never drift. Powers the recap + history pages, the
+  // DSR export and the trial-conversion email. `authorId` is the post's author at write time (rows
+  // written before 2026-09-07 lack it and are ignored by "received" counts).
+  // `reaction` is set when kind==='reaction'; `comment` when 'comment'.
   userInteractions: defineTable({
     userId: v.id('users'),
     postId: v.id('posts'),
+    authorId: v.optional(v.id('users')),
     kind: v.union(v.literal('reaction'), v.literal('comment')),
     reaction: v.optional(reactionValidator),
     comment: v.optional(v.string()),
     createdAt: v.number()
   })
-    .index('by_user', ['userId']) // DSR export + a user's activity
+    .index('by_user', ['userId']) // DSR export + a user's activity + history page
     // Locate rows referencing a given post so account erasure can delete OTHER users' interactions
     // on the deleted user's posts (they aren't caught by the by_user drain). See privacy/deletion.ts.
-    .index('by_post', ['postId']),
+    .index('by_post', ['postId'])
+    // "Received" side of the recap: everything anyone did on this author's posts.
+    .index('by_author', ['authorId']),
 
   // Per-(user, post) engagement state. One lazily-created row per user+post — distinct from the
   // append-only userInteractions LOG above. Holds CURRENT state: `reactedAt` (set on the user's
@@ -369,6 +428,11 @@ export default defineSchema({
     userId: v.id('users'),
     postId: v.id('posts'),
     reactedAt: v.optional(v.number()),
+    // backlog/R21 — set when the viewer records a comment; with reactedAt it starts the 24 h window
+    // after which the post leaves THIS viewer's feed. Never read by counts, caps or the author.
+    commentedAt: v.optional(v.number()),
+    // backlog/R21 — "Hide now": the post leaves this viewer's feed at once. No unhide (history has it).
+    hiddenAt: v.optional(v.number()),
     commentDraft: v.optional(v.string())
   })
     .index('by_user_and_post', ['userId', 'postId'])

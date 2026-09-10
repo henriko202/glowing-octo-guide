@@ -7,9 +7,13 @@
     "privacy": "Privacidade e dados",
     "signOut": "Sair",
     "openMenu": "Abrir menu do usuário",
-    "groups": { "main": "Principal", "manage": "Gerenciar" },
+    "groups": {
+      "main": "Principal",
+      "manage": "Gerenciar"
+    },
     "primary": "Navegação principal",
-    "viewSsi": "Ver seu SSI no LinkedIn"
+    "recap": "Resumo",
+    "history": "Histórico"
   },
   "shell": {
     "search": "Pesquisar publicações, pessoas",
@@ -24,31 +28,62 @@
     "theme": "Alternar tema",
     "profile": "Perfil e configurações",
     "openSidebar": "Abrir navegação",
-    "skipToContent": "Pular para o conteúdo"
-  },
-  "login": {
-    "title": "Link Into The SSI",
-    "tagline": "Aumente seu SSI no LinkedIn interagindo com a sua comunidade.",
-    "signInButton": "Entrar com LinkedIn"
+    "skipToContent": "Pular para o conteúdo",
+    "trialGoal": "Seu plano {{plan}} começa quando você atingir {{threshold}} interações ou em {{date}}.",
+    "trialGoalNoDate": "Seu plano {{plan}} começa quando você atingir {{threshold}} interações.",
+    "trialStartsAt": "Seu plano começa em {{threshold}} interações ou em {{date}}.",
+    "trialNearEnd": "Faltam {{remaining}} interações para o plano {{plan}} começar.",
+    "trialMadeReceived": "feitas {{made}} · recebidas {{received}}",
+    "trialPill": "{{combined}}/{{threshold}}",
+    "trialPillAriaLabel": "Progresso do teste: {{combined}} de {{threshold}} interações"
   },
   "onboarding": {
     "firstPost": {
       "title": "Compartilhe sua melhor publicação recente",
-      "intro": "Adicione uma das suas publicações do LinkedIn para dar vida ao seu feed e permitir que outras pessoas interajam com ela. Você pode adicionar mais quando quiser.",
+      "intro": "Adicione uma das suas publicações do LinkedIn para que ela apareça no feed e outras pessoas possam interagir. Você pode adicionar mais quando quiser.",
       "skip": "Faço isso mais tarde"
     }
   },
   "feed": {
     "title": "Seu feed",
     "loading": "Carregando feed...",
-    "empty": "Ainda não há publicações. Convide colegas para entrar no Link Into The SSI!",
+    "emptyTitle": "Seu feed se preenche conforme os membros publicam",
+    "emptyBody": "As publicações dos membros aparecem aqui conforme eles compartilham. A sua pode ser a primeira.",
+    "emptyBodyPosted": "Ainda não há outras publicações. Convide um colega do seu setor ou volte mais tarde.",
+    "emptyCta": "Compartilhe sua primeira publicação",
     "loadMore": "Carregar mais",
     "featured": "★ Destacada",
     "like": "Gostei",
     "comment": "Comentar",
     "cardGate": "Adicione uma forma de pagamento na página de Assinatura para começar a interagir.",
+    "cardGateTitle": "Mostre suas publicações no feed e contabilize interações",
+    "cardGateBody": "Durante o período de teste, suas publicações aparecem no feed, e as reações e os comentários entram no total de interações.",
+    "cardGateCta": "Começar teste grátis",
+    "cardGateLater": "Agora não",
+    "cardGateCost": "Cartão necessário. Grátis até {{threshold}} interações feitas ou recebidas, registradas no app, ou por até {{days}} dias, o que ocorrer primeiro. Depois, seu plano começa. Cancele quando quiser.",
+    "hiddenPostBanner": "Sua primeira publicação está salva e oculta até você iniciar seu teste.",
+    "cardGateBodyPastDue": "Seu último pagamento não foi concluído. Atualize sua forma de pagamento para que suas publicações voltem a aparecer no feed.",
+    "cardGatePastDueCta": "Atualizar forma de pagamento",
+    "hiddenPostBannerPastDue": "Sua publicação fica oculta até você atualizar sua forma de pagamento.",
+    "cardGateBodyNoTrial": "Suas publicações aparecem no feed, e as reações e os comentários entram no total de interações.",
+    "hiddenPostBannerNoTrial": "Sua primeira publicação está salva e oculta até você assinar.",
+    "cardGatePriceNoTrial": "O plano {{plan}} custa {{monthly}} ou {{annual}}.",
     "viewOnLinkedIn": "Ver no LinkedIn ↗",
     "emptyFiltered": "Nenhuma publicação corresponde ao seu filtro. Ajuste-o ou limpe-o para ver mais.",
+    "doneReacted": "Você reagiu",
+    "doneCommented": "Você comentou",
+    "doneBoth": "Você reagiu e comentou",
+    "leavesIn": "Sai do seu feed em {{hours}} h",
+    "hideNow": "Ocultar agora",
+    "caughtUpTitle": "Você está em dia",
+    "caughtUpBody": "As publicações que você curtiu ou comentou saem depois de 24 horas. Novas publicações aparecem conforme os membros compartilham.",
+    "inviteLink": "Convidar um colega",
+    "checklist": {
+      "title": "Primeiros passos",
+      "signedIn": "Você entrou com o LinkedIn",
+      "firstPost": "Compartilhe uma publicação",
+      "reactTwice": "Reaja a duas publicações"
+    },
     "filter": {
       "toggle": "Filtrar feed",
       "note": "Mostrar apenas publicações dos setores e países que você escolher. Deixe vazio para ver todos.",
@@ -60,7 +95,8 @@
       "clear": "Limpar filtros",
       "selectPlaceholder": "Selecionar…",
       "noResults": "Sem resultados."
-    }
+    },
+    "viewGeneratedComment": "Ver comentário gerado"
   },
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mês",
@@ -68,14 +104,15 @@
     "featuredPillHint": "Neste mês",
     "feature": "Destacar",
     "unfeature": "Remover destaque",
+    "unfeatureConfirmTitle": "Remover o destaque desta publicação?",
+    "unfeatureConfirm": "Isso remove a publicação da posição de destaque. Você pode destacá-la novamente mais tarde sem usar outro benefício do plano nem pagar de novo.",
     "featureLimitReached": "Limite mensal de destaques atingido",
     "today": "Hoje",
     "daysAgo_one": "há {{count}} dia",
     "daysAgo_other": "há {{count}} dias",
     "tierPlan": "Plano {{tier}}",
     "weeklyUsageHint": "Nos últimos 7 dias",
-    "weeklyUsage": "{{used}} de {{limit}} publicações esta semana",
-    "weeklyLimitReached": "Limite semanal atingido",
+    "weeklyUsage": "{{used}} de {{limit}} publicações nos últimos 7 dias",
     "heading": "Suas publicações ({{count}})",
     "emptyState": "Compartilhe sua primeira publicação usando o campo acima ↑",
     "hiddenFromFeed": "Oculta do feed",
@@ -85,15 +122,28 @@
     "delete": "Excluir",
     "deleteConfirm": "Excluir esta publicação? Ela será removida do feed e de Minhas publicações. Ainda vai contar para o seu limite semanal de publicações.",
     "updateError": "Não foi possível atualizar a publicação.",
-    "deleteError": "Não foi possível excluir a publicação."
+    "deleteError": "Não foi possível excluir a publicação.",
+    "interactionCapBadge": "Atingiu {{limit}} interações e saiu do feed",
+    "buyFeatured": "Destacar por {{price}}",
+    "buyFeaturedRoom": "Aumentar limite por {{price}}",
+    "buyFeaturedHint": "Compra única para esta publicação. Aumenta o limite para {{newCap}} interações. Não há reembolso se você remover o destaque.",
+    "buyFeaturedTrial": "Cobrado hoje, separado do seu período de teste.",
+    "buyFeaturedCapped": "Atingiu {{cap}} e saiu do feed. Comprar espaço para {{newCap}} traz a publicação de volta ao topo.",
+    "featuredPaidBadge": "Em destaque · pago · limite {{cap}}",
+    "featuredPaidToast": "Pagamento confirmado. Estamos aumentando o limite desta publicação para {{newCap}} interações.",
+    "confirmingPayment": "Confirmando seu pagamento…",
+    "postAddedBuy": "Publicação adicionada. Destaque esta publicação por {{price}} abaixo.",
+    "postAddedFeature": "Publicação adicionada. Destaque esta publicação abaixo.",
+    "buyFeaturedError": "Não foi possível iniciar essa compra. Atualize a página e tente de novo.",
+    "featuredCappedTitle": "Esta publicação atingiu o limite de interações. Destacada, ela não volta ao feed."
   },
   "composer": {
     "shareLabel": "Compartilhar uma publicação",
     "placeholder": "https://www.linkedin.com/posts/your-name_…",
     "hint": "Cole o link da sua publicação do LinkedIn",
     "submitting": "Enviando…",
-    "submit": "Enviar →",
-    "submitError": "Falha ao enviar a publicação"
+    "submit": "Adicionar publicação →",
+    "submitError": "Não foi possível adicionar a publicação. Tente novamente."
   },
   "reactions": {
     "react": "Reagir",
@@ -116,7 +166,12 @@
     "generating": "Gerando…",
     "language": "Idioma do comentário",
     "languageAuto": "Automático — idioma da publicação",
-    "generateError": "Não foi possível gerar um comentário. Tente novamente."
+    "generateError": "Não foi possível gerar um comentário. Tente novamente.",
+    "generatedComment": "Comentário gerado",
+    "loadingSaved": "Carregando comentário salvo…",
+    "noSavedComment": "Nenhum comentário gerado foi salvo para esta publicação.",
+    "reopenLinkedIn": "Comentar no LinkedIn novamente",
+    "closeSaved": "Fechar"
   },
   "settings": {
     "title": "Configurações",
@@ -138,7 +193,7 @@
     "refreshing": "Atualizando…",
     "profileNote": "Edite seu setor e país abaixo.",
     "visibility": "Quem pode ver suas publicações",
-    "visibilityNote": "Restrinja quais setores e países podem ver suas publicações no feed. Deixe vazio para mostrar a todos.",
+    "visibilityNote": "Limite a visibilidade a pessoas dos setores e países selecionados. Deixe vazio para mostrar suas publicações a todos.",
     "feedFilter": "O que você vê no seu feed",
     "feedFilterNote": "Mostrar apenas publicações destes setores e países. Deixe vazio para ver publicações de todos.",
     "visibilityIndustries": "Setores",
@@ -146,19 +201,30 @@
     "visibilityAddIndustry": "Adicionar um setor…",
     "visibilityAddCountry": "Adicionar um país…",
     "visibilityRemove": "Remover {{label}}",
-    "upgradePrompt": "Faça upgrade para o Pro para controlar quem vê suas publicações.",
     "aiComments": "Comentários com IA",
     "aiCommentsNote": "Idioma padrão dos comentários gerados por IA. Você pode alterá-lo em cada comentário.",
-    "commentLanguage": "Idioma padrão do comentário"
+    "commentLanguage": "Idioma padrão do comentário",
+    "inviteTitle": "Convidar um colega",
+    "inviteBody": "Convide um colega do seu setor para trazer mais publicações relevantes ao feed. Ele recebe um teste grátis por até {{days}} dias em vez de {{base}} dias.",
+    "inviteLinkLabel": "Seu link de convite",
+    "inviteCopy": "Copiar link",
+    "inviteCopied": "Link copiado",
+    "inviteCopyManual": "Não é possível copiar automaticamente aqui. O link está selecionado; copie-o manualmente.",
+    "inviteJoined_one": "{{count}} membro entrou pelo seu link",
+    "inviteJoined_other": "{{count}} membros entraram pelo seu link",
+    "inviteJoinedMany": "Mais de 100 membros entraram pelo seu link",
+    "inviteNone": "Ninguém entrou por ele ainda.",
+    "inviteError": "Não foi possível criar seu link de convite. Atualize a página e tente de novo."
   },
   "billing": {
     "title": "Assinatura",
     "currentPlan": "Plano atual",
     "trial": "(período de teste)",
-    "upgrade": "Fazer upgrade para {{plan}}",
     "currentPlanLabel": "Plano atual",
     "contact": "Fale conosco",
-    "enterprise": "Precisa de mais? Fale conosco para planos empresariais personalizados.",
+    "enterprise": "Precisa de limites maiores? Fale conosco sobre o plano Custom.",
+    "featuredAddon": "Adicional avulso de {{price}} · fixe uma publicação no topo até {{newCap}} reações e comentários",
+    "featuredAddonCta": "Escolher uma publicação",
     "subscriptionInfo": "Sua assinatura",
     "status": "Status",
     "nextBilling": "Próxima data de cobrança",
@@ -167,67 +233,116 @@
     "accessUntil": "Acesso até {{date}}",
     "cancelPending": "Sua assinatura não será renovada.",
     "renewal": "Renovação",
+    "pendingChange": "Mudança de plano",
+    "pendingFrom": "{{plan}} a partir de {{date}}",
+    "pendingKeep": "Manter {{plan}}",
+    "pendingKept": "Seu plano continua como está.",
+    "pendingUntil": "Você fica no {{plan}} até lá.",
+    "pendingScheduled": "Você muda para {{plan}} no fim do seu período.",
+    "pendingUndoFirst": "Desfaça sua mudança agendada primeiro.",
+    "pendingResumeFirst": "Retome seu plano primeiro.",
     "manageSubscription": "Gerenciar assinatura",
     "freeTrial": "Período de teste gratuito",
     "daysRemaining_one": "{{count}} dia restante",
     "daysRemaining_other": "{{count}} dias restantes",
     "expiredBanner": "Sua assinatura terminou. Escolha um plano abaixo para continuar.",
     "none": "Nenhum",
-    "noActivePlan": "Sem plano ativo",
-    "trialBanner": "Você está no teste gratuito do Growth. Vamos cobrar quando você atingir 50 interações ou após 7 dias, o que vier primeiro.",
+    "trialBanner": "Você está em um teste grátis do {{plan}}. Seu plano começa ao atingir {{threshold}} interações ou em {{date}}, o que vier primeiro.",
+    "trialBannerNoDate": "Você está em um teste grátis do {{plan}}. Seu plano começa ao atingir {{threshold}} interações ou depois de {{days}} dias, o que vier primeiro.",
     "trialProgress": "{{combined}} / {{threshold}} interações",
-    "ssiLink": "Ver seu SSI no LinkedIn",
-    "whatYouLlMiss": "No Starter você perde o feed filtrado por setor, cai de 50 para 25 interações por publicação e de 2 para 1 publicação por semana.",
-    "startTrialCta": "Comece seu teste gratuito de 7 dias no {{plan}}",
-    "trialCtaNote": "Depois {{price}} · cancele quando quiser. Vamos cobrar quando você atingir 50 interações ou após 7 dias, o que vier primeiro.",
-    "trialIncludes": "Acesso completo ao {{plan}} durante seu teste. A comparação de planos aparece assim que você começar.",
-    "comparisonNote": "Compare os planos após seu teste — faça upgrade, downgrade ou cancele quando quiser.",
-    "newUserLead": "Escolha um plano abaixo — o Growth é o melhor custo-benefício.",
-    "newUserTrialNote": "Todos os planos começam com um teste gratuito de 7 dias · cancele quando quiser.",
-    "recommended": "Recomendado",
+    "trialNoSwitch": "Indisponível durante seu período de teste",
+    "whatYouLlMiss": "O Starter inclui 25 interações por publicação e 1 publicação por semana, em vez de 50 e 2 no Growth, e não inclui filtro por setor.",
+    "newUserLead": "O Growth filtra o feed por setor e país e aumenta os limites das suas publicações.",
+    "newUserTrialNote": "Cartão necessário. Grátis até {{threshold}} interações feitas ou recebidas, registradas no app, ou por até {{days}} dias, o que ocorrer primeiro. Cancele quando quiser.",
+    "noTrialNote": "Você já usou seu período de teste grátis. A cobrança começa quando você assinar. Cancele quando quiser.",
+    "recommended": "Melhor para um feed direcionado",
+    "selected": "Sua escolha",
     "annual": "Anual · 2 meses grátis",
     "monthly": "Mensal",
     "checkoutFailed": "Falha no checkout: {{error}}",
     "portalFailed": "Falha ao abrir o portal: {{error}}",
     "customPrice": "Personalizado",
+    "switchPlan": "Mudar para {{plan}}",
+    "startTrialCta": "Começar teste do {{plan}}",
+    "noTrialCta": "Assinar o {{plan}}",
+    "seeAllPlans": "Ver todos os planos",
+    "hideAllPlans": "Ocultar os outros planos",
+    "chosenPlanLead": "Você escolheu o {{plan}} no site. Comece o teste grátis abaixo.",
+    "noTrialChosenPlanLead": "Você escolheu o {{plan}} no site. A cobrança começa assim que você assinar abaixo.",
+    "giftFrom": "{{name}} convidou você, então seu teste pode durar até {{days}} dias em vez de {{base}} dias.",
+    "alreadySubscribed": "Você já tem um plano. Gerencie pelo portal de cobrança.",
+    "nearThresholdBanner": "Faltam {{remaining}} interações para seu plano começar · {{plan}}, {{price}}",
+    "duplicateCanceledNotice": "Uma assinatura duplicada foi criada por engano e cancelamos na hora. Você não foi cobrado por ela.",
+    "dismiss": "Dispensar",
+    "successTitle": "Tudo pronto.",
+    "successBody": "Seu teste grátis do {{plan}} já está ativo.",
+    "successBodyActive": "Seu plano {{plan}} já está ativo.",
+    "successPostLive": "Sua primeira publicação já está no feed.",
+    "successOutcome": "Abra o feed e participe da sua primeira conversa relevante no LinkedIn.",
+    "successCta": "Encontrar publicação",
+    "successStay": "Ficar aqui",
+    "activating": "Ativando seu teste…",
+    "activatingPlan": "Ativando seu plano…",
+    "activatingTimeout": "Seu pagamento foi processado; seu plano vai aparecer aqui em instantes.",
+    "switching": "Mudando seu plano para {{plan}}…",
+    "switched": "Agora você está no {{plan}}.",
+    "switchTimeout": "A troca de plano foi confirmada; ela vai aparecer aqui em instantes.",
+    "cancel": {
+      "link": "Cancelar plano",
+      "title": "Antes de sair",
+      "trialBody": "Você não será cobrado. Seu teste termina em {{date}} e suas publicações saem do feed nessa data.",
+      "trialBodyNoDate": "Você não será cobrado. Suas publicações saem do feed quando o teste terminar.",
+      "body_one": "Sua publicação sai do feed em {{date}}. Nos últimos 30 dias ela recebeu {{received}} reações e comentários.",
+      "body_other": "Suas {{count}} publicações saem do feed em {{date}}. Nos últimos 30 dias elas receberam {{received}} reações e comentários.",
+      "bodyNoPosts": "Seu plano termina em {{date}}. Nos últimos 30 dias suas publicações receberam {{received}} reações e comentários.",
+      "bodyNoDate": "Suas publicações saem do feed no fim do período de cobrança. Nos últimos 30 dias elas receberam {{received}} reações e comentários.",
+      "alternative": "Mude para o Starter em {{date}} por {{price}}. Limite semanal de publicações: {{posts}}. Cada publicação fica no feed até {{interactions}} reações e comentários. O filtro por setor será removido.",
+      "alternativeNoDate": "Mude para o Starter no fim do período atual por {{price}}. Limite semanal de publicações: {{posts}}. Cada publicação fica no feed até {{interactions}} reações e comentários. O filtro por setor será removido.",
+      "alternativeCta": "Agendar Starter",
+      "question": "O que teria feito você ficar?",
+      "questionPlaceholder": "Opcional. Uma linha basta.",
+      "keep": "Manter meu plano",
+      "continue": "Continuar e cancelar",
+      "resume": "Retomar plano",
+      "postsLeave": "Suas publicações saem do feed em {{date}}.",
+      "resumed": "Seu plano continua.",
+      "resumeFailed": "Não foi possível retomar seu plano: {{error}}."
+    },
     "plans": {
       "starter": {
         "name": "Starter",
-        "description": "Comece e interaja",
+        "description": "Para compartilhar publicações e navegar pelo feed completo",
         "features": [
+          "As publicações ficam no feed até 25 reações e comentários",
           "Veja o feed completo em tempo real",
-          "Comente e reaja com IA",
-          "25 interações contadas por publicação",
-          "1 publicação no feed / semana"
-        ],
-        "cta": "Iniciar período de teste"
+          "Rascunhos de comentário e sugestões de reação com IA",
+          "1 publicação no feed por semana"
+        ]
       },
       "growth": {
         "name": "Growth",
-        "description": "Feed direcionado para resultados mais rápidos",
+        "description": "Para um feed filtrado por setor e país",
         "features": [
+          "As publicações ficam no feed até 50 reações e comentários",
           "Feed filtrado por setor + país",
           "Tudo do Starter",
-          "50 interações contadas por publicação",
-          "2 publicações no feed / semana"
-        ],
-        "cta": "Obter Growth"
+          "2 publicações no feed por semana"
+        ]
       },
       "pro": {
         "name": "Pro",
-        "description": "Visibilidade máxima e controle total",
+        "description": "Para filtros personalizados e controle de visibilidade no feed",
         "features": [
+          "As publicações ficam no feed até 200 reações e comentários",
           "Filtros personalizados de setor + país",
-          "Controle quem vê suas publicações",
+          "Controle quem vê suas publicações no feed compartilhado",
           "Tudo do Growth",
-          "200 interações contadas por publicação",
-          "5 publicações no feed / semana"
-        ],
-        "cta": "Obter Pro"
+          "5 publicações no feed por semana"
+        ]
       },
       "contact": {
-        "name": "Empresa",
-        "description": "Personalizado para equipes e agências",
+        "name": "Custom",
+        "description": "Personalizado para um volume maior de uso",
         "cta": "Fale conosco"
       }
     }
@@ -256,8 +371,8 @@
     "submitting": "Enviando…",
     "cancel": "Cancelar",
     "close": "Fechar",
-    "thanks": "Obrigado! Recebemos seu feedback.",
-    "error": "Algo deu errado. Tente novamente."
+    "thanks": "Agradecemos! Recebemos seu feedback.",
+    "error": "Não foi possível enviar seu feedback. Tente novamente."
   },
   "motd": {
     "dismiss": "Dispensar",
@@ -310,7 +425,7 @@
       "title": "Atualizamos nossa Política de Privacidade",
       "body": "Fizemos alterações em como tratamos seus dados. Revise e confirme para continuar.",
       "readPolicy": "Ler a política",
-      "acknowledge": "Eu confirmo"
+      "acknowledge": "Estou ciente"
     }
   },
   "bannedScreen": {
@@ -330,5 +445,61 @@
   },
   "linkedInEmbed": {
     "title": "Publicação do LinkedIn"
+  },
+  "upgrade": {
+    "weeklyPosts": "Você atingiu o limite semanal de {{used}} publicações do seu plano. O {{nextPlan}} oferece {{next}} por semana, cada uma podendo receber até {{interactions}} interações.",
+    "featured": "Você usou todas as publicações em destaque deste mês. O {{nextPlan}} oferece {{next}} por mês.",
+    "interactionCap": "Esta publicação saiu do feed depois de atingir o limite de interações. No {{nextPlan}}, suas próximas publicações recebem até {{next}} cada uma.",
+    "interactionCapNear": "Sua publicação está em {{total}} de {{cap}} interações. No {{nextPlan}} ela continua acumulando até {{next}}.",
+    "visibility": "Escolher quem vê suas publicações é um recurso do plano {{nextPlan}}.",
+    "cta": "Mudar para o {{nextPlan}}",
+    "proContact": "Precisa de mais do que o Pro oferece? Fale conosco sobre o plano Custom.",
+    "contactCustom": "Seu plano já tem um limite personalizado. Fale conosco para ajustá-lo.",
+    "featuredAddon": "Ou faça uma compra avulsa de {{price}} para destacar uma publicação."
+  },
+  "recap": {
+    "title": "Resumo",
+    "lead": "Veja as reações e os comentários que você fez e recebeu, além do uso do seu plano.",
+    "window": {
+      "7d": "Últimos 7 dias",
+      "30d": "Últimos 30 dias",
+      "all": "Desde o início"
+    },
+    "made": "Você fez",
+    "received": "Suas publicações receberam",
+    "reactionsCount_one": "{{count}} reação",
+    "reactionsCount_other": "{{count}} reações",
+    "commentsCount_one": "{{count}} comentário",
+    "commentsCount_other": "{{count}} comentários",
+    "postsCount_one": "em {{count}} publicação",
+    "postsCount_other": "em {{count}} publicações",
+    "delta": "{{delta}} em relação aos {{days}} dias anteriores",
+    "celebrate": "Mais do que nos {{days}} dias anteriores. Continue assim.",
+    "truncated": "Mostrando suas {{count}} interações mais recentes.",
+    "planUsage": "Uso do plano",
+    "postUsage": "{{total}} de {{cap}} interações",
+    "noPosts": "Nenhuma publicação adicionada neste período. As publicações que você compartilha aparecem aqui com a contagem de interações.",
+    "emptyTitle": "Nada registrado nos últimos {{days}} dias",
+    "emptyBody": "Sua primeira reação ou comentário no feed aparece aqui, junto com o que suas publicações recebem.",
+    "emptyCta": "Ir para o feed",
+    "honest": "Este resumo inclui apenas as interações registradas no aplicativo; ele não consulta nem estima seu SSI.",
+    "salesNav": "Consulte seu SSI no Sales Navigator:",
+    "seeAll": "Ver todas as interações",
+    "inviteLine": "Convide um colega do seu setor para trazer mais publicações relevantes ao feed. Ele receberá um teste grátis por até {{days}} dias."
+  },
+  "history": {
+    "title": "Histórico",
+    "lead": "Cada reação e comentário que você registrou aqui.",
+    "commented": "Comentou",
+    "by": "de {{name}}",
+    "removed": "Publicação removida",
+    "showMore": "Mostrar mais",
+    "showLess": "Mostrar menos",
+    "empty": "Nenhuma interação neste período.",
+    "emptyCta": "Ir para o feed"
+  },
+  "errors": {
+    "weeklyLimit": "Você atingiu o limite semanal de {{limit}} publicações.",
+    "featuredLimit": "Você atingiu o limite mensal de {{limit}} publicações em destaque."
   }
 }

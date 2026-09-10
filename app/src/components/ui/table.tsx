@@ -1,6 +1,6 @@
 import * as React from 'react'
 
-import {cn} from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 /**
  * Semantic table primitives (shadcn-style). Real `<table>`/`<thead>`/`<tbody>`/`<tr>`/`<th>`/`<td>`
@@ -50,7 +50,7 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
   return (
     <th
       className={cn(
-        'bg-muted text-muted-foreground px-4 py-2 text-left align-middle text-[11px] font-semibold uppercase tracking-wide',
+        'bg-muted text-muted-foreground px-4 py-2 text-left align-middle text-[11px] font-semibold tracking-wide uppercase',
         className
       )}
       {...props}

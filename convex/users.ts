@@ -7,7 +7,8 @@ import { isValidCountry, isValidIndustry } from './lib/profileOptions'
 import { isValidCommentLanguage } from './lib/languages'
 import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
 import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
-import { TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
+import { isNearThreshold, TRIAL_INTERACTION_THRESHOLD, trialDaysFor, trialEligible } from './lib/trialMilestone'
+import { firstName, generateInviteCode } from './lib/invite'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -78,7 +79,10 @@ export function toSafeMe(user: Doc<'users'>) {
   /* eslint-disable @typescript-eslint/no-unused-vars -- destructure-and-discard sensitive fields */
   const { linkedinAccessToken, linkedinRefreshToken, stripeCustomerId, bannedBy, bannedAt, isAdmin, ...safeUser } = user
   /* eslint-enable @typescript-eslint/no-unused-vars */
-  return isAdmin ? { ...safeUser, isAdmin: true as const } : safeUser
+  // backlog/R19 — the trial the member would get at checkout (7, or 14 when invited); the gate
+  // screens and Billing render "{{days}}-day trial" from it instead of a hard-coded 7.
+  const trialDays = trialDaysFor(user)
+  return isAdmin ? { ...safeUser, trialDays, isAdmin: true as const } : { ...safeUser, trialDays }
 }
 
 /** Cap for the user-editable headline field; mirrored by the Settings input's maxLength. */
@@ -173,7 +177,31 @@ export const getMe = query({
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken)
     if (!user) return null
-    return toSafeMe(user)
+    // backlog/R19 — Billing's gift line names who invited them. One indexed point read, only for a
+    // referred member; only the inviter's first name crosses to the client. Always the same shape,
+    // so `me?.inviterName` types cleanly on the client.
+    const code = user.referredByCode
+    const inviter = code
+      ? await ctx.db
+          .query('users')
+          .withIndex('by_invite_code', q => q.eq('inviteCode', code))
+          .first()
+      : null
+    // Whether checkout would actually grant a trial. Billing must not promise one it will not get:
+    // billingNode.createCheckoutSession keys the trial on the subscription-row COUNT, so any status
+    // guess the client makes is wrong somewhere — 'canceled' misses a member whose Stripe
+    // subscription went incomplete/paused (toSubscriptionStatus maps those to 'none' with the row
+    // already inserted) and one an admin set back to 'none'. The rule is "no row, ever", so one row
+    // answers it: take(1) keeps the most-subscribed query in the app on a bounded read.
+    const subscriptions = await ctx.db
+      .query('subscriptions')
+      .withIndex('by_user', q => q.eq('userId', user._id))
+      .take(1)
+    return {
+      ...toSafeMe(user),
+      inviterName: inviter ? firstName(inviter.name) : undefined,
+      trialEligible: trialEligible(subscriptions.length)
+    }
   }
 })
 
@@ -194,9 +222,49 @@ export const getTrialProgress = query({
       combined,
       threshold: TRIAL_INTERACTION_THRESHOLD,
       reached: combined >= TRIAL_INTERACTION_THRESHOLD,
+      nearThreshold: isNearThreshold(combined),
       status: user.subscriptionStatus,
       trialEndsAt: user.trialEndsAt
     }
+  }
+})
+
+// backlog/R19 — mints the member's invite code on their first visit to Settings › Invite. Codes are
+// never reissued: links people already shared must keep working. Idempotent after the first call.
+export const getOrCreateInviteCode = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    if (user.inviteCode) return user.inviteCode
+    // 36^8 codes — a collision is a one-in-billions event. One retry, then surface it.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const code = generateInviteCode()
+      const taken = await ctx.db
+        .query('users')
+        .withIndex('by_invite_code', q => q.eq('inviteCode', code))
+        .first()
+      if (taken) continue
+      await ctx.db.patch(user._id, { inviteCode: code })
+      return code
+    }
+    throw new ConvexError('INVITE_CODE_RETRY')
+  }
+})
+
+// backlog/R19 — Settings › Invite: the code (null until minted) and how many members joined through
+// it. Bounded: the count stops at 101 and the UI shows "100+".
+export const getInviteSummary = query({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await resolveSession(ctx, sessionToken)
+    if (!user) return null
+    const code = user.inviteCode
+    if (!code) return { inviteCode: null, joined: 0 }
+    const rows = await ctx.db
+      .query('users')
+      .withIndex('by_referred_by_code', q => q.eq('referredByCode', code))
+      .take(101)
+    return { inviteCode: code, joined: rows.length }
   }
 })
 
@@ -236,7 +304,17 @@ export const getSubscriptionInfo = query({
         stripeSubscriptionId: activeSub.stripeSubscriptionId,
         // Renewal/access-end instant for the billing page — from our own subscriptions row
         // (the component doesn't store it). Undefined only if our row hasn't caught up yet.
-        currentPeriodEnd: ourSub?.currentPeriodEnd
+        currentPeriodEnd: ourSub?.currentPeriodEnd,
+        // The interval Stripe will actually bill on, off the webhook price snapshot. The page's
+        // own `billingInterval` toggle is seeded from this but browser-local and clickable, so it
+        // must never be used to tell a member what they are about to be charged.
+        priceInterval: ourSub?.priceInterval,
+        priceAmount: ourSub?.priceAmount,
+        priceCurrency: ourSub?.priceCurrency,
+        // backlog/B07 — the pending cross-tier downgrade, for the billing card's "Starter from
+        // <date>" cell and its Keep button. Absent ⇒ nothing is scheduled.
+        pendingTier: ourSub?.pendingTier,
+        pendingAt: ourSub?.pendingAt
       }
     }
 
@@ -246,8 +324,38 @@ export const getSubscriptionInfo = query({
       status: user.subscriptionStatus ?? 'trialing',
       cancelAtPeriodEnd: false,
       stripeSubscriptionId: null,
-      currentPeriodEnd: undefined
+      currentPeriodEnd: undefined,
+      priceInterval: undefined,
+      priceAmount: undefined,
+      priceCurrency: undefined,
+      pendingTier: undefined,
+      pendingAt: undefined
     }
+  }
+})
+
+/** Records the language the member checked out in, so billing emails reach them in it. */
+export const setLanguage = internalMutation({
+  args: { userId: v.id('users'), language: v.string() },
+  handler: async (ctx, { userId, language }) => {
+    await ctx.db.patch(userId, { language })
+  }
+})
+
+/** Raises a one-shot billing notice banner (see schema: users.billingNotice). */
+export const setBillingNotice = internalMutation({
+  args: { userId: v.id('users'), notice: v.string() },
+  handler: async (ctx, { userId, notice }) => {
+    await ctx.db.patch(userId, { billingNotice: notice })
+  }
+})
+
+/** Dismisses the billing notice banner. Public: the owner clears their own. */
+export const clearBillingNotice = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await ctx.db.patch(user._id, { billingNotice: undefined })
   }
 })
 

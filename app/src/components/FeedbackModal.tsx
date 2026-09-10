@@ -4,6 +4,7 @@ import { useMutation } from 'convex/react'
 import { api } from '../convex'
 import Modal from './Modal'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { friendlyError } from '@/lib/errors'
 
@@ -66,7 +67,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
         <div>
           <h2 className="text-foreground text-base font-semibold">{t('feedback.title')}</h2>
 
-          <p className="text-muted-foreground mt-3 text-[11px] font-semibold uppercase tracking-wide">
+          <p className="text-muted-foreground mt-3 text-[11px] font-semibold tracking-wide uppercase">
             {t('feedback.categoryLabel')}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -88,7 +89,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <label className="mt-4 flex flex-col gap-1">
-            <span className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+            <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
               {t('feedback.messageLabel')}
             </span>
             <Textarea
@@ -106,7 +107,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
 
           {error && <p className="text-destructive mt-2 text-xs">{error}</p>}
 
-          <div className="mt-4 flex justify-end gap-2">
+          <DialogFooter className="mt-4">
             <Button
               type="button"
               variant="outline"
@@ -121,7 +122,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
             >
               {submitting ? t('feedback.submitting') : t('feedback.submit')}
             </Button>
-          </div>
+          </DialogFooter>
         </div>
       )}
     </Modal>

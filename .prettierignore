@@ -6,6 +6,12 @@ pnpm-lock.yaml
 .agents/
 .junie/
 .windsurf/
-AGENTS.md
-CLAUDE.md
 docs/
+
+# Build output (gitignored, but Prettier does not read .gitignore)
+landing/.open-next/
+
+# Prose is hand-maintained: its tables are aligned for the DISPLAY width of ✓ ✗ —,
+# which Prettier re-pads by codepoint count and thereby misaligns. Same reason as docs/.
+plans/
+*.md

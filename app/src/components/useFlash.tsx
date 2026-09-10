@@ -45,7 +45,7 @@ export function Flash({ flash, onDismiss }: { flash: FlashState; onDismiss: () =
       className={`mb-4 flex items-start justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
         isError
           ? 'border-destructive/30 bg-destructive/10 text-destructive'
-          : 'border-[color:var(--success-foreground)]/30 bg-success text-success-foreground'
+          : 'bg-success text-success-foreground border-[color:var(--success-foreground)]/30'
       }`}
     >
       <span>{flash.msg}</span>

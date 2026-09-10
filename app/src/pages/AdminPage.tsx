@@ -7,13 +7,14 @@ import PlanLimitsTab from '../components/PlanLimitsTab'
 import UsersTab from '../components/UsersTab'
 import FeedbackTab from '../components/FeedbackTab'
 import MotdTab from '../components/MotdTab'
+import SurvivalTab from '../components/SurvivalTab'
 import { Flash, useFlash } from '../components/useFlash'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Button } from '../components/ui/button'
 import { friendlyError } from '@/lib/errors'
 
-type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd'
+type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd' | 'survival'
 
 export default function AdminPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -121,12 +122,14 @@ export default function AdminPage() {
         value={tab}
         onValueChange={handleTabChange}
       >
-        <TabsList>
+        {/* Six triggers overflow a phone viewport; the list scrolls sideways instead of wrapping. */}
+        <TabsList className="overflow-x-auto">
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="planLimits">Plan Limits</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
           <TabsTrigger value="motd">MOTD</TabsTrigger>
+          <TabsTrigger value="survival">Survival</TabsTrigger>
         </TabsList>
 
         {/* Settings tab */}
@@ -288,6 +291,14 @@ export default function AdminPage() {
         {/* MOTD tab */}
         <TabsContent value="motd">
           <MotdTab
+            sessionToken={sessionToken}
+            isAdmin={isAdmin}
+          />
+        </TabsContent>
+
+        {/* Survival tab (backlog/R18) */}
+        <TabsContent value="survival">
+          <SurvivalTab
             sessionToken={sessionToken}
             isAdmin={isAdmin}
           />

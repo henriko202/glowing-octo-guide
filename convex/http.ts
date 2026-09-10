@@ -5,8 +5,10 @@ import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
-import { getTierFromPriceId } from './lib/stripePrices'
+import { eventCreatedMs, syncArgs } from './stripe'
 import { scrubError } from './lib/scrubError'
+import { isInviteCode } from './lib/invite'
+import { isFeaturedPostCheckout } from './lib/featuredPurchase'
 
 const http = httpRouter()
 
@@ -27,9 +29,13 @@ http.route({
     const VALID_INTERVALS = new Set(['monthly', 'annual'])
     const plan = rawPlan !== undefined && VALID_PLANS.has(rawPlan) ? rawPlan : undefined
     const interval = rawInterval !== undefined && VALID_INTERVALS.has(rawInterval) ? rawInterval : undefined
+    // backlog/R19 — the inviter's code from the landing's ?ref=. Shape-checked here; whether it
+    // belongs to a member is checked at upsert, where an unknown code is dropped.
+    const rawRef = reqUrl.searchParams.get('ref')
+    const ref = isInviteCode(rawRef) ? rawRef : undefined
 
     // Persist state server-side before redirecting — validated on callback (CSRF protection).
-    await ctx.runMutation(internal.sessions.createOAuthState, { state, plan, interval })
+    await ctx.runMutation(internal.sessions.createOAuthState, { state, plan, interval, ref })
     const url = buildAuthUrl(state)
     return new Response(null, { status: 302, headers: { Location: url } })
   })
@@ -92,7 +98,8 @@ http.route({
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         tokenExpiresAt,
-        email: userInfo.email
+        email: userInfo.email,
+        referredByCode: oauthState.ref
       })
 
       // Issue a cryptographically random session token — never expose the raw userId.
@@ -128,7 +135,8 @@ http.route({
 // ─── Stripe Webhooks (via @convex-dev/stripe component) ─────────────────────
 // The component auto-syncs customers, subscriptions, payments, and invoices.
 // Custom handlers below keep our app's users + subscriptions tables in sync.
-// getTierFromPriceId is imported from ./lib/stripePrices (single source of truth).
+// `syncArgs` (payload → syncUserSubscription's args) lives in ./stripe so it can be unit-tested:
+// this file registers its routes at module scope and cannot be imported by a test.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
 type StripeEvent = any
@@ -137,28 +145,22 @@ registerRoutes(http, components.stripe, {
   webhookPath: '/stripe/webhook',
   events: {
     'customer.subscription.created': async (ctx: StripeEvent, event: StripeEvent) => {
-      const sub = event.data.object
-      const priceId = sub.items?.data?.[0]?.price?.id ?? ''
-      await ctx.runMutation(internal.stripe.syncUserSubscription, {
-        stripeCustomerId: String(sub.customer),
-        stripeSubscriptionId: sub.id,
-        tier: getTierFromPriceId(priceId),
-        status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
-        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
-      })
+      // Two tabs, two checkouts: the checkout guard cannot see a second checkout completed between
+      // session creation and Stripe confirming payment. syncUserSubscription decides, inside its own
+      // transaction, whether this member now holds a duplicate and which row is the newer one. Only
+      // `created` acts on it — Stripe emits `updated` for the duplicate right after, and acting there
+      // too would void (and notify) twice.
+      const duplicate = await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))
+      if (duplicate) {
+        await ctx.scheduler.runAfter(0, internal.billingNode.cancelDuplicateSubscription, {
+          userId: duplicate.userId,
+          stripeSubscriptionId: duplicate.stripeSubscriptionId,
+          tier: duplicate.keepTier
+        })
+      }
     },
     'customer.subscription.updated': async (ctx: StripeEvent, event: StripeEvent) => {
-      const sub = event.data.object
-      const priceId = sub.items?.data?.[0]?.price?.id ?? ''
-      await ctx.runMutation(internal.stripe.syncUserSubscription, {
-        stripeCustomerId: String(sub.customer),
-        stripeSubscriptionId: sub.id,
-        tier: getTierFromPriceId(priceId),
-        status: sub.status,
-        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : undefined,
-        trialEndsAt: sub.trial_end ? sub.trial_end * 1000 : undefined
-      })
+      await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))
     },
     'customer.subscription.deleted': async (ctx: StripeEvent, event: StripeEvent) => {
       const sub = event.data.object
@@ -166,14 +168,40 @@ registerRoutes(http, components.stripe, {
         stripeSubscriptionId: sub.id
       })
     },
+    // Stripe fires this 3 days before trial_end. It NEVER fires for the 50-interaction path
+    // (endTrialEarly sets trial_end:'now'), which is why that path has its own 40-of-50 notice.
+    // Stripe's built-in trial-ending email must stay OFF so the member gets exactly one warning.
+    'customer.subscription.trial_will_end': async (ctx: StripeEvent, event: StripeEvent) => {
+      const sub = event.data.object
+      if (!sub.trial_end) return
+      await ctx.scheduler.runAfter(0, internal.notifications.sendTrialEnding, {
+        stripeSubscriptionId: sub.id,
+        trialEndsAt: sub.trial_end * 1000
+      })
+    },
     'invoice.payment_failed': async (ctx: StripeEvent, event: StripeEvent) => {
       const invoice = event.data.object
       if (invoice.subscription && invoice.customer) {
         await ctx.runMutation(internal.stripe.markPastDue, {
           stripeCustomerId: String(invoice.customer),
-          stripeSubscriptionId: String(invoice.subscription)
+          stripeSubscriptionId: String(invoice.subscription),
+          eventCreated: eventCreatedMs(event)
         })
       }
+    },
+    // backlog/R17 — the one-time featured-post purchase. Subscription checkouts complete through
+    // this event too; the pure filter lets only a PAID payment-mode session tagged by
+    // purchaseFeaturedPost through. postId travels as a plain string and is normalised inside the
+    // mutation: a malformed id must log and return, never throw (Stripe retries a 500 for days).
+    'checkout.session.completed': async (ctx: StripeEvent, event: StripeEvent) => {
+      const session = event.data.object
+      if (!isFeaturedPostCheckout(session)) return
+      await ctx.runMutation(internal.posts.applyPurchasedFeature, {
+        postId: String(session.metadata?.postId ?? ''),
+        checkoutSessionId: String(session.id),
+        amountCents: typeof session.amount_total === 'number' ? session.amount_total : 0,
+        paidAt: eventCreatedMs(event) ?? Date.now()
+      })
     }
   },
   onEvent: async (_ctx: StripeEvent, event: StripeEvent) => {

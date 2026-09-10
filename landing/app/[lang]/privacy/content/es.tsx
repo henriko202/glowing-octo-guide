@@ -6,9 +6,10 @@ export default function Es({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Política de Privacidad</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última actualización:</strong> Junio 2026
+          <strong className="text-cream">Última actualización:</strong> Septiembre 2026
         </p>
-        <p>Policy version: 2026-06-15</p>
+        {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts — see the note in en.tsx. */}
+        <p>Policy version: 2026-09-08</p>
 
         {/* 1. Quienes somos */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Quiénes Somos</h2>
@@ -62,6 +63,9 @@ export default function Es({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Facturación.</strong> Los pagos de suscripción son procesados por Stripe.
           Almacenamos su ID de cliente de Stripe y el estado de suscripción; no almacenamos datos de tarjeta de pago.
+          Las compras únicas (una publicación destacada) se cobran a través de Stripe de la misma forma y aparecen en su
+          recibo de Stripe; guardamos el registro de la compra (ID de sesión, monto y fecha) en la publicación
+          destacada.
         </p>
         <p>
           <strong className="text-cream">Datos técnicos y de sesión.</strong> Recopilamos registros de servidor estándar
@@ -70,8 +74,10 @@ export default function Es({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Sin raspado de datos.</strong> No realizamos raspado de datos de LinkedIn ni de
-          ningún otro sitio web de terceros. Todos los datos provienen de sus interacciones directas con nuestra
-          plataforma o a través de la API de LinkedIn con su consentimiento autorizado.
+          ningún otro sitio web de terceros. Recibimos datos de su propio uso de nuestra plataforma y del inicio de
+          sesión con LinkedIn OpenID Connect, que devuelve su ID de miembro, nombre, foto de perfil y correo
+          electrónico. No tenemos permiso para publicar, comentar ni reaccionar en LinkedIn, y no escribimos nada en su
+          cuenta de LinkedIn.
         </p>
 
         {/* 3. Por que lo usamos y bases legales */}
@@ -127,6 +133,21 @@ export default function Es({ lang }: { lang: Locale }) {
             no se almacenan ni se utilizan para entrenamiento).
           </li>
         </ul>
+        <p>
+          <strong className="text-cream">El papel del propio Stripe.</strong> Stripe procesa los pagos en nuestro
+          nombre, y Stripe también actúa como controlador independiente de los datos de pago que recopila de usted, que
+          utiliza para prevenir fraudes y cumplir sus propias obligaciones legales y regulatorias. Stripe rige ese uso
+          mediante la{' '}
+          <a
+            href="https://stripe.com/privacy"
+            className="text-gold-text hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            política de privacidad de Stripe
+          </a>
+          . El número de su tarjeta va a Stripe, y nunca lo vemos ni lo almacenamos.
+        </p>
         <p>
           <strong className="text-cream">No vendemos ni compartimos su información personal</strong> para publicidad
           conductual contextual cruzada ni para ninguna otra finalidad comercial.

@@ -25,8 +25,8 @@ pnpm monorepo — three deployable packages sharing one Convex backend:
 
 | Package    | Stack                                         | Deploy target                          | Domain (prod)                                |
 |------------|-----------------------------------------------|----------------------------------------|----------------------------------------------|
-| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 | **Cloudflare** Workers (OpenNext)      | `linkintothessi.com`                         |
-| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4     | **Cloudflare** Workers (Static Assets) | `app.linkintothessi.com`                     |
+| `landing/` | Next.js 15 (App Router), React 19, Tailwind 4 | **Cloudflare** Workers (OpenNext)      | `www.linkintothessi.com`                     |
+| `app/`     | React 19 + Vite 6, TypeScript, Tailwind 4     | **Cloudflare** Workers (Static Assets) | `www.app.linkintothessi.com`                 |
 | `convex/`  | Convex (serverless, real-time, TS-native)     | **Convex** managed                     | `<deployment>.convex.cloud` / `.convex.site` |
 
 Cloudflare hosts both frontends and provides DNS/CDN/TLS. External services: **LinkedIn** (OAuth + profile/posts),
@@ -129,16 +129,16 @@ Stripe subscription for the tier chosen on the billing grid; it converts on **50
 whichever comes first. Cancellation never revokes access — a canceled member keeps engaging; only their own posts stop
 entering the feed once the paid period ends.
 
-| Capability                          | Starter ($5/mo) | Growth ($15/mo) | Pro ($50/mo) |   Contact   |
-|-------------------------------------|:---------------:|:---------------:|:------------:|:-----------:|
-| Access shared feed                  |       ✓        |       ✓        |      ✓      |     ✓      |
-| 7-day trial (card required)         |       ✓        |       ✓        |      ✓      |      —      |
-| Feed filtered by industry + country |       ✗        |    ✓ (auto)    | ✓ (custom)  | ✓ (custom) |
-| Control who sees your posts         |       ✗        |       ✗        |      ✓      |     ✓      |
-| Interactions counted per post (cap) |       25        |       50        |     200      |    200+     |
-| Posts admitted to feed / week       |        1        |        2        |      5       |     5+      |
-| Featured posts / month              |        0        |        1        |      3       |   Custom    |
-| AI comment generator                |       ✓        |       ✓        |      ✓      |     ✓      |
+| Capability                          | Starter ($10/mo) | Growth ($15/mo) | Pro ($50/mo) |   Contact   |
+|-------------------------------------|:----------------:|:---------------:|:------------:|:-----------:|
+| Access shared feed                  |        ✓        |       ✓        |      ✓      |     ✓      |
+| 7-day trial (card required)         |        ✓        |       ✓        |      ✓      |      —      |
+| Feed filtered by industry + country |        ✗        |    ✓ (auto)    | ✓ (custom)  | ✓ (custom) |
+| Control who sees your posts         |        ✗        |       ✗        |      ✓      |     ✓      |
+| Interactions counted per post (cap) |        25        |       50        |     200      |    200+     |
+| Posts admitted to feed / week       |        1         |        2        |      5       |     5+      |
+| Featured posts / month              |        0         |        1        |      3       |   Custom    |
+| AI comment generator                |        ✓        |       ✓        |      ✓      |     ✓      |
 
 > AI comment drafting is **live for every tier** — gated on an active subscription (the same card-on-file gate as
 > engaging) and rate-limited, but **not** tier-gated. See `docs/PLATFORM.md` §11A.

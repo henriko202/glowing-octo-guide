@@ -1,6 +1,6 @@
 // Cross-site cookie I/O for the theme + language preferences. In prod,
 // VITE_COOKIE_DOMAIN='.linkintothessi.com' scopes the cookie to the apex so the app
-// (app.linkintothessi.com) and the landing (linkintothessi.com) share one value.
+// (www.app.linkintothessi.com) and the landing (www.linkintothessi.com) share one value.
 // Unset in dev → a host-only cookie (cross-site sync is a prod-only feature).
 const COOKIE_DOMAIN = (import.meta.env.VITE_COOKIE_DOMAIN as string | undefined) || undefined
 

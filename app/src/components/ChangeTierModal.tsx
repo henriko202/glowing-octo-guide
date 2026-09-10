@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import Modal from './Modal'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { friendlyError } from '@/lib/errors'
 
 type Tier = 'starter' | 'growth' | 'pro' | 'contact'
@@ -64,7 +65,7 @@ export default function ChangeTierModal({ user, sessionToken, onClose }: Props) 
 
       {error && <p className="text-destructive mt-3 text-xs">{error}</p>}
 
-      <div className="mt-5 flex justify-end gap-2">
+      <DialogFooter className="mt-5">
         <Button
           type="button"
           variant="outline"
@@ -79,7 +80,7 @@ export default function ChangeTierModal({ user, sessionToken, onClose }: Props) 
         >
           {saving ? '…' : 'Save'}
         </Button>
-      </div>
+      </DialogFooter>
     </Modal>
   )
 }

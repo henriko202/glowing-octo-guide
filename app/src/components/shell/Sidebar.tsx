@@ -4,18 +4,28 @@ import { cn } from '@/lib/utils'
 import { NAV_GROUPS, isActivePath } from './navItems'
 import UserMenu from './UserMenu'
 import BrandMark from '../BrandMark'
-import { useCardGate } from '../../hooks/useCardGate'
+import TrialProgressCard from './TrialProgressCard'
+import { useTrialProgress } from '../../hooks/useTrialProgress'
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation()
   const { t } = useTranslation()
-  const { gated } = useCardGate()
+  const { gated, isTrialing, me, progress } = useTrialProgress()
 
   return (
     <div className="bg-sidebar text-sidebar-foreground flex h-full flex-col">
       <div className="px-4 py-4">
         <BrandMark />
       </div>
+
+      {isTrialing && progress != null && (
+        <div className="px-3">
+          <TrialProgressCard
+            progress={progress}
+            tier={me?.tier ?? 'growth'}
+          />
+        </div>
+      )}
 
       <nav
         aria-label={t('nav.primary')}
@@ -26,7 +36,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             key={group.labelKey}
             className="mb-2"
           >
-            <p className="text-muted-foreground px-2 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide">
+            <p className="text-muted-foreground px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
               {t(group.labelKey)}
             </p>
             {group.items.map(item => {
@@ -43,7 +53,9 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     active
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                       : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60',
-                    item.path === '/billing' && gated && 'text-primary animate-pulse'
+                    // Static accent only — the gate binds at the tap (CardGateDialog) and in the feed banner;
+                    // a permanent pulse made administrative friction the most salient thing on screen.
+                    item.path === '/billing' && gated && 'text-primary'
                   )}
                 >
                   <Icon
@@ -59,14 +71,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="border-sidebar-border border-t p-3">
-        <a
-          href="https://linkedin.com/sales/ssi"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-gold-text mb-2 flex items-center gap-2 px-3 py-1.5 text-[13px] hover:underline"
-        >
-          {t('nav.viewSsi')} ↗
-        </a>
         <UserMenu />
       </div>
     </div>

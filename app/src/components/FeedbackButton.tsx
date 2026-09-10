@@ -12,7 +12,7 @@ export default function FeedbackButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={t('feedback.button')}
-        className="bg-primary text-primary-foreground fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full px-4 py-3 text-sm font-semibold shadow-lg hover:bg-[color-mix(in_oklch,var(--primary),black_12%)]"
+        className="bg-primary text-primary-foreground fixed right-5 bottom-5 z-40 flex items-center gap-2 rounded-full px-4 py-3 text-sm font-semibold shadow-lg hover:bg-[color-mix(in_oklch,var(--primary),black_12%)]"
       >
         <MessageCircle
           className="size-4"
