@@ -4,7 +4,7 @@ import '../globals.css'
 import { getDictionary } from '@/i18n/getDictionary'
 import { i18n, type Locale } from '@/i18n/config'
 import CookieNotice from '@/components/CookieNotice'
-import RefCarrier from '@/components/RefCarrier'
+import TrialProvider from '@/components/TrialProvider'
 
 // Self-hosted at build time → served from 'self', so the tight CSP needs no font/style host.
 const display = Cormorant_Garamond({
@@ -60,7 +60,7 @@ export default async function RootLayout({
   return (
     <html
       lang={lang}
-      className={`scroll-smooth ${display.variable} ${body.variable}`}
+      className={`${display.variable} ${body.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -71,12 +71,11 @@ export default async function RootLayout({
         />
       </head>
       <body className="bg-ink font-body text-cream antialiased">
-        {children}
+        <TrialProvider>{children}</TrialProvider>
         <CookieNotice
           dict={dict.cookieNotice}
           lang={lang}
         />
-        <RefCarrier />
       </body>
     </html>
   )

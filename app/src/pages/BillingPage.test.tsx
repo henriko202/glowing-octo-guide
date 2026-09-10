@@ -88,7 +88,7 @@ const PLAN_LABELS: Record<string, string> = {
   starter: 'Starter',
   growth: 'Growth',
   pro: 'Pro',
-  contact: 'Enterprise'
+  contact: 'Custom'
 }
 
 // The R07 celebration/activating copy is asserted by its real English wording (not the raw key),
@@ -334,7 +334,7 @@ describe('chosen plan (R03)', () => {
   it('shows the localized plan name as the current plan, never the capitalized tier id', () => {
     setUser({ subscriptionStatus: 'active', tier: 'contact' })
     renderPage()
-    expect(screen.getByText(/billing\.currentPlan: Enterprise/)).toBeInTheDocument()
+    expect(screen.getByText(/billing\.currentPlan: Custom/)).toBeInTheDocument()
     expect(screen.queryByText(/Contact/)).not.toBeInTheDocument()
   })
 

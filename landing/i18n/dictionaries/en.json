@@ -9,7 +9,8 @@
     "howItWorks": "How it works",
     "features": "Features",
     "pricing": "Pricing",
-    "cta": "Start trial"
+    "cta": "Start trial",
+    "skipToContent": "Skip to content"
   },
   "hero": {
     "headlineLine1": "Relevant LinkedIn posts.",
@@ -17,15 +18,8 @@
     "subLine1": "Your next opportunity depends on LinkedIn. Find relevant posts, get a comment draft, and complete every action there yourself.",
     "subLine2": "You choose every action. Nothing is automated.",
     "cta": "Start my trial",
-    "ctaDisclaimer": "Card required · Free until 50 recorded interactions or 7 days, whichever comes first · Cancel anytime",
-    "ctaTrust": "Official LinkedIn sign-in · We receive only your name, photo and email · We never post for you",
-    "scrollLabel": "Scroll"
-  },
-  "painBeat": {
-    "eyebrow": "The problem",
-    "headlineLine1": "An inactive profile",
-    "headlineLine2": "is easy to miss.",
-    "body": "But an inactive LinkedIn profile is easy to miss. Recruiters and clients search every day, and they cannot contact you if they never come across your profile."
+    "ctaDisclaimer": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
+    "ctaTrust": "Official LinkedIn sign-in · We receive only your name, photo and email · We never post for you"
   },
   "howItWorks": {
     "eyebrow": "How it works",
@@ -81,15 +75,16 @@
   },
   "proof": {
     "eyebrow": "No hype",
-    "headlineLine1": "We're new.",
-    "headlineLine2": "We don't have results to claim yet.",
+    "headlineLine1": "See your activity.",
+    "headlineLine2": "Understand the response.",
     "founderName": "Henriko",
     "founderRole": "Founder · Frontend Specialist (7+ years)",
-    "founderMessage": "I'm Henriko, a frontend specialist with more than seven years of experience. I built Link Into The SSI after seeing skilled people go unnoticed on LinkedIn because they were not active there. The product is new, so I don't have customer results to show yet. Judge it by what happens in your own account.",
-    "proofCardHeadline": "See your activity, not a score from us.",
+    "founderMessage": "I built Link Into The SSI to make relevant conversations easier to find. We are in early access and do not have customer results to claim yet. The feed, comment drafts, and activity recap are available for you to try.",
     "proofCardBody": "Your weekly recap lists the reactions and comments you made and received. We don't add our own score or claim results we cannot verify.",
     "proofCardNote": "If you have Sales Navigator, you can check your SSI on LinkedIn.",
-    "earlyAccess": "Join us early."
+    "earlyAccess": "Join us early.",
+    "recapLabel": "What your weekly recap records",
+    "recapFields": ["Reactions you made", "Comments you made", "Reactions you received", "Comments you received"]
   },
   "features": {
     "eyebrow": "Platform",
@@ -133,8 +128,8 @@
     "periodYear": "/yr",
     "annualSubLabel": "{{perMonth}}/mo billed annually",
     "monthlySubLabel": "2 months free if you pay annually",
-    "trialNote": "Card required. Free until 50 interactions made or received, or up to 7 days, whichever comes first. Cancel anytime.",
-    "enterpriseNote": "Teams & agencies: Enterprise from",
+    "trialNote": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
+    "enterpriseNote": "Custom for higher usage, from",
     "enterprisePriceMonth": "US$100/mo",
     "enterprisePriceYear": "US$1,000/yr",
     "enterpriseCta": "Talk to us",
@@ -143,7 +138,7 @@
         "id": "starter",
         "name": "Starter",
         "description": "For sharing posts and browsing the full feed",
-        "axis": "Posts stay in the feed until 25 reactions and comments",
+        "axis": "Each post stays in the feed until 25 reactions and comments",
         "features": [
           "See the full live feed",
           "AI reaction suggestions and comment drafts",
@@ -155,7 +150,7 @@
         "id": "growth",
         "name": "Growth",
         "description": "For a feed filtered to your industry and country",
-        "axis": "Posts stay in the feed until 50 reactions and comments",
+        "axis": "Each post stays in the feed until 50 reactions and comments",
         "features": [
           "Feed filtered to your industry + country",
           "Everything in Starter",
@@ -168,7 +163,7 @@
         "id": "pro",
         "name": "Pro",
         "description": "For custom filters and feed visibility controls",
-        "axis": "Posts stay in the feed until 200 reactions and comments",
+        "axis": "Each post stays in the feed until 200 reactions and comments",
         "features": [
           "Custom industry + country filters",
           "Control who sees your posts in our feed",
@@ -178,7 +173,9 @@
         ],
         "cta": "Start Pro trial"
       }
-    ]
+    ],
+    "renewalAnnual": "After your trial: {{price}} billed annually.",
+    "renewalMonthly": "After your trial: {{price}} billed monthly."
   },
   "faq": {
     "eyebrow": "FAQ",
@@ -213,7 +210,7 @@
   "finalCta": {
     "headlineLine1": "See the feed for yourself.",
     "headlineLine2": "You choose what happens next.",
-    "subheadline": "Free until 50 interactions made or received, or up to 7 days, whichever comes first.",
+    "subheadline": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
     "cta": "Start my trial",
     "ctaTrust": "Official LinkedIn sign-in · We receive only your name, photo and email · We never post for you",
     "earlyAccess": "Early access is open."
@@ -228,7 +225,8 @@
   "cookieNotice": {
     "text": "We use essential browser storage only for sign-in and language preferences. We do not use tracking cookies.",
     "learnMore": "Learn more",
-    "dismiss": "Got it"
+    "dismiss": "Got it",
+    "label": "Essential storage notice"
   },
   "themeToggle": {
     "system": "System theme",
@@ -240,5 +238,9 @@
     "en": "English",
     "pt": "Português",
     "es": "Español"
+  },
+  "trialOffer": {
+    "annual": "Growth trial · Then {{price}} billed annually",
+    "monthly": "Growth trial · Then {{price}} billed monthly"
   }
 }

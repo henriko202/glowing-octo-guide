@@ -104,6 +104,8 @@
     "featuredPillHint": "This calendar month",
     "feature": "Feature",
     "unfeature": "Unfeature",
+    "unfeatureConfirmTitle": "Unfeature this post?",
+    "unfeatureConfirm": "This removes the post from the featured position. You can feature it again later without using another plan allowance or paying again.",
     "featureLimitReached": "Monthly featured limit reached",
     "today": "Today",
     "daysAgo_one": "{{count}} day ago",
@@ -220,7 +222,7 @@
     "trial": "(trial)",
     "currentPlanLabel": "Current plan",
     "contact": "Contact us",
-    "enterprise": "Need higher limits? Contact us about a custom Enterprise plan.",
+    "enterprise": "Need higher limits? Contact us about a Custom plan.",
     "featuredAddon": "One-time {{price}} add-on · pin one post at the top until {{newCap}} reactions and comments",
     "featuredAddonCta": "Pick a post",
     "subscriptionInfo": "Your Subscription",
@@ -339,8 +341,8 @@
         ]
       },
       "contact": {
-        "name": "Enterprise",
-        "description": "Tailored for teams and agencies",
+        "name": "Custom",
+        "description": "Tailored for higher usage",
         "cta": "Contact us"
       }
     }
@@ -451,7 +453,7 @@
     "interactionCapNear": "Your post is at {{total}} of {{cap}} interactions. On {{nextPlan}} it keeps collecting to {{next}}.",
     "visibility": "Choosing who sees your posts is a {{nextPlan}} feature.",
     "cta": "Upgrade to {{nextPlan}}",
-    "proContact": "Need more than Pro offers? Contact us for a custom Enterprise plan.",
+    "proContact": "Need more than Pro offers? Contact us for a Custom plan.",
     "contactCustom": "Your plan already has a custom limit. Contact us to adjust it.",
     "featuredAddon": "Or make a one-time {{price}} purchase to feature one post."
   },

@@ -4,8 +4,10 @@ import {
   applyPurchasedFeatureHandler,
   canModifyPost,
   countPostsSince,
+  featurePostHandler,
   findTierDefaultRow,
-  isAdminShareOverrideEnabled
+  isAdminShareOverrideEnabled,
+  unfeaturePostHandler
 } from './posts'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
@@ -91,6 +93,71 @@ describe('canModifyPost', () => {
 
   it('forbids a non-admin from modifying someone else’s post', () => {
     expect(canModifyPost(other, post)).toBe(false)
+  })
+})
+
+function featuredToggleCtx(post: Record<string, unknown>) {
+  const patches: { id: string; data: Record<string, unknown> }[] = []
+  const queriedTables: string[] = []
+  const docs: Record<string, Record<string, unknown>> = {
+    p1: post,
+    u1: { _id: 'u1', tier: 'growth', isAdmin: false }
+  }
+  const ctx = {
+    db: {
+      query: (table: string) => {
+        queriedTables.push(table)
+        return {
+          withIndex: () => ({
+            unique: async () =>
+              table === 'sessions'
+                ? { _id: 's1', token: 'tok', userId: 'u1', expiresAt: Number.MAX_SAFE_INTEGER }
+                : null
+          })
+        }
+      },
+      get: async (id: string) => docs[id] ?? null,
+      patch: async (id: string, data: Record<string, unknown>) => {
+        patches.push({ id, data })
+      },
+      insert: async () => 'unused'
+    }
+  }
+  return { ctx: ctx as unknown as MutationCtx, patches, queriedTables }
+}
+
+describe('featured entitlement handlers', () => {
+  const post = {
+    _id: 'p1',
+    authorId: 'u1',
+    publishedAt: 1_700_000_000_000,
+    hidden: false,
+    interactionLimitReached: false,
+    authorTierRank: 2
+  }
+
+  it('re-features a previously entitled post without reading or incrementing monthly usage', async () => {
+    const { ctx, patches, queriedTables } = featuredToggleCtx({
+      ...post,
+      isFeatured: false,
+      featuredAt: 42
+    })
+
+    await featurePostHandler(ctx, { sessionToken: 'tok', postId: 'p1' as Id<'posts'> })
+
+    expect(queriedTables).toEqual(['sessions'])
+    expect(patches).toHaveLength(1)
+    expect(patches[0]).toMatchObject({ id: 'p1', data: { isFeatured: true, featuredAt: 42 } })
+  })
+
+  it('keeps featuredAt when unfeaturing so the entitlement remains reusable', async () => {
+    const { ctx, patches } = featuredToggleCtx({ ...post, isFeatured: true, featuredAt: 42 })
+
+    await unfeaturePostHandler(ctx, { sessionToken: 'tok', postId: 'p1' as Id<'posts'> })
+
+    expect(patches).toHaveLength(1)
+    expect(patches[0].data).toMatchObject({ isFeatured: false })
+    expect(patches[0].data).not.toHaveProperty('featuredAt')
   })
 })
 

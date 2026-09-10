@@ -9,7 +9,8 @@
     "howItWorks": "Como funciona",
     "features": "Recursos",
     "pricing": "Planos",
-    "cta": "Começar teste"
+    "cta": "Começar teste",
+    "skipToContent": "Pular para o conteúdo"
   },
   "hero": {
     "headlineLine1": "Publicações relevantes do LinkedIn.",
@@ -17,15 +18,8 @@
     "subLine1": "Sua próxima oportunidade depende do LinkedIn. Encontre publicações relevantes, receba um rascunho e conclua cada ação por lá.",
     "subLine2": "Você decide cada ação. Nada é automatizado.",
     "cta": "Começar meu teste",
-    "ctaDisclaimer": "Cartão necessário · Grátis até 50 interações registradas ou 7 dias, o que ocorrer primeiro · Cancele quando quiser",
-    "ctaTrust": "Login oficial do LinkedIn · Recebemos apenas nome, foto e e-mail · Nunca publicamos em seu nome",
-    "scrollLabel": "Rolar"
-  },
-  "painBeat": {
-    "eyebrow": "O problema",
-    "headlineLine1": "Um perfil inativo",
-    "headlineLine2": "passa despercebido.",
-    "body": "Mas um perfil inativo no LinkedIn passa despercebido. Recrutadores e clientes pesquisam todos os dias, mas não podem entrar em contato se não encontrarem seu perfil."
+    "ctaDisclaimer": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
+    "ctaTrust": "Login oficial do LinkedIn · Recebemos apenas nome, foto e e-mail · Nunca publicamos em seu nome"
   },
   "howItWorks": {
     "eyebrow": "Como funciona",
@@ -81,15 +75,21 @@
   },
   "proof": {
     "eyebrow": "Sem exageros",
-    "headlineLine1": "Somos novos.",
-    "headlineLine2": "Ainda não temos resultados para divulgar.",
+    "headlineLine1": "Veja sua atividade.",
+    "headlineLine2": "Entenda a resposta.",
     "founderName": "Henriko",
     "founderRole": "Fundador · Especialista em Front-end (7+ anos)",
-    "founderMessage": "Sou o Henriko, especialista em front-end há mais de sete anos. Criei o Link Into The SSI depois de ver bons profissionais passarem despercebidos no LinkedIn por não estarem ativos por lá. O produto é novo, então ainda não tenho resultados de clientes para mostrar. Avalie pelo que acontece na sua própria conta.",
-    "proofCardHeadline": "Veja sua atividade, não uma pontuação nossa.",
+    "founderMessage": "Aoooba, bão? Sou o Henriko. Criei o Link Into The SSI para facilitar a busca por conversas relevantes. Estamos em acesso antecipado e ainda não temos resultados de clientes para apresentar. O feed, os rascunhos de comentários e o resumo de atividades já estão disponíveis para você experimentar.",
     "proofCardBody": "Seu resumo semanal lista as reações e os comentários que você fez e recebeu. Não criamos uma pontuação própria nem alegamos resultados que não podemos verificar.",
     "proofCardNote": "Se você tem o Sales Navigator, pode consultar seu SSI no LinkedIn.",
-    "earlyAccess": "Entre com a gente desde o começo."
+    "earlyAccess": "Entre com a gente desde o começo.",
+    "recapLabel": "O que seu resumo semanal registra",
+    "recapFields": [
+      "Reações que você fez",
+      "Comentários que você fez",
+      "Reações que você recebeu",
+      "Comentários que você recebeu"
+    ]
   },
   "features": {
     "eyebrow": "Plataforma",
@@ -133,8 +133,8 @@
     "periodYear": "/ano",
     "annualSubLabel": "{{perMonth}}/mês cobrado anualmente",
     "monthlySubLabel": "2 meses grátis no plano anual",
-    "trialNote": "Cartão necessário. Grátis até 50 interações feitas ou recebidas, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
-    "enterpriseNote": "Times e agências: Enterprise a partir de",
+    "trialNote": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
+    "enterpriseNote": "Custom para volumes maiores de uso, a partir de",
     "enterprisePriceMonth": "US$100/mês",
     "enterprisePriceYear": "US$1.000/ano",
     "enterpriseCta": "Fale conosco",
@@ -143,7 +143,7 @@
         "id": "starter",
         "name": "Starter",
         "description": "Para compartilhar publicações e navegar pelo feed completo",
-        "axis": "As publicações ficam no feed até 25 reações e comentários",
+        "axis": "Cada publicação fica no feed até atingir 25 reações e comentários",
         "features": [
           "Veja o feed completo em tempo real",
           "Sugestões de reação e rascunhos de comentário com IA",
@@ -155,7 +155,7 @@
         "id": "growth",
         "name": "Growth",
         "description": "Para um feed filtrado por setor e país",
-        "axis": "As publicações ficam no feed até 50 reações e comentários",
+        "axis": "Cada publicação fica no feed até atingir 50 reações e comentários",
         "features": [
           "Feed filtrado por setor + país",
           "Tudo do Starter",
@@ -168,7 +168,7 @@
         "id": "pro",
         "name": "Pro",
         "description": "Para filtros personalizados e controle de visibilidade no feed",
-        "axis": "As publicações ficam no feed até 200 reações e comentários",
+        "axis": "Cada publicação fica no feed até atingir 200 reações e comentários",
         "features": [
           "Filtros personalizados de setor + país",
           "Controle quem vê suas publicações no nosso feed",
@@ -178,7 +178,9 @@
         ],
         "cta": "Começar teste Pro"
       }
-    ]
+    ],
+    "renewalAnnual": "Após o teste: {{price}} cobrados anualmente.",
+    "renewalMonthly": "Após o teste: {{price}} cobrados mensalmente."
   },
   "faq": {
     "eyebrow": "FAQ",
@@ -213,7 +215,7 @@
   "finalCta": {
     "headlineLine1": "Conheça o feed.",
     "headlineLine2": "Você decide o próximo passo.",
-    "subheadline": "Grátis até 50 interações feitas ou recebidas, ou por até 7 dias, o que ocorrer primeiro.",
+    "subheadline": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
     "cta": "Começar meu teste",
     "ctaTrust": "Login oficial do LinkedIn · Recebemos apenas nome, foto e e-mail · Nunca publicamos em seu nome",
     "earlyAccess": "O acesso antecipado está aberto."
@@ -228,7 +230,8 @@
   "cookieNotice": {
     "text": "Usamos apenas o armazenamento essencial do navegador para login e preferência de idioma. Não usamos cookies de rastreamento.",
     "learnMore": "Saiba mais",
-    "dismiss": "Entendi"
+    "dismiss": "Entendi",
+    "label": "Aviso de armazenamento essencial"
   },
   "themeToggle": {
     "system": "Tema do sistema",
@@ -240,5 +243,9 @@
     "en": "English",
     "pt": "Português",
     "es": "Español"
+  },
+  "trialOffer": {
+    "annual": "Teste do Growth · Depois, {{price}} cobrados anualmente",
+    "monthly": "Teste do Growth · Depois, {{price}} cobrados mensalmente"
   }
 }

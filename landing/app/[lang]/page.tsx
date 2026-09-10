@@ -2,7 +2,6 @@ import { getDictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
 import Nav from '@/components/Nav'
 import Hero from '@/components/Hero'
-import PainBeat from '@/components/PainBeat'
 import HowItWorks from '@/components/HowItWorks'
 import SSIExplainer from '@/components/SSIExplainer'
 import Proof from '@/components/Proof'
@@ -18,24 +17,45 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
   const dict = await getDictionary(lang)
   return (
     <div className="min-h-screen bg-ink">
+      <a
+        href="#main-content"
+        className="fixed top-2 left-2 z-[60] -translate-y-24 rounded-md bg-gold px-4 py-3 font-semibold text-on-gold focus:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+      >
+        {dict.nav.skipToContent}
+      </a>
       <Nav
         dict={dict.nav}
         themeToggleDict={dict.themeToggle}
         languageSelectorDict={dict.languageSelector}
         lang={lang}
       />
-      <Hero dict={dict.hero} />
-      <PainBeat dict={dict.painBeat} />
-      <HowItWorks dict={dict.howItWorks} />
-      <SSIExplainer dict={dict.ssiExplainer} />
-      <Proof dict={dict.proof} />
-      <Features
-        dict={dict.features}
-        tiers={dict.tiers}
-      />
-      <Pricing dict={dict.pricing} />
-      <FAQ dict={dict.faq} />
-      <FinalCTA dict={dict.finalCta} />
+      <main
+        id="main-content"
+        tabIndex={-1}
+      >
+        <Hero
+          dict={dict.hero}
+          offer={dict.trialOffer}
+          lang={lang}
+        />
+        <HowItWorks dict={dict.howItWorks} />
+        <Features
+          dict={dict.features}
+          tiers={dict.tiers}
+        />
+        <Pricing
+          dict={dict.pricing}
+          lang={lang}
+        />
+        <Proof dict={dict.proof} />
+        <SSIExplainer dict={dict.ssiExplainer} />
+        <FAQ dict={dict.faq} />
+        <FinalCTA
+          dict={dict.finalCta}
+          offer={dict.trialOffer}
+          lang={lang}
+        />
+      </main>
       <Footer
         dict={dict.footer}
         languageSelectorDict={dict.languageSelector}

@@ -1,4 +1,4 @@
-// Where the landing-site CTAs ("Join free", "Sign in with LinkedIn", plan buttons) send visitors:
+// Where the landing trial buttons send visitors:
 // straight into LinkedIn OAuth, which Convex initiates at `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`.
 //
 // Going directly to OAuth — rather than to the app root — matters because the app bounces a

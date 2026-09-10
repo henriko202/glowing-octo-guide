@@ -104,6 +104,8 @@
     "featuredPillHint": "Neste mês",
     "feature": "Destacar",
     "unfeature": "Remover destaque",
+    "unfeatureConfirmTitle": "Remover o destaque desta publicação?",
+    "unfeatureConfirm": "Isso remove a publicação da posição de destaque. Você pode destacá-la novamente mais tarde sem usar outro benefício do plano nem pagar de novo.",
     "featureLimitReached": "Limite mensal de destaques atingido",
     "today": "Hoje",
     "daysAgo_one": "há {{count}} dia",
@@ -220,7 +222,7 @@
     "trial": "(período de teste)",
     "currentPlanLabel": "Plano atual",
     "contact": "Fale conosco",
-    "enterprise": "Precisa de limites maiores? Fale conosco sobre um plano Enterprise personalizado.",
+    "enterprise": "Precisa de limites maiores? Fale conosco sobre o plano Custom.",
     "featuredAddon": "Adicional avulso de {{price}} · fixe uma publicação no topo até {{newCap}} reações e comentários",
     "featuredAddonCta": "Escolher uma publicação",
     "subscriptionInfo": "Sua assinatura",
@@ -339,8 +341,8 @@
         ]
       },
       "contact": {
-        "name": "Enterprise",
-        "description": "Personalizado para equipes e agências",
+        "name": "Custom",
+        "description": "Personalizado para um volume maior de uso",
         "cta": "Fale conosco"
       }
     }
@@ -451,7 +453,7 @@
     "interactionCapNear": "Sua publicação está em {{total}} de {{cap}} interações. No {{nextPlan}} ela continua acumulando até {{next}}.",
     "visibility": "Escolher quem vê suas publicações é um recurso do plano {{nextPlan}}.",
     "cta": "Mudar para o {{nextPlan}}",
-    "proContact": "Precisa de mais do que o Pro oferece? Fale conosco para um plano Enterprise personalizado.",
+    "proContact": "Precisa de mais do que o Pro oferece? Fale conosco sobre o plano Custom.",
     "contactCustom": "Seu plano já tem um limite personalizado. Fale conosco para ajustá-lo.",
     "featuredAddon": "Ou faça uma compra avulsa de {{price}} para destacar uma publicação."
   },

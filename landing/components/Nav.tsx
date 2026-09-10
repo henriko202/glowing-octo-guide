@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { SIGN_IN_URL } from '@/lib/links'
+import { TrialLink } from './TrialProvider'
 import ThemeToggle from './ThemeToggle'
 import LanguageSelector from './LanguageSelector'
 import type { Dictionary } from '@/i18n/getDictionary'
@@ -36,50 +36,52 @@ export default function Nav({
         <Link
           href={`/${lang}`}
           aria-label="Link Into The SSI"
-          className="group flex shrink-0 items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+          className="group flex min-h-11 min-w-11 shrink-0 items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gold transition-[border-color,box-shadow] duration-300 group-hover:border-gold-light group-hover:shadow-[0_0_12px_rgba(201,150,62,0.4)]">
             <div className="h-2 w-2 rounded-full bg-gold transition-colors duration-300 group-hover:bg-gold-light" />
           </div>
-          {/* Icon-only below ~430px so the language select + CTA never collide on the smallest phones. */}
           <span className="hidden font-display text-base font-semibold tracking-wide whitespace-nowrap text-cream min-[430px]:inline md:text-lg">
             Link Into The SSI
           </span>
         </Link>
 
-        <div className="hidden items-center gap-8 md:flex">
+        <div className="hidden items-center gap-6 lg:flex">
           <Link
             href={`/${lang}#how-it-works`}
-            className="text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+            className="inline-flex min-h-11 items-center text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.howItWorks}
           </Link>
           <Link
             href={`/${lang}#features`}
-            className="text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+            className="inline-flex min-h-11 items-center text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.features}
           </Link>
           <Link
             href={`/${lang}#pricing`}
-            className="text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+            className="inline-flex min-h-11 items-center text-sm text-cream-muted transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {dict.pricing}
           </Link>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href={`/${lang}#pricing`}
+            className="inline-flex min-h-11 items-center px-1 text-sm font-medium text-cream hover:text-gold-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold lg:hidden"
+          >
+            {dict.pricing}
+          </Link>
           <LanguageSelector
             dict={languageSelectorDict}
             lang={lang}
           />
           <ThemeToggle dict={themeToggleDict} />
-          <a
-            href={`${SIGN_IN_URL}?plan=growth&interval=annual`}
-            className="rounded-full border border-gold/60 px-4 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold md:px-5"
-          >
+          <TrialLink className="hidden min-h-11 items-center rounded-full border border-gold/60 px-3 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold sm:inline-flex md:px-5">
             {dict.cta}
-          </a>
+          </TrialLink>
         </div>
       </nav>
     </header>

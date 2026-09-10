@@ -11,7 +11,13 @@ import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
 import { canEngage } from './lib/access'
 import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
-import { findDuplicateSubscription, findLiveSubscription, isStaleEvent, isTrialConversion } from './lib/trialMilestone'
+import {
+  findDuplicateSubscription,
+  findLiveSubscription,
+  isCancelPending,
+  isStaleEvent,
+  isTrialConversion
+} from './lib/trialMilestone'
 import { resolvePendingDowngrade } from './lib/downgrade'
 import { getTierFromPriceId } from './lib/stripePrices'
 
@@ -46,7 +52,8 @@ export function syncArgs(event: StripeEvent) {
     priceAmount: typeof price?.unit_amount === 'number' ? price.unit_amount : undefined,
     priceCurrency: price?.currency ?? undefined,
     priceInterval: price?.recurring?.interval ?? undefined,
-    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+    // Any scheduled cancel, not just the flag — see isCancelPending.
+    cancelAtPeriodEnd: isCancelPending(sub),
     // backlog/B07 — the subscription schedule attached to this subscription, if any. Its PRESENCE is
     // how the sync tells "downgrade still pending" from "applied or released"; the id itself is never
     // stored (Stripe's own advice: discard a schedule id once it is released).

@@ -6,10 +6,10 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
   return (
     <section
       id="what-is-ssi"
-      className="bg-ink-800 px-6 py-28"
+      className="bg-ink-800 px-6 py-14 md:py-20"
     >
       <div className="mx-auto max-w-5xl">
-        <div className="mb-16 text-center">
+        <div className="mb-8 text-center">
           <p className="mb-3 text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
             {dict.headlineLine1}
@@ -19,14 +19,19 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-cream-muted">{dict.intro}</p>
         </div>
 
-        <div className="mb-16 grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {dict.pillars.map(pillar => (
             <div
               key={pillar.title}
-              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-colors duration-300 hover:border-cream/15"
+              className="border-t border-cream/15 pt-4"
             >
-              <div className="mb-5 flex items-start justify-between">
-                <span className="text-2xl">{pillar.icon}</span>
+              <div className="mb-3 flex items-start justify-between">
+                <span
+                  aria-hidden="true"
+                  className="text-xl"
+                >
+                  {pillar.icon}
+                </span>
                 <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-[13px] font-medium text-cream-muted dark:bg-cream/[0.06]">
                   {pillar.pts} pts
                 </span>

@@ -1,11 +1,26 @@
 import { describe, it, expect } from 'vitest'
 import {
   currentUtcMonthKey,
+  hasPermanentFeaturedEntitlement,
   isFeaturedLimitReached,
   isUnlimitedFeatured,
   isWeeklyLimitReached,
   UNLIMITED_FEATURED_SENTINEL
 } from './postLimit'
+
+describe('hasPermanentFeaturedEntitlement', () => {
+  it('reuses a plan allowance after the post has been featured once', () => {
+    expect(hasPermanentFeaturedEntitlement({ featuredAt: 0 })).toBe(true)
+  })
+
+  it('reuses a paid entitlement on legacy posts without a retained featuredAt', () => {
+    expect(hasPermanentFeaturedEntitlement({ featuredPurchase: { checkoutSessionId: 'cs_1' } })).toBe(true)
+  })
+
+  it('requires an allowance or purchase for a post that has never been featured', () => {
+    expect(hasPermanentFeaturedEntitlement({})).toBe(false)
+  })
+})
 
 describe('isWeeklyLimitReached', () => {
   it('returns false when under limit', () => {

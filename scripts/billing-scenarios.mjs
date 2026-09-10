@@ -39,9 +39,11 @@
 // NOT COVERED, deliberately: past_due/dunning (needs a failing card and repeated advances),
 // invoice.payment_failed, the featured-post one-time checkout, the duplicate-subscription guard, and
 // endTrialEarly's 50-interaction TRIGGER — reaching 50 needs 50 real interactions. What that trigger
-// then DOES is covered: the conversion step below sets trial_end 'now' on a live trialing
-// subscription, which is endTrialEarly's one line verbatim, and asserts the card is charged (the row
-// moves to `active`). Each of the others needs machinery worth more than the coverage.
+// then DOES is covered: the conversion step below runs endTrialEarly itself, first on a cancelled
+// trial (it must not convert) and then on a live one, where it asserts the MONEY — one paid invoice
+// for the full price, nothing pending. The row moving to `active` never proved a charge: the
+// 2026-09-10 cancelled-trial conversion went `active` too, and charged nothing. Each of the others
+// needs machinery worth more than the coverage.
 //
 // ponytail: the Stripe form encoder and the assertion helpers below are a second copy of
 // stripe-provision.mjs's. That script runs its whole flow at import, so it cannot be imported for its
@@ -374,9 +376,42 @@ async function run() {
       { sessionToken, flow: 'downgrade' }
     )
 
-    heading('Converting the trial (trial_end: now — what endTrialEarly does)')
-    await stripe('POST', `/subscriptions/${sub.id}`, { trial_end: 'now' })
+    // The 2026-09-10 incident: the portal cancels with `cancel_at` (API 2026-02-25.clover), not the
+    // flag. The row read it as "not cancelling", the 50th interaction converted the cancelled trial,
+    // and Stripe billed the truncated period as PENDING prorations — nothing charged until renewal.
+    heading('A cancelled trial is not converted (the portal cancel shape: cancel_at, flag false)')
+    await stripe('POST', `/subscriptions/${sub.id}`, { cancel_at: sub.trial_end })
+    await waitFor('row mirrors cancel_at as cancelAtPeriodEnd', readSub(sub.id), r => r?.cancelAtPeriodEnd === true)
+    const skipped = call('billingNode:endTrialEarly', { stripeSubscriptionId: sub.id })
+    check('endTrialEarly returns quietly', skipped.ok, skipped.ok ? 'ok' : errLine(skipped.error))
+    const cancelled = await stripe('GET', `/subscriptions/${sub.id}`)
+    check('the cancelled trial is still trialing', cancelled.status === 'trialing', cancelled.status)
+    const resumedTrial = call('billingNode:resumeSubscription', { sessionToken })
+    check('resumeSubscription accepted', resumedTrial.ok, resumedTrial.ok ? 'ok' : errLine(resumedTrial.error))
+    const uncancelled = await stripe('GET', `/subscriptions/${sub.id}`)
+    check('resume cleared cancel_at', uncancelled.cancel_at === null, String(uncancelled.cancel_at))
+    await waitFor('row cancelAtPeriodEnd cleared', readSub(sub.id), r => r?.cancelAtPeriodEnd !== true)
+
+    heading('Converting the trial (endTrialEarly — the 50-interaction conversion)')
+    const invoicesInTrial = (await invoicesOf(sub.id)).length
+    const converted = call('billingNode:endTrialEarly', { stripeSubscriptionId: sub.id })
+    check('endTrialEarly accepted', converted.ok, converted.ok ? 'ok' : errLine(converted.error))
     await waitFor('row status moved to active', readSub(sub.id), r => r?.status === 'active')
+    // Money, not status: `active` is also what the cancelled-trial conversion above reached.
+    const [conversionInvoice, ...olderInvoices] = await invoicesOf(sub.id)
+    check(
+      'the conversion is invoiced now',
+      olderInvoices.length === invoicesInTrial,
+      `${olderInvoices.length + 1} invoice(s)`
+    )
+    const fullPrice = sub.items.data[0].price.unit_amount
+    check(
+      'and paid, for the full price',
+      conversionInvoice?.status === 'paid' && conversionInvoice?.amount_paid === fullPrice,
+      `${conversionInvoice?.status} ${conversionInvoice?.amount_paid} vs ${fullPrice}`
+    )
+    const pendingItems = (await stripe('GET', `/invoiceitems?pending=true&customer=${customer.id}`)).data
+    check('nothing left pending for the renewal', pendingItems.length === 0, `${pendingItems.length} item(s)`)
 
     // ── S4 cancel-pending ──
     heading('S4 cancel pending — the mirror, the guard it raises, and resumeSubscription')

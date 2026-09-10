@@ -46,10 +46,11 @@ export default function ThemeToggle({ dict }: { dict: Dictionary['themeToggle'] 
       onClick={cycle}
       aria-label={label[pref]}
       title={label[pref]}
-      className="flex h-9 w-9 items-center justify-center rounded-full border border-cream/15 text-cream/70 hover:border-cream/30 hover:text-cream"
+      className="flex h-11 w-11 items-center justify-center rounded-full border border-cream/15 text-cream/70 hover:border-cream/30 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
     >
       {pref === 'system' ? (
         <svg
+          aria-hidden="true"
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -70,6 +71,7 @@ export default function ThemeToggle({ dict }: { dict: Dictionary['themeToggle'] 
         </svg>
       ) : pref === 'light' ? (
         <svg
+          aria-hidden="true"
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -88,6 +90,7 @@ export default function ThemeToggle({ dict }: { dict: Dictionary['themeToggle'] 
         </svg>
       ) : (
         <svg
+          aria-hidden="true"
           width="16"
           height="16"
           viewBox="0 0 24 24"

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConvexError } from 'convex/values'
 import { MemoryRouter, useLocation } from 'react-router-dom'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import MyPostsPage from './MyPostsPage'
 
 // Mock the Convex API module so each query/action has a stable, identifiable
@@ -57,10 +58,12 @@ function SearchProbe() {
 
 function renderPage(path = '/my-posts') {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <MyPostsPage />
-      <SearchProbe />
-    </MemoryRouter>
+    <TooltipProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <MyPostsPage />
+        <SearchProbe />
+      </MemoryRouter>
+    </TooltipProvider>
   )
 }
 
@@ -211,6 +214,39 @@ describe('MyPostsPage', () => {
     expect(screen.getByRole('button', { name: /^unfeature$/i })).toBeInTheDocument()
   })
 
+  it('confirms Unfeature and explains that the permanent entitlement can be reused', async () => {
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p4',
+        linkedinPostUrn: 'urn:li:activity:4',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false,
+        isFeatured: true,
+        featuredAt: 42
+      }
+    ]
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /^unfeature$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(
+      within(dialog).getByText(/feature it again later without using another plan allowance or paying again/i)
+    ).toBeInTheDocument()
+    expect(mockMutations['posts.unfeaturePost']).not.toHaveBeenCalled()
+
+    const confirmButton = within(dialog).getByRole('button', { name: /^unfeature$/i })
+    expect(confirmButton).toHaveAttribute('data-variant', 'destructive')
+    fireEvent.click(confirmButton)
+    await waitFor(() =>
+      expect(mockMutations['posts.unfeaturePost']).toHaveBeenCalledWith({ sessionToken: 'tok', postId: 'p4' })
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   // Starter includes 0 featured posts, so `usedCount >= featuredPerMonth` is 0 >= 0 on every visit —
   // the upgrade ask must not fire on page load for a cap the plan never had (R08: at the limit,
   // never by interruption). The Feature button's own disabled state is where Starter meets it.
@@ -326,15 +362,34 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
   }
   const purchase = { checkoutSessionId: 'cs_1', amountCents: 500, paidAt: 1 }
 
-  it('offers the $5 slot with the bought cap instead of a disabled Feature button at the monthly cap', () => {
+  it('offers the $5 slot with the bought cap and its details in a shadcn tooltip', async () => {
     mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 3, featuredPerMonth: 3 }
     mockQueryReturns['posts.getMyPosts'] = [unfeatured]
     renderPage()
     expect(screen.getByRole('button', { name: /feature for US\$5/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^feature$/i })).not.toBeInTheDocument()
-    // starter cap 25 + starter bonus 25; the no-refund rule is visible text, not a tooltip
-    expect(screen.getByText(/raises its limit to 50 interactions/i)).toBeInTheDocument()
-    expect(screen.getByText(/no refund/i)).toBeInTheDocument()
+    const buyButton = screen.getByRole('button', { name: /feature for US\$5/i })
+    expect(buyButton).toHaveAttribute('data-variant', 'default')
+    expect(buyButton).not.toHaveAttribute('title')
+    expect(screen.queryByText(/raises its limit to 50 interactions/i)).not.toBeInTheDocument()
+    fireEvent.pointerMove(buyButton, { pointerType: 'mouse' })
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/raises its limit to 50 interactions.*no refund/i)
+  })
+
+  it('uses the remaining plan allowance for a new post even when opened from the paid-feature link', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 0, featuredPerMonth: 3 }
+    mockQueryReturns['posts.getMyPosts'] = [unfeatured]
+    renderPage('/my-posts?feature=buy')
+    expect(screen.getByRole('button', { name: /^feature$/i })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /feature for US\$5/i })).not.toBeInTheDocument()
+  })
+
+  it('re-features a plan-entitled post without consuming or buying another slot', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 3, featuredPerMonth: 3 }
+    mockQueryReturns['posts.getMyPosts'] = [{ ...unfeatured, featuredAt: 42 }]
+    renderPage()
+    expect(screen.getByRole('button', { name: /^feature$/i })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /feature for US\$5/i })).not.toBeInTheDocument()
   })
 
   it('puts the upgrade first and the add-on second on a post that left the feed', () => {
@@ -362,11 +417,12 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     expect(screen.queryByRole('button', { name: /^feature for US\$5$/i })).not.toBeInTheDocument()
   })
 
-  it('tells a trialing member the charge is separate from the trial', () => {
+  it('tells a trialing member in the tooltip that the charge is separate from the trial', async () => {
     mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'starter', subscriptionStatus: 'trialing' }
     mockQueryReturns['posts.getMyPosts'] = [{ ...unfeatured, interactionLimitReached: true }]
     renderPage()
-    expect(screen.getByText(/separate from your trial/i)).toBeInTheDocument()
+    fireEvent.focus(screen.getByRole('button', { name: /feature for US\$5/i }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/separate from your trial/i)
   })
 
   it('hides the control for an unlimited tier, a bought post and a card-gated member', () => {
@@ -468,7 +524,8 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     expect(screen.getByText(/reached 50 interactions and left the feed/i)).toBeInTheDocument()
   })
 
-  it('?feature=buy shows the control on an eligible card and strips the param', () => {
+  it('?feature=buy shows the control after plan allowances are exhausted and strips the param', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 3, featuredPerMonth: 3 }
     mockQueryReturns['posts.getMyPosts'] = [unfeatured]
     renderPage('/my-posts?feature=buy')
     expect(screen.getByRole('button', { name: /feature for US\$5/i })).toBeInTheDocument()

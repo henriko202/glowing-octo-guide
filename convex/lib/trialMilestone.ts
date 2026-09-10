@@ -45,6 +45,15 @@ export function shouldEndTrialEarly<T extends { stripeSubscriptionId?: string; c
 }
 
 /**
+ * Whether a Stripe subscription has a cancellation scheduled. Both fields count: on API
+ * 2026-02-25.clover the portal cancels by setting `cancel_at` and leaves `cancel_at_period_end`
+ * false, and a check on the flag alone is blind to every portal cancel.
+ */
+export function isCancelPending(sub: { cancel_at_period_end?: boolean | null; cancel_at?: number | null }): boolean {
+  return sub.cancel_at_period_end === true || typeof sub.cancel_at === 'number'
+}
+
+/**
  * One trial per user, forever. Keyed on the subscription-row COUNT rather than user.trialEndsAt,
  * because syncUserSubscription (convex/stripe.ts) overwrites trialEndsAt with undefined for a
  * non-trial subscription — a marker that erases itself would hand a returning user a second trial.

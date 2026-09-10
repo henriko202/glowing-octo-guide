@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import PostComposer from '../components/PostComposer'
@@ -25,7 +26,7 @@ import { useCardGate } from '@/hooks/useCardGate'
 import { FEATURED_POST_PRICE } from '@/lib/planPrices'
 import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
 import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
-import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
+import { hasPermanentFeaturedEntitlement, isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 
 // The shape returned by getMyPosts — matches the posts table schema
 interface MyPost {
@@ -37,6 +38,7 @@ interface MyPost {
   commentCount: number
   hidden?: boolean
   isFeatured?: boolean
+  featuredAt?: number
   sourceUrl?: string
   // Set when this post's engagement met the author's per-post interaction cap and it left the
   // feed (convex/posts.ts:439,473,533,567 — Option A, total engagement counts toward the cap).
@@ -48,8 +50,8 @@ interface MyPost {
 
 type BuySource = 'cap' | 'billing' | 'quota'
 
-// backlog/R17 — the $5 control. Ghost, never primary: the upgrade link always sits above it. The
-// numbers and the no-refund rule are visible text under the button, never a tooltip.
+// backlog/R17 — the $5 control. The value details live in its tooltip so the card action bar stays
+// compact, while the solid button makes the paid action explicit.
 function BuyFeaturedButton({
   post,
   source,
@@ -66,23 +68,29 @@ function BuyFeaturedButton({
   onBuy: (post: MyPost, source: BuySource) => void
 }) {
   const { t } = useTranslation()
+  const hint = `${t('myPosts.buyFeaturedHint', { newCap })}${isTrialing ? ` ${t('myPosts.buyFeaturedTrial')}` : ''}`
   return (
-    <div className="flex flex-col items-start gap-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={pending}
-        className={pending ? 'cursor-wait' : 'cursor-pointer'}
-        onClick={() => onBuy(post, source)}
-      >
-        {pending
-          ? '...'
-          : t(post.isFeatured ? 'myPosts.buyFeaturedRoom' : 'myPosts.buyFeatured', { price: FEATURED_POST_PRICE })}
-      </Button>
-      <span className="text-muted-foreground text-[11px]">{t('myPosts.buyFeaturedHint', { newCap })}</span>
-      {isTrialing && <span className="text-muted-foreground text-[11px]">{t('myPosts.buyFeaturedTrial')}</span>}
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          disabled={pending}
+          className={pending ? 'cursor-wait' : 'cursor-pointer'}
+          onClick={() => onBuy(post, source)}
+        >
+          {pending
+            ? '...'
+            : t(post.isFeatured ? 'myPosts.buyFeaturedRoom' : 'myPosts.buyFeatured', {
+                price: FEATURED_POST_PRICE
+              })}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>{hint}</p>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -109,7 +117,7 @@ export default function MyPostsPage() {
 
   // backlog/R17 — two one-shot URL params, latched during render (BillingPage's `justSubscribed`
   // pattern) so they survive being stripped a moment later:
-  //   ?feature=buy            Billing's "Pick a post": the buy control on every eligible card.
+  //   ?feature=buy            Billing's "Pick a post": selects the billing source once plan slots are exhausted.
   //   ?featured=paid&post=ID  Stripe's success_url: that card reads "Confirming…" until the
   //                           webhook writes featuredPurchase onto it. No timeout, by decision.
   const paidPostId = searchParams.get('featured') === 'paid' ? searchParams.get('post') : null
@@ -135,9 +143,9 @@ export default function MyPostsPage() {
   // canBuy is recomputed per render, so unhiding re-enables the control on its own.
   const canBuy = (post: MyPost) =>
     !post.hidden &&
-    !post.featuredPurchase &&
-    // Spec §4.9: the confirming state replaces ANY buy control. `featuredPurchase` above cannot
-    // carry this — it is exactly the field that has not arrived yet during the confirming window,
+    !hasPermanentFeaturedEntitlement(post) &&
+    // Spec §4.9: the confirming state replaces ANY buy control. The entitlement helper above
+    // cannot carry this yet — neither purchase field has arrived during the confirming window,
     // which is the only window where a second Checkout Session is possible.
     confirmingPostId !== post._id &&
     !featuredUnlimited &&
@@ -166,6 +174,7 @@ export default function MyPostsPage() {
 
   // Transient error surfaced above the list when a hide/delete action fails.
   const [actionError, setActionError] = useState<string | null>(null)
+  const [confirmUnfeaturePost, setConfirmUnfeaturePost] = useState<MyPost | null>(null)
   // The post awaiting delete confirmation in the themed Dialog below (null = closed).
   const [confirmDeletePost, setConfirmDeletePost] = useState<MyPost | null>(null)
   // backlog/R17 F4 — the post id mid-Checkout-redirect, so only the clicked card's button disables
@@ -203,12 +212,24 @@ export default function MyPostsPage() {
     setActionError(null)
     try {
       if (post.isFeatured) {
-        await unfeaturePost({ sessionToken, postId: post._id })
+        setConfirmUnfeaturePost(post)
       } else {
         await featurePost({ sessionToken, postId: post._id })
       }
     } catch (err) {
       setActionError(mapLimitError(friendlyError(err, t('myPosts.updateError')), t))
+    }
+  }
+
+  async function handleConfirmUnfeature() {
+    if (!sessionToken || !confirmUnfeaturePost) return
+    const postId = confirmUnfeaturePost._id
+    setConfirmUnfeaturePost(null)
+    setActionError(null)
+    try {
+      await unfeaturePost({ sessionToken, postId })
+    } catch (err) {
+      setActionError(friendlyError(err, t('myPosts.updateError')))
     }
   }
 
@@ -364,7 +385,7 @@ export default function MyPostsPage() {
                     </span>
                   ) : !post.isFeatured &&
                     !post.interactionLimitReached &&
-                    (featuredAtCap || buyMode) &&
+                    featuredAtCap &&
                     canBuy(post) &&
                     newCap !== undefined ? (
                     <BuyFeaturedButton
@@ -383,14 +404,15 @@ export default function MyPostsPage() {
                       aria-pressed={post.isFeatured ?? false}
                       disabled={
                         !post.isFeatured &&
-                        ((featuredAtCap && !post.featuredPurchase) || post.interactionLimitReached === true)
+                        ((featuredAtCap && !hasPermanentFeaturedEntitlement(post)) ||
+                          post.interactionLimitReached === true)
                       }
                       title={
                         post.isFeatured
                           ? undefined
                           : post.interactionLimitReached === true
                             ? t('myPosts.featuredCappedTitle')
-                            : featuredAtCap && !post.featuredPurchase
+                            : featuredAtCap && !hasPermanentFeaturedEntitlement(post)
                               ? t('myPosts.featureLimitReached')
                               : undefined
                       }
@@ -507,6 +529,33 @@ export default function MyPostsPage() {
               onClick={() => void handleConfirmDelete()}
             >
               {t('myPosts.delete')}
+            </Button>
+          </DialogFooter>
+        </Modal>
+      )}
+
+      {confirmUnfeaturePost && (
+        <Modal
+          onClose={() => setConfirmUnfeaturePost(null)}
+          title={t('myPosts.unfeatureConfirmTitle')}
+        >
+          <p className="text-foreground m-0 text-sm">{t('myPosts.unfeatureConfirm')}</p>
+          <DialogFooter className="mt-5">
+            <Button
+              type="button"
+              variant="ghost"
+              className="cursor-pointer"
+              onClick={() => setConfirmUnfeaturePost(null)}
+            >
+              {t('privacy.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="cursor-pointer"
+              onClick={() => void handleConfirmUnfeature()}
+            >
+              {t('myPosts.unfeature')}
             </Button>
           </DialogFooter>
         </Modal>

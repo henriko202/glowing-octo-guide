@@ -4,10 +4,10 @@ export default function Features({ dict, tiers }: { dict: Dictionary['features']
   return (
     <section
       id="features"
-      className="bg-ink-800 px-6 py-28"
+      className="bg-ink-800 px-6 py-14 md:py-20"
     >
       <div className="mx-auto max-w-5xl">
-        <div className="mb-16 text-center">
+        <div className="mb-8 text-center">
           <p className="mb-3 text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
         </div>
@@ -15,10 +15,13 @@ export default function Features({ dict, tiers }: { dict: Dictionary['features']
           {dict.items.map(f => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-7 transition-colors duration-300 hover:border-cream/15"
+              className="group rounded-2xl border border-cream/[0.08] bg-ink-600 p-5 transition-colors duration-300 hover:border-cream/15 md:p-7"
             >
               <div className="mb-5 flex items-start justify-between">
-                <span className="text-2xl text-gold-text opacity-70 transition-opacity duration-300 group-hover:opacity-100">
+                <span
+                  aria-hidden="true"
+                  className="text-2xl text-gold-text opacity-70 transition-opacity duration-300 group-hover:opacity-100"
+                >
                   {f.icon}
                 </span>
                 <span className="rounded-full bg-cream/[0.08] px-2.5 py-1 text-[13px] font-medium text-cream-muted dark:bg-cream/[0.06]">

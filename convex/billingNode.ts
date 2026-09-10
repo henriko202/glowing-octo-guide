@@ -15,7 +15,7 @@ import {
 } from './lib/stripePrices'
 import { buildDowngradePhases, isSpentSchedule, planChangeDirection } from './lib/downgrade'
 import { PORTAL_TIER_KEY, portalTierFor } from './lib/portalConfig'
-import { findLiveSubscription, trialDaysFor, trialEligible } from './lib/trialMilestone'
+import { findLiveSubscription, isCancelPending, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
 import { assertCanEngage } from './lib/access'
@@ -145,9 +145,14 @@ export const purchaseFeaturedPost = action({
 
 // Ends the Stripe trial now → billing starts immediately. Plan 2B schedules this when a
 // trialing user reaches 50 combined interactions before the 7-day trial elapses.
+// Re-checked against Stripe, not just our row: a cancel that lands before its webhook would still be
+// converted, and Stripe then bills the period the cancel truncates as PENDING prorations, charged at
+// the next invoice rather than now (2026-09-10). A clean conversion invoices the full period at once.
 export const endTrialEarly = internalAction({
   args: { stripeSubscriptionId: v.string() },
   handler: async (_ctx, { stripeSubscriptionId }) => {
+    const sub = await stripe().subscriptions.retrieve(stripeSubscriptionId)
+    if (sub.status !== 'trialing' || isCancelPending(sub)) return
     await stripe().subscriptions.update(stripeSubscriptionId, { trial_end: 'now' })
   }
 })
@@ -386,7 +391,7 @@ export const createCancelFlowSession = action({
     // than scheduled. CancelInterstitial hides the alternative for a trialing member; this is the
     // server's half of the same rule.
     if (sub.status === 'trialing') throw new ConvexError('TRIAL_NO_SWITCH')
-    if (sub.cancel_at_period_end) throw new ConvexError('CANCEL_PENDING')
+    if (isCancelPending(sub)) throw new ConvexError('CANCEL_PENDING')
 
     // The retrieved item carries the authoritative interval; our snapshot (optional) is the fallback.
     const stripeInterval = item.price.recurring?.interval
@@ -430,7 +435,7 @@ export const createPlanSwitchSession = action({
     // `contact` row would rank Pro as cheaper, and the sync never writes contact to a row — so the
     // fall-through to the portal is a type guard, not a member-facing path.
     if (direction === 'down' && targetTier !== 'pro') {
-      if (sub.cancel_at_period_end) throw new ConvexError('CANCEL_PENDING')
+      if (isCancelPending(sub)) throw new ConvexError('CANCEL_PENDING')
       return scheduleDowngrade(ctx, sub, priceId, targetTier)
     }
     // The portal writes the same subscription our schedule owns, so an upgrade taken while one is
@@ -476,12 +481,19 @@ export const undoScheduledDowngrade = action({
 // Undo a pending period-end cancellation. The webhook's customer.subscription.updated clears
 // cancelAtPeriodEnd on our row; the page reacts to that, so nothing is returned. Idempotent: a
 // subscription that is already not cancelling (stale tab, double tap) is a silent success.
+// Undoes whichever field carries the cancel: the flag, or the portal's `cancel_at` (see
+// isCancelPending), which `cancel_at_period_end: false` does not clear and `''` unsets.
 export const resumeSubscription = action({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }): Promise<null> => {
     const { live } = await liveSubscriptionFor(ctx, sessionToken)
     if (!live.cancelAtPeriodEnd) return null
-    await stripe().subscriptions.update(live.stripeSubscriptionId, { cancel_at_period_end: false })
+    const sub = await stripe().subscriptions.retrieve(live.stripeSubscriptionId)
+    if (!isCancelPending(sub)) return null
+    await stripe().subscriptions.update(
+      sub.id,
+      sub.cancel_at_period_end ? { cancel_at_period_end: false } : { cancel_at: '' }
+    )
     return null
   }
 })

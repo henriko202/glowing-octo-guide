@@ -7,10 +7,10 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
   return (
     <section
       id="proof"
-      className="bg-ink px-6 py-28"
+      className="bg-ink px-6 py-14 md:py-20"
     >
       <div className="mx-auto max-w-5xl">
-        <div className="mb-16 text-center">
+        <div className="mb-8 text-center">
           <p className="mb-3 text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">
             {dict.headlineLine1}
@@ -19,9 +19,9 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Founder note */}
-          <div className="flex flex-col rounded-2xl border border-cream/[0.08] bg-ink-800 p-8 md:col-span-2">
+          <div className="flex flex-col rounded-2xl border border-cream/[0.08] bg-ink-800 p-6">
             <div className="mb-5 flex items-center gap-4">
               <Image
                 src={FOUNDER_PHOTO}
@@ -38,16 +38,34 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
             <p className="text-base leading-relaxed text-cream-muted">{dict.founderMessage}</p>
           </div>
 
-          {/* No link-out: the SSI page is a Sales Navigator feature since Aug 2026 (backlog/R10). */}
-          <div className="flex flex-col justify-center rounded-2xl border border-gold/20 bg-gold/[0.04] p-8">
-            <p className="text-xl font-semibold text-cream">{dict.proofCardHeadline}</p>
-            <p className="mt-3 text-base leading-relaxed text-cream-muted">{dict.proofCardBody}</p>
-            <p className="mt-4 text-sm font-medium text-cream-muted">{dict.proofCardNote}</p>
+          <div className="flex flex-col justify-center rounded-2xl border border-gold/20 bg-gold/[0.04] p-6">
+            <h3 className="text-xl font-semibold text-cream">{dict.recapLabel}</h3>
+            <ul className="mt-4 grid gap-3 text-sm text-cream">
+              {dict.recapFields.map(field => (
+                <li
+                  key={field}
+                  className="border-b border-cream/10 pb-3"
+                >
+                  {field}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-sm leading-relaxed text-cream-muted">{dict.proofCardBody}</p>
+            <p className="mt-4 text-sm font-medium text-cream-muted">
+              <a
+                href="https://www.linkedin.com/sales/ssi"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-4 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+              >
+                {dict.proofCardNote}
+              </a>
+            </p>
           </div>
         </div>
 
         {/* Early-access line */}
-        <div className="mt-10 flex items-center justify-center">
+        <div className="mt-6 flex items-center justify-center">
           <p className="rounded-full border border-gold/30 bg-gold/5 px-5 py-2 text-sm text-gold-text">
             {dict.earlyAccess}
           </p>

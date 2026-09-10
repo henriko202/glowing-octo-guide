@@ -8,6 +8,12 @@ export function isFeaturedLimitReached(usedCount: number, featuredPerMonth: numb
   return usedCount >= featuredPerMonth
 }
 
+// A featured slot belongs to the post permanently. `featuredAt` is retained after unfeaturing as
+// the plan-entitlement marker; featuredPurchase remains the fallback for older paid posts.
+export function hasPermanentFeaturedEntitlement(post: { featuredAt?: number; featuredPurchase?: unknown }): boolean {
+  return post.featuredAt !== undefined || post.featuredPurchase !== undefined
+}
+
 // The contact/enterprise "unlimited" featured-post cap (planLimits.ts DEFAULTS.contact). Lives in
 // this pure module, not planLimits.ts (which imports server code), so the app bundle shares the
 // same rule instead of hardcoding the number.

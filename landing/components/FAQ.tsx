@@ -8,10 +8,10 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
   return (
     <section
       id="faq"
-      className="bg-ink-800 px-6 py-28"
+      className="bg-ink-800 px-6 py-14 md:py-20"
     >
       <div className="mx-auto max-w-3xl">
-        <div className="mb-16 text-center">
+        <div className="mb-8 text-center">
           <p className="mb-3 text-xs font-medium tracking-widest text-gold-text uppercase">{dict.eyebrow}</p>
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
         </div>
@@ -21,6 +21,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
             <div key={faq.q}>
               <button
                 id={`faq-btn-${i}`}
+                type="button"
                 aria-controls={`faq-panel-${i}`}
                 aria-expanded={openIndex === i}
                 className="flex w-full items-center justify-between gap-6 py-6 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
@@ -39,8 +40,7 @@ export default function FAQ({ dict }: { dict: Dictionary['faq'] }) {
                 id={`faq-panel-${i}`}
                 role="region"
                 aria-labelledby={`faq-btn-${i}`}
-                className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
-                style={{ maxHeight: openIndex === i ? '600px' : '0px' }}
+                hidden={openIndex !== i}
               >
                 <p className="pb-6 text-base leading-relaxed text-cream-muted">{faq.a}</p>
               </div>

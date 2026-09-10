@@ -23,7 +23,7 @@ import { fetchWithTimeout } from './lib/fetchWithTimeout'
 import { postCreatedHidden } from './lib/access'
 import { DEFAULTS, getPlanLimitsHelper, type PlanLimits, type Tier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
-import { currentUtcMonthKey, isFeaturedLimitReached } from './lib/postLimit'
+import { currentUtcMonthKey, hasPermanentFeaturedEntitlement, isFeaturedLimitReached } from './lib/postLimit'
 import { hasReachedInteractionLimit } from './lib/interactionLimit'
 import { featuredPurchaseBlocker, fulfilmentAction, purchasedFeaturePatch } from './lib/featuredPurchase'
 import { writeAuditLog } from './lib/audit'
@@ -544,95 +544,107 @@ export const deletePost = mutation({
  * it, a retried call would re-run the whole feature flow (including the usage increment) a second
  * time even though the post was already featured by the call it raced against — this guard is the
  * actual double-increment fix, not just an optimization. Authorized for the post's author or any
- * admin (`canModifyPost`, same as `setPostHidden`/`deletePost`). No quota refund on unfeature
- * (below) — featuring permanently consumes one monthly slot by design (product decision, backlog/B07).
+ * admin (`canModifyPost`, same as `setPostHidden`/`deletePost`). The first feature permanently
+ * assigns that allowance to this post; later unfeature/re-feature cycles reuse it.
  */
+type FeaturedToggleArgs = { sessionToken: string; postId: Id<'posts'> }
+
+export async function featurePostHandler(
+  ctx: MutationCtx,
+  { sessionToken, postId }: FeaturedToggleArgs
+): Promise<void> {
+  const user = await requireAuth(ctx, sessionToken)
+  const post = await ctx.db.get(postId)
+  if (!post) throw new ConvexError('Post not found')
+  if (!canModifyPost(user, post)) {
+    throw new ConvexError('Forbidden: you can only modify your own posts')
+  }
+  // A soft-deleted post must never be resurfaced by featuring it.
+  if (post.deletedAt !== undefined) {
+    throw new ConvexError('Post has been deleted')
+  }
+  // Idempotent no-op if already featured — see the concurrency note above.
+  if (post.isFeatured) return
+
+  // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
+  const feed = computeFeedFields({
+    isFeatured: true,
+    publishedAt: post.publishedAt,
+    authorTierRank: post.authorTierRank,
+    hidden: post.hidden,
+    interactionLimitReached: post.interactionLimitReached,
+    deletedAt: post.deletedAt
+  })
+  // A plan allowance or paid slot belongs to this post permanently. `featuredAt` survives
+  // unfeaturing, so re-featuring never checks or increments the current month's quota.
+  if (hasPermanentFeaturedEntitlement(post)) {
+    await ctx.db.patch(postId, { isFeatured: true, featuredAt: post.featuredAt ?? Date.now(), ...feed })
+    return
+  }
+
+  const tier = user.tier ?? 'starter'
+  const limits = await getPlanLimitsHelper(ctx, user._id, tier)
+  const month = currentUtcMonthKey()
+  const usageRow = await ctx.db
+    .query('featuredPostUsage')
+    .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
+    .unique()
+  const usedCount = usageRow?.usedCount ?? 0
+  if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
+    // Prefixed code, not English prose: survives production error redaction and is
+    // localized client-side by lib/errors.ts's mapLimitError (backlog/R08).
+    throw new ConvexError(`FEATURED_LIMIT:${limits.featuredPerMonth}`)
+  }
+
+  await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
+
+  if (usageRow) await ctx.db.patch(usageRow._id, { usedCount: usedCount + 1 })
+  else await ctx.db.insert('featuredPostUsage', { userId: user._id, month, usedCount: 1 })
+}
+
 export const featurePost = mutation({
   args: {
     sessionToken: v.string(),
     postId: v.id('posts')
   },
-  handler: async (ctx, { sessionToken, postId }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    const post = await ctx.db.get(postId)
-    if (!post) throw new ConvexError('Post not found')
-    if (!canModifyPost(user, post)) {
-      throw new ConvexError('Forbidden: you can only modify your own posts')
-    }
-    // A soft-deleted post must never be resurfaced by featuring it.
-    if (post.deletedAt !== undefined) {
-      throw new ConvexError('Post has been deleted')
-    }
-    // Idempotent no-op if already featured — see the concurrency note above.
-    if (post.isFeatured) return
-
-    // Featuring changes feed rank — refresh the denormalized feed fields (see lib/feedRank.ts).
-    const feed = computeFeedFields({
-      isFeatured: true,
-      publishedAt: post.publishedAt,
-      authorTierRank: post.authorTierRank,
-      hidden: post.hidden,
-      interactionLimitReached: post.interactionLimitReached,
-      deletedAt: post.deletedAt
-    })
-    // backlog/R17 — a bought slot was paid for once; re-featuring it never touches the monthly
-    // quota and never refunds (the hint under the buy button says so).
-    if (post.featuredPurchase) {
-      await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
-      return
-    }
-
-    const tier = user.tier ?? 'starter'
-    const limits = await getPlanLimitsHelper(ctx, user._id, tier)
-    const month = currentUtcMonthKey()
-    const usageRow = await ctx.db
-      .query('featuredPostUsage')
-      .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
-      .unique()
-    const usedCount = usageRow?.usedCount ?? 0
-    if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
-      // Prefixed code, not English prose: survives production error redaction and is
-      // localized client-side by lib/errors.ts's mapLimitError (backlog/R08).
-      throw new ConvexError(`FEATURED_LIMIT:${limits.featuredPerMonth}`)
-    }
-
-    await ctx.db.patch(postId, { isFeatured: true, featuredAt: Date.now(), ...feed })
-
-    if (usageRow) await ctx.db.patch(usageRow._id, { usedCount: usedCount + 1 })
-    else await ctx.db.insert('featuredPostUsage', { userId: user._id, month, usedCount: 1 })
-  }
+  handler: featurePostHandler
 })
 
 /**
- * Reverse `featurePost`. Does NOT decrement `featuredPostUsage` — see the no-refund decision in
- * the doc comment above `featurePost`. Authorized for the post's author or any admin. Idempotent.
+ * Reverse `featurePost`. Does NOT decrement `featuredPostUsage` and retains `featuredAt` as the
+ * permanent entitlement marker. Authorized for the post's author or any admin. Idempotent.
  */
+export async function unfeaturePostHandler(
+  ctx: MutationCtx,
+  { sessionToken, postId }: FeaturedToggleArgs
+): Promise<void> {
+  const user = await requireAuth(ctx, sessionToken)
+  const post = await ctx.db.get(postId)
+  if (!post) throw new ConvexError('Post not found')
+  if (!canModifyPost(user, post)) {
+    throw new ConvexError('Forbidden: you can only modify your own posts')
+  }
+  if (!post.isFeatured) return // already unfeatured — idempotent no-op
+
+  // Unfeaturing changes feed rank — refresh the denormalized feed fields.
+  const feed = computeFeedFields({
+    isFeatured: false,
+    publishedAt: post.publishedAt,
+    authorTierRank: post.authorTierRank,
+    hidden: post.hidden,
+    interactionLimitReached: post.interactionLimitReached,
+    deletedAt: post.deletedAt
+  })
+  await ctx.db.patch(postId, { isFeatured: false, ...feed })
+  // No usedCount decrement; retained featuredAt lets this post reuse the same allowance later.
+}
+
 export const unfeaturePost = mutation({
   args: {
     sessionToken: v.string(),
     postId: v.id('posts')
   },
-  handler: async (ctx, { sessionToken, postId }) => {
-    const user = await requireAuth(ctx, sessionToken)
-    const post = await ctx.db.get(postId)
-    if (!post) throw new ConvexError('Post not found')
-    if (!canModifyPost(user, post)) {
-      throw new ConvexError('Forbidden: you can only modify your own posts')
-    }
-    if (!post.isFeatured) return // already unfeatured — idempotent no-op
-
-    // Unfeaturing changes feed rank — refresh the denormalized feed fields.
-    const feed = computeFeedFields({
-      isFeatured: false,
-      publishedAt: post.publishedAt,
-      authorTierRank: post.authorTierRank,
-      hidden: post.hidden,
-      interactionLimitReached: post.interactionLimitReached,
-      deletedAt: post.deletedAt
-    })
-    await ctx.db.patch(postId, { isFeatured: false, featuredAt: undefined, ...feed })
-    // No usedCount decrement — unfeaturing does not refund the monthly quota.
-  }
+  handler: unfeaturePostHandler
 })
 
 // ── Featured post add-on (backlog/revenue/R17) ───────────────────────────────────────────────────

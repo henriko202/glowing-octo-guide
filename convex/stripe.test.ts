@@ -79,4 +79,14 @@ describe('syncArgs', () => {
     expect(syncArgs(event({ schedule: { id: 'sub_sched_2' } })).stripeScheduleId).toBe('sub_sched_2')
     expect(syncArgs(event({})).stripeScheduleId).toBeUndefined()
   })
+
+  // The regression this pins: on API 2026-02-25.clover the portal's cancel sets `cancel_at` and leaves
+  // `cancel_at_period_end` false. Reading only the flag left the row "not cancelling", so the
+  // 50-interaction milestone converted a cancelled trial (2026-09-10) and Stripe billed the truncated
+  // period as pending prorations instead of charging.
+  it('mirrors a portal cancel (cancel_at set, cancel_at_period_end false) as pending', () => {
+    expect(syncArgs(event({ cancel_at: 1_789_586_703, cancel_at_period_end: false })).cancelAtPeriodEnd).toBe(true)
+    expect(syncArgs(event({ cancel_at_period_end: true })).cancelAtPeriodEnd).toBe(true)
+    expect(syncArgs(event({ cancel_at: null, cancel_at_period_end: false })).cancelAtPeriodEnd).toBe(false)
+  })
 })
