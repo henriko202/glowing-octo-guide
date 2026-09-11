@@ -2,9 +2,10 @@
 // Data minimization / storage limitation. A daily cron expires LinkedIn tokens, purges old export
 // files + audit logs, and flags dormant accounts for deletion (feeding the Phase 2a deletion cron).
 // The predicates are pure + unit-tested; the cron orchestrates with bounded batches.
-import { internalAction, internalMutation } from '../_generated/server'
+import { env, internalAction, internalMutation } from '../_generated/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api'
+import { resolveBillingLocale } from '../lib/checkoutCopy'
 import { sendEmail } from '../lib/email'
 import { dormancyWarningEmail } from './emails'
 
@@ -34,10 +35,6 @@ export function isDormant(
   if (typeof u.lastLoginAt !== 'number') return false
   if (u.subscriptionStatus === 'active' || u.subscriptionStatus === 'trialing') return false
   return now - u.lastLoginAt >= thresholdMs
-}
-
-function dayStr(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10)
 }
 
 export const enforceDataRetention = internalMutation({
@@ -103,6 +100,8 @@ export const enforceDataRetention = internalMutation({
       subscriptionStatus?: string
       deletionScheduledAt?: number
       email?: string
+      language?: string
+      primaryLocale?: string
     }>) {
       if (isDormant(u, now, DORMANCY_MS)) {
         const scheduledAt = now + GRACE_MS
@@ -114,7 +113,8 @@ export const enforceDataRetention = internalMutation({
         if (email) {
           await ctx.scheduler.runAfter(0, internal.privacy.retention.sendDormancyWarning, {
             email,
-            deletionDate: dayStr(scheduledAt)
+            deletionAt: scheduledAt,
+            locale: resolveBillingLocale(u.language, u.primaryLocale)
           })
         }
       }
@@ -134,9 +134,13 @@ export const enforceDataRetention = internalMutation({
 })
 
 export const sendDormancyWarning = internalAction({
-  args: { email: v.string(), deletionDate: v.string() },
-  handler: async (_ctx, { email, deletionDate }) => {
-    const m = dormancyWarningEmail(deletionDate)
+  args: {
+    email: v.string(),
+    deletionAt: v.number(),
+    locale: v.union(v.literal('en'), v.literal('pt'), v.literal('es'))
+  },
+  handler: async (_ctx, { email, deletionAt, locale }) => {
+    const m = dormancyWarningEmail({ locale, deletionAt, appUrl: env.APP_URL })
     await sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text })
   }
 })

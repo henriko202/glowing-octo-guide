@@ -6,6 +6,7 @@ import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { requireAuth } from '../lib/auth'
 import { assertAdmin } from '../admin'
+import { resolveBillingLocale } from '../lib/checkoutCopy'
 import { checkRateLimit } from '../lib/rateLimit'
 import { type AuditDb, writeAuditLog } from '../lib/audit'
 import { sendEmail } from '../lib/email'
@@ -221,7 +222,9 @@ export const getReplyData = internalQuery({
     return {
       email: u?.email ?? null,
       originalMessage: feedback.message,
-      replyText: response.text
+      replyText: response.text,
+      language: u?.language,
+      primaryLocale: u?.primaryLocale
     }
   }
 })
@@ -233,7 +236,8 @@ export const sendFeedbackReply = internalAction({
   handler: async (ctx, { responseId }) => {
     const data = await ctx.runQuery(internal.feedback.feedback.getReplyData, { responseId })
     if (!data || !data.email) return
-    const m = feedbackReplyEmail({ replyText: data.replyText, originalMessage: data.originalMessage })
+    const locale = resolveBillingLocale(data.language, data.primaryLocale)
+    const m = feedbackReplyEmail({ locale, replyText: data.replyText, originalMessage: data.originalMessage })
     const replyTo = env.FEEDBACK_REPLY_TO
     await sendEmail({
       to: data.email,

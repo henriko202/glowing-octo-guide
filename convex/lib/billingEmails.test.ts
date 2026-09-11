@@ -221,7 +221,7 @@ describe('postCapReachedEmail (R20)', () => {
       const m = postCapReachedEmail(l, { ...base, mode: 'proContact' })
       expect(m.subject).toContain('25')
       expect(m.text).toContain(base.myPostsUrl)
-      expect(m.html).toContain(`<a href="${base.myPostsUrl}">`)
+      expect(m.html).toContain(`href="${base.myPostsUrl}"`)
     }
   })
 
@@ -248,7 +248,7 @@ describe('postCapReachedEmail (R20)', () => {
     const upgradeUrl = 'https://app.example/billing?plan=growth&interval=annual&src=cap_email'
     const m = postCapReachedEmail('en', { ...base, mode: 'upgrade', nextPlanName: 'Growth', nextCap: 50, upgradeUrl })
     expect(m.text).toContain(`On Growth, your next posts collect up to 50 each: ${upgradeUrl}`)
-    expect(m.html).toContain(`<a href="${upgradeUrl}">`)
+    expect(m.html).toContain(`href="${upgradeUrl}"`)
     expect(m.text).not.toContain(base.supportEmail)
     // The checkout link is the only link: the My Posts line steps aside in this mode.
     expect(m.text).not.toContain(base.myPostsUrl)

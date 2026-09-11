@@ -3,12 +3,13 @@
 // reads the user's own rows PER TABLE with pagination (gatherUserTablePage) so a user with an
 // unbounded number of posts/interactions can't blow a single query's read limit; the action stores
 // the JSON bundle in Convex file storage behind a 7-day owner-only link and emails the user.
-import { internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
+import { env, internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { resolveSession } from '../lib/auth'
 import { checkRateLimit } from '../lib/rateLimit'
 import { type AuditDb, writeAuditLog } from '../lib/audit'
+import { resolveBillingLocale } from '../lib/checkoutCopy'
 import { sendEmail } from '../lib/email'
 import { exportReadyEmail } from './emails'
 
@@ -206,7 +207,8 @@ export const generateExport = internalAction({
       })
       const email = user.email as string | undefined
       if (email) {
-        const m = exportReadyEmail()
+        const locale = resolveBillingLocale(user.language, user.primaryLocale)
+        const m = exportReadyEmail({ locale, appUrl: env.APP_URL })
         await sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text })
       }
     } catch (err) {

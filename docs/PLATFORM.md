@@ -1014,10 +1014,10 @@ sequenceDiagram
     CV ->> DB: checkOAuthStartBudget() — per-client 60/hour + global 1800/hour backstop
     CV ->> DB: createOAuthState(state, browserNonce, challenge, +10min, plan?, interval?, ref?)
     CV -->> U: 302 → LinkedIn authorize?scope=…&state<br/>Set-Cookie: oauth_nonce_<state> (HttpOnly; Secure; SameSite=Lax; 10min)
-    U ->> LI: authenticate & consent
-    LI -->> CV: 302 /auth/linkedin/callback?code&state (sends the oauth_nonce_<state> cookie)
-    CV ->> CV: readCookie(oauth_nonce_<state>) — missing ⇒ reject
-    CV ->> DB: validateAndConsumeOAuthState(state, browserNonce) → { valid, plan?, interval?, ref?, challenge }
+U ->> LI: authenticate & consent
+LI -->> CV: 302 /auth/linkedin/callback?code&state (sends the oauth_nonce_<state> cookie)
+CV ->> CV: readCookie(oauth_nonce_<state>) — missing ⇒ reject
+CV ->> DB: validateAndConsumeOAuthState(state, browserNonce) → { valid, plan?, interval?, ref?, challenge }
 alt invalid / expired state, missing/mismatched nonce cookie, or missing challenge
 CV -->> U: 302 → APP_URL/?error=oauth_failed<br/>Set-Cookie: oauth_nonce_<state> cleared
 else valid
@@ -1030,12 +1030,12 @@ Note over CV, DB: insert only, and only if by_invite_code finds a non-banned mem
 CV ->> DB: createAuthCode(code=UUID, userId, challenge, +2min)
 CV -->> U: 302 → APP_URL/auth/success#code=UUID&plan=growth&interval=annual<br/>Cache-Control: no-store ; oauth_nonce_<state> cleared
 Note over CV, U: every OAuth 302 sets Cache-Control: no-store ; no session token in any URL ; ref is never echoed back
-U ->> A: /auth/success captures #code + plan/interval (fragment scrubbed)
+U ->> A: /auth/success captures#code + plan/interval (fragment scrubbed)
 A ->> CV: sessions.redeemAuthCode({ code, verifier })
 CV ->> DB: SHA-256(verifier) == stored challenge ⇒ insert session + delete code
 CV -->> A: { sessionToken } over the Convex transport
 A ->> A: sessionStorage.sessionToken = token → navigate /feed
-Note over U, A: a handed-over #code= link is inert — the verifier never left this browser
+Note over U, A: a handed-over#code= link is inert — the verifier never left this browser
 end
 ```
 
@@ -1315,9 +1315,10 @@ Two pure guards run before the session is created, both reading `internal.billin
 
 **Language.** `createCheckoutSession` takes an optional `locale` argument (the app passes `i18n.language`) and persists
 the resolved value to `users.language` through `internal.users.setLanguage`. The member's UI language otherwise lives
-only in a browser cookie the backend never sees, and the billing mailers run hours or days later. Resolution order for
-every billing notice is `resolveBillingLocale(users.language, users.primaryLocale)`, falling back to `'en'`; regional
-and mis-cased tags (`pt-BR`, `ES`) normalize, unsupported ones fall through to the next candidate.
+only in a browser cookie the backend never sees, and the transactional mailers run hours or days later. Resolution order
+for every transactional notice — billing, privacy/DSR and feedback alike — is
+`resolveBillingLocale(users.language, users.primaryLocale)`, falling back to `'en'`; regional and mis-cased tags
+(`pt-BR`, `ES`) normalize, unsupported ones fall through to the next candidate.
 
 ```mermaid
 sequenceDiagram
@@ -1467,6 +1468,14 @@ an English plan name never lands inside a Portuguese email. `sendDuplicateCancel
 rendered plan name: `http.ts` deals in tier ids and the mailer localizes, so display copy never passes through the
 webhook layer.
 
+Every transactional body now renders through the shared branded shell **`lib/emailLayout.ts`**, with escaping in **
+`lib/html.ts`**: a table-based 600 px card (dark header band + wordmark, gold rule, white content card, muted footer)
+assembled from `emailParagraph` / `emailLabel` / `emailQuote` / `emailFacts` / `emailNote` / `emailButton`. The shell is
+client-safe by construction — inline styles, no flexbox/grid/CSS variables/canvas/web fonts, one `<style>` block limited
+to the mobile padding media query and the link color. The billing builders add localized headings, fact labels and
+button labels (Plan/Price/Trial ends, _Manage billing_ / _Gerenciar assinatura_ / _Gestionar suscripción_, …) while
+every `text` body stays byte-identical.
+
 Each mailer **re-reads state before sending** and skips when the member is no longer `trialing` — and, critically, when
 the row's `cancelAtPeriodEnd` is set. **Stripe keeps `status: 'trialing'` after a member cancels mid-trial**, so that
 flag is the only signal that no charge is coming; both trial mailers check it, so we never promise a charge that will
@@ -1580,6 +1589,8 @@ post's **own**
 interaction total, never the plan's cap — a downgrade can leave the cap below it) and the body in en/pt/es, quotes the
 post's `excerpt(post.content)` (`lib/recap`) so the author knows which post
 it is, and is enumerated in the existing "billing emails stay transactional" guard test alongside the trial mailers.
+Its HTML renders the excerpt as an escaped quote and the one actionable link as a `lib/emailLayout.ts` button — the
+support address only ever closes the non-upgrade modes as plain text in the soft panel.
 `SUPPORT_EMAIL` moved to **`convex/lib/support.ts`**, and `app/src/lib/support.ts` is now a re-export of it, so the
 email, the banned screen and the upgrade-at-limit mailto cannot drift apart.
 
@@ -3681,7 +3692,9 @@ Each feedback item can receive **multiple admin replies** stored as a thread in 
   `feedbackResponses` row, patches `status=responded`, writes a `feedback.responded` audit log, schedules the email if
   `sendEmail=true`), `archiveFeedback` / `reopenFeedback`, and the internal `getReplyData` + `sendFeedbackReply` action
   (keyed by `responseId`).
-- `emails.ts` — `feedbackReplyEmail` builder (HTML-escapes user/admin text).
+- `emails.ts` — `feedbackReplyEmail` builder (one copy record per language, selected by the submitter's
+  `resolveBillingLocale` locale; renders through the shared `lib/emailLayout.ts` shell; HTML-escapes user/admin text
+  with `lib/html.ts:escapeHtml`; multi-line replies keep their line breaks as `<br>`).
 - Replies use `lib/email.ts:sendEmail` with `Reply-To` = `FEEDBACK_REPLY_TO` so users reply to a human inbox. The admin
   chooses **per reply** whether to send an email (`sendEmail`
   boolean arg to `respondToFeedback`).
@@ -3891,7 +3904,10 @@ flowchart TD
   `dataExportRequests` (asynchronous Subject‑Access‑Request jobs), `auditLogs` (accountability —
   `lib/audit.ts` exposes `writeAuditLog` for in‑mutation use and the `logAudit` internal mutation for actions).
 - **Transactional email.** `lib/email.ts` wraps Resend via `sendEmail` and **no‑ops when
-  `RESEND_API_KEY`/`EMAIL_FROM` are unset**, so privacy flows never fail merely because email is not configured.
+  `RESEND_API_KEY`/`EMAIL_FROM` are unset**, so privacy flows never fail merely because email is not configured. All
+  transactional HTML renders through the shared branded shell `lib/emailLayout.ts` (see
+  [§8](#8-subscriptions--billing)); the privacy builders accept an optional `appUrl` and add one CTA button only when it
+  is set — `/privacy-data` for the export, the app root for the deletion-scheduled and dormancy warnings.
   See [§16](#16-environment-variables).
 - **Transactional billing email.** Three billing notices are sent to `users.email` — trial near-end (40 of 50), trial
   ending (3 days before day 7), and duplicate-subscription cancelled — all built in `convex/lib/billingEmails.ts` and
@@ -3956,7 +3972,7 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
   `getExportUser` and feedback replies from `gatherFeedbackResponses` (keyed by feedbackId). It then assembles a JSON
   bundle via the pure `buildExportBundle` — which **strips token secrets** and **redacts other actors** from audit
   entries — stores it in Convex file storage, marks the row `ready` with a **7-day** `expiresAt`, and emails the user
-  (`exportReadyEmail`).
+  (`exportReadyEmail`, localized from the user doc's `language`/`primaryLocale`).
 - `getExportStatus` / `getExportDownloadUrl` return the status and a short-lived **owner-only** download URL
   (`ctx.storage.getUrl`); expired links return null. Both take a client-supplied `now` (queries must not read the wall
   clock); `PrivacyDataPage` latches it once per mount.
@@ -3966,7 +3982,8 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
 - `requestAccountDeletion` (mutation, idempotent) sets `deletionRequestedAt` + `deletionScheduledAt`
   (+30 days) + `deletionReason='user_request'`, **revokes all sessions**, audits, and schedules
   `onDeletionRequested` (cancels the user's Stripe subscriptions immediately via the Stripe SDK — stop billing during
-  grace — and sends `deletionScheduledEmail`).
+  grace — and sends the localized `deletionScheduledEmail`; the locale comes from `getDeletionUser`, which returns the
+  user doc's `email`/`language`/`primaryLocale`).
 - The shared feed **excludes pending-deletion authors** via the pure `isAuthorFeedEligible` helper (`feed.ts`) — their
   posts disappear immediately and **reappear automatically on cancel**, with no post mutation.
 - `cancelAccountDeletion` clears the deletion fields (the user must re-subscribe for paid features).
@@ -3983,8 +4000,8 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
   row is deleted **last**, so a half-drained account stays "due" and the cron re-selects it until every table is clear —
   keeping each pass within one transaction's budget even for an author with an unbounded number of posts. On the final
   pass it writes an
-  `account.deleted` system audit entry, then emails
-  `deletionCompletedEmail`. **Billing invoices are retained inside Stripe** for tax/accounting law.
+  `account.deleted` system audit entry, then emails `deletionCompletedEmail` in the locale computed from the in-scope
+  user doc. **Billing invoices are retained inside Stripe** for tax/accounting law.
 - A schema-derived completeness test asserts the cascade covers every user-referencing table, so a future table cannot
   silently orphan personal data.
 - **`userInteractions.authorId` (added 2026-09-07) needs no cascade step of its own.** Every row carrying an author id
@@ -4056,12 +4073,12 @@ range (token fields incl. `tokenExpiresAt` cleared; dormant rows gain `deletionS
 runs; rescheduling keys only off those two strictly-draining sweeps to guarantee termination (the export and dormancy
 sweeps make bounded progress per run):
 
-| Sweep                 | Predicate                                                                                                     | Action                                                                                                           |
-|-----------------------|---------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| LinkedIn token expiry | `isTokenExpired(user)` — `tokenExpiresAt` in the past                                                         | Nulls `linkedinAccessToken`, `linkedinRefreshToken`, `tokenExpiresAt`, `tokenScope` on the `users` row.          |
-| Export file expiry    | `isExportExpired(req)` — status `ready` + `expiresAt` in the past                                             | Deletes the file from Convex storage, sets status → `expired`.                                                   |
-| Audit log purge       | `isAuditExpired(log)` — older than ~24 months                                                                 | Deletes the `auditLogs` row entirely.                                                                            |
-| Dormancy              | `isDormant(user)` — `lastLoginAt` (or `_creationTime`) >24 months ago **and** no active/trialing subscription | Sets `deletionScheduledAt` (+30 days from now) + `deletionReason='dormancy'` and sends a dormancy-warning email. |
+| Sweep                 | Predicate                                                                                                     | Action                                                                                                                                             |
+|-----------------------|---------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| LinkedIn token expiry | `isTokenExpired(user)` — `tokenExpiresAt` in the past                                                         | Nulls `linkedinAccessToken`, `linkedinRefreshToken`, `tokenExpiresAt`, `tokenScope` on the `users` row.                                            |
+| Export file expiry    | `isExportExpired(req)` — status `ready` + `expiresAt` in the past                                             | Deletes the file from Convex storage, sets status → `expired`.                                                                                     |
+| Audit log purge       | `isAuditExpired(log)` — older than ~24 months                                                                 | Deletes the `auditLogs` row entirely.                                                                                                              |
+| Dormancy              | `isDormant(user)` — `lastLoginAt` (or `_creationTime`) >24 months ago **and** no active/trialing subscription | Sets `deletionScheduledAt` (+30 days from now) + `deletionReason='dormancy'` and sends a dormancy-warning email in the member's resolved language. |
 
 The dormancy path **reuses the Phase 2a deletion cascade**: once `deletionScheduledAt` is set,
 `processAccountDeletions` (the existing daily cron) handles the hard delete after the 30-day grace window. A dormant
@@ -4960,7 +4977,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5173,8 +5190,8 @@ the member's real tier instead of hard-coding Growth. Three dead keys went the o
 `startTrialCta`), so they were deleted; `billing.plans.contact.cta` stays, because the Custom card still uses it.
 Net **252 leaf keys** per file, still verified by recursive key-diff — there is still no automated parity test. The
 outbound **billing emails are not i18n keys**: they are built server-side in `convex/lib/billingEmails.ts`, which keeps
-its own three-language copy (including localized plan names) because Convex actions have no access to the browser's
-i18next instance — see [§8](#8-subscriptions--billing).
+its own three-language copy (including localized plan names, headings, fact labels and CTA labels) because Convex
+actions have no access to the browser's i18next instance — see [§8](#8-subscriptions--billing).
 
 **R04 keys (2026-09-06):** the card-gate reorder (§14 "Trial UI (Plan 2C)") added five `feed.*` keys —
 `cardGateTitle`, `cardGateBody`, `cardGateCta`, `cardGateLater`, `hiddenPostBanner` — read by the new
@@ -6361,6 +6378,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                                                                      | [§5 Data Model](#5-data-model) (+ ER diagram)                                                                                                                                                                                                                                                                                            |
 | Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                                                                      | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                                                                                                                                                                                                                                                               |
 | Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                                                                             | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                                                                                                                                                                                                                                                |
+| Transactional emails — shell, builders and language resolution (`lib/emailLayout.ts`, `lib/html.ts`, `lib/billingEmails.ts`, `privacy/emails.ts`, `feedback/emails.ts`, `lib/checkoutCopy.ts`)                                                                                                                  | [§8](#8-subscriptions--billing), [§12A](#12a-feedback), [§13B](#13b-privacy--compliance)                                                                                                                                                                                                                                                 |
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                                                                              | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
 | Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                                                                         | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Customer Portal configurations (`convex/lib/portalConfig.ts`, `billingNode.portalConfigurationId` / `portalSession` / `createPortalSession`, the portal block in `scripts/stripe-provision.mjs`)                                                                                                                | [§8](#8-subscriptions--billing) per-tier portal configurations + Dashboard table, [§14](#14-frontend--authenticated-app-app) BillingPage                                                                                                                                                                                                 |
@@ -6419,6 +6437,18 @@ only) and the compliance docs, which
 claimed generated drafts were never stored — untrue since the draft feature shipped, and now also incomplete without
 the first-draft `ai_draft` log entry. Sections updated: §5, §11, §11A, §13B, §14, §17, §21. Gates: convex **611/611**,
 app **486/486**, landing **24/24**, convex integration **8/8**, `pnpm verify` exit 0._
+
+_Also 2026‑09‑11: **every transactional email now renders on a shared branded shell, and the privacy and
+feedback notices are localized.** New `lib/emailLayout.ts` (table-based 600 px card, inline styles, escaped
+headings/facts/quotes, at most one CTA button per mail; one `<style>` block for the mobile media query and link color)
+and `lib/html.ts` (`escapeHtml`, moved off the feedback builder). The billing builders gained localized headings, fact
+labels and CTA labels; `privacy/emails.ts` and `feedback/emails.ts` take an `EmailLang` and hold one copy record per
+language, with the senders resolving it through `resolveBillingLocale(users.language, users.primaryLocale)`. The privacy
+builders also format `deletionAt` with `Intl.DateTimeFormat` (`pt` → `pt-BR`), so dates read "30 de setembro de 2026"
+instead of the old ISO string; `deletion.getUserEmail` became `getDeletionUser`, and the deletion-completed and dormancy
+actions carry a `locale` argument. Every `subject` and `text` body is otherwise byte-identical. New
+`lib/emailLayout.test.ts` guards all builders' documents. Sections updated: §8, §12A, §13B, §21. Gates: convex
+**623/623** unit + **8/8** integration, `tsc` clean, eslint 0 warnings._
 
 _Prior: 2026‑09‑10. **The landing is now discoverable by search engines and AI assistants.**
 `landing/lib/site.ts`

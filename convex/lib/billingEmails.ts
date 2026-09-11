@@ -5,10 +5,12 @@
 // These are contract notices (card-network trial rules require a pre-charge reminder stating the
 // amount, the date and how to cancel), never marketing: no promotional copy, no countdown, no
 // urgency. Each one leads with what the member DID, then the term, then one link to cancel.
+// HTML renders through the shared branded shell in convex/lib/emailLayout.ts.
 import type { BillingLocale } from './checkoutCopy'
 import type { CapNoticeMode } from './postCapNotice'
-import { escapeHtml } from '../feedback/emails'
+import { escapeHtml } from './html'
 import type { EmailContent } from './email'
+import { emailButton, emailFacts, emailNote, emailParagraph, emailQuote, renderEmailLayout } from './emailLayout'
 import { TRIAL_INTERACTION_THRESHOLD } from './trialMilestone'
 
 const APP = 'Link Into The SSI'
@@ -61,31 +63,68 @@ interface NearEndArgs {
 }
 
 export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailContent {
-  const copy: Record<BillingLocale, { subject: string; lead: string; term: string; cancel: string }> = {
+  const copy: Record<
+    BillingLocale,
+    {
+      subject: string
+      heading: string
+      lead: string
+      term: string
+      cancel: string
+      planLabel: string
+      priceLabel: string
+      cta: string
+    }
+  > = {
     en: {
       subject: `${a.made + a.received} interactions so far on ${APP}`,
+      heading: `${a.made + a.received} interactions so far`,
       lead: `You have ${a.made} interactions made and ${a.received} received — ${a.made + a.received} in total.`,
       term: `Your ${a.planName} plan (${a.priceLabel}) starts after ${a.remaining} more interactions, or on the last day of your trial, whichever comes first.`,
-      cancel: `Cancel before then and you pay nothing:`
+      cancel: `Cancel before then and you pay nothing:`,
+      planLabel: 'Plan',
+      priceLabel: 'Price',
+      cta: 'Manage billing'
     },
     pt: {
       subject: `${a.made + a.received} interações até agora no ${APP}`,
+      heading: `${a.made + a.received} interações até agora`,
       lead: `Você tem ${a.made} interações feitas e ${a.received} recebidas — ${a.made + a.received} no total.`,
       term: `Seu plano ${a.planName} (${a.priceLabel}) começa depois de mais ${a.remaining} interações, ou no último dia do seu teste, o que vier primeiro.`,
-      cancel: `Cancele antes disso e você não paga nada:`
+      cancel: `Cancele antes disso e você não paga nada:`,
+      planLabel: 'Plano',
+      priceLabel: 'Preço',
+      cta: 'Gerenciar assinatura'
     },
     es: {
       subject: `${a.made + a.received} interacciones hasta ahora en ${APP}`,
+      heading: `${a.made + a.received} interacciones hasta ahora`,
       lead: `Tienes ${a.made} interacciones hechas y ${a.received} recibidas: ${a.made + a.received} en total.`,
       term: `Tu plan ${a.planName} (${a.priceLabel}) comienza después de ${a.remaining} interacciones más, o el último día de tu prueba, lo que ocurra primero.`,
-      cancel: `Cancela antes y no pagas nada:`
+      cancel: `Cancela antes y no pagas nada:`,
+      planLabel: 'Plan',
+      priceLabel: 'Precio',
+      cta: 'Gestionar suscripción'
     }
   }
   const c = copy[locale]
   return {
     subject: c.subject,
     text: `${c.lead}\n\n${c.term}\n\n${c.cancel} ${a.billingUrl}`,
-    html: `<p>${c.lead}</p><p>${c.term}</p><p>${c.cancel} <a href="${a.billingUrl}">${a.billingUrl}</a></p>`
+    html: renderEmailLayout({
+      lang: locale,
+      preheader: c.lead,
+      heading: c.heading,
+      contentHtml:
+        emailFacts([
+          { label: c.planLabel, value: a.planName },
+          ...(a.priceLabel ? [{ label: c.priceLabel, value: a.priceLabel }] : [])
+        ]) +
+        emailParagraph(c.lead) +
+        emailParagraph(c.term) +
+        emailParagraph(c.cancel) +
+        emailButton({ href: a.billingUrl, label: c.cta })
+    })
   }
 }
 
@@ -97,28 +136,68 @@ interface EndingArgs {
 }
 
 export function trialEndingEmail(locale: BillingLocale, a: EndingArgs): EmailContent {
-  const copy: Record<BillingLocale, { subject: string; term: string; cancel: string }> = {
+  const copy: Record<
+    BillingLocale,
+    {
+      subject: string
+      heading: string
+      term: string
+      cancel: string
+      planLabel: string
+      priceLabel: string
+      trialEndsLabel: string
+      cta: string
+    }
+  > = {
     en: {
       subject: `Your ${APP} trial ends on ${a.endsOn}`,
+      heading: `Your trial ends on ${a.endsOn}`,
       term: `Your free trial ends on ${a.endsOn}, or as soon as you reach ${TRIAL_INTERACTION_THRESHOLD} interactions, whichever comes first. Your ${a.planName} plan (${a.priceLabel}) starts then.`,
-      cancel: `Cancel before then and you pay nothing:`
+      cancel: `Cancel before then and you pay nothing:`,
+      planLabel: 'Plan',
+      priceLabel: 'Price',
+      trialEndsLabel: 'Trial ends',
+      cta: 'Manage billing'
     },
     pt: {
       subject: `Seu teste do ${APP} termina em ${a.endsOn}`,
+      heading: `Seu teste termina em ${a.endsOn}`,
       term: `Seu teste grátis termina em ${a.endsOn} ou assim que você chegar a ${TRIAL_INTERACTION_THRESHOLD} interações, o que ocorrer primeiro. Seu plano ${a.planName} (${a.priceLabel}) começa nesse momento.`,
-      cancel: `Cancele antes disso e você não paga nada:`
+      cancel: `Cancele antes disso e você não paga nada:`,
+      planLabel: 'Plano',
+      priceLabel: 'Preço',
+      trialEndsLabel: 'Teste termina',
+      cta: 'Gerenciar assinatura'
     },
     es: {
       subject: `Tu prueba de ${APP} termina el ${a.endsOn}`,
+      heading: `Tu prueba termina el ${a.endsOn}`,
       term: `Tu prueba gratuita termina el ${a.endsOn} o en cuanto llegues a ${TRIAL_INTERACTION_THRESHOLD} interacciones, lo que ocurra primero. Tu plan ${a.planName} (${a.priceLabel}) comienza en ese momento.`,
-      cancel: `Cancela antes y no pagas nada:`
+      cancel: `Cancela antes y no pagas nada:`,
+      planLabel: 'Plan',
+      priceLabel: 'Precio',
+      trialEndsLabel: 'La prueba termina',
+      cta: 'Gestionar suscripción'
     }
   }
   const c = copy[locale]
   return {
     subject: c.subject,
     text: `${c.term}\n\n${c.cancel} ${a.billingUrl}`,
-    html: `<p>${c.term}</p><p>${c.cancel} <a href="${a.billingUrl}">${a.billingUrl}</a></p>`
+    html: renderEmailLayout({
+      lang: locale,
+      preheader: c.term,
+      heading: c.heading,
+      contentHtml:
+        emailFacts([
+          { label: c.planLabel, value: a.planName },
+          ...(a.priceLabel ? [{ label: c.priceLabel, value: a.priceLabel }] : []),
+          { label: c.trialEndsLabel, value: a.endsOn }
+        ]) +
+        emailParagraph(c.term) +
+        emailParagraph(c.cancel) +
+        emailButton({ href: a.billingUrl, label: c.cta })
+    })
   }
 }
 
@@ -126,28 +205,49 @@ export function duplicateSubscriptionCanceledEmail(
   locale: BillingLocale,
   a: { planName: string; billingUrl: string }
 ): EmailContent {
-  const copy: Record<BillingLocale, { subject: string; body: string; link: string }> = {
+  const copy: Record<
+    BillingLocale,
+    { subject: string; heading: string; body: string; link: string; planLabel: string; cta: string }
+  > = {
     en: {
       subject: `We removed a duplicate subscription on ${APP}`,
+      heading: 'We removed a duplicate subscription',
       body: `A second subscription was created on your account by mistake, so we cancelled it right away. You have not been charged for it. Your ${a.planName} plan is unchanged.`,
-      link: `See your subscription:`
+      link: `See your subscription:`,
+      planLabel: 'Plan',
+      cta: 'Manage billing'
     },
     pt: {
       subject: `Removemos uma assinatura duplicada no ${APP}`,
+      heading: 'Removemos uma assinatura duplicada',
       body: `Uma segunda assinatura foi criada na sua conta por engano, então cancelamos na hora. Você não foi cobrado por ela. Seu plano ${a.planName} continua igual.`,
-      link: `Veja sua assinatura:`
+      link: `Veja sua assinatura:`,
+      planLabel: 'Plano',
+      cta: 'Gerenciar assinatura'
     },
     es: {
       subject: `Eliminamos una suscripción duplicada en ${APP}`,
+      heading: 'Eliminamos una suscripción duplicada',
       body: `Se creó una segunda suscripción en tu cuenta por error, así que la cancelamos de inmediato. No se te cobró por ella. Tu plan ${a.planName} sigue igual.`,
-      link: `Consulta tu suscripción:`
+      link: `Consulta tu suscripción:`,
+      planLabel: 'Plan',
+      cta: 'Gestionar suscripción'
     }
   }
   const c = copy[locale]
   return {
     subject: c.subject,
     text: `${c.body}\n\n${c.link} ${a.billingUrl}`,
-    html: `<p>${c.body}</p><p>${c.link} <a href="${a.billingUrl}">${a.billingUrl}</a></p>`
+    html: renderEmailLayout({
+      lang: locale,
+      preheader: c.body,
+      heading: c.heading,
+      contentHtml:
+        emailFacts([{ label: c.planLabel, value: a.planName }]) +
+        emailParagraph(c.body) +
+        emailParagraph(c.link) +
+        emailButton({ href: a.billingUrl, label: c.cta })
+    })
   }
 }
 
@@ -161,31 +261,56 @@ export interface ConvertedArgs {
 
 /** Day-7 conversion notice (backlog/R14): the charge and the recorded counts, one link. Not sent at 0+0. */
 export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): EmailContent {
-  const copy: Record<BillingLocale, { subject: string; lead: string; term: string; link: string }> = {
+  const copy: Record<
+    BillingLocale,
+    { subject: string; lead: string; term: string; link: string; planLabel: string; priceLabel: string; cta: string }
+  > = {
     en: {
       subject: `Your ${a.planName} plan started today`,
       lead: `During your trial you made ${a.made} interactions and your posts received ${a.received}.`,
       term: `Your ${a.planName} plan (${a.priceLabel}) is now active.`,
-      link: 'See your recap:'
+      link: 'See your recap:',
+      planLabel: 'Plan',
+      priceLabel: 'Price',
+      cta: 'See your recap'
     },
     pt: {
       subject: `Seu plano ${a.planName} começou hoje`,
       lead: `Durante o seu teste você fez ${a.made} interações e suas publicações receberam ${a.received}.`,
       term: `Seu plano ${a.planName} (${a.priceLabel}) está ativo.`,
-      link: 'Veja seu resumo:'
+      link: 'Veja seu resumo:',
+      planLabel: 'Plano',
+      priceLabel: 'Preço',
+      cta: 'Veja seu resumo'
     },
     es: {
       subject: `Tu plan ${a.planName} comenzó hoy`,
       lead: `Durante tu prueba hiciste ${a.made} interacciones y tus publicaciones recibieron ${a.received}.`,
       term: `Tu plan ${a.planName} (${a.priceLabel}) ya está activo.`,
-      link: 'Mira tu resumen:'
+      link: 'Mira tu resumen:',
+      planLabel: 'Plan',
+      priceLabel: 'Precio',
+      cta: 'Mira tu resumen'
     }
   }
   const c = copy[locale]
   return {
     subject: c.subject,
     text: `${c.lead}\n\n${c.term}\n\n${c.link} ${a.recapUrl}`,
-    html: `<p>${c.lead}</p><p>${c.term}</p><p>${c.link} <a href="${a.recapUrl}">${a.recapUrl}</a></p>`
+    html: renderEmailLayout({
+      lang: locale,
+      preheader: c.lead,
+      heading: c.subject,
+      contentHtml:
+        emailFacts([
+          { label: c.planLabel, value: a.planName },
+          ...(a.priceLabel ? [{ label: c.priceLabel, value: a.priceLabel }] : [])
+        ]) +
+        emailParagraph(c.lead) +
+        emailParagraph(c.term) +
+        emailParagraph(c.link) +
+        emailButton({ href: a.recapUrl, label: c.cta })
+    })
   }
 }
 
@@ -215,7 +340,16 @@ export interface CapReachedArgs {
 export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): EmailContent {
   const copy: Record<
     BillingLocale,
-    { subject: string; body: string; stays: string; upgrade: string; proContact: string; contactCustom: string }
+    {
+      subject: string
+      body: string
+      stays: string
+      upgrade: string
+      proContact: string
+      contactCustom: string
+      seePlans: string
+      openMyPosts: string
+    }
   > = {
     en: {
       subject: `Your post reached ${a.total} interactions and left the feed`,
@@ -226,7 +360,9 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
       // does NOT put this post back in the feed. Promising that ahead of a charge would be a lie.
       upgrade: `On ${a.nextPlanName}, your next posts collect up to ${a.nextCap} each:`,
       proContact: `Need a higher cap? Write to ${a.supportEmail}.`,
-      contactCustom: `Your plan has a custom cap. Write to ${a.supportEmail} to adjust it.`
+      contactCustom: `Your plan has a custom cap. Write to ${a.supportEmail} to adjust it.`,
+      seePlans: 'See plans',
+      openMyPosts: 'Open My Posts'
     },
     pt: {
       subject: `Sua publicação chegou a ${a.total} interações e saiu do feed`,
@@ -234,7 +370,9 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
       stays: 'Ela continua em Minhas publicações:',
       upgrade: `No ${a.nextPlanName}, suas próximas publicações recebem até ${a.nextCap} cada uma:`,
       proContact: `Precisa de um limite maior? Escreva para ${a.supportEmail}.`,
-      contactCustom: `Seu plano tem um limite personalizado. Escreva para ${a.supportEmail} para ajustá-lo.`
+      contactCustom: `Seu plano tem um limite personalizado. Escreva para ${a.supportEmail} para ajustá-lo.`,
+      seePlans: 'Ver planos',
+      openMyPosts: 'Abrir Minhas publicações'
     },
     es: {
       subject: `Tu publicación llegó a ${a.total} interacciones y salió del feed`,
@@ -242,21 +380,28 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
       stays: 'Sigue en Mis publicaciones:',
       upgrade: `En ${a.nextPlanName}, tus próximas publicaciones reciben hasta ${a.nextCap} cada una:`,
       proContact: `¿Necesitas un límite mayor? Escribe a ${a.supportEmail}.`,
-      contactCustom: `Tu plan tiene un límite personalizado. Escribe a ${a.supportEmail} para ajustarlo.`
+      contactCustom: `Tu plan tiene un límite personalizado. Escribe a ${a.supportEmail} para ajustarlo.`,
+      seePlans: 'Ver planes',
+      openMyPosts: 'Abrir Mis publicaciones'
     }
   }
   const c = copy[locale]
   const closing =
     a.mode === 'upgrade' ? `${c.upgrade} ${a.upgradeUrl}` : a.mode === 'proContact' ? c.proContact : c.contactCustom
-  const closingHtml =
-    a.mode === 'upgrade' ? `${c.upgrade} <a href="${a.upgradeUrl}">${a.upgradeUrl}</a>` : escapeHtml(closing)
   // One link per email. In upgrade mode the checkout link is the one the member can act on, so the
   // My Posts line steps aside; the other modes close with a support address, which is not a link.
   const stays = a.mode === 'upgrade' ? '' : `${c.stays} ${a.myPostsUrl}\n\n`
-  const staysHtml = a.mode === 'upgrade' ? '' : `<p>${c.stays} <a href="${a.myPostsUrl}">${a.myPostsUrl}</a></p>`
+  const content =
+    emailQuote(`“${a.excerpt}”`) +
+    emailParagraph(c.body) +
+    (a.mode === 'upgrade'
+      ? emailParagraph(c.upgrade) + (a.upgradeUrl ? emailButton({ href: a.upgradeUrl, label: c.seePlans }) : '')
+      : emailParagraph(c.stays) +
+        emailButton({ href: a.myPostsUrl, label: c.openMyPosts }) +
+        emailNote(escapeHtml(closing)))
   return {
     subject: c.subject,
     text: `“${a.excerpt}”\n\n${c.body}\n\n${stays}${closing}`,
-    html: `<p>“${escapeHtml(a.excerpt)}”</p><p>${c.body}</p>${staysHtml}<p>${closingHtml}</p>`
+    html: renderEmailLayout({ lang: locale, preheader: c.body, heading: c.subject, contentHtml: content })
   }
 }

@@ -9,6 +9,7 @@ import { resolveSession } from '../lib/auth'
 import { sendEmail } from '../lib/email'
 import { deletionScheduledEmail, deletionCompletedEmail } from './emails'
 import { type AuditDb, writeAuditLog } from '../lib/audit'
+import { resolveBillingLocale } from '../lib/checkoutCopy'
 import { checkRateLimit, resetUserRateLimits } from '../lib/rateLimit'
 
 interface CascadeDb {
@@ -163,10 +164,6 @@ export async function cascadeDeleteUser(
 
 const GRACE_MS = 30 * 24 * 60 * 60 * 1000
 
-function formatDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10) // YYYY-MM-DD
-}
-
 export const requestAccountDeletion = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
@@ -231,10 +228,14 @@ export const onDeletionRequested = internalAction({
         }
       }
     }
-    const email = await ctx.runQuery(internal.privacy.deletion.getUserEmail, { userId })
-    if (email) {
-      const m = deletionScheduledEmail(formatDate(scheduledAt))
-      await sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text })
+    const target = await ctx.runQuery(internal.privacy.deletion.getDeletionUser, { userId })
+    if (target?.email) {
+      const m = deletionScheduledEmail({
+        locale: resolveBillingLocale(target.language, target.primaryLocale),
+        deletionAt: scheduledAt,
+        appUrl: env.APP_URL
+      })
+      await sendEmail({ to: target.email, subject: m.subject, html: m.html, text: m.text })
     }
   }
 })
@@ -248,11 +249,12 @@ export const listUserSubscriptions = internalQuery({
       .collect()
 })
 
-export const getUserEmail = internalQuery({
+export const getDeletionUser = internalQuery({
   args: { userId: v.id('users') },
   handler: async (ctx, { userId }) => {
     const u = await ctx.db.get(userId)
-    return u?.email ?? null
+    if (!u) return null
+    return { email: u.email ?? null, language: u.language, primaryLocale: u.primaryLocale }
   }
 })
 
@@ -287,7 +289,8 @@ export const processAccountDeletions = internalMutation({
       // drains above can't reach them). Terminal pass only, so this runs once per account.
       await resetUserRateLimits(ctx, user._id)
       if (email) {
-        await ctx.scheduler.runAfter(0, internal.privacy.deletion.sendDeletionCompleted, { email })
+        const locale = resolveBillingLocale(user.language, user.primaryLocale)
+        await ctx.scheduler.runAfter(0, internal.privacy.deletion.sendDeletionCompleted, { email, locale })
       }
     }
     // Keep going until the due-set is empty: either this account needs more passes (done === false)
@@ -297,9 +300,9 @@ export const processAccountDeletions = internalMutation({
 })
 
 export const sendDeletionCompleted = internalAction({
-  args: { email: v.string() },
-  handler: async (_ctx, { email }) => {
-    const m = deletionCompletedEmail()
+  args: { email: v.string(), locale: v.union(v.literal('en'), v.literal('pt'), v.literal('es')) },
+  handler: async (_ctx, { email, locale }) => {
+    const m = deletionCompletedEmail({ locale })
     await sendEmail({ to: email, subject: m.subject, html: m.html, text: m.text })
   }
 })

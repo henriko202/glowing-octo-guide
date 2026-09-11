@@ -8,7 +8,8 @@ export type BillingLocale = 'en' | 'pt' | 'es'
 const SUPPORTED: readonly string[] = ['en', 'pt', 'es']
 
 /**
- * Which language a billing notice is written in.
+ * Which language a transactional email is written in — every billing notice and every
+ * privacy/feedback notice alike.
  * Order: the language the member last checked out in → their scraped LinkedIn locale → English.
  * Accepts regional tags ('pt-BR') and any casing.
  */
