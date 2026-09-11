@@ -55,6 +55,8 @@
     "featured": "★ Featured",
     "like": "Like",
     "comment": "Comment",
+    "comments_one": "{{count}} comment",
+    "comments_other": "{{count}} comments",
     "cardGate": "Add a payment method on the Billing page to start engaging.",
     "cardGateTitle": "Show your posts in the feed and count interactions",
     "cardGateBody": "During your trial, your posts appear in the feed, and reactions and comments count toward your interaction total.",
@@ -73,7 +75,7 @@
     "doneReacted": "Reacted",
     "doneCommented": "Commented",
     "doneBoth": "Reacted · commented",
-    "leavesIn": "Leaves your feed in {{hours}} h",
+    "leavesIn": "Leaves in {{hours}} h",
     "hide": "Hide",
     "hideNow": "Hide now",
     "hideConfirmTitle": "Hide this post?",
@@ -100,7 +102,7 @@
       "selectPlaceholder": "Select…",
       "noResults": "No results."
     },
-    "viewGeneratedComment": "View your comment"
+    "viewGeneratedComment": "View comment"
   },
   "myPosts": {
     "featuredPill": "{{used}} of {{limit}} featured this month",

@@ -3165,7 +3165,7 @@ the author's view of it changes.
 ```mermaid
 flowchart TD
     TAP["viewer taps React or Comment"] --> ST["userPostState: reactedAt / commentedAt<br/>(commentedAt is written inside incrementCommentCount,<br/>same transaction as the userInteractions row)"]
-    ST --> DONE["done footer: ✓ Reacted / Commented / Reacted · commented<br/>+ the remaining action + View on LinkedIn<br/>+ 'Leaves your feed in N h' + Hide now"]
+    ST --> DONE["done footer: checked chip (reaction emoji + count) + View comment<br/>+ 'Leaves in N h' + Hide now + View on LinkedIn ↗<br/>(one fixed-height row; no reflow between states)"]
     DONE --> W{"viewerPostStatus(state, now)"}
     W -->|" &lt; 24 h "| DONE
     W -->|" ≥ 24 h "| GONE["'gone' — the open feed removes it at hidesAt;<br/>subsequent feed queries also exclude it"]
@@ -3197,12 +3197,20 @@ without a `?? 0` sentinel, which `Math.max` would otherwise floor at zero and sw
   `hidesAt` is an absolute instant (`lastInteractedAt + INTERACTED_TTL_MS`), and the client turns it into "in N h".
 
 The card's remaining action stays live: a viewer who reacted still sees the Comment button, and vice versa.
-Commented posts also offer **View your comment**. This opens the saved text read-only with **Comment on
+Commented posts also offer **View comment**. This opens the saved text read-only with **Comment on
 LinkedIn again**, which copies the text and reopens the post without recording another interaction
 or resetting the 24-hour window. The text is the last submitted comment (`incrementCommentCount` writes it to
 `commentDraft`), so an edit the member made before posting is what comes back; a post whose only saved text is an AI
 draft shows that instead. A missing saved text gets an explicit empty state and still permits reopening
 LinkedIn. Clipboard failure leaves the text available for manual copying.
+
+**The footer is fixed-height in every state.** Reacting or commenting swaps its control in place — the React button
+becomes a checked chip carrying the same reaction emoji and count (the count stays visible), the Comment count becomes
+**View comment** — and the trailing cluster (`Leaves in N h` with a clock icon + Hide / Hide now + View on LinkedIn ↗)
+never moves. At `sm` and up this is one 52 px row (`h-13`); below `sm` the trailing cluster drops to a second row, but
+the structure is the same in every viewer state, so the overlay always covers the same strip of the embed and a card
+that was just reacted to never reflows the feed around it. Long comment labels truncate with an ellipsis instead of
+wrapping, and counts use `tabular-nums` so a digit change cannot nudge the row.
 
 `FeedPage` filters out cards at `viewerState.hidesAt`, including while the feed stays open without database updates.
 One shared clock refreshes the countdown every minute, at the nearest expiry, and when the tab regains focus or
@@ -4867,16 +4875,20 @@ entry above and [§8](#8-subscriptions--billing)), plus the two LinkedIn‑embed
   in both branches (same `href`/`target`/`rel`); the gated branch just adds `preventDefault` + `onGated('linkedin')`.
   `FeedPage` renders a single shared `CardGateDialog` for whichever control fired `onGated`, driven by the source it
   reported. **R21** adds a `viewerState?: FeedViewerState | null` prop (the server's `{ reacted, commented, hidesAt }`,
-  attached per post by `feed.getFeed` — [§11](#11-feed--engagement)) and an `onHide?: () => void`. The footer order is
-  **React first, then Comment / View your comment, then the done marker** — the react control keeps the same place
-  whether or not the viewer has interacted (only a reacted post hides it). When `viewerState` is present the card adds
-  a "✓ you reacted / commented / both" marker (`feed.doneReacted` / `feed.doneCommented` / `feed.doneBoth`) and
-  `feed.leavesIn` with the whole hours left (rounded up and bounded to 1–24); the trailing hide control reads
-  `feed.hideNow` on a done card. On a post without `viewerState` the same slot carries a ghost **`feed.hide`** button,
-  so **every card can be hidden** (the parent confirms before calling `hidePost` — [§11](#11-feed--engagement)). After
-  commenting, **View your comment** replaces the initial Comment action and toggles `CommentBox` in read-only review
-  mode.
-  Its label uses the same 13px text size as the Reacted/commented status.
+  attached per post by `feed.getFeed` — [§11](#11-feed--engagement)) and an `onHide?: () => void`. The footer is built
+  for **zero reflow between viewer states**: one fixed-height row (`h-13`, 52 px) at `sm` and up, and the same structure
+  split into two rows below `sm` (the trailing `Leaves in N h` + Hide + **View on LinkedIn ↗** cluster takes its own
+  row). Reacting replaces the leftmost React button **in place** with a checked chip carrying the same reaction emoji
+  and count (the count no longer disappears once the viewer reacted); commenting replaces the Comment count button with
+  **View comment** (`MessageSquareCheck` + `feed.viewGeneratedComment`). The old trailing "✓ you reacted / commented /
+  both" sentence is gone — `feed.doneReacted` / `feed.doneCommented` / `feed.doneBoth` now live as the chip's `title`
+  and screen-reader text. `feed.leavesIn` renders compact (`Leaves in N h`) with a clock icon and the whole hours left
+  (rounded up and bounded to 1–24); the trailing hide control reads `feed.hideNow` on a done card and `feed.hide` on a
+  fresh one, so **every card can be hidden** (the parent confirms before calling `hidePost` —
+  [§11](#11-feed--engagement)). Comment counts carry a plural accessible name (`feed.comments_one` /
+  `feed.comments_other`),
+  and the comment label truncates rather than wrapping if a locale outgrows the row. After commenting, **View comment**
+  toggles `CommentBox` in read-only review mode.
   That mode reloads `interactions.getCommentDraft` — the member's last submitted text, written to `commentDraft` by
   `incrementCommentCount`, or the AI draft if they never submitted — hides generation controls, and offers **Comment on
   LinkedIn again**. Reopening copies that text and hands off to LinkedIn without calling
@@ -4948,7 +4960,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5242,8 +5254,13 @@ new key carries `{{days}}`, for the same reason as the three above. No keys were
   `comment.generatedComment` ("Your comment") and `comment.noSavedComment` (a comment was saved, whether generated or
   typed), because the box now reloads the member's submitted text, not only the AI draft.
 
-**State the counting method with the number.** All three files hold **418 keys with arrays counted once** — the same
-files are **428 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
+**Stable-footer keys (2026-09-11):** one new plural pair — `feed.comments_one` / `feed.comments_other`, the accessible
+name of the Comment count control — added so the comment count no longer carries a visible verb. Two values were
+shortened for the fixed-height footer: `feed.leavesIn` ("Leaves your feed in {{hours}} h" → "Leaves in {{hours}} h")
+and `feed.viewGeneratedComment` ("View your comment" → "View comment"). No keys were removed.
+
+**State the counting method with the number.** All three files hold **420 keys with arrays counted once** — the same
+files are **430 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
 pt and es show **zero drift** under a recursive key-diff in either counting mode, and the same diff compares the
 `{{placeholder}}` set of every leaf — a translated string that drops or renames one is a runtime hole no key-diff
 alone would catch. There is still no automated parity test, so both are run by hand whenever keys change.
@@ -6378,21 +6395,27 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 ---
 
 _Last updated: 2026‑09‑11. **AI drafts now count, every card can be hidden behind a confirmation, submitted
-comments are what the box reloads, React keeps its place, and the tap budgets moved to 100/h.** The first
+comments are what the box reloads, React keeps its place in a footer that no longer reflows between states, and the tap
+budgets moved to 100/h.** The first
 `generateComment` on a post writes one `userInteractions` row (`kind: 'ai_draft'`, the draft text, no `authorId`) and
 bumps the trial `made` counter; `userPostState.aiDraftedAt` dedupes so regenerations only refresh `commentDraft`, and
 the post's count, cap and `commentedAt` stay untouched (the R15 "counts as nothing" decision of 2026‑09‑05 is
 superseded). Recap gained a `drafts` bucket (the tile shows it only above zero) and History an "AI comment drafted"
-row. `incrementCommentCount` now writes the member's submitted text to `commentDraft`, so **View your comment**
+row. `incrementCommentCount` now writes the member's submitted text to `commentDraft`, so **View comment**
 reloads what they posted, not the untouched model output — three i18n values reworded, no key renamed. `hidePost` no
 longer requires `canHide` (deleted): every card carries a hide control, a fresh post stores the state row on hide, and
 `FeedPage` confirms in a destructive modal before firing `post_hidden { interacted, after }` (`after` is null on a
-fresh hide). `PostCard`'s footer order is React → comment control → done marker → LinkedIn link → hide, so the react
-button sits at the same x in the normal and commented states (verified in the browser at 1280 and 375 px). Rate limits:
-`commentOnPost` and `reactToPost` 20/30 → **100/h**; `generateComment` 30 → **100/h** too. Locale keys 411 → **418** (
-428
-string leaves). A review pass also corrected copy that the new counting made false (`recap.lead`, `recap.emptyBody`,
-`history.lead` and the `feed.checklist.reactTwice` step now name AI drafts, values only) and the compliance docs, which
+fresh hide). `PostCard`'s footer is now one fixed-height row (52 px at `sm`+, two rows below `sm`) in every viewer
+state: reacting swaps the React button for an in-place checked chip (same emoji + count), commenting swaps the Comment
+count for **View comment**, and the trailing cluster (`Leaves in N h` + Hide + View on LinkedIn ↗) never moves —
+measured in the browser at 606 px and 356 px in all four viewer states and all three locales, with no wrap, overflow,
+or height change (verified in the browser at 1280 and 390 px viewports). Rate limits:
+`commentOnPost` and `reactToPost` 20/30 → **100/h**; `generateComment` 30 → **100/h** too. Locale keys 411 → **420** (
+430
+string leaves) — the stable-footer pass added `feed.comments_one` / `feed.comments_other` and shortened
+`feed.leavesIn` and `feed.viewGeneratedComment`. A review pass also corrected copy that the new counting made false (
+`recap.lead`, `recap.emptyBody`, `history.lead` and the `feed.checklist.reactTwice` step now name AI drafts, values
+only) and the compliance docs, which
 claimed generated drafts were never stored — untrue since the draft feature shipped, and now also incomplete without
 the first-draft `ai_draft` log entry. Sections updated: §5, §11, §11A, §13B, §14, §17, §21. Gates: convex **611/611**,
 app **486/486**, landing **24/24**, convex integration **8/8**, `pnpm verify` exit 0._

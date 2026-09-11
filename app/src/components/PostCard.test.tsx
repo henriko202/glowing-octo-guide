@@ -229,7 +229,7 @@ describe('PostCard done footer (R21)', () => {
     expect(screen.getByText(/reacted/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
-    expect(screen.getByText(/leaves your feed in 5 h/i)).toBeInTheDocument()
+    expect(screen.getByText(/leaves in 5 h/i)).toBeInTheDocument()
   })
 
   it('offers the saved comment once the viewer reacted and commented', () => {
@@ -244,7 +244,7 @@ describe('PostCard done footer (R21)', () => {
     )
     expect(screen.getByText(/reacted · commented/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /view your comment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /view comment/i }))
     expect(onComment).toHaveBeenCalledWith(mockPost._id)
   })
 
@@ -261,8 +261,8 @@ describe('PostCard done footer (R21)', () => {
     )
     const [first, second] = screen.getAllByRole('button')
     expect(first).toHaveAccessibleName(/react/i)
-    expect(second).toHaveAccessibleName(/view your comment/i)
-    expect(screen.getByText(/commented/i)).toBeInTheDocument()
+    expect(second).toHaveAccessibleName(/view comment/i)
+    expect(second).toHaveAttribute('title', 'Commented')
   })
 
   it('shows at most 24 hours when an interaction arrives after the card mounted', () => {
@@ -286,7 +286,7 @@ describe('PostCard done footer (R21)', () => {
           onReact={onReact}
         />
       )
-      expect(screen.getByText(/leaves your feed in 24 h/i)).toBeInTheDocument()
+      expect(screen.getByText(/leaves in 24 h/i)).toBeInTheDocument()
     } finally {
       clock.mockRestore()
     }
@@ -301,7 +301,7 @@ describe('PostCard done footer (R21)', () => {
         onHide={() => {}}
       />
     )
-    expect(screen.getByText(/leaves your feed in 1 h/i)).toBeInTheDocument()
+    expect(screen.getByText(/leaves in 1 h/i)).toBeInTheDocument()
   })
 
   it('calls onHide from the Hide now button', () => {

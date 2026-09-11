@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
-import { Loader2, MessageSquare } from 'lucide-react'
+import { Check, Clock, Loader2, MessageSquare, MessageSquareCheck } from 'lucide-react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { REACTIONS, type Reaction } from '../../../convex/lib/reactions'
 import type { FeedViewerState } from '../../../convex/lib/feedHygiene'
@@ -67,7 +67,7 @@ function ReactionButton({
       onClick={loading ? undefined : () => (gated ? onGated?.('react') : onReact(postId, current.value))}
       disabled={loading}
       title={t(current.labelKey)}
-      className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
+      className="text-muted-foreground flex h-8 min-h-11 cursor-pointer items-center gap-1 px-2 text-[13px] sm:min-h-8"
     >
       {loading ? (
         <Loader2
@@ -76,8 +76,8 @@ function ReactionButton({
         />
       ) : (
         <span aria-hidden="true">{current.emoji}</span>
-      )}{' '}
-      {likeCount}
+      )}
+      <span className="tabular-nums">{likeCount}</span>
     </Button>
   )
 }
@@ -109,6 +109,7 @@ export default function PostCard({
   const hoursLeft = done ? Math.min(24, Math.max(1, Math.ceil((done.hidesAt - now) / 3_600_000))) : 0
   const doneLabel =
     done?.reacted && done.commented ? 'feed.doneBoth' : done?.reacted ? 'feed.doneReacted' : 'feed.doneCommented'
+  const reaction = REACTIONS.find(r => r.value === (post.suggestedReaction ?? 'LIKE')) ?? REACTIONS[0]
 
   return (
     <div className="border-border bg-card overflow-hidden rounded-xl border font-sans">
@@ -147,100 +148,107 @@ export default function PostCard({
       <LinkedInEmbed
         urn={post.linkedinPostUrn}
         footer={
-          <div className="border-border bg-card flex min-h-[52px] flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-1.5">
-            {!done?.reacted && (
-              <ReactionButton
-                postId={post._id}
-                suggested={post.suggestedReaction ?? 'LIKE'}
-                likeCount={post.likeCount}
-                onReact={onReact}
-                gated={gated}
-                onGated={onGated}
-                loading={reacting}
-              />
-            )}
-            {done?.commented ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => onComment(post._id)}
-                className="text-muted-foreground min-h-11 cursor-pointer text-[13px]"
-              >
-                <MessageSquare
-                  className="size-4"
-                  aria-hidden="true"
-                />
-                {t('feed.viewGeneratedComment')}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => (gated ? onGated?.('comment') : onComment(post._id))}
-                className="text-muted-foreground flex cursor-pointer items-center gap-1 text-[13px]"
-              >
-                💬 {post.commentCount} {t('feed.comment')}
-              </Button>
-            )}
-            {done && (
-              // The ✓ trails the controls it describes, so the react button keeps its place as the
-              // leftmost action whether or not the viewer has interacted.
-              <span className="text-muted-foreground text-[13px]">
-                <span aria-hidden="true">✓</span> {t(doneLabel)}
-              </span>
-            )}
-
-            {!!post.sourceUrl &&
-              (gated ? (
-                <a
-                  href={post.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={e => {
-                    e.preventDefault()
-                    onGated?.('linkedin')
-                  }}
-                  className="ml-auto text-gold-text no-underline hover:underline"
+          // One fixed-height row on desktop; on small screens the trailing meta/hide/link cluster
+          // takes a second row. The layout is the same in every viewer state, so reacting or
+          // commenting never reflows the footer or changes its height.
+          <div className="border-border bg-card flex flex-wrap items-center gap-x-2 border-t px-4 sm:h-13 sm:flex-nowrap sm:gap-x-3">
+            <div className="flex min-w-0 flex-1 items-center gap-x-1 sm:gap-x-2">
+              {done?.reacted ? (
+                // The reaction stays put after it is recorded, as a checked chip carrying the same
+                // emoji + count the button showed, so the leftmost action never moves or vanishes.
+                <span
+                  className="text-muted-foreground flex h-8 shrink-0 items-center gap-1 px-2 text-[13px]"
+                  title={t(doneLabel)}
                 >
-                  {t('feed.viewOnLinkedIn')}
-                </a>
+                  <Check
+                    className="size-3.5"
+                    aria-hidden="true"
+                  />
+                  <span aria-hidden="true">{reaction.emoji}</span>
+                  <span className="tabular-nums">{post.likeCount}</span>
+                  <span className="sr-only">{t(doneLabel)}</span>
+                </span>
               ) : (
-                <a
-                  href={post.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto text-gold-text no-underline hover:underline"
-                >
-                  {t('feed.viewOnLinkedIn')}
-                </a>
-              ))}
-
-            {done ? (
-              // No ml-auto here: the LinkedIn link above already carries one, and two of them
-              // split the free space and strand the link mid-row.
-              <span className="flex items-center gap-2">
-                <span className="text-muted-foreground text-xs">{t('feed.leavesIn', { hours: hoursLeft })}</span>
+                <ReactionButton
+                  postId={post._id}
+                  suggested={post.suggestedReaction ?? 'LIKE'}
+                  likeCount={post.likeCount}
+                  onReact={onReact}
+                  gated={gated}
+                  onGated={onGated}
+                  loading={reacting}
+                />
+              )}
+              {done?.commented ? (
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  onClick={onHide}
-                  className="text-muted-foreground h-7 min-h-11 cursor-pointer px-2 text-xs sm:min-h-0"
+                  onClick={() => onComment(post._id)}
+                  title={t('feed.doneCommented')}
+                  className="text-muted-foreground h-8 min-h-11 min-w-0 shrink cursor-pointer gap-1.5 px-2 text-[13px] sm:min-h-8"
                 >
-                  {t('feed.hideNow')}
+                  <MessageSquareCheck
+                    className="size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{t('feed.viewGeneratedComment')}</span>
                 </Button>
-              </span>
-            ) : (
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={t('feed.comments', { count: post.commentCount })}
+                  title={t('feed.comment')}
+                  onClick={() => (gated ? onGated?.('comment') : onComment(post._id))}
+                  className="text-muted-foreground flex h-8 min-h-11 shrink-0 cursor-pointer items-center gap-1 px-2 text-[13px] sm:min-h-8"
+                >
+                  <MessageSquare
+                    className="size-4"
+                    aria-hidden="true"
+                  />
+                  <span className="tabular-nums">{post.commentCount}</span>
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-x-1.5 max-sm:w-full max-sm:justify-end sm:shrink-0 sm:gap-x-3">
+              {done && (
+                <span className="text-muted-foreground flex items-center gap-1 text-xs whitespace-nowrap">
+                  <Clock
+                    className="size-3.5"
+                    aria-hidden="true"
+                  />
+                  {t('feed.leavesIn', { hours: hoursLeft })}
+                </span>
+              )}
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={onHide}
-                className="text-muted-foreground h-7 min-h-11 cursor-pointer px-2 text-xs sm:min-h-0"
+                className="text-muted-foreground h-7 min-h-11 shrink-0 cursor-pointer px-2 text-xs sm:min-h-0"
               >
-                {t('feed.hide')}
+                {done ? t('feed.hideNow') : t('feed.hide')}
               </Button>
-            )}
+              {!!post.sourceUrl && (
+                <a
+                  href={post.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={
+                    gated
+                      ? e => {
+                          e.preventDefault()
+                          onGated?.('linkedin')
+                        }
+                      : undefined
+                  }
+                  className="shrink-0 whitespace-nowrap text-gold-text no-underline hover:underline"
+                >
+                  {t('feed.viewOnLinkedIn')}
+                </a>
+              )}
+            </div>
           </div>
         }
       />

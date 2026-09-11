@@ -55,6 +55,8 @@
     "featured": "★ Destacada",
     "like": "Me gusta",
     "comment": "Comentar",
+    "comments_one": "{{count}} comentario",
+    "comments_other": "{{count}} comentarios",
     "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar.",
     "cardGateTitle": "Muestra tus publicaciones en el feed y contabiliza interacciones",
     "cardGateBody": "Durante la prueba, tus publicaciones aparecen en el feed, y las reacciones y los comentarios se suman a tu total de interacciones.",
@@ -73,7 +75,7 @@
     "doneReacted": "Reaccionaste",
     "doneCommented": "Comentaste",
     "doneBoth": "Reaccionaste y comentaste",
-    "leavesIn": "Sale de tu feed en {{hours}} h",
+    "leavesIn": "Sale en {{hours}} h",
     "hide": "Ocultar",
     "hideNow": "Ocultar ahora",
     "hideConfirmTitle": "¿Ocultar esta publicación?",
@@ -100,7 +102,7 @@
       "selectPlaceholder": "Seleccionar…",
       "noResults": "Sin resultados."
     },
-    "viewGeneratedComment": "Ver tu comentario"
+    "viewGeneratedComment": "Ver comentario"
   },
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mes",
