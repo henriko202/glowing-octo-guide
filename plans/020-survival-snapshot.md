@@ -1,5 +1,9 @@
 # Plan 020: Snapshot the admin survival metrics instead of recomputing 4k docs reactively
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by `survivalMetrics` reading the single
+> `survivalSnapshots` row (`convex/admin.ts:406-418`), the `[7, 28]` nightly rebuild cron, and `SurvivalTab`'s null/
+> `generatedAt` states (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 5).
@@ -178,14 +182,14 @@ cohort maths; note the `generatedAt` staleness and remove the "1000 newest users
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `survivalMetrics` performs no per-user reads and no `Date.now()`
-- [ ] The 1000 cap is gone; the snapshot job pages the whole cohort
-- [ ] A cron rebuilds both windows daily
-- [ ] `SurvivalTab` renders the null and `generatedAt` states
-- [ ] `docs/PLATFORM.md` §12 updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `survivalMetrics` performs no per-user reads and no `Date.now()`
+- [x] The 1000 cap is gone; the snapshot job pages the whole cohort
+- [x] A cron rebuilds both windows daily
+- [x] `SurvivalTab` renders the null and `generatedAt` states
+- [x] `docs/PLATFORM.md` §12 updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

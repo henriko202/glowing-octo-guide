@@ -216,17 +216,20 @@ if (shouldContinueSessionPurge(expired.length, 200)) {
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "console.error" convex/linkedin/client.ts convex/lib/apify.ts convex/http.ts` shows every
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "console.error" convex/linkedin/client.ts convex/lib/apify.ts convex/http.ts` shows every
   logged dynamic value wrapped in `scrubError` (or dropped, for the email recipient)
-- [ ] `grep -rn "new Error('Unauthorized')" convex/lib/auth.ts convex/privacy/` returns no matches
-- [ ] `grep -n "ConvexError" convex/linkedin/verifyPostOwnership.ts convex/admin.ts convex/motd/motd.ts`
+- [x] `grep -rn "new Error('Unauthorized')" convex/lib/auth.ts convex/privacy/` returns no matches
+- [x] `grep -n "ConvexError" convex/linkedin/verifyPostOwnership.ts convex/admin.ts convex/motd/motd.ts`
   finds the conversions
-- [ ] `shouldContinueSessionPurge` is used by both session deletions and reschedules on a full batch
-- [ ] No error message text changed (diff review)
-- [ ] `docs/PLATFORM.md` updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `shouldContinueSessionPurge` is used by both session deletions and reschedules on a full batch
+- [x] No error message text changed (diff review)
+- [x] `docs/PLATFORM.md` updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
+
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by greps + the green suites at convex 609 /
+> app 479 / landing 24 / integration 6.
 
 ## STOP conditions
 

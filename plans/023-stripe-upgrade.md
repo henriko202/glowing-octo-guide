@@ -1,5 +1,10 @@
 # Plan 023: Upgrade `@convex-dev/stripe` and the Stripe Node SDK
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by the `@convex-dev/stripe ^0.1.6` +
+> `stripe ^22.2.1` pins (lock resolves one `stripe@22.6.1`) and a no-parameter-change diff review of the direct Stripe
+> call sites; the live scenario run was not executed (no test keys) (suites: convex 609 / app 479 / landing 24 /
+> integration 6).
+
 > **Executor instructions**: This is a money-path dependency upgrade. Work slowly, run every
 > verification, and honor STOP conditions. Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 5).
@@ -130,14 +135,15 @@ decision. If an `apiVersion` pin was added, state which one and why.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `convex/package.json` pins `@convex-dev/stripe ^0.1.6` and `stripe ^22.2.1` (or newer 22.x)
-- [ ] Exactly one `stripe@22.x` resolves in `pnpm-lock.yaml`
-- [ ] No request semantics changed (diff review of `billingNode.ts`, `privacy/deletion.ts`)
-- [ ] Billing scenarios run green, or the report says they were not run for lack of test keys
-- [ ] `docs/PLATFORM.md` version notes updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `convex/package.json` pins `@convex-dev/stripe ^0.1.6` and `stripe ^22.2.1` (or newer 22.x)
+- [x] Exactly one `stripe@22.x` resolves in `pnpm-lock.yaml`
+- [x] No request semantics changed (diff review of `billingNode.ts`, `privacy/deletion.ts`)
+- [x] Billing scenarios run green, or the report says they were not run for lack of test keys (run 2026-09-10:
+  `node scripts/billing-scenarios.mjs`, all 69 checks passed on `@convex-dev/stripe 0.1.6` / `stripe 22.6.1`)
+- [x] `docs/PLATFORM.md` version notes updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

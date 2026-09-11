@@ -1,5 +1,9 @@
 # Plan 022: Centralize the audit DB seam, type Stripe events, fix DSR pagination opts
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by the single shared `AuditDb` in
+> `convex/lib/audit.ts` used by every audit write cast, `Stripe.Event` in `stripe.ts`/`http.ts`, and explicit `cursor`/
+> `numItems` args on `gatherUserTablePage` (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 4).
@@ -159,13 +163,13 @@ No other doc changes.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] One `AuditDb` definition exists, in `lib/audit.ts`; all audit write casts use it
-- [ ] No `type StripeEvent = any` remains; both files use `Stripe.Event`
-- [ ] `gatherUserTablePage` takes explicit `cursor`/`numItems`; no opts reconstruction
-- [ ] PLATFORM.md §6 seam list includes `linkedin/auth.ts`
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] One `AuditDb` definition exists, in `lib/audit.ts`; all audit write casts use it
+- [x] No `type StripeEvent = any` remains; both files use `Stripe.Event`
+- [x] `gatherUserTablePage` takes explicit `cursor`/`numItems`; no opts reconstruction
+- [x] PLATFORM.md §6 seam list includes `linkedin/auth.ts`
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

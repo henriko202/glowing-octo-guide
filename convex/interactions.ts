@@ -33,10 +33,6 @@ import {
 /** The slice of the member's row the milestone reads — narrow so a test can build one inline. */
 type TrialUserRow = {
   subscriptionStatus?: string
-  // Legacy pre-plan-018 counters. The writer consumes these on first touch; the migration only
-  // sees members the writer has not touched since the deploy.
-  trialInteractionsMade?: number
-  trialInteractionsReceived?: number
 }
 
 /** The counter row slice the handler reads/updates — narrow so a test can build one inline. */
@@ -45,23 +41,22 @@ type TrialCounterRow = { _id: Id<'trialCounters'>; made: number; received: numbe
 /** The slice of a subscription row `pickTrialingSubscription` and `shouldEndTrialEarly` need. */
 type TrialSubscriptionRow = { status: string; stripeSubscriptionId?: string; cancelAtPeriodEnd?: boolean }
 
-/** The counter fields a bump patches, or the legacy fields the first touch clears from the users row. */
+/** The counter fields a bump patches. */
 type TrialCounterPatch = { made?: number; received?: number }
-type TrialLegacyClear = { trialInteractionsMade: undefined; trialInteractionsReceived: undefined }
 
 /** The slice of MutationCtx the handler touches. Same narrowing as users.setPostVisibilityHandler. */
 export interface TrialBumpCtx {
   db: {
     get: (id: Id<'users'>) => Promise<TrialUserRow | null>
     // The counters live in their own high-churn table (schema.ts: trialCounters) so a bump never
-    // patches the shared users doc — see plan 018. The only users patch is the one-time legacy clear.
+    // patches the shared users doc — see plan 018.
     query: (table: 'trialCounters') => {
       withIndex(
         index: 'by_user',
         range: (q: { eq: (field: 'userId', value: Id<'users'>) => unknown }) => unknown
       ): { unique: () => Promise<TrialCounterRow | null> }
     }
-    patch: (id: Id<'trialCounters'> | Id<'users'>, fields: TrialCounterPatch | TrialLegacyClear) => Promise<void>
+    patch: (id: Id<'trialCounters'>, fields: TrialCounterPatch) => Promise<void>
     insert: (
       table: 'trialCounters',
       doc: { userId: Id<'users'>; made: number; received: number }
@@ -79,13 +74,9 @@ export interface TrialBumpCtx {
  * charges the card. `loadSubscriptions` is lazy on purpose, so the index read still happens only on
  * that one interaction in fifty.
  *
- * Deploy window (plan 018): on a member's first interaction after the writer switch, if no
- * `trialCounters` row exists yet, the insert is SEEDED from the legacy
- * `users.trialInteractionsMade` / `trialInteractionsReceived` fields and both fields are cleared in
- * the same transaction. So a member whose counts still live on the users row neither restarts from
- * zero nor waits for `migrations/moveTrialCounters.ts` (which therefore only handles members the
- * writer has never touched). Because the writer consumes the fields atomically, the migration can
- * never add them on top of a counter row the writer created — the two cannot double-count.
+ * Plan 018: the counters live in their own `trialCounters` row (patch when present, insert on the
+ * first trial interaction). The legacy `users` fields were migrated and dropped; that table is the
+ * only source of truth.
  */
 export async function bumpTrialInteractionHandler(
   ctx: TrialBumpCtx,
@@ -99,32 +90,24 @@ export async function bumpTrialInteractionHandler(
     .query('trialCounters')
     .withIndex('by_user', q => q.eq('userId', userId))
     .unique()
-  // Seed from the legacy fields only while no counter row exists (the deploy window); once the row
-  // exists it is authoritative and the fields below have already been consumed.
-  const made = counter?.made ?? u.trialInteractionsMade ?? 0
-  const received = counter?.received ?? u.trialInteractionsReceived ?? 0
+  const made = counter?.made ?? 0
+  const received = counter?.received ?? 0
   const combined = made + received
   if (counter) {
     await ctx.db.patch(counter._id, kind === 'made' ? { made: made + 1 } : { received: received + 1 })
   } else {
-    // First trial interaction: create the row from the legacy counts + this bump. Both sides are
-    // always written, so readers need no undefined-coalescing and the row's shape never changes.
+    // First trial interaction: create the row. Both sides are always written, so readers need no
+    // undefined-coalescing and the row's shape never changes.
     await ctx.db.insert('trialCounters', {
       userId,
       made: kind === 'made' ? made + 1 : made,
       received: kind === 'received' ? received + 1 : received
     })
   }
-  // Same transaction as the counter write: clearing the legacy fields is what stops the migration
-  // from adding them to an already-written row (which could jump a threshold `crossesThreshold`
-  // never saw). Clear both sides, not just the bumped one, so neither can linger.
-  if (u.trialInteractionsMade !== undefined || u.trialInteractionsReceived !== undefined) {
-    await ctx.db.patch(userId, { trialInteractionsMade: undefined, trialInteractionsReceived: undefined })
-  }
 
   // 80% of the way: one heads-up before the plan starts, never an alarm. crossesThreshold's
-  // semantics guarantee it fires exactly once per member. `combined` is pre-increment, so a seeded
-  // 49 + this interaction fires `crossesThreshold(49, 1)` — the charge, not a late warning.
+  // semantics guarantee it fires exactly once per member. `combined` is pre-increment, so the
+  // 40th/50th interaction is the one that fires.
   if (crossesThreshold(combined, 1, TRIAL_WARNING_THRESHOLD)) {
     await ctx.scheduler.runAfter(0, internal.notifications.sendTrialNearEnd, { userId })
   }

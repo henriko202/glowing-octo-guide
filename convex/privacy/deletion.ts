@@ -35,6 +35,8 @@ const OWNED: Array<{ table: string; index: string; field: string }> = [
   { table: 'postQueue', index: 'by_author', field: 'authorId' },
   { table: 'subscriptions', index: 'by_user', field: 'userId' },
   { table: 'sessions', index: 'by_userId', field: 'userId' },
+  // Unredeemed login codes are bearer credentials: erase them with the user (never exported in a DSR).
+  { table: 'authCodes', index: 'by_userId', field: 'userId' },
   // NOTE: rate-limit state is NOT here — it lives in the rate-limiter component's isolated tables,
   // which the by-index db drains below can't reach. processAccountDeletions calls resetUserRateLimits
   // on the terminal pass to erase it.

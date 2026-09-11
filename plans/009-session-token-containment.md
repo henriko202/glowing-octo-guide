@@ -241,14 +241,17 @@ the serialized value contains `; Secure`; `pnpm --filter app test` and `pnpm --f
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "location.hash" app/src/ -r` returns no matches (capture moved to index.html)
-- [ ] `grep -c "replaceState" app/index.html` returns 1
-- [ ] `grep -n "Secure" app/src/lib/cookies.ts landing/lib/cookies.ts app/src/i18n/index.ts` finds all three
-- [ ] `grep -n "beforeSendTransaction" app/src/lib/observability/sentry.ts` finds it
-- [ ] `app/dist/_headers` `script-src` lists two hashes (check after a build)
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "location.hash" app/src/ -r` returns no matches (capture moved to index.html)
+- [x] `grep -c "replaceState" app/index.html` returns 1
+- [x] `grep -n "Secure" app/src/lib/cookies.ts landing/lib/cookies.ts app/src/i18n/index.ts` finds all three
+- [x] `grep -n "beforeSendTransaction" app/src/lib/observability/sentry.ts` finds it
+- [x] `app/dist/_headers` `script-src` lists two hashes (check after a build)
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
+
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by greps + the green suites at convex 609 /
+> app 479 / landing 24 / integration 6.
 
 ## STOP conditions
 

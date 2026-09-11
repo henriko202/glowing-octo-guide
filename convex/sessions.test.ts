@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  AUTH_CODE_TTL_MS,
   SESSION_TTL_MS,
   isUsableOAuthState,
   oauthNonceMatches,
@@ -25,6 +26,12 @@ describe('session sliding expiry', () => {
   it('renews once past the halfway point', () => {
     expect(shouldRenewSession(now + SESSION_TTL_MS / 2 - 1, now)).toBe(true) // just past halfway
     expect(shouldRenewSession(now + 1, now)).toBe(true) // nearly expired
+  })
+})
+
+describe('auth code lifetime', () => {
+  it('lives two minutes', () => {
+    expect(AUTH_CODE_TTL_MS).toBe(2 * 60 * 1000)
   })
 })
 

@@ -1,5 +1,10 @@
 # Plan 017: Make the recap read one-shot instead of a 4k-doc live subscription
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by `useQueryOnce`
+> (`app/src/lib/useQueryOnce.ts`) as the only production `getRecap` consumer (`RecapPage`, `CancelInterstitial`,
+> billing)
+> and the PLATFORM recap one-shot note (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 4).
@@ -174,13 +179,13 @@ UX consequence: recap numbers refresh when the page is (re)opened or the window 
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "getRecap" app/src/ -r` shows only `useQueryOnce` consumers
-- [ ] `grep -n "useQuery(api.interactions.getRecap" app/src/ -r` returns nothing
-- [ ] `app/src/lib/useQueryOnce.ts` exists with no `any`
-- [ ] `docs/PLATFORM.md` recap subsection updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "getRecap" app/src/ -r` shows only `useQueryOnce` consumers
+- [x] `grep -n "useQuery(api.interactions.getRecap" app/src/ -r` returns nothing
+- [x] `app/src/lib/useQueryOnce.ts` exists with no `any`
+- [x] `docs/PLATFORM.md` recap subsection updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

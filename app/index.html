@@ -17,23 +17,26 @@
       name="theme-color"
     />
     <script>
-      // OAuth return: move the session token out of the URL before any bundle, Sentry replay, or
-      // error handler can observe location.href, then scrub the fragment from history.
-      // Only the /auth/success route captures anything: a crafted #session= fragment on any other
-      // path must be ignored, and an existing stored token is never overwritten.
+      // OAuth return: move the single-use login code out of the URL before any bundle, Sentry replay, or
+      // error handler can observe location.href, then scrub the fragment from history. The code alone is
+      // inert — the SPA redeems it with the PKCE verifier this browser stored at /auth/start, so the
+      // session token never travels in a URL.
+      // Only the /auth/success route captures anything: a crafted #code= fragment on any other path must
+      // be ignored, and an existing stored token is never overwritten (the code must not be burned for
+      // its owner by a handed-over link).
       ;(function () {
         try {
           if (!window.location.pathname.endsWith('/auth/success')) return
           var hash = window.location.hash.replace(/^#/, '')
           if (!hash) return
           var p = new URLSearchParams(hash)
-          var session = p.get('session')
+          var code = p.get('code')
           var plan = p.get('plan')
           var interval = p.get('interval')
-          if (session && !sessionStorage.getItem('sessionToken')) sessionStorage.setItem('sessionToken', session)
+          if (code && !sessionStorage.getItem('sessionToken')) sessionStorage.setItem('oauthCode', code)
           if (plan) sessionStorage.setItem('chosenPlan', plan)
           if (interval) sessionStorage.setItem('chosenInterval', interval)
-          if (session || plan || interval) {
+          if (code || plan || interval) {
             window.history.replaceState(null, '', window.location.pathname + window.location.search)
           }
         } catch (e) {}

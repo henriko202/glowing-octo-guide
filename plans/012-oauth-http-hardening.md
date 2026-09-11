@@ -292,15 +292,18 @@ must show no OAuth-route response without `NO_STORE` (the Stripe `registerRoutes
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "oauth_nonce" convex/http.ts` finds the Set-Cookie and the read
-- [ ] `grep -n "browserNonce" convex/sessions.ts convex/http.ts` finds both sides
-- [ ] `grep -n "no-store" convex/http.ts` finds the helper and it is used by every OAuth redirect
-- [ ] `grep -n "checkOAuthStartBudget" convex/http.ts convex/lib/rateLimit.ts` finds the call and definition
-- [ ] `deleteExpiredOAuthStates` reschedules when the batch is full
-- [ ] `docs/PLATFORM.md` §7 and §17 updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "oauth_nonce" convex/http.ts` finds the Set-Cookie and the read
+- [x] `grep -n "browserNonce" convex/sessions.ts convex/http.ts` finds both sides
+- [x] `grep -n "no-store" convex/http.ts` finds the helper and it is used by every OAuth redirect
+- [x] `grep -n "checkOAuthStartBudget" convex/http.ts convex/lib/rateLimit.ts` finds the call and definition
+- [x] `deleteExpiredOAuthStates` reschedules when the batch is full
+- [x] `docs/PLATFORM.md` §7 and §17 updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
+
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by greps + the green suites at convex 609 /
+> app 479 / landing 24 / integration 6.
 
 ## STOP conditions
 

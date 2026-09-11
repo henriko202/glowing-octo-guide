@@ -165,7 +165,7 @@ flowchart LR
         direction TB
         Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
         Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-        DB[("Convex DB<br/>19 tables")]
+        DB[("Convex DB<br/>20 tables")]
         Crons["Cron scheduler"]
         Cloud --- DB
         Site --- DB
@@ -254,7 +254,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │       └── i18n/                # i18next init + locales/{en,pt,es}.json
 │
 ├── convex/                      # Convex backend (shared by both apps)
-│   ├── schema.ts                # 19-table database schema
+│   ├── schema.ts                # 20-table database schema
 │   ├── convex.config.ts         # registers @convex-dev/stripe + @convex-dev/rate-limiter components
 │   ├── crons.ts                 # the ONLY file Convex reads for scheduled jobs
 │   ├── http.ts                  # LinkedIn OAuth + Stripe webhook HTTP routes
@@ -295,7 +295,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 
 ## 5. Data Model
 
-All state lives in **Convex** (`convex/schema.ts`). There are **19 tables**. Every document also carries Convex‑managed
+All state lives in **Convex** (`convex/schema.ts`). There are **20 tables**. Every document also carries Convex‑managed
 `_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
 
 Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential integrity**;
@@ -529,9 +529,10 @@ feed).
 
 #### `sessions` — app's own auth tokens
 
-Random UUID tokens issued by the OAuth callback. **15‑day sliding TTL** — the window is renewed on authenticated use
-once it passes the halfway mark, so active users stay logged in while an idle (or stolen‑but‑unused) token dies 15 days
-after its last use. `SESSION_TTL_MS` in `convex/sessions.ts` is the single source of truth; renewal lives in
+Random UUID tokens issued by `sessions.redeemAuthCode` when the SPA redeems a login code (see §7). **15‑day sliding
+TTL** — the window is renewed on authenticated use once it passes the halfway mark, so active users stay logged in
+while an idle (or stolen‑but‑unused) token dies 15 days after its last use. `SESSION_TTL_MS` in `convex/sessions.ts` is
+the single source of truth; renewal lives in
 `resolveSession` (mutation ctx) / `requireAuthAction` (via
 `sessions.slide`).
 
@@ -541,19 +542,36 @@ after its last use. `SESSION_TTL_MS` in `convex/sessions.ts` is the single sourc
 | `userId`    | `id('users')` | ✓  | Session owner (`by_userId`).                                                                                            |
 | `expiresAt` | number        | ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-session cleanup cron (range scan, not a full-table `.filter()`). |
 
-#### `oauthStates` — CSRF nonces
+#### `oauthStates` — CSRF nonces + PKCE challenge
 
-Single‑use OAuth `state` values; ~10‑minute TTL; deleted only when the nonce + expiry validate (a failed probe leaves
-the row for TTL cleanup). The row also carries the plan-selection the user
+Single‑use OAuth `state` values; ~10‑minute TTL; deleted only when the nonce + expiry + PKCE challenge validate (a
+failed probe leaves the row for TTL cleanup). The row also carries the plan-selection the user
 made on the landing page — and, since **R19**, the inviter's code — so both survive the OAuth redirect round-trip.
 
-| Field       | Type                         | Req | Meaning                                                                                                                                        |
-|-------------|------------------------------|:---:|------------------------------------------------------------------------------------------------------------------------------------------------|
-| `state`     | string                       | ✓  | Random nonce (`by_state`).                                                                                                                     |
-| `expiresAt` | number                       | ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron.                                                                     |
-| `plan`      | `'starter'\|'growth'\|'pro'` |  –  | Tier chosen on the landing Pricing page before starting OAuth. Absent when OAuth is initiated without a plan selection (e.g. direct app link). |
-| `interval`  | `'monthly'\|'annual'`        |  –  | Billing interval chosen alongside `plan`. Absent when `plan` is absent.                                                                        |
-| `ref`       | string                       |  –  | **R19** — invite code from the landing `?ref=`, checked by `isInviteCode` in `http.ts` before storing. See [§7](#7-authentication--identity).  |
+| Field       | Type                         | Req | Meaning                                                                                                                                                                                                                                                                               |
+|-------------|------------------------------|:---:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `state`     | string                       | ✓  | Random nonce (`by_state`).                                                                                                                                                                                                                                                            |
+| `expiresAt` | number                       | ✓  | Expiry (ms). `by_expires_at` backs the indexed expired-state cleanup cron.                                                                                                                                                                                                            |
+| `challenge` | string                       |  –  | PKCE-style SHA‑256 challenge (43‑char base64url) of the initiating browser's verifier — the binding that makes a handed-over login code inert. Optional **only** for deploy safety: rows minted before 2026‑09‑10 carry none and are rejected. See [§7](#7-authentication--identity). |
+| `plan`      | `'starter'\|'growth'\|'pro'` |  –  | Tier chosen on the landing Pricing page before starting OAuth. Absent when OAuth is initiated without a plan selection (e.g. direct app link).                                                                                                                                        |
+| `interval`  | `'monthly'\|'annual'`        |  –  | Billing interval chosen alongside `plan`. Absent when `plan` is absent.                                                                                                                                                                                                               |
+| `ref`       | string                       |  –  | **R19** — invite code from the landing `?ref=`, checked by `isInviteCode` in `http.ts` before storing. See [§7](#7-authentication--identity).                                                                                                                                         |
+
+#### `authCodes` — single-use login-code handoff
+
+Minted by the OAuth callback (2‑minute TTL) and redeemed by the SPA with the PKCE verifier. The code travels in the
+success redirect's fragment (`#code=…`) — the session token never does; redeem deletes the row on success, and a code
+alone is inert without the verifier, which never leaves the initiating browser. Erasure‑cascaded with the owning user;
+deliberately **not** part of the DSR export (a transient bearer credential). See [§7](#7-authentication--identity).
+
+| Field       | Type                         | Req | Meaning                                                                                               |
+|-------------|------------------------------|:---:|-------------------------------------------------------------------------------------------------------|
+| `code`      | string                       | ✓  | Random UUID minted by the callback (`by_code`).                                                       |
+| `userId`    | `id('users')`                | ✓  | Member the code will log in (`by_userId` — erasure cascade).                                          |
+| `challenge` | string                       | ✓  | SHA‑256(verifier) base64url stored at login start — redeem re-derives it from the presented verifier. |
+| `plan`      | `'starter'\|'growth'\|'pro'` |  –  | Pricing selection carried through OAuth (the redirect fragment also carries it for the SPA).          |
+| `interval`  | `'monthly'\|'annual'`        |  –  | Billing interval carried alongside `plan`.                                                            |
+| `expiresAt` | number                       | ✓  | Expiry (ms; `Date.now() + 2 min`). `by_expires_at` backs the indexed expired-code cleanup cron.       |
 
 #### Rate‑limit counters — the `@convex-dev/rate-limiter` component
 
@@ -757,14 +775,12 @@ One row per trialing member, written by `incrementLikeCount` / `incrementComment
 `users` document (plan 018): the counters were previously patched onto `users` on every interaction
 while trialing, and a `users` patch invalidates every query that reads the member — `getMe` on every
 authenticated request, and every open feed page containing one of their posts (`feed.getFeed` reads
-post authors). The row is created lazily on the member's first trial interaction: when the legacy
-`users.trialInteractionsMade` / `users.trialInteractionsReceived` fields are still set (the deploy
-window before the migration has run), the writer seeds both sides from them and clears both in the
-same transaction — so a first post-deploy bump can neither reset the meter nor let the migration's
-later add-on-merge skip a milestone. Readers:
+post authors). The row is created lazily on the member's first trial interaction. The counters were
+migrated off the legacy `users.trialInteractionsMade` / `users.trialInteractionsReceived` fields (those fields and
+`migrations/moveTrialCounters.ts` no longer exist); this table is the only source
+of truth. Readers:
 `users.getTrialProgress` (the trial meter) and `internal.billing.getBillingContext` (the trial
-emails). Migrated off `users.trialInteractionsMade` / `users.trialInteractionsReceived` by
-`migrations/moveTrialCounters.ts`, which skips anyone the writer has already seeded.
+emails).
 
 | Field      | Type          | Req | Meaning                                         |
 |------------|---------------|:---:|-------------------------------------------------|
@@ -902,22 +918,29 @@ OAuth the app uses its **own opaque session tokens**.
 - **OAuth endpoints:** authorize `https://www.linkedin.com/oauth/v2/authorization`, token
   `https://www.linkedin.com/oauth/v2/accessToken`, userinfo `https://api.linkedin.com/v2/userinfo`
   (OIDC; replaces the deprecated `/v2/me`).
-- **CSRF:** a random `state` is stored in `oauthStates` (10‑min TTL) before redirect and is single‑use validated on
-  callback — the browser nonce and expiry are checked **before** the row is deleted, so a failed (wrong‑nonce/expired)
-  probe cannot burn the legitimate browser's in‑flight state; only a fully valid presentation consumes it, and expired
-  rows are TTL‑cleaned. It is **bound to the initiating browser** by a second random nonce: `/auth/linkedin` sets it as
-  an `HttpOnly; Secure; SameSite=Lax` cookie **namespaced per state** (`oauth_nonce_<state>`, 10‑min `Max‑Age`,
-  `Path=/`) so concurrent logins in one browser don't overwrite each other; the row stores the matching `browserNonce`,
-  and the callback rejects the flow unless the presented `oauth_nonce_<state>` cookie matches — a captured callback URL
-  alone cannot log a victim into the attacker's account. That per‑state cookie is cleared (`Max-Age=0`) on every
-  callback redirect. `/auth/linkedin` is rate‑limited at **60/hour per client** (best‑effort `x-forwarded-for` key)
-  plus a **global 1800/hour backstop** (`checkOAuthStartBudget`) to bound `oauthStates` growth — the global limit is
+- **CSRF + PKCE binding:** a random `state` is stored in `oauthStates` (10‑min TTL) before redirect and is single‑use
+  validated on callback — the browser nonce, expiry, and PKCE challenge are checked **before** the row is deleted, so a
+  failed (wrong‑nonce/expired/challenge‑less) probe cannot burn the legitimate browser's in‑flight state; only a fully
+  valid presentation consumes it, and expired rows are TTL‑cleaned. It is **bound to the initiating browser** by a
+  second random nonce: `/auth/linkedin` sets it as an `HttpOnly; Secure; SameSite=Lax` cookie **namespaced per state**
+  (`oauth_nonce_<state>`, 10‑min `Max‑Age`, `Path=/`) so concurrent logins in one browser don't overwrite each other;
+  the row stores the matching `browserNonce`, and the callback rejects the flow unless the presented
+  `oauth_nonce_<state>` cookie matches — a captured callback URL alone cannot log a victim into the attacker's account.
+  That per‑state cookie is cleared (`Max-Age=0`) on every callback redirect. The start route additionally **requires**
+  `?vc=<challenge>` (SHA‑256 of the app‑generated verifier, 43‑char base64url) and rejects a direct hit without one with
+  a 400; the challenge is stored on the same row, so the login code the callback mints can only be redeemed by the
+  browser holding the verifier. `/auth/linkedin` is rate‑limited at **60/hour per client** (best-effort
+  `x-forwarded-for`
+  key) plus a **global 1800/hour backstop** (`checkOAuthStartBudget`) to bound `oauthStates` growth — the global limit
+  is
   what actually does the bounding, since the header is untrusted/spoofable — and every OAuth redirect sets
-  `Cache-Control: no-store` so a token‑bearing 302 is never cacheable.
+  `Cache-Control: no-store` so a code‑bearing 302 is never cacheable.
 - **Session token:** a random UUID stored in `sessions` (**15‑day sliding TTL** — renewed on authenticated use past the
-  halfway mark; `SESSION_TTL_MS` is the source of truth); returned to the app in the redirect URL **fragment**
-  `#session=…` (fragments never reach servers/proxies/access logs, unlike query strings). The app keeps it in **
-  `sessionStorage`** (key `sessionToken`).
+  halfway mark; `SESSION_TTL_MS` is the source of truth) and **never carried in a URL**. The OAuth callback redirects
+  with a single‑use, 2‑minute login code in the fragment (`#code=…`); the SPA redeems it through
+  `sessions.redeemAuthCode({ code, verifier })`, presenting the PKCE verifier it generated at `/auth/start` and kept in
+  **`sessionStorage`** (key `oauthVerifier`). The token comes back over the Convex transport and is stored in
+  `sessionStorage` (key `sessionToken`).
 - **Sign‑out:** the app auto‑starts OAuth for any unauthenticated visit (see `RequireAuth`, §14), and LinkedIn keeps its
   own SSO session — so a naive sign‑out is silently re‑authenticated. Sign‑out therefore sets a **persistent `signedOut`
   marker** (`localStorage`, `lib/session.ts`) _before_
@@ -930,25 +953,33 @@ OAuth the app uses its **own opaque session tokens**.
   `RequireAuth` bounces them to the landing site instead of auto‑logging them in. It is cleared on the next successful
   login (`AuthSuccessPage`, and only when a session token was actually captured), so "auto‑redirect for login" resumes
   for fresh/expired sessions. To log back in, the
-  landing site's CTAs point **straight at OAuth**
-  (`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, §15) — not the app root — so a signed‑out visitor doesn't ping‑pong
-  between the landing site and the app. All three sign‑out buttons (`UserMenu`,
+  landing site's CTAs point at the app's **`/auth/start`** route (`${NEXT_PUBLIC_APP_URL}/auth/start`, §15) — not the
+  app root — so a signed‑out visitor doesn't ping‑pong
+  between the landing site and the app; `/auth/start` generates the PKCE verifier/challenge and bounces to Convex. All
+  three sign‑out buttons (`UserMenu`,
   `BannedScreen`, `CancelDeletionScreen`) route through the shared `performSignOut()` helper in
   `app/src/lib/session.ts`, which `await`s `users.logout` to invalidate the session server‑side.
 
 ### OAuth login flow
 
-The `/auth/linkedin` start handler reads optional `plan`, `interval` and `ref` query parameters from the URL (appended
-by the landing Pricing page CTAs, and — for `ref` — by `TrialProvider`, see [§15](#15-frontend--landing-site-landing)).
+Login starts in the app at **`/auth/start`**: the browser generates a 32‑byte random verifier (base64url, kept in
+`sessionStorage.oauthVerifier`), derives `SHA-256(verifier)` base64url, and navigates to
+`${CONVEX_SITE_URL}/auth/linkedin?vc=<challenge>` — plus the optional `plan`, `interval` and `ref` the landing appended
+to the start URL (the landing Pricing CTAs, and — for `ref` — `TrialProvider`, now point at
+`${NEXT_PUBLIC_APP_URL}/auth/start`, see [§15](#15-frontend--landing-site-landing)). The `/auth/linkedin` start handler
+reads that `vc` and rejects a missing/malformed challenge with a 400 — every login is initiated with one — and reads the
+optional `plan`, `interval` and `ref` query parameters.
 The `plan` value is validated against the allowed tier list (`starter|growth|pro`); `ref` is kept only when
-`isInviteCode(ref)` matches `/^[a-z0-9]{8}$/` (`lib/invite.ts`). All three are stored on the `oauthStates` row via
+`isInviteCode(ref)` matches `/^[a-z0-9]{8}$/` (`lib/invite.ts`). All of them are stored on the `oauthStates` row via
 `sessions.createOAuthState`, so they survive the LinkedIn redirect round-trip. The handler also mints a random
 `browserNonce`, stores it on the same row, and sets it as an `HttpOnly; Secure; SameSite=Lax` cookie
 (`oauth_nonce_<state>`, 10‑min `Max‑Age`, namespaced per state so concurrent logins don't clobber each other); the
 callback requires the matching `oauth_nonce_<state>` cookie and clears it. Every OAuth redirect carries
-`Cache-Control: no-store`. The route is rate‑limited **per client (60/hour, best‑effort `x-forwarded-for` key) with a
+`Cache-Control: no-store`. The route is rate‑limited **per client (60/hour, best-effort `x-forwarded-for` key) with a
 global 1800/hour backstop** (`checkOAuthStartBudget`) because its caller is anonymous; the global limit is what
-actually bounds `oauthStates` growth.
+actually bounds `oauthStates` growth. The browser‑nonce cookie mechanism is unchanged; what changed is token delivery:
+the callback no longer creates a session — it mints a single‑use, 2‑minute **login code** bound to the stored challenge,
+and only the browser that holds the verifier can redeem it (below).
 
 **Referral attribution (R19)** is a four-hop chain, and every hop can drop the code without failing the login:
 
@@ -967,17 +998,20 @@ sequenceDiagram
     participant LI as LinkedIn
     participant DB as Convex DB
     participant A as App (React)
-    LP ->> CV: /auth/linkedin?plan=growth&interval=annual&ref=k3p9x2ab
-    Note over LP, CV: plan/interval/ref all optional — absent on direct app link
+    LP ->> A: /auth/start?plan=growth&interval=annual&ref=k3p9x2ab
+    Note over LP, A: plan/interval/ref all optional — absent on direct app link
+    A ->> A: verifier = 32 random bytes → sessionStorage.oauthVerifier<br/>challenge = SHA-256(verifier) base64url
+    A ->> CV: /auth/linkedin?vc=<challenge>&plan=…&interval=…&ref=…
+    Note over CV: vc missing/malformed ⇒ 400 Invalid login request.
     CV ->> CV: isInviteCode(ref) ? ref : undefined
     CV ->> DB: checkOAuthStartBudget() — per-client 60/hour + global 1800/hour backstop
-    CV ->> DB: createOAuthState(state, browserNonce, +10min, plan?, interval?, ref?)
+    CV ->> DB: createOAuthState(state, browserNonce, challenge, +10min, plan?, interval?, ref?)
     CV -->> U: 302 → LinkedIn authorize?scope=…&state<br/>Set-Cookie: oauth_nonce_<state> (HttpOnly; Secure; SameSite=Lax; 10min)
     U ->> LI: authenticate & consent
     LI -->> CV: 302 /auth/linkedin/callback?code&state (sends the oauth_nonce_<state> cookie)
     CV ->> CV: readCookie(oauth_nonce_<state>) — missing ⇒ reject
-    CV ->> DB: validateAndConsumeOAuthState(state, browserNonce) → { valid, plan?, interval?, ref? }
-alt invalid / expired state, or missing/mismatched nonce cookie
+    CV ->> DB: validateAndConsumeOAuthState(state, browserNonce) → { valid, plan?, interval?, ref?, challenge }
+alt invalid / expired state, missing/mismatched nonce cookie, or missing challenge
 CV -->> U: 302 → APP_URL/?error=oauth_failed<br/>Set-Cookie: oauth_nonce_<state> cleared
 else valid
 CV ->> LI: exchangeCodeForTokens(code)
@@ -986,10 +1020,15 @@ CV ->> LI: GET /v2/userinfo
 LI -->> CV: sub, name, picture
 CV ->> DB: upsertUser(…, referredByCode: ref?) → userId (tokens stored server-side)
 Note over CV, DB: insert only, and only if by_invite_code finds a non-banned member
-CV ->> DB: sessions.create(token=UUID, userId, +15d sliding)
-CV -->> U: 302 → APP_URL/auth/success#session=UUID&plan=growth&interval=annual<br/>Cache-Control: no-store ; oauth_nonce_<state> cleared
-Note over CV, U: every OAuth 302 sets Cache-Control: no-store ; plan/interval omitted from hash when absent ; ref is never echoed back
-        U ->> A: /auth/success reads hash → stores token + plan/interval → navigate /feed
+CV ->> DB: createAuthCode(code=UUID, userId, challenge, +2min)
+CV -->> U: 302 → APP_URL/auth/success#code=UUID&plan=growth&interval=annual<br/>Cache-Control: no-store ; oauth_nonce_<state> cleared
+Note over CV, U: every OAuth 302 sets Cache-Control: no-store ; no session token in any URL ; ref is never echoed back
+U ->> A: /auth/success captures #code + plan/interval (fragment scrubbed)
+A ->> CV: sessions.redeemAuthCode({ code, verifier })
+CV ->> DB: SHA-256(verifier) == stored challenge ⇒ insert session + delete code
+CV -->> A: { sessionToken } over the Convex transport
+A ->> A: sessionStorage.sessionToken = token → navigate /feed
+Note over U, A: a handed-over #code= link is inert — the verifier never left this browser
 end
 ```
 
@@ -1006,34 +1045,35 @@ flowchart TD
 
 ### Identity / user functions (`convex/users.ts`, `linkedin/auth.ts`, `sessions.ts`)
 
-| Function                                                                 | Kind                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-|--------------------------------------------------------------------------|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedin.auth.upsertUser`                                               | internalMutation               | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. `headline` is patched **only when provided** — OIDC login carries none, so a manually-set/scraped headline survives every login instead of being unset. Never writes `isAdmin`.                                                                                                                                                                                                                                                                                                                     |
-| `users.getMe`                                                            | query (public)                 | Safe profile via `resolveSession` + `toSafeMe` (strips token **values** + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`; **keeps `tokenExpiresAt`** — not a secret, drives the client's reconnect‑before‑expiry banner). **R19** adds `trialDays` (`trialDaysFor(user)`: 14 or 7) and `inviterName` (first name only, never stored). Also adds **`trialEligible`** — `trialEligible(rowCount)` over the member's `subscriptions` rows (`by_user`), the same rule checkout enforces, so no client has to guess trial eligibility from `subscriptionStatus` (§8). |
-| `linkedin.oauth.refreshAccessToken`                                      | function (server‑only)         | `grant_type=refresh_token` call to the token endpoint. Same log‑real/throw‑sanitized discipline as `exchangeCodeForTokens`; never logs the token value. Called only by the refresh cron below.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `linkedin.auth.updateTokens`                                             | internalMutation               | Patches `linkedinAccessToken`/`tokenExpiresAt` (always) + `linkedinRefreshToken` (only when LinkedIn returns a new one — a non‑rotating provider's omitted `refresh_token` leaves the stored value untouched instead of clearing it). Never writes `isAdmin`, mirroring `upsertUser`.                                                                                                                                                                                                                                                                                                                     |
-| `linkedin.tokenRefresh.getUsersPendingRefresh` / `refreshExpiringTokens` | internalQuery / internalAction | Refresh-cron pair — see [§13](#13-scheduled-jobs-crons).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `users.getWithTokens`                                                    | internalQuery                  | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `users.getActiveSubscribers`                                             | internalQuery                  | Cursor‑paginated users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers; the fan‑out pages with `continueCursor` until `isDone`).                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `users.getSubscriptionInfo`                                              | query (public)                 | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `users.getTrialProgress`                                                 | query (public)                 | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received` from the member's `trialCounters` row; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern.                                                                                                                                                                                                                                          |
-| `users.getOrCreateInviteCode`                                            | mutation (public)              | **R19** — returns the member's `inviteCode`, minting it on the first call (Settings › Invite). Idempotent afterwards; codes are never reissued. On a `by_invite_code` collision it retries once, then throws `ConvexError('INVITE_CODE_RETRY')`.                                                                                                                                                                                                                                                                                                                                                          |
-| `users.getInviteSummary`                                                 | query (public)                 | **R19** — `{ inviteCode: string \| null; joined: number }`, or `null` when unauthenticated. `inviteCode` is `null` until the mutation above mints it. `joined` counts members carrying the code via `by_referred_by_code` with `.take(101)`, so the read is bounded and the UI can render "100+" past the ceiling.                                                                                                                                                                                                                                                                                        |
-| `users.setDerivedPublicIdentifier`                                       | mutation (internal)            | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `users.dismissFirstPostPrompt`                                           | mutation (public)              | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `users.markFirstPostPrompted`                                            | mutation (internal)            | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `users.updateProfile`                                                    | mutation (public)              | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at `MAX_HEADLINE_LENGTH` (65) chars — rejected if longer; empty string clears any of them.                                                                                                                                                                                                                                                                                                                                                          |
-| `users.setPostVisibility`                                                | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets `defaultVisibilityIndustries`/`defaultVisibilityCountries`; each entry validated against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values), countries upper-cased. Empty arrays are valid (⇒ everyone). Applies to future posts only — see [§11](#11-feed--engagement).                                                                                                                                                                                                                                       |
-| `users.setFeedFilter`                                                    | mutation (public)              | **Pro/Contact only** (checked server-side — throws otherwise). Sets the viewer's own feed filter `feedFilterIndustries`/`feedFilterCountries`; same validation as `setPostVisibility` (canonical lists, countries upper-cased). Empty arrays clear the filter. `feed.getFeed` reads these off the viewer doc, so saving re-filters the feed reactively — see [§11](#11-feed--engagement).                                                                                                                                                                                                                 |
-| `users.refreshProfileFromLinkedIn`                                       | mutation (public)              | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `users.isProfileRefreshEnabled`                                          | query (public)                 | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `users.applyScrapedProfile`                                              | internalMutation               | Writes scraped fields: `country` + `headline` **fill-when-empty** (scraped headline trimmed + truncated to the `MAX_HEADLINE_LENGTH` cap, never rejected); `location`/`primaryLocale` always refresh.                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `users.logout`                                                           | mutation (public)              | Deletes the current session token.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `users.forceLogoutAll`                                                   | mutation (public)              | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `sessions.create` / `getByToken` / `deleteByToken`                       | internal                       | Session lifecycle.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `sessions.deleteAllForUser`                                              | internalMutation               | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `sessions.createOAuthState` / `validateAndConsumeOAuthState`             | internalMutation               | CSRF nonce lifecycle. `createOAuthState` stores `browserNonce` (the value of the browser-bound, per‑state `oauth_nonce_<state>` cookie) alongside the state, and accepts optional `plan`/`interval`/`ref`. `validateAndConsumeOAuthState` validates the stored `browserNonce` **and** expiry **before** deleting — a failed attempt leaves the row for the legitimate browser until TTL cleanup, and only success consumes it — then returns `{ valid, plan?, interval?, ref? }` so the callback can forward the chosen tier **and the R19 invite code** to `upsertUser`.                                 |
-| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates`            | internalMutation               | Cron cleanup (batches of 200).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Function                                                                                 | Kind                                   | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+|------------------------------------------------------------------------------------------|----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `linkedin.auth.upsertUser`                                                               | internalMutation                       | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. `headline` is patched **only when provided** — OIDC login carries none, so a manually-set/scraped headline survives every login instead of being unset. Never writes `isAdmin`.                                                                                                                                                                                                                                                                                                                                                                   |
+| `users.getMe`                                                                            | query (public)                         | Safe profile via `resolveSession` + `toSafeMe` (strips token **values** + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`; **keeps `tokenExpiresAt`** — not a secret, drives the client's reconnect‑before‑expiry banner). **R19** adds `trialDays` (`trialDaysFor(user)`: 14 or 7) and `inviterName` (first name only, never stored). Also adds **`trialEligible`** — `trialEligible(rowCount)` over the member's `subscriptions` rows (`by_user`), the same rule checkout enforces, so no client has to guess trial eligibility from `subscriptionStatus` (§8).                                               |
+| `linkedin.oauth.refreshAccessToken`                                                      | function (server‑only)                 | `grant_type=refresh_token` call to the token endpoint. Same log‑real/throw‑sanitized discipline as `exchangeCodeForTokens`; never logs the token value. Called only by the refresh cron below.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `linkedin.auth.updateTokens`                                                             | internalMutation                       | Patches `linkedinAccessToken`/`tokenExpiresAt` (always) + `linkedinRefreshToken` (only when LinkedIn returns a new one — a non‑rotating provider's omitted `refresh_token` leaves the stored value untouched instead of clearing it). Never writes `isAdmin`, mirroring `upsertUser`.                                                                                                                                                                                                                                                                                                                                                                   |
+| `linkedin.tokenRefresh.getUsersPendingRefresh` / `refreshExpiringTokens`                 | internalQuery / internalAction         | Refresh-cron pair — see [§13](#13-scheduled-jobs-crons).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `users.getWithTokens`                                                                    | internalQuery                          | Full record **incl. tokens** — server‑only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `users.getActiveSubscribers`                                                             | internalQuery                          | Cursor‑paginated users with `subscriptionStatus === 'active'` via the `by_subscription_status` index (reads only active subscribers; the fan‑out pages with `continueCursor` until `isDone`).                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `users.getSubscriptionInfo`                                                              | query (public)                         | Billing‑page data; reads the Stripe component's live subscriptions + our `subscriptions.tier`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `users.getTrialProgress`                                                                 | query (public)                         | Trial meter data for `BillingPage`. Returns `{ made, received, combined, threshold, reached, status, trialEndsAt }` — `combined = made + received` from the member's `trialCounters` row; `threshold = TRIAL_INTERACTION_THRESHOLD` (50); `reached` when `combined >= threshold`. Returns `null` if unauthenticated. Mirrors `getMe`'s `resolveSession` pattern.                                                                                                                                                                                                                                                                                        |
+| `users.getOrCreateInviteCode`                                                            | mutation (public)                      | **R19** — returns the member's `inviteCode`, minting it on the first call (Settings › Invite). Idempotent afterwards; codes are never reissued. On a `by_invite_code` collision it retries once, then throws `ConvexError('INVITE_CODE_RETRY')`.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `users.getInviteSummary`                                                                 | query (public)                         | **R19** — `{ inviteCode: string \| null; joined: number }`, or `null` when unauthenticated. `inviteCode` is `null` until the mutation above mints it. `joined` counts members carrying the code via `by_referred_by_code` with `.take(101)`, so the read is bounded and the UI can render "100+" past the ceiling.                                                                                                                                                                                                                                                                                                                                      |
+| `users.setDerivedPublicIdentifier`                                                       | mutation (internal)                    | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `users.dismissFirstPostPrompt`                                                           | mutation (public)                      | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `users.markFirstPostPrompted`                                                            | mutation (internal)                    | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `users.updateProfile`                                                                    | mutation (public)                      | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at `MAX_HEADLINE_LENGTH` (65) chars — rejected if longer; empty string clears any of them.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `users.setPostVisibility`                                                                | mutation (public)                      | **Pro/Contact only** (checked server-side — throws otherwise). Sets `defaultVisibilityIndustries`/`defaultVisibilityCountries`; each entry validated against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values), countries upper-cased. Empty arrays are valid (⇒ everyone). Applies to future posts only — see [§11](#11-feed--engagement).                                                                                                                                                                                                                                                                                     |
+| `users.setFeedFilter`                                                                    | mutation (public)                      | **Pro/Contact only** (checked server-side — throws otherwise). Sets the viewer's own feed filter `feedFilterIndustries`/`feedFilterCountries`; same validation as `setPostVisibility` (canonical lists, countries upper-cased). Empty arrays clear the filter. `feed.getFeed` reads these off the viewer doc, so saving re-filters the feed reactively — see [§11](#11-feed--engagement).                                                                                                                                                                                                                                                               |
+| `users.refreshProfileFromLinkedIn`                                                       | mutation (public)                      | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `users.isProfileRefreshEnabled`                                                          | query (public)                         | Whether the dev-only Apify profile scrape is enabled; Settings uses it to **hide** the "Refresh from LinkedIn" button when off (the prod default).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `users.applyScrapedProfile`                                                              | internalMutation                       | Writes scraped fields: `country` + `headline` **fill-when-empty** (scraped headline trimmed + truncated to the `MAX_HEADLINE_LENGTH` cap, never rejected); `location`/`primaryLocale` always refresh.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `users.logout`                                                                           | mutation (public)                      | Deletes the current session token.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `users.forceLogoutAll`                                                                   | mutation (public)                      | Deletes **all** sessions for the user (compromise response).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `sessions.create` / `getByToken` / `deleteByToken`                                       | internal                               | Session lifecycle. The OAuth path no longer calls `create` — `redeemAuthCode` inserts the session directly (same transaction).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `sessions.deleteAllForUser`                                                              | internalMutation                       | Revoke all sessions for a user (used by `forceLogoutAll`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `sessions.createAuthCode` / `redeemAuthCode`                                             | internalMutation / **public mutation** | PKCE login-code lifecycle. `createAuthCode` stores `{ code, userId, challenge, plan?, interval? }` with a 2‑minute TTL. `redeemAuthCode({ code, verifier })` re‑derives `SHA-256(verifier)` and compares it to the stored challenge; on match it deletes the single‑use code, inserts the session, and returns `{ sessionToken }`. Any failure throws the generic `ConvexError('Login could not be verified. Please try again.')` (a throwing mutation rolls back its writes, so a failed attempt mints nothing and cannot consume the code). Never logs `code`/`verifier`.                                                                             |
+| `sessions.createOAuthState` / `validateAndConsumeOAuthState`                             | internalMutation                       | CSRF nonce lifecycle. `createOAuthState` stores `browserNonce` (the value of the browser-bound, per‑state `oauth_nonce_<state>` cookie) and the PKCE `challenge` alongside the state, and accepts optional `plan`/`interval`/`ref`. `validateAndConsumeOAuthState` validates the stored `browserNonce`, expiry, **and** challenge shape **before** deleting — a failed attempt leaves the row for the legitimate browser until TTL cleanup, and only success consumes it — then returns `{ valid, plan?, interval?, ref?, challenge }` so the callback can forward the chosen tier **and the R19 invite code** to `upsertUser` and bind the login code. |
+| `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` / `deleteExpiredAuthCodes` | internalMutation                       | Cron cleanup (batches of 200, self‑rescheduling when full).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ### Token lifecycle: issue → refresh window → reconnect fallback
 
@@ -1057,8 +1097,8 @@ token. Please sign in again.'`
    authenticated region only) driven by the `tokenExpiresAt` `users.getMe` returns. Pure gate
    `shouldShowReconnect(me, now)`: `tokenExpiresAt == null` → "expired" copy; `tokenExpiresAt < now + 7d` (including
    already past) → "expiring in N day (s)" copy; otherwise renders nothing. No dismiss — it stays up while the condition
-   holds. Its "Reconnect" button just re‑runs `/auth/linkedin` (`window.location.href = AUTH_URL`, the same URL
-   `RequireAuth`'s own auto‑OAuth redirect uses) — the existing OAuth entry point already re‑stores a fresh token via
+   holds. Its "Reconnect" button navigates to the app's `/auth/start` route (`beginOAuthLogin`), the same entry point
+   `RequireAuth`'s own auto‑OAuth redirect now uses — the existing OAuth flow already re‑stores a fresh token via
    `upsertUser`. An expired‑token user who still manages to submit sees the `submitPost` error above, but the banner
    means that's no longer their first signal.
 
@@ -3727,6 +3767,7 @@ account‑deletion, and retention jobs run on fixed intervals from deploy time (
 | `reconcile MOTD windows`       | every **5 min**     | `motd/motd.reconcileMotdWindows`                   | Materialize MOTD schedule transitions into the `enabled` flag (enable a reached `startAt`, disable a passed `expiresAt`; bounded `.take(50)` per state; a quick-toggle disable clears `startAt`/`expiresAt` first so it is not re-enabled) so `getActiveMotd` stays wall-clock-free. See [§12B](#12b-message-of-the-day-motd).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`                   | Purge expired sessions in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`                | Purge expired CSRF nonces in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `cleanup expired auth codes`   | every **1h**        | `sessions.deleteExpiredAuthCodes`                  | Purge expired 2‑minute login codes in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions`         | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `refresh LinkedIn tokens`      | every **6h**        | `linkedin/tokenRefresh.refreshExpiringTokens`      | Renews tokens entering their pre-expiry window (`tokenExpiresAt` in `[now, now+7d)` **and** a refresh token on file) via `linkedin.oauth.refreshAccessToken` + `linkedin.auth.updateTokens`. Reads via `by_token_expiry`, **cursor-paginated** (≤100/page, mirrors `migrations/backfillFeedFields.ts`'s pattern) rather than a single `.take(100)` snapshot — the cursor is captured before any refresh attempt and advances every run regardless of per-user outcome, so a full 6h tick pages through the **entire** pre-expiry window even if rows near the front keep failing. Each user's refresh is try/caught independently (one `invalid_grant` skips that user, never aborts the batch or stalls the cursor). **Runs more often than `enforce data retention` below on purpose** — see ordering note. Best-effort/mostly dormant in practice: see [§7](#7-authentication--identity). |
 | `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`           | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -4135,25 +4176,27 @@ sibling of `<Routes>` resets `window.scrollTo(0, 0)` on every pathname change (s
 `#anchor`) — the declarative router doesn't restore scroll on its own, and the app uses a page-scroll model (the window
 is the scroller; see AppShell), so without it a scrolled feed would carry its scroll into the next page.
 
-| Path            | Page              |                                                         Guarded                                                          |
-|-----------------|-------------------|:------------------------------------------------------------------------------------------------------------------------:|
-| `/auth/success` | `AuthSuccessPage` | – (pre-bundle script captures `#session=` on this route only → stores token + plan/interval → clear signedOut → `/feed`) |
-| `/feed`         | `FeedPage`        |                                                            ✓                                                            |
-| `/my-posts`     | `MyPostsPage`     |                                                            ✓                                                            |
-| `/recap`        | `RecapPage`       |                                                            ✓                                                            |
-| `/history`      | `HistoryPage`     |                                                            ✓                                                            |
-| `/settings`     | `SettingsPage`    |                                                            ✓                                                            |
-| `/billing`      | `BillingPage`     |                                                            ✓                                                            |
-| `/admin`        | `AdminPage`       |                                 ✓ (server‑gated via `checkIsAdmin`; not linked in nav)                                  |
-| `/privacy-data` | `PrivacyDataPage` |                                                            ✓                                                            |
-| `*`             | → `/feed`         |                                                            –                                                             |
+| Path            | Page              |                                                                           Guarded                                                                            |
+|-----------------|-------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------:|
+| `/auth/start`   | `AuthStartPage`   |                               – (PKCE entry: generates verifier/challenge → `beginOAuthLogin` → Convex `/auth/linkedin?vc=…`)                                |
+| `/auth/success` | `AuthSuccessPage` | – (pre-bundle script captures `#code=` on this route only → SPA redeems with the stored verifier → stores token + plan/interval → clear signedOut → `/feed`) |
+| `/feed`         | `FeedPage`        |                                                                              ✓                                                                              |
+| `/my-posts`     | `MyPostsPage`     |                                                                              ✓                                                                              |
+| `/recap`        | `RecapPage`       |                                                                              ✓                                                                              |
+| `/history`      | `HistoryPage`     |                                                                              ✓                                                                              |
+| `/settings`     | `SettingsPage`    |                                                                              ✓                                                                              |
+| `/billing`      | `BillingPage`     |                                                                              ✓                                                                              |
+| `/admin`        | `AdminPage`       |                                                   ✓ (server‑gated via `checkIsAdmin`; not linked in nav)                                                    |
+| `/privacy-data` | `PrivacyDataPage` |                                                                              ✓                                                                              |
+| `*`             | → `/feed`         |                                                                              –                                                                               |
 
 `RequireAuth` calls `getMe`; the interception order is:
 
 1. **loading** (`getMe` undefined) → `<LoadingSpinner>`
 2. **`me === null`** → if the user explicitly signed out (`isSignedOut()` / persistent `localStorage.signedOut`) →
-   redirect to the **landing site** (`VITE_LANDING_URL`, §7) so sign‑out sticks; otherwise hard‑redirect to
-   `${VITE_CONVEX_SITE}/auth/linkedin` (auto‑OAuth; LinkedIn's SSO makes it a one‑hop login).
+   redirect to the **landing site** (`VITE_LANDING_URL`, §7) so sign‑out sticks; otherwise drop any stale
+   `sessionToken` and `window.location.assign('/auth/start')` — the app's PKCE entry route, which generates the
+   verifier/challenge and hands off to Convex (auto‑OAuth; LinkedIn's SSO makes it a one‑hop login).
 3. **`isBanned`** → `<BannedScreen>`
 4. **`me.deletionScheduledAt` set** (account pending deletion, within grace window) → `<CancelDeletionScreen>`
 5. **`me.acknowledgedPolicyVersion !== POLICY_VERSION`** (policy updated since last login) → `<PolicyUpdateScreen>`
@@ -4170,10 +4213,10 @@ is the scroller; see AppShell), so without it a scrolled feed would carry its sc
 flowchart TD
     L["index.html → main.tsx"] --> I["i18n init + ConvexProvider + Router"]
     I --> RT{"route guarded?"}
-    RT -->|no e . g . /auth/success| LAND["capture #session (success route only) → store → clear signedOut → /feed"]
+    RT -->|no e . g . /auth/success| LAND["capture #code (success route only) → redeem with stored verifier → store token → clear signedOut → /feed"]
     RT -->|yes| RA["RequireAuth: getMe(sessionToken)"]
     RA -->|undefined loading| SP["LoadingSpinner"]
-    RA -->|null| OAUTH["window.location = VITE_CONVEX_SITE/auth/linkedin"]
+    RA -->|null| OAUTH["drop stale token; window.location = /auth/start → PKCE challenge → VITE_CONVEX_SITE/auth/linkedin"]
     RA -->|isBanned| BAN["BannedScreen"]
     RA -->|deletionScheduledAt set| CDEL["CancelDeletionScreen"]
     RA -->|" acknowledgedPolicyVersion ≠ POLICY_VERSION "| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
@@ -4191,12 +4234,20 @@ sync with the compliance docs and live support inbox.
 
 ### Pages
 
-- **AuthSuccessPage** — the OAuth callback lands here with `#session`/`plan`/`interval`; the pre‑bundle inline script
-  in `index.html` has already moved them into `sessionStorage` (keys `sessionToken` / `chosenPlan` / `chosenInterval`)
-  and scrubbed the fragment before this page runs. That script captures a `#session=` **only on this route** and never
-  overwrites an existing stored token. The page then clears the persistent `signedOut` marker (§7) **only when a token
-  is actually stored** — opening `/auth/success` directly must not erase a deliberate sign‑out — and navigates to
-  `/feed`. No Convex calls.
+- **AuthStartPage** — the app's single login entry route: landing CTAs, `RequireAuth`'s auto‑OAuth, and
+  `ReconnectBanner` all point here. On mount it reads `plan`/`interval`/`ref` from the query string, generates the
+  PKCE verifier (kept in `sessionStorage.oauthVerifier`), derives its SHA‑256 challenge, and navigates to
+  `${VITE_CONVEX_SITE}/auth/linkedin?vc=<challenge>` via `beginOAuthLogin` (`lib/oauthStart.ts`). A run‑once latch
+  keeps StrictMode's double effect from overwriting the verifier with a challenge that isn't the one navigated to.
+  Renders only a spinner.
+- **AuthSuccessPage** — the OAuth callback lands here with `#code`/`plan`/`interval`; the pre‑bundle inline script
+  in `index.html` has already moved the code into `sessionStorage` (keys `oauthCode` / `chosenPlan` / `chosenInterval`)
+  and scrubbed the fragment before this page runs. That script captures a `#code=` **only on this route** and never
+  overwrites an existing stored token. The page redeems the code through `sessions.redeemAuthCode({ code, verifier })`
+  with the verifier this browser stored at `/auth/start`, stores the returned session token, drops the code/verifier,
+  clears the persistent `signedOut` marker (§7), and navigates to `/feed`. It fails closed to the landing site without
+  redeeming when the code or verifier is missing (a handed‑over code must not be burned for its owner), and on a
+  redeem failure. A run‑once latch keeps the single‑use code from being redeemed twice under StrictMode.
 - **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); for **Pro/Contact** viewers (gated on `getMe.tier`)
   a collapsible **`FeedFilterPanel`** — two `ChipMultiSelect` pickers (industries / countries) whose add/remove/clear
   each call `setFeedFilter`; the saved arrays come from `getMe`, so the feed re-filters reactively (no local state).
@@ -4863,7 +4914,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                  | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5514,8 +5565,12 @@ See [`docs/compliance/README.md`](compliance/README.md) for the consolidated leg
 
 Every conversion CTA is a real anchor rendered by `TrialLink`, exported from
 `landing/components/TrialProvider.tsx`. Its destination comes from `SIGN_IN_URL` in `landing/lib/links.ts`:
-`${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin`, or `NEXT_PUBLIC_APP_URL` when the Convex site is not configured.
-Direct OAuth entry preserves the signed-out visitor flow described in §7.
+`${NEXT_PUBLIC_APP_URL}/auth/start`, falling back to `http://localhost:5173/auth/start` when the app URL is not
+configured. The CTAs no longer link straight to Convex OAuth: `/auth/start` is the app's PKCE entry point, which
+generates the verifier/challenge in the browser and then bounces to Convex's `/auth/linkedin` start with the
+challenge (`?vc=…`, see §7); a direct hit without a valid challenge is rejected. Going through the app route —
+rather than the app root — preserves the signed-out visitor flow described in §7, because `/auth/start` begins
+OAuth on load instead of bouncing a signed-out visitor back to the landing site.
 
 `TrialProvider` wraps the server-rendered page children in `app/[lang]/layout.tsx`. It owns one
 `BillingInterval` (`annual` or `monthly`), initially annual. `Pricing` changes that shared state. The navigation,
@@ -5690,30 +5745,30 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
-| Variable                              |                    Required                     | Consumed in                  | Purpose                                                                                                                                                                             |
-|---------------------------------------|:-----------------------------------------------:|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `VITE_CONVEX_URL`                     |                       ✓                        | `main.tsx`                   | `.convex.cloud` URL for `ConvexReactClient` (data transport). **Left as the placeholder ⇒ every query/mutation/action fails — the app cannot reach the backend at all.**            |
-| `VITE_CONVEX_SITE`                    |                       ✓                        | `lib/session.ts`             | `.convex.site` base for the `/auth/linkedin` sign‑in redirect. **Left as the placeholder ⇒ sign-in redirects to a dead host and OAuth cannot start.**                               |
-| `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`             | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                                                                                  |
-| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`             | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                              |
-| `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Starter checkout. Must match `STRIPE_STARTER_PRICE_ID` in Convex.                                                                                              |
-| `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Growth checkout. Must match `STRIPE_GROWTH_PRICE_ID` in Convex.                                                                                                |
-| `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                                          |
-| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Starter ($100/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                                       |
-| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                                                                                         |
-| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`            | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                               |
-| `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`    | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`. |
-| `VITE_POSTHOG_KEY`                    |      – (prod only; unset ⇒ analytics off)       | `observability/analytics.ts` | PostHog project key for product analytics. Unset ⇒ `initPostHog()` no‑ops. Capture is **also** gated on the user's `analytics` consent (opt‑out by default).                        |
-| `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts` | PostHog ingestion host. Defaults to EU Cloud; set `https://us.i.posthog.com` for US Cloud.                                                                                          |
+| Variable                              |                    Required                     | Consumed in                           | Purpose                                                                                                                                                                                                |
+|---------------------------------------|:-----------------------------------------------:|---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `VITE_CONVEX_URL`                     |                       ✓                        | `main.tsx`                            | `.convex.cloud` URL for `ConvexReactClient` (data transport). **Left as the placeholder ⇒ every query/mutation/action fails — the app cannot reach the backend at all.**                               |
+| `VITE_CONVEX_SITE`                    |                       ✓                        | `lib/session.ts`, `lib/oauthStart.ts` | `.convex.site` base for the `/auth/linkedin` PKCE sign‑in redirect (`oauthStart.ts` appends `?vc=<challenge>`). **Left as the placeholder ⇒ sign-in redirects to a dead host and OAuth cannot start.** |
+| `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`                      | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                                                                                                     |
+| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`                      | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                                 |
+| `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Monthly price id for Starter checkout. Must match `STRIPE_STARTER_PRICE_ID` in Convex.                                                                                                                 |
+| `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Monthly price id for Growth checkout. Must match `STRIPE_GROWTH_PRICE_ID` in Convex.                                                                                                                   |
+| `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                                                             |
+| `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Starter ($100/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                                                          |
+| `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                                                                                                            |
+| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                                                  |
+| `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`             | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`.                    |
+| `VITE_POSTHOG_KEY`                    |      – (prod only; unset ⇒ analytics off)       | `observability/analytics.ts`          | PostHog project key for product analytics. Unset ⇒ `initPostHog()` no‑ops. Capture is **also** gated on the user's `analytics` consent (opt‑out by default).                                           |
+| `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts`          | PostHog ingestion host. Defaults to EU Cloud; set `https://us.i.posthog.com` for US Cloud.                                                                                                             |
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
-| Variable                    |                       Required                       | Consumed in      | Purpose                                                                                                                                                                     |
-|-----------------------------|:----------------------------------------------------:|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `NEXT_PUBLIC_APP_URL`       |         – (default `http://localhost:5173`)          | `lib/links.ts`   | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset. The `.example` ships the canonical prod URL (`https://www.app.linkintothessi.com`).       |
-| `NEXT_PUBLIC_SITE_URL`      |     – (default `https://www.linkintothessi.com`)     | `lib/site.ts`    | Canonical public origin of the landing site; drives absolute canonical/OpenGraph URLs, hreflang alternates, the sitemap, and JSON-LD. Set per preview deployment if needed. |
-| `NEXT_PUBLIC_CONVEX_SITE`   | – (CTAs fall back to `NEXT_PUBLIC_APP_URL` if unset) | `lib/links.ts`   | Convex `.site` base; CTAs link to `${NEXT_PUBLIC_CONVEX_SITE}/auth/linkedin` to start OAuth directly.                                                                       |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` |   – (unset in dev; `.linkintothessi.com` in prod)    | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                      |
+| Variable                    |                    Required                     | Consumed in      | Purpose                                                                                                                                                                                                                                                       |
+|-----------------------------|:-----------------------------------------------:|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NEXT_PUBLIC_APP_URL`       |       – (default `http://localhost:5173`)       | `lib/links.ts`   | App base URL; **fallback** for CTA links when `NEXT_PUBLIC_CONVEX_SITE` is unset. The `.example` ships the canonical prod URL (`https://www.app.linkintothessi.com`).                                                                                         |
+| `NEXT_PUBLIC_SITE_URL`      |  – (default `https://www.linkintothessi.com`)   | `lib/site.ts`    | Canonical public origin of the landing site; drives absolute canonical/OpenGraph URLs, hreflang alternates, the sitemap, and JSON-LD. Set per preview deployment if needed.                                                                                   |
+| `NEXT_PUBLIC_CONVEX_SITE`   |      – (legacy; CTAs no longer consume it)      | – (unused)       | **Not consumed** since the PKCE change: landing CTAs target `${NEXT_PUBLIC_APP_URL}/auth/start`, which bounces to Convex's OAuth start with the challenge (see [§15](#15-frontend--landing-site-landing)). Kept in `.env.example` as a documented legacy var. |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                                                                                        |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
 > default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the
@@ -5736,29 +5791,38 @@ The codebase follows a consistent, defensible security model:
 - **Clients never pass a `userId`.** Identity is always resolved server‑side from an **opaque UUID session token** via
   `lib/auth.ts`. The only thing a client can do is present a valid token.
 - **CSRF protection** on OAuth: a single‑use `state` nonce (10‑min TTL) stored before redirect; the callback checks
-  the browser nonce **and** expiry **before** deleting, so a failed probe cannot burn the legitimate browser's state
-  (only success consumes it; expired rows are TTL‑cleaned). The state is also **bound to the initiating browser**:
-  `/auth/linkedin` mints a second random nonce, stores it on the `oauthStates` row (`browserNonce`), and sets it as an
-  `HttpOnly; Secure; SameSite=Lax` cookie **namespaced per state** (`oauth_nonce_<state>`, 10‑min `Max‑Age`) that the
-  callback **requires** and then clears — a captured callback URL cannot mint a session in another browser, and
-  concurrent logins in one browser don't overwrite each other. `/auth/linkedin` is rate‑limited at **60/hour per
+  the browser nonce, expiry, **and PKCE challenge** before deleting, so a failed probe cannot burn the legitimate
+  browser's state (only success consumes it; expired rows are TTL‑cleaned). The state is also **bound to the initiating
+  browser**: `/auth/linkedin` mints a second random nonce, stores it on the `oauthStates` row (`browserNonce`), and sets
+  it as an `HttpOnly; Secure; SameSite=Lax` cookie **namespaced per state** (`oauth_nonce_<state>`, 10‑min `Max‑Age`)
+  that the callback **requires** and then clears — a captured callback URL cannot mint a session in another browser, and
+  concurrent logins in one browser don't overwrite each other. The start route **requires** `?vc=<challenge>` (a 400
+  otherwise) and stores it on the same row, so the callback's login code is bound to the verifier that stays in the
+  initiating browser. `/auth/linkedin` is rate‑limited at **60/hour per
   client** (best‑effort `x-forwarded-for`) plus a **global 1800/hour backstop** (`checkOAuthStartBudget`; anonymous
   callers have no per‑user key) to bound `oauthStates` growth, and every OAuth redirect sets `Cache-Control: no-store`
-  so the token‑bearing success 302 is never cacheable.
+  so the code‑bearing success 302 is never cacheable.
 - **Sessions:** random UUID, **15‑day sliding TTL** (`SESSION_TTL_MS` — see [§7](#7-authentication--identity)), stored
-  in **`sessionStorage`** (cleared on tab close). The token is delivered
-  to the SPA in the OAuth redirect's **URL fragment** (`#session=…`, never a query string). A **pre‑bundle inline script
-  in `app/index.html`** moves `session`/`plan`/`interval` into `sessionStorage` and scrubs the fragment from history
+  in **`sessionStorage`** (cleared on tab close). The token **never travels in a URL**: it is returned over the Convex
+  transport when the SPA redeems the callback's single‑use, 2‑minute login code with
+  `sessions.redeemAuthCode({ code, verifier })`. The redirect fragment carries only `#code=…`, bound to a PKCE‑style
+  `SHA‑256(verifier)` challenge minted at `/auth/start` and kept in `sessionStorage.oauthVerifier` — never sent to the
+  server — so a handed‑over or replayed `#code=` link is inert without the verifier. Residual: an attacker who obtains
+  **both** the code and the verifier from the victim's own browser can log in — the same trust boundary as that browser
+  session itself; the 2‑minute TTL and single‑use burn bound the window. A **pre‑bundle inline script
+  in `app/index.html`** moves `code`/`plan`/`interval` into `sessionStorage` and scrubs the fragment from history
   **before any bundle runs** (i.e. before Sentry/PostHog init) — and only on the `/auth/success` route, without ever
-  overwriting an existing stored `sessionToken`, so a crafted `/#session=<attacker-token>` link on any other path
-  cannot log the victim into the attacker's account. `AuthSuccessPage` clears the explicit `signedOut` marker only when
-  that token actually exists, then navigates to `/feed` — so the token
-  can't leak via server/proxy access logs, the `Referer` header, or an error/replay payload; Sentry additionally strips
+  overwriting an existing stored `sessionToken`, so a crafted `#code=` link on any other path
+  cannot log the victim into the attacker's account. `AuthSuccessPage` redeems the code (failing closed to the landing
+  site when the verifier is missing, so a handed‑over code is never burned for its owner), clears the explicit
+  `signedOut` marker only when a session token was actually captured, then navigates to `/feed` — so neither credential
+  can leak via server/proxy access logs, the `Referer` header, or an error/replay payload; Sentry additionally strips
   fragment‑bearing `request.url` values and runs the same scrubbing on transactions (`beforeSendTransaction`). `signOut`
   clears both the token and the `motdDismissed` memory that embeds it. `logout`
   invalidates one session,
   `forceLogoutAll` invalidates all (draining in self‑rescheduling 200‑row batches until none remain); expired sessions
-  are purged by the 6‑hour cron, also in self‑rescheduling 200‑row batches until none remain.
+  are purged by the 6‑hour cron, also in self‑rescheduling 200‑row batches until none remain; expired login codes are
+  purged by the `cleanup expired auth codes` cron (1‑hour, 200‑row batches).
 - **Generic client‑facing errors.** Every LinkedIn/OAuth/Stripe/Apify failure logs the real error server‑side
   (`console.error`) and returns a sanitized message — no stack traces or upstream bodies leak to clients.
 - **SSRF guard on outbound fetches.** `submitPost` fetches a user‑supplied URL, so
@@ -5808,7 +5872,7 @@ The codebase follows a consistent, defensible security model:
   over 200 chars (resource guard); MOTD authoring rejects body keys outside the supported `en`/`pt`/`es` locales.
 - **CSP + security headers (served at the Cloudflare HTTP layer).** The **app** generates `dist/_headers`
   at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the quoted **SHA-256 hashes** of the two pre-paint
-  inline scripts — the OAuth `#session=…` capture and the theme guard (no `'unsafe-inline'`) — plus the third-party
+  inline scripts — the OAuth `#code=…` capture and the theme guard (no `'unsafe-inline'`) — plus the third-party
   scripts it loads (Cloudflare's beacon and
   `https://*.posthog.com`); `connect-src` allows Convex `.cloud`/`.site`, Stripe, `https://*.posthog.com`, and
   `https://*.sentry.io`; `worker-src`/`child-src` allow `blob:` workers (Sentry Replay compresses off the main thread);
@@ -5858,7 +5922,7 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   send**: `dataCollection` is left at its defaults (the `userInfo`/`httpBodies` opt‑outs are present but commented out
   in
   `sentry.ts`), and a `beforeSend`/`beforeSendTransaction` pair drops
-  `request.cookies`/`request.headers` and any `user` identity, strips a `#session=…` fragment from `request.url`
+  `request.cookies`/`request.headers` and any `user` identity, strips the OAuth fragment (`#code=…`) from `request.url`
   (`stripUrlSecrets`), and runs the message + exception values through the same `scrubError` redactor. Performance
   tracing runs at
   `tracesSampleRate:1.0`; Session Replay records 10% of sessions (100% of error sessions) with Sentry's default masking
@@ -6154,7 +6218,7 @@ Before opening sign-ups:
 ### README ↔ code mismatches (trust the code)
 
 The root `README.md` was **reconciled to the code on 2026‑08‑30** (Cloudflare hosting, Apify ingestion, handoff
-engagement, live all‑tier AI, 7‑day trial, 19 tables, session‑token OAuth redirect, Next.js 15, dev port 5174). The
+engagement, live all‑tier AI, 7‑day trial, 20 tables, PKCE login‑code OAuth redirect, Next.js 15, dev port 5174). The
 former mismatch list (5 tables, hourly LinkedIn‑API sync, `?userId=` redirect, Next.js 14, port 5173, phantom
 `syncConnections.ts`/`LoginPage.tsx` in the project tree) is resolved. Two code facts the README intentionally omits,
 for the record:

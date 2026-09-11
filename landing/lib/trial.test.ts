@@ -15,6 +15,11 @@ describe('landing trial offer', () => {
     expect(() => planPrice('unknown', 'annual')).toThrow('Unknown plan')
   })
 
+  it('sends every trial link through the app PKCE start route', () => {
+    const url = new URL(trialHref('growth', 'annual', 'abc12345'))
+    expect(url.pathname).toBe('/auth/start')
+  })
+
   it('keeps each tier and referral in both billing intervals before any click', () => {
     for (const plan of ['starter', 'growth', 'pro']) {
       for (const interval of ['monthly', 'annual'] as const) {

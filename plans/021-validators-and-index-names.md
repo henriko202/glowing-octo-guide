@@ -1,5 +1,9 @@
 # Plan 021: Add pagination return validators and rename indexes to match the guidelines
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by `paginationResultValidator` returns on
+> `getFeed` + `listMyInteractions` and the renamed `by_in_feed_and_feed_rank` / `by_feedback_id_and_created_at` /
+> `by_user_id_and_month` indexes with no old names left (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 4).
@@ -138,13 +142,13 @@ the return validators on the two queries in §6 or the relevant sections.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "returns:" convex/feed.ts convex/interactions.ts` shows both validators
-- [ ] `paginationResultValidator` is used in both
-- [ ] The three old index names appear nowhere in `convex/`
-- [ ] `docs/PLATFORM.md` mentions updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "returns:" convex/feed.ts convex/interactions.ts` shows both validators
+- [x] `paginationResultValidator` is used in both
+- [x] The three old index names appear nowhere in `convex/`
+- [x] `docs/PLATFORM.md` mentions updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

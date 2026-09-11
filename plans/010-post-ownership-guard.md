@@ -217,14 +217,17 @@ back" case uses vanity `real-vanity` matching the stored value, so it still pass
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "isSamePostAuthor" convex/jobs/syncPosts.ts` finds the helper and one call site
-- [ ] `grep -n "already linked to another LinkedIn account" convex/posts.ts` finds the ConvexError
-- [ ] The three new ownership test cases exist and pass
-- [ ] `docs/PLATFORM.md` no longer claims name-based ownership cannot be spoofed; the limitation and
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "isSamePostAuthor" convex/jobs/syncPosts.ts` finds the helper and one call site
+- [x] `grep -n "already linked to another LinkedIn account" convex/posts.ts` finds the ConvexError
+- [x] The three new ownership test cases exist and pass
+- [x] `docs/PLATFORM.md` no longer claims name-based ownership cannot be spoofed; the limitation and
   both new guards are documented
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
+
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by greps + the green suites at convex 609 /
+> app 479 / landing 24 / integration 6.
 
 ## STOP conditions
 

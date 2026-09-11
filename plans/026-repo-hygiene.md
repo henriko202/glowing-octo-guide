@@ -1,5 +1,9 @@
 # Plan 026: Delete the stale npm lockfile and placeholder the committed observability keys
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by the deleted `convex/package-lock.json` +
+> `.gitignore` rule and placeholder-only `app/.env.example` values (suites: convex 609 / app 479 / landing 24 /
+> integration 6).
+
 > **Executor instructions**: Follow step by step. Honor STOP conditions. Update this plan's row in
 > `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** The user commits; deleting a tracked
@@ -89,11 +93,11 @@ that rotation is optional and a maintainer call.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `convex/package-lock.json` is deleted and covered by `.gitignore`
-- [ ] `app/.env.example` contains only placeholder values
-- [ ] Real values were not copied anywhere into the repo or this plan
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `convex/package-lock.json` is deleted and covered by `.gitignore`
+- [x] `app/.env.example` contains only placeholder values
+- [x] Real values were not copied anywhere into the repo or this plan
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

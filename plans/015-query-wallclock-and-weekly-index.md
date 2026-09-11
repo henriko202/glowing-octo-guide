@@ -175,13 +175,18 @@ In `convex/posts.ts`:
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -rn "Date.now()" convex/search.ts` empty; no wall clock inside the four fixed query handlers
-- [ ] `getFeed`/`getCaughtUp`/`resolveSession` documented as exceptions in PLATFORM.md
-- [ ] Weekly reads use `by_author_and_publishedAt`; `grep -n "by_author'" convex/posts.ts` returns none
-- [ ] `getMyPosts` no longer sorts in JS
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [ ] `grep -rn "Date.now()" convex/search.ts` empty; no wall clock inside the four fixed query handlers (superseded
+  2026-09-10: the review required `search` to use the SERVER clock, so `search.ts` keeps `Date.now()` as a documented
+  exception; the other three fixed handlers are clock-free)
+- [x] `getFeed`/`getCaughtUp`/`resolveSession` documented as exceptions in PLATFORM.md
+- [x] Weekly reads use `by_author_and_publishedAt`; `grep -n "by_author'" convex/posts.ts` returns none
+- [x] `getMyPosts` no longer sorts in JS
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
+
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by greps + the green suites at convex 609 /
+> app 479 / landing 24 / integration 6.
 
 ## STOP conditions
 

@@ -1,5 +1,10 @@
 # Plan 016: Bound the history, feedback, and consent reads
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by the `MAX_HISTORY_PAGE` clamp before
+> `.paginate()` (`convex/interactions.ts:499,537`), the bounded feedback read (`take(200)` / `take(21)` +
+> `repliesTruncated`) with `FeedbackTab`'s truncation note, and per-purpose newest-first consent reads
+> (`convex/privacy/consent.ts:60-71`) (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 4).
@@ -191,13 +196,13 @@ latest grant per purpose because each prompt writes both purposes together.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "MAX_HISTORY_PAGE" convex/interactions.ts` finds the clamp and it is used
-- [ ] No `.take(100)` remains inside the `listFeedback` per-row loop; outer read is 200
-- [ ] `grep -n "collect()" convex/privacy/consent.ts` returns nothing
-- [ ] `FeedbackTab` renders the truncation note
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "MAX_HISTORY_PAGE" convex/interactions.ts` finds the clamp and it is used
+- [x] No `.take(100)` remains inside the `listFeedback` per-row loop; outer read is 200
+- [x] `grep -n "collect()" convex/privacy/consent.ts` returns nothing
+- [x] `FeedbackTab` renders the truncation note
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

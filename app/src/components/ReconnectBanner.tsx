@@ -2,7 +2,6 @@ import { useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import { Button } from '@/components/ui/button'
-import { AUTH_URL } from '@/lib/session'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const SEVEN_DAYS_MS = 7 * DAY_MS
@@ -27,7 +26,7 @@ export function shouldShowReconnect(
 }
 
 function reconnect() {
-  window.location.href = AUTH_URL
+  window.location.assign('/auth/start')
 }
 
 // ponytail: persistent, no dismiss state — the user can't route around an expired LinkedIn

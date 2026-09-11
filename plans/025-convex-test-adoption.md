@@ -1,5 +1,10 @@
 # Plan 025: Adopt `convex-test` for integration coverage of high-risk backend paths
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by `convex/vitest.integration.config.ts`
+> (`edge-runtime`, no mock alias), the `convex-test` high-risk suite, and the still-mock-based unit runner (suites:
+> convex
+> 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 5).
@@ -153,13 +158,13 @@ Add a short section to `docs/PLATFORM.md` §18 (Testing):
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0 and runs both suites
-- [ ] `convex/vitest.integration.config.ts` uses `environment: 'edge-runtime'` and no mock alias
-- [ ] At least the four integration tests pass
-- [ ] The unit suite still passes with its alias config unchanged
-- [ ] `docs/PLATFORM.md` §18 documents the two-runner model and the shim's freeze
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0 and runs both suites
+- [x] `convex/vitest.integration.config.ts` uses `environment: 'edge-runtime'` and no mock alias
+- [x] At least the four integration tests pass
+- [x] The unit suite still passes with its alias config unchanged
+- [x] `docs/PLATFORM.md` §18 documents the two-runner model and the shim's freeze
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

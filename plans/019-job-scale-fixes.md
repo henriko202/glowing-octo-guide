@@ -1,5 +1,10 @@
 # Plan 019: Fix the queue spin loop and page the Apify fan-outs
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by the `progressed > 0` reschedule guard
+> (`shouldRescheduleQueue`), cursor-paginated fan-out queries/actions, `isValidPostUrn` rejection before `upsertPost`,
+> and
+> the cron calling `syncAllPostsViaApify` directly (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 5).
@@ -214,15 +219,15 @@ file's imports).
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `processPostQueue` reschedules only when `progressed > 0`
-- [ ] Both fan-out queries paginate; no `SCAN_CAP` remains
-- [ ] Both fan-out actions accept a cursor and self-reschedule until done
-- [ ] `syncAllPosts` router deleted; cron calls the Apify action directly
-- [ ] Invalid scraper URNs are dropped before `upsertPost`
-- [ ] `docs/PLATFORM.md` updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `pnpm verify` exits 0
+- [x] `processPostQueue` reschedules only when `progressed > 0`
+- [x] Both fan-out queries paginate; no `SCAN_CAP` remains
+- [x] Both fan-out actions accept a cursor and self-reschedule until done
+- [x] `syncAllPosts` router deleted; cron calls the Apify action directly
+- [x] Invalid scraper URNs are dropped before `upsertPost`
+- [x] `docs/PLATFORM.md` updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

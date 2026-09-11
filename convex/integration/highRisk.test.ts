@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest'
 import { api, internal } from '../_generated/api'
 import type { TestConvex } from 'convex-test'
 import type { Id } from '../_generated/dataModel'
+import { pkceChallengeFromVerifier } from '../lib/pkce'
 import schema from '../schema'
 
 // The real generated modules — this config has no `convex/server` alias, so functions run against
@@ -155,5 +156,57 @@ describe('high-risk backend paths', () => {
 
     await expect(call(api.posts.setPostHidden, { sessionToken: 'x', postId })).rejects.toThrow(/hidden/)
     await expect(call(api.posts.setPostHidden, { sessionToken: 'x', postId, hidden: true, extra: 1 })).rejects.toThrow()
+  })
+
+  // Also proves crypto.subtle (SHA-256) works in the Convex/edge runtime — the plan's STOP condition.
+  test('auth code redeem: the matching verifier mints a session and burns the code', async () => {
+    const t = convexTest(schema, modules)
+    const userId = await insertUser(t, { linkedinId: 'li-redeem', name: 'Redeem User' })
+    const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+    const challenge = await pkceChallengeFromVerifier(verifier)
+    await t.run(async ctx =>
+      ctx.db.insert('authCodes', { code: 'redeem-code', userId, challenge, expiresAt: Date.now() + 60_000 })
+    )
+
+    const { sessionToken } = await t.mutation(api.sessions.redeemAuthCode, { code: 'redeem-code', verifier })
+    expect(typeof sessionToken).toBe('string')
+
+    const observed = await t.run(async ctx => ({
+      session: await ctx.db
+        .query('sessions')
+        .withIndex('by_token', q => q.eq('token', sessionToken))
+        .unique(),
+      codes: await ctx.db.query('authCodes').collect()
+    }))
+    expect(observed.session).toMatchObject({ token: sessionToken, userId })
+    expect(observed.codes).toHaveLength(0)
+  })
+
+  test('auth code redeem: a mismatched verifier throws, mints no session, and does not consume the code', async () => {
+    const t = convexTest(schema, modules)
+    const userId = await insertUser(t, { linkedinId: 'li-redeem-bad', name: 'Redeem Bad' })
+    const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+    const challenge = await pkceChallengeFromVerifier(verifier)
+    await t.run(async ctx =>
+      ctx.db.insert('authCodes', { code: 'redeem-code-bad', userId, challenge, expiresAt: Date.now() + 60_000 })
+    )
+
+    await expect(
+      t.mutation(api.sessions.redeemAuthCode, { code: 'redeem-code-bad', verifier: 'A'.repeat(43) })
+    ).rejects.toThrow('Login could not be verified. Please try again.')
+
+    // Convex rolls a throwing mutation's writes back, so a failed attempt cannot burn the code (nor
+    // mint a session). The row is challenge-bound: only the correct verifier can redeem it.
+    const afterMismatch = await t.run(async ctx => ({
+      sessions: await ctx.db.query('sessions').collect(),
+      codes: await ctx.db.query('authCodes').collect()
+    }))
+    expect(afterMismatch.sessions).toHaveLength(0)
+    expect(afterMismatch.codes).toHaveLength(1)
+
+    const { sessionToken } = await t.mutation(api.sessions.redeemAuthCode, { code: 'redeem-code-bad', verifier })
+    expect(typeof sessionToken).toBe('string')
+    const finalCodes = await t.run(async ctx => ctx.db.query('authCodes').collect())
+    expect(finalCodes).toHaveLength(0)
   })
 })

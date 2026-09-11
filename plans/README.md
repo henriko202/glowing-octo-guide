@@ -116,31 +116,32 @@ includes uncommitted changes); six read-only subagents; every finding was re-ver
 before planning. The full vetted table is in
 [`2026-09-10-security-review-findings.md`](2026-09-10-security-review-findings.md). **All findings are
 planned**: 009-014 cover the security bundles (S1-S13), 015-027 cover the Convex usage/perf and
-dependency/docs findings (C1-C13, D1-D10).
+dependency/docs findings (C1-C13, D1-D10), and 028 covers the post-review PKCE verifier binding.
 
 ## Execution order & status
 
-| Plan | Title                                                                           | Priority | Effort | Depends on             | Status                                                                                                           |
-|------|---------------------------------------------------------------------------------|----------|--------|------------------------|------------------------------------------------------------------------------------------------------------------|
-| 009  | Session token containment (Sentry URL scrub, `motdDismissed`, `Secure` cookies) | P1       | S-M    | —                      | DONE                                                                                                             |
-| 010  | Post ownership guard (cross-author URN write, vanity cross-check, docs truth)   | P1       | S      | —                      | DONE                                                                                                             |
-| 011  | `submitPost` fetch hardening (auth before outbound fetch, validated redirects)  | P1       | S-M    | —                      | DONE                                                                                                             |
-| 012  | OAuth HTTP hardening (browser-bound state, start throttle, no-store)            | P1       | M      | —                      | DONE                                                                                                             |
-| 013  | Log redaction, `ConvexError` guards, complete session revocation                | P2       | S      | 010, 012 (recommended) | DONE                                                                                                             |
-| 014  | Rate-limit billing actions and the deletion cycle                               | P1       | S      | —                      | DONE                                                                                                             |
-| 015  | Wall-clock-free queries + weekly-count index                                    | P2       | M      | —                      | DONE                                                                                                             |
-| 016  | Bound the history, feedback, and consent reads                                  | P2       | S      | run before 017/018     | DONE                                                                                                             |
-| 017  | Recap one-shot fetch (stop the 4k-doc live subscription)                        | P2       | M      | after 016              | DONE                                                                                                             |
-| 018  | Move trial counters off the shared `users` document                             | P2       | M-L    | after 016/017          | DONE — Step 4 (drop `users` fields) pending until `migrations/moveTrialCounters` has run on deployments          |
-| 019  | Queue spin-loop fix + paged Apify fan-outs                                      | P2       | M      | —                      | DONE                                                                                                             |
-| 020  | Survival metrics nightly snapshot                                               | P3       | M      | —                      | DONE                                                                                                             |
-| 021  | Pagination return validators + index renames                                    | P3       | M      | after 015-018          | DONE — convex tests 588/588 + tsc green; `pnpm verify` left to integrator                                        |
-| 022  | Centralize audit DB seam, real Stripe event types, DSR pagination opts          | P3       | M      | 013, 016, 023          | DONE — convex tests 588/588 + tsc green; `pnpm verify` left to integrator                                        |
-| 023  | Upgrade `@convex-dev/stripe` + Stripe SDK (2 majors)                            | P2       | M      | run before 022         | DONE                                                                                                             |
-| 024  | Bump `convex` + adopt typed env (`defineApp({ env })`)                          | P3       | M      | —                      | DONE — convex 1.45.0, codegen ran, typed env; convex tests 588/588 + tsc green; `pnpm verify` left to integrator |
-| 025  | Adopt `convex-test` + `@edge-runtime/vm` integration suite                      | P3       | L      | after 024              | DONE — `convex/integration/highRisk.test.ts` 4/4; unit 588/588; tsc green; `pnpm verify` left to integrator      |
-| 026  | Delete stale `convex/package-lock.json`, placeholder env keys                   | P3       | S      | —                      | DONE — tests green (convex 588/588, app 461/461); `pnpm verify` left to integrator                               |
-| 027  | Reconcile `docs/PLATFORM.md` + compliance docs with fixed code                  | P3       | S-M    | 009-026                | DONE — docs synced 2026-09-10                                                                                    |
+| Plan | Title                                                                           | Priority | Effort | Depends on             | Status                                                                                                                            |
+|------|---------------------------------------------------------------------------------|----------|--------|------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| 009  | Session token containment (Sentry URL scrub, `motdDismissed`, `Secure` cookies) | P1       | S-M    | —                      | DONE                                                                                                                              |
+| 010  | Post ownership guard (cross-author URN write, vanity cross-check, docs truth)   | P1       | S      | —                      | DONE                                                                                                                              |
+| 011  | `submitPost` fetch hardening (auth before outbound fetch, validated redirects)  | P1       | S-M    | —                      | DONE                                                                                                                              |
+| 012  | OAuth HTTP hardening (browser-bound state, start throttle, no-store)            | P1       | M      | —                      | DONE                                                                                                                              |
+| 013  | Log redaction, `ConvexError` guards, complete session revocation                | P2       | S      | 010, 012 (recommended) | DONE                                                                                                                              |
+| 014  | Rate-limit billing actions and the deletion cycle                               | P1       | S      | —                      | DONE                                                                                                                              |
+| 015  | Wall-clock-free queries + weekly-count index                                    | P2       | M      | —                      | DONE                                                                                                                              |
+| 016  | Bound the history, feedback, and consent reads                                  | P2       | S      | run before 017/018     | DONE                                                                                                                              |
+| 017  | Recap one-shot fetch (stop the 4k-doc live subscription)                        | P2       | M      | after 016              | DONE                                                                                                                              |
+| 018  | Move trial counters off the shared `users` document                             | P2       | M-L    | after 016/017          | DONE - legacy fields, seeding fallback, migration file, and npm scripts removed 2026-09-10 after the migration ran on deployments |
+| 019  | Queue spin-loop fix + paged Apify fan-outs                                      | P2       | M      | —                      | DONE                                                                                                                              |
+| 020  | Survival metrics nightly snapshot                                               | P3       | M      | —                      | DONE                                                                                                                              |
+| 021  | Pagination return validators + index renames                                    | P3       | M      | after 015-018          | DONE — convex tests 588/588 + tsc green; `pnpm verify` left to integrator                                                         |
+| 022  | Centralize audit DB seam, real Stripe event types, DSR pagination opts          | P3       | M      | 013, 016, 023          | DONE — convex tests 588/588 + tsc green; `pnpm verify` left to integrator                                                         |
+| 023  | Upgrade `@convex-dev/stripe` + Stripe SDK (2 majors)                            | P2       | M      | run before 022         | DONE                                                                                                                              |
+| 024  | Bump `convex` + adopt typed env (`defineApp({ env })`)                          | P3       | M      | —                      | DONE — convex 1.45.0, codegen ran, typed env; convex tests 588/588 + tsc green; `pnpm verify` left to integrator                  |
+| 025  | Adopt `convex-test` + `@edge-runtime/vm` integration suite                      | P3       | L      | after 024              | DONE — `convex/integration/highRisk.test.ts` 4/4; unit 588/588; tsc green; `pnpm verify` left to integrator                       |
+| 026  | Delete stale `convex/package-lock.json`, placeholder env keys                   | P3       | S      | —                      | DONE — tests green (convex 588/588, app 461/461); `pnpm verify` left to integrator                                                |
+| 027  | Reconcile `docs/PLATFORM.md` + compliance docs with fixed code                  | P3       | S-M    | 009-026                | DONE — docs synced 2026-09-10                                                                                                     |
+| 028  | PKCE-style verifier binding (session token never travels in a URL)              | P1       | M      | none                   | DONE - PKCE code+verifier binding; no session token in any URL; suites green                                                      |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 
@@ -181,3 +182,8 @@ confirm the per-state nonce cookie; decide the staged `landing/public/{llms.txt,
 deletions that predate this work. Residual, unscored design note: a crafted `/auth/success#session=`
 link aimed at a user with no session still hands them the attacker's session; fully closing that
 needs a browser-bound verifier, a separate design change.
+
+After the review fixes, plan 028 (PKCE verifier binding) was added and executed, resolving the residual
+`/auth/success#session=` design note. On 2026-09-10 the maintainer ran the trial-counter migration on deployments and
+verified a real login, plan 018 Step 4 was completed (legacy fields, seeding fallback, migration file, and npm scripts
+removed), and the staged `landing/public` phantom deletions were cleaned from the index. Nothing remains before commit.

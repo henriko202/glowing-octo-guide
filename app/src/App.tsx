@@ -7,6 +7,7 @@ import { pickSeedLanguage } from './i18n/seedLanguage'
 import FeedPage from './pages/FeedPage'
 import SettingsPage from './pages/SettingsPage'
 import BillingPage from './pages/BillingPage'
+import AuthStartPage from './pages/AuthStartPage'
 import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
 import RecapPage from './pages/RecapPage'
@@ -27,13 +28,13 @@ import AnalyticsConsentGate from './components/AnalyticsConsentGate'
 import PrivacyDataPage from './pages/PrivacyDataPage'
 import { Toaster } from './components/ui/toast'
 import { POLICY_VERSION } from '../../convex/lib/policy'
-import { AUTH_URL, LANDING_URL, isSignedOut } from './lib/session'
+import { LANDING_URL, isSignedOut } from './lib/session'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
 
-  useEffect(;() => {
+  useEffect(() => {
     // Not authenticated. A user who explicitly signed out is sent back to the landing site so the
     // sign-out sticks (the persistent signedOut marker survives the return visit); everyone else
     // auto-starts LinkedIn OAuth (one-hop via LinkedIn's SSO).
@@ -44,8 +45,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
         // The stored token was rejected (expired or revoked). Drop it before auto-OAuth: the
         // pre-bundle capture in index.html never overwrites an existing token, so a stale one would
         // otherwise loop app -> LinkedIn -> app without ever storing the fresh callback token.
+        // /auth/start generates the PKCE verifier/challenge and hands off to Convex.
         sessionStorage.removeItem('sessionToken')
-        window.location.href = AUTH_URL
+        window.location.assign('/auth/start')
       }
     }
   }, [me])
@@ -92,6 +94,10 @@ export default function App() {
       <Toaster />
       <ScrollToTop />
       <Routes>
+        <Route
+          path="/auth/start"
+          element={<AuthStartPage />}
+        />
         <Route
           path="/auth/success"
           element={<AuthSuccessPage />}

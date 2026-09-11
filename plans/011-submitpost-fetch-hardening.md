@@ -236,15 +236,18 @@ server.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] `grep -n "fetchAllowedLinkedInUrl" convex/posts.ts convex/linkedin/parsePostUrl.ts` finds the
+- [x] `pnpm verify` exits 0
+- [x] `grep -n "fetchAllowedLinkedInUrl" convex/posts.ts convex/linkedin/parsePostUrl.ts` finds the
   definition plus both call sites
-- [ ] The off-allowlist redirect test asserts exactly one fetch
-- [ ] In `convex/posts.ts`, `requireAuthAction` appears before `resolveLinkedInShortlink`
+- [x] The off-allowlist redirect test asserts exactly one fetch
+- [x] In `convex/posts.ts`, `requireAuthAction` appears before `resolveLinkedInShortlink`
   (`grep -n` both, compare line numbers)
-- [ ] `docs/PLATFORM.md` §17 no longer overstates the redirect guarantee
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `docs/PLATFORM.md` §17 no longer overstates the redirect guarantee
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
+
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by greps + the green suites at convex 609 /
+> app 479 / landing 24 / integration 6.
 
 ## STOP conditions
 

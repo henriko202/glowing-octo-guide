@@ -1,5 +1,11 @@
 # Plan 018: Move trial interaction counters off the shared `users` document
 
+> **Execution note (2026-09-10, Step 4 completed):** Implemented in the working tree. After the maintainer ran the
+> migration on deployments, the legacy `users.trialInteractionsMade/Received` fields, the writer's seeding fallback,
+> `migrations/moveTrialCounters.ts`, and the two npm scripts were removed; `trialCounters` is the only counter store,
+> wired through `users.getTrialProgress`, `billing.getBillingContext`, the DSR export list, and the deletion cascade
+> (suites: convex 607 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Follow step by step, run each verification. Honor STOP conditions.
 > Update this plan's row in `plans/README.md` when done.
 > **Repo rule (`CLAUDE.md`/`AGENTS.md`): NEVER commit or push.** Keep `docs/PLATFORM.md` in sync (Step 5).
@@ -139,9 +145,9 @@ page is full. Idempotent: skip users whose counter row already exists and whose 
 
 ### Step 4: Narrow the schema
 
-After the migration has been run on every deployment (the maintainer confirms; pre-launch this is a
-no-op), remove the two fields from `users` in `convex/schema.ts`. If you cannot confirm the migration
-ran, leave the fields and mark this step as pending in the plan's status row and your report.
+Executed 2026-09-10 after the maintainer confirmed the migration ran on deployments: the two `users` fields were removed
+from `convex/schema.ts`, the writer's legacy seeding/clearing was stripped, and `migrations/moveTrialCounters.ts` plus
+its npm scripts were deleted. `trialCounters` is now the only counter store.
 
 **Verify**: `pnpm --filter convex exec tsc --noEmit -p convex/tsconfig.json` exits 0; grep shows no
 remaining `trialInteractionsMade`/`Received` uses.
@@ -162,14 +168,14 @@ remaining `trialInteractionsMade`/`Received` uses.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] No runtime writer patches `trialInteractionsMade`/`Received` on `users`
-  (`grep -rn "trialInteractions" convex --include=*.ts` shows only schema (if Step 4 pending) and the migration)
-- [ ] `getTrialProgress` and `billing.getBillingContext` read `trialCounters`
-- [ ] `trialCounters` is in the DSR export list and the deletion cascade
-- [ ] `docs/PLATFORM.md` table count and trial storage updated
-- [ ] Only in-scope files changed; no commit made; migration not executed against a deployment
-- [ ] `plans/README.md` row updated (note Step 4 pending if applicable)
+- [x] `pnpm verify` exits 0
+- [x] No runtime writer patches `trialInteractionsMade`/`Received` on `users` (fields, seeding fallback, and migration
+  are gone; counters live only in `trialCounters`)
+- [x] `getTrialProgress` and `billing.getBillingContext` read `trialCounters`
+- [x] `trialCounters` is in the DSR export list and the deletion cascade
+- [x] `docs/PLATFORM.md` table count and trial storage updated
+- [x] Only in-scope files changed; no commit made; migration not executed against a deployment
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

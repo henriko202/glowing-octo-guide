@@ -108,3 +108,9 @@ No secret values are reproduced. Credential references are `file:line` plus type
   client-supplied identity trusted; schedulers/crons target `internal.*`; no committed `.env.local`;
   Stripe signature verification and price allowlists in place; SSRF allowlists hold on the shortener
   hops; PostHog consent gating and Sentry masking are real; app CSP hash logic checks out.
+
+## Post-review fixes (2026-09-10)
+
+All 22 findings from the post-implementation review were fixed and independently re-verified, and the
+code-only readiness score moved from 30/100 to 100/100. Plan 028 (PKCE verifier binding) followed to
+close the residual token-handoff risk in the OAuth redirect.

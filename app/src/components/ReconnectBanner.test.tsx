@@ -13,7 +13,6 @@ vi.mock('react-i18next', () => ({
     t: (k: string, o?: { count?: number }) => (o?.count !== undefined ? `${k}:${o.count}` : k)
   })
 }))
-vi.mock('@/lib/session', () => ({ AUTH_URL: 'https://example.convex.site/auth/linkedin' }))
 
 import ReconnectBanner from './ReconnectBanner'
 
@@ -85,18 +84,19 @@ describe('ReconnectBanner (render)', () => {
     expect(screen.queryByText(/expiringMessage/)).not.toBeInTheDocument()
   })
 
-  it('clicking Reconnect redirects to the LinkedIn auth URL', () => {
+  it('clicking Reconnect redirects to the app login-start route', () => {
     currentMe = {}
     const originalLocation = window.location
+    const assign = vi.fn()
     // jsdom's window.location isn't directly assignable; swap it for a spyable stand-in.
     Object.defineProperty(window, 'location', {
-      value: { ...originalLocation, href: '' },
+      value: { assign },
       writable: true,
       configurable: true
     })
     render(<ReconnectBanner />)
     fireEvent.click(screen.getByRole('button', { name: 'reconnectBanner.reconnect' }))
-    expect(window.location.href).toBe('https://example.convex.site/auth/linkedin')
+    expect(assign).toHaveBeenCalledWith('/auth/start')
     Object.defineProperty(window, 'location', { value: originalLocation, writable: true, configurable: true })
   })
 })

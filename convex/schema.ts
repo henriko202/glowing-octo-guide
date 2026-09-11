@@ -58,8 +58,6 @@ export default defineSchema({
     // every Stripe sync + cancellation. A canceled author's posts stay in the feed until this
     // instant, then drop out (see feed.isAuthorFeedEligible) — access to engage is NOT affected.
     subscriptionEndsAt: v.optional(v.number()),
-    trialInteractionsMade: v.optional(v.number()),
-    trialInteractionsReceived: v.optional(v.number()),
     stripeCustomerId: v.optional(v.string()),
     linkedinAccessToken: v.optional(v.string()),
     linkedinRefreshToken: v.optional(v.string()),
@@ -279,6 +277,10 @@ export default defineSchema({
   oauthStates: defineTable({
     state: v.string(),
     browserNonce: v.string(),
+    // PKCE-style SHA-256 challenge (base64url, 43 chars) minted by the initiating browser from a
+    // verifier that never leaves it. Optional ONLY for deploy safety: ephemeral rows written before
+    // this field existed have no challenge and are treated as invalid by validateAndConsumeOAuthState.
+    challenge: v.optional(v.string()),
     expiresAt: v.number(),
     plan: v.optional(v.string()),
     interval: v.optional(v.string()),
@@ -288,6 +290,24 @@ export default defineSchema({
     .index('by_state', ['state'])
     // Indexed range for the expired-OAuth-state cleanup cron — replaces a full-table .filter() scan.
     .index('by_expires_at', ['expiresAt']),
+
+  // Single-use login codes (PKCE-style verifier binding). The OAuth callback mints one (2-minute
+  // TTL) and redirects with `#code=…`; the initiating browser redeems it by presenting the verifier
+  // whose SHA-256 challenge is stored here. The session token itself never travels in a URL, and a
+  // handed-over code is inert without the verifier. See sessions.createAuthCode / redeemAuthCode.
+  authCodes: defineTable({
+    code: v.string(),
+    userId: v.id('users'),
+    challenge: v.string(),
+    plan: v.optional(v.string()),
+    interval: v.optional(v.string()),
+    expiresAt: v.number()
+  })
+    .index('by_code', ['code'])
+    // Indexed range for the expired-auth-code cleanup cron (mirrors oauthStates).
+    .index('by_expires_at', ['expiresAt'])
+    // Account-erasure cascade drains a deleted user's unredeemed codes by owner.
+    .index('by_userId', ['userId']),
 
   // Subscription-tier limits for post interactions and weekly post volume.
   // The contact tier supports optional per-user overrides via userId.

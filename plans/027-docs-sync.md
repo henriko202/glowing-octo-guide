@@ -1,5 +1,9 @@
 # Plan 027: Reconcile `docs/PLATFORM.md` and the compliance docs with the fixed code
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by the ten-item docs reconciliation, the
+> 20-table count matching `convex/schema.ts`, and the corrected `sessions.token` wording in
+> `docs/compliance/DATA-INVENTORY.md` (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Run this plan LAST, after 009-026 have landed or have been explicitly
 > skipped. It corrects documented facts that this review found wrong or incomplete. Follow each step
 > and verification. Update this plan's row in `plans/README.md` when done.
@@ -100,13 +104,13 @@ gate is the standard).
 
 ## Done criteria (ALL must hold)
 
-- [ ] Every one of the ten items is either fixed or explicitly recorded as pending because its source
+- [x] Every one of the ten items is either fixed or explicitly recorded as pending because its source
   plan did not land
-- [ ] Table count matches `grep -c "defineTable(" convex/schema.ts`
-- [ ] No doc sentence still claims a fact contradicted by the current code (spot-check the ten)
-- [ ] `docs/compliance/DATA-INVENTORY.md` no longer says the session token is hashed
-- [ ] No code files changed
-- [ ] `plans/README.md` row updated
+- [x] Table count matches `grep -c "defineTable(" convex/schema.ts`
+- [x] No doc sentence still claims a fact contradicted by the current code (spot-check the ten)
+- [x] `docs/compliance/DATA-INVENTORY.md` no longer says the session token is hashed
+- [x] No code files changed
+- [x] `plans/README.md` row updated
 
 ## STOP conditions
 

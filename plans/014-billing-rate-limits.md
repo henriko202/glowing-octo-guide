@@ -194,16 +194,19 @@ all nine new names (sort and compare, so ordering is not pinned). `pnpm --filter
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] Each of the nine action keys appears exactly once as an `action:` argument in
+- [x] `pnpm verify` exits 0
+- [x] Each of the nine action keys appears exactly once as an `action:` argument in
   `convex/billingNode.ts` / `convex/privacy/deletion.ts`
   (`grep -n "action: '" convex/billingNode.ts convex/privacy/deletion.ts` shows them)
-- [ ] `RATE_LIMIT_ACTIONS` contains all nine names
-- [ ] `requestAccountDeletion`'s limiter runs after the idempotent early return
-- [ ] No Stripe call, URL, or message changed (diff review)
-- [ ] `docs/PLATFORM.md` §8/§17 updated
-- [ ] Only in-scope files changed; no commit made
-- [ ] `plans/README.md` row updated
+- [x] `RATE_LIMIT_ACTIONS` contains all nine names
+- [x] `requestAccountDeletion`'s limiter runs after the idempotent early return
+- [x] No Stripe call, URL, or message changed (diff review)
+- [x] `docs/PLATFORM.md` §8/§17 updated
+- [x] Only in-scope files changed; no commit made
+- [x] `plans/README.md` row updated
+
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by greps + the green suites at convex 609 /
+> app 479 / landing 24 / integration 6.
 
 ## STOP conditions
 

@@ -1,5 +1,9 @@
 # Plan 024: Bump Convex and adopt `defineApp({ env })` typed environment
 
+> **Execution note (2026-09-10):** Implemented in the working tree; verified by `convex ^1.45.0` in all three manifests
+> (one lock resolution), the typed `defineApp({ env })` schema with generated `env`, and no non-test `process.env` reads
+> left (suites: convex 609 / app 479 / landing 24 / integration 6).
+
 > **Executor instructions**: Steps 1-2 are fully executable without deployment access. Steps 3-5
 > require Convex codegen, which needs deployment credentials; if `npx convex codegen` cannot run,
 > STOP after Step 2 and report (do not hand-edit `_generated/`). Update this plan's row in
@@ -165,14 +169,14 @@ env names are validated at deploy time.
 
 ## Done criteria (ALL must hold)
 
-- [ ] `pnpm verify` exits 0
-- [ ] All three manifests pin `convex ^1.45.0`; the lockfile resolves one version
-- [ ] `convex/convex.config.ts` declares every backend env var; `env` is generated and imported
-- [ ] No `process.env` remains in non-test `convex/**`
-- [ ] `CONVEX_SITE_URL`/`CONVEX_CLOUD_URL` are not declared
-- [ ] `docs/PLATFORM.md` §16/§18 updated
-- [ ] Only in-scope files changed; no commit made; no deployment performed
-- [ ] `plans/README.md` row updated (mark BLOCKED at Step 3 if codegen was unavailable)
+- [x] `pnpm verify` exits 0
+- [x] All three manifests pin `convex ^1.45.0`; the lockfile resolves one version
+- [x] `convex/convex.config.ts` declares every backend env var; `env` is generated and imported
+- [x] No `process.env` remains in non-test `convex/**`
+- [x] `CONVEX_SITE_URL`/`CONVEX_CLOUD_URL` are not declared
+- [x] `docs/PLATFORM.md` §16/§18 updated
+- [x] Only in-scope files changed; no commit made; no deployment performed
+- [x] `plans/README.md` row updated (mark BLOCKED at Step 3 if codegen was unavailable)
 
 ## STOP conditions
 

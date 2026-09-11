@@ -11,6 +11,7 @@ import { scrubError } from './lib/scrubError'
 import { isInviteCode } from './lib/invite'
 import { isFeaturedPostCheckout } from './lib/featuredPurchase'
 import { readCookie } from './lib/cookies'
+import { isPkceChallenge } from './lib/pkce'
 
 const http = httpRouter()
 
@@ -50,6 +51,12 @@ http.route({
     // Carry the user's chosen plan/interval through the OAuth round-trip.
     // Validate against the known-good sets to prevent tampering.
     const reqUrl = new URL(req.url)
+    // PKCE-style binding: every login must present the SHA-256 challenge of a verifier that stays in
+    // the initiating browser. A direct hit without a valid challenge is not a login flow.
+    const vc = reqUrl.searchParams.get('vc')
+    if (!vc || !isPkceChallenge(vc)) {
+      return new Response('Invalid login request.', { status: 400, headers: NO_STORE })
+    }
     const rawPlan = reqUrl.searchParams.get('plan') ?? undefined
     const rawInterval = reqUrl.searchParams.get('interval') ?? undefined
     const VALID_PLANS = new Set(['starter', 'growth', 'pro'])
@@ -68,7 +75,15 @@ http.route({
     await ctx.runMutation(internal.lib.rateLimit.checkOAuthStartBudget, { clientKey })
 
     // Persist state server-side before redirecting — validated on callback (CSRF protection).
-    await ctx.runMutation(internal.sessions.createOAuthState, { state, browserNonce, plan, interval, ref })
+    // The PKCE challenge rides along so the callback can bind the login code to this browser.
+    await ctx.runMutation(internal.sessions.createOAuthState, {
+      state,
+      browserNonce,
+      challenge: vc,
+      plan,
+      interval,
+      ref
+    })
     return redirect(buildAuthUrl(state), { 'Set-Cookie': setNonceCookie(state, browserNonce) })
   })
 })
@@ -145,17 +160,20 @@ http.route({
         referredByCode: oauthState.ref
       })
 
-      // Issue a cryptographically random session token — never expose the raw userId.
-      // The client stores this token; all protected functions resolve it server-side. The 15-day
-      // sliding TTL is owned by sessions.create (see SESSION_TTL_MS).
-      const sessionToken = crypto.randomUUID()
-      await ctx.runMutation(internal.sessions.create, {
-        token: sessionToken,
-        userId: userId as Id<'users'>
+      // Mint a single-use, 2-minute login code bound to the initiating browser's PKCE challenge.
+      // The session token is NOT created here and never travels in a URL: the SPA redeems this code
+      // over the Convex transport by presenting the verifier (sessions.redeemAuthCode).
+      const authCode = crypto.randomUUID()
+      await ctx.runMutation(internal.sessions.createAuthCode, {
+        code: authCode,
+        userId: userId as Id<'users'>,
+        challenge: oauthState.challenge,
+        plan: oauthState.plan,
+        interval: oauthState.interval
       })
 
       // Append plan/interval to the success redirect when they were carried through OAuth.
-      let successUrl = `${appUrl}/auth/success#session=${sessionToken}`
+      let successUrl = `${appUrl}/auth/success#code=${authCode}`
       if (oauthState.plan !== undefined) successUrl += `&plan=${oauthState.plan}`
       if (oauthState.interval !== undefined) successUrl += `&interval=${oauthState.interval}`
 

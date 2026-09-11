@@ -4,9 +4,10 @@
 // Clients NEVER supply their own userId; they supply a session token, and the
 // server resolves it to a user server-side.
 
-import { internalMutation, internalQuery } from './_generated/server'
+import { internalMutation, internalQuery, mutation } from './_generated/server'
 import { internal } from './_generated/api'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
+import { isPkceChallenge, isPkceVerifier, pkceChallengeFromVerifier } from './lib/pkce'
 
 // ─── Session lifetime ────────────────────────────────────────────────────────
 // 15-day sliding window: an idle (or stolen-but-unused) token expires SESSION_TTL_MS after its last
@@ -138,14 +139,16 @@ export const createOAuthState = internalMutation({
   args: {
     state: v.string(),
     browserNonce: v.string(),
+    challenge: v.string(),
     plan: v.optional(v.string()),
     interval: v.optional(v.string()),
     ref: v.optional(v.string())
   },
-  handler: async (ctx, { state, browserNonce, plan, interval, ref }) => {
+  handler: async (ctx, { state, browserNonce, challenge, plan, interval, ref }) => {
     await ctx.db.insert('oauthStates', {
       state,
       browserNonce,
+      challenge,
       expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
       plan,
       interval,
@@ -154,10 +157,11 @@ export const createOAuthState = internalMutation({
   }
 })
 
-/** Validates the state (nonce + expiry) and deletes it only on success (single-use).
+/** Validates the state (nonce + expiry + PKCE challenge) and deletes it only on success (single-use).
  * A failed attempt deliberately leaves the row for the legitimate browser until TTL/cleanup — a
- * wrong-nonce probe must not burn an in-flight state.
- * Returns { valid: true, plan?, interval?, ref? } on success, or { valid: false } if invalid/expired.
+ * wrong-nonce probe must not burn an in-flight state. A missing/malformed challenge (a row minted
+ * before the PKCE change, or a tampered row) is invalid.
+ * Returns { valid: true, plan?, interval?, ref?, challenge } on success, or { valid: false }.
  */
 export const validateAndConsumeOAuthState = internalMutation({
   args: { state: v.string(), browserNonce: v.string() },
@@ -167,12 +171,19 @@ export const validateAndConsumeOAuthState = internalMutation({
       .withIndex('by_state', q => q.eq('state', state))
       .unique()
 
-    if (!record) return { valid: false }
+    if (!record) return { valid: false as const }
     // Validate BEFORE deleting: only a fully valid presentation consumes the row. An early delete
     // would let any wrong-nonce callback destroy the legitimate browser's state.
-    if (!isUsableOAuthState(record, browserNonce, Date.now())) return { valid: false }
+    if (!isUsableOAuthState(record, browserNonce, Date.now())) return { valid: false as const }
+    if (record.challenge === undefined || !isPkceChallenge(record.challenge)) return { valid: false as const }
     await ctx.db.delete(record._id)
-    return { valid: true, plan: record.plan, interval: record.interval, ref: record.ref }
+    return {
+      valid: true as const,
+      plan: record.plan,
+      interval: record.interval,
+      ref: record.ref,
+      challenge: record.challenge
+    }
   }
 })
 
@@ -188,6 +199,86 @@ export const deleteExpiredOAuthStates = internalMutation({
     // If batch was full, more rows may remain — reschedule immediately (drains faster than 200/hour)
     if (expired.length === 200) {
       await ctx.scheduler.runAfter(0, internal.sessions.deleteExpiredOAuthStates, {})
+    }
+  }
+})
+
+// ─── Login codes (PKCE-style verifier binding) ───────────────────────────────
+
+/**
+ * A login code lives 2 minutes: long enough for the callback redirect plus the SPA's redeem call,
+ * short enough that a leaked row is worthless. Only the challenge is stored — never the verifier.
+ */
+export const AUTH_CODE_TTL_MS = 2 * 60 * 1000
+
+export const createAuthCode = internalMutation({
+  args: {
+    code: v.string(),
+    userId: v.id('users'),
+    challenge: v.string(),
+    plan: v.optional(v.string()),
+    interval: v.optional(v.string())
+  },
+  handler: async (ctx, { code, userId, challenge, plan, interval }) => {
+    await ctx.db.insert('authCodes', {
+      code,
+      userId,
+      challenge,
+      plan,
+      interval,
+      expiresAt: Date.now() + AUTH_CODE_TTL_MS
+    })
+  }
+})
+
+/**
+ * Redeems a single-use login code for a session token. The client presents the verifier; we
+ * re-derive its SHA-256 challenge and compare. On success the code row is deleted (single-use) and
+ * the session is inserted here (rather than via internal.sessions.create) to keep redeem in one
+ * transaction. A mismatch throws ConvexError — Convex rolls back a throwing mutation's writes, so
+ * the row intentionally survives a failed attempt (nothing can be redeemed without the verifier
+ * anyway; the row is TTL-cleaned). Never logs `code` or `verifier`.
+ */
+export const redeemAuthCode = mutation({
+  args: { code: v.string(), verifier: v.string() },
+  handler: async (ctx, { code, verifier }) => {
+    const row = await ctx.db
+      .query('authCodes')
+      .withIndex('by_code', q => q.eq('code', code))
+      .unique()
+
+    if (!row || row.expiresAt < Date.now() || !isPkceVerifier(verifier)) {
+      throw new ConvexError('Login could not be verified. Please try again.')
+    }
+
+    const challenge = await pkceChallengeFromVerifier(verifier)
+    if (challenge !== row.challenge) {
+      throw new ConvexError('Login could not be verified. Please try again.')
+    }
+
+    const sessionToken = crypto.randomUUID()
+    await ctx.db.insert('sessions', {
+      token: sessionToken,
+      userId: row.userId,
+      expiresAt: sessionExpiryFrom(Date.now())
+    })
+    await ctx.db.delete(row._id)
+    return { sessionToken }
+  }
+})
+
+export const deleteExpiredAuthCodes = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const now = Date.now()
+    const expired = await ctx.db
+      .query('authCodes')
+      .withIndex('by_expires_at', q => q.lt('expiresAt', now))
+      .take(200)
+    await Promise.all(expired.map(c => ctx.db.delete(c._id)))
+    // If batch was full, more rows may remain — reschedule immediately (mirrors deleteExpiredOAuthStates).
+    if (expired.length === 200) {
+      await ctx.scheduler.runAfter(0, internal.sessions.deleteExpiredAuthCodes, {})
     }
   }
 })

@@ -7,20 +7,13 @@ import type { Id } from './_generated/dataModel'
 // here is the WIRING between them — that the 50th combined interaction is the one that ends the
 // trial, on the right subscription, exactly once. That is the moment the member's card is charged.
 // Since plan 018 the counters live in their own `trialCounters` row (patch when present, insert on
-// the first trial interaction) instead of on `users`; the thresholds themselves are unchanged. The
-// first insert is seeded from the legacy `users.trialInteractionsMade/Received` fields (then clears
-// them) so the deploy window cannot reset the meter or skip a milestone.
+// the first trial interaction) instead of on `users`; the thresholds themselves are unchanged.
 
 type Row = { status: string; stripeSubscriptionId?: string; cancelAtPeriodEnd?: boolean }
-type User = {
-  subscriptionStatus?: string
-  trialInteractionsMade?: number
-  trialInteractionsReceived?: number
-}
+type User = { subscriptionStatus?: string }
 type Counter = { made: number; received: number }
 type CounterPatch = { made?: number; received?: number }
-type LegacyClear = { trialInteractionsMade: undefined; trialInteractionsReceived: undefined }
-type PatchCall = { id: Id<'users'> | Id<'trialCounters'>; fields: CounterPatch | LegacyClear }
+type PatchCall = { id: Id<'trialCounters'>; fields: CounterPatch }
 
 const USER_ID = 'u1' as Id<'users'>
 const COUNTER_ID = 'c1' as Id<'trialCounters'>
@@ -102,33 +95,6 @@ describe('bumpTrialInteractionHandler', () => {
     const received = createCtx({ subscriptionStatus: 'trialing' })
     await bumpTrialInteractionHandler(received.ctx, USER_ID, 'received', received.load(LIVE_TRIAL))
     expect(received.inserts).toEqual([{ userId: USER_ID, made: 0, received: 1 }])
-  })
-
-  it('seeds the counter from legacy fields on the first post-deploy bump, then charges at 50', async () => {
-    const t = createCtx({ subscriptionStatus: 'trialing', trialInteractionsMade: 49 })
-    await bumpTrialInteractionHandler(t.ctx, USER_ID, 'made', t.load(LIVE_TRIAL))
-    // 49 legacy + this one = 50: the seeded row is written at 50, not 1 (the meter never resets).
-    expect(t.inserts).toEqual([{ userId: USER_ID, made: 50, received: 0 }])
-    // Consumed in the same mutation, so the migration can never add them to the row again.
-    expect(t.patches).toEqual([
-      { id: USER_ID, fields: { trialInteractionsMade: undefined, trialInteractionsReceived: undefined } }
-    ])
-    // Pre-increment combined = 49: the charge fires, and the 40 warning does NOT double-fire.
-    expect(t.scheduled).toHaveLength(1)
-    expect(t.scheduled[0].fn).toBe(internal.billingNode.endTrialEarly)
-    expect(t.scheduled[0].args).toEqual({ stripeSubscriptionId: 'sub_live' })
-  })
-
-  it('seeds the counter from legacy fields and warns at 40 on the first post-deploy bump', async () => {
-    const t = createCtx({ subscriptionStatus: 'trialing', trialInteractionsMade: 39 })
-    await bumpTrialInteractionHandler(t.ctx, USER_ID, 'made', t.load(LIVE_TRIAL))
-    expect(t.inserts).toEqual([{ userId: USER_ID, made: 40, received: 0 }])
-    expect(t.patches).toEqual([
-      { id: USER_ID, fields: { trialInteractionsMade: undefined, trialInteractionsReceived: undefined } }
-    ])
-    expect(t.scheduled).toHaveLength(1)
-    expect(t.scheduled[0].fn).toBe(internal.notifications.sendTrialNearEnd)
-    expect(t.scheduled[0].args).toEqual({ userId: USER_ID })
   })
 
   it('warns at 40 combined and charges nothing yet', async () => {
