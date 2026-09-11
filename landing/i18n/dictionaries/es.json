@@ -1,8 +1,7 @@
 {
   "meta": {
-    "title": "Herramienta de SSI de LinkedIn · Publicaciones relevantes",
     "description": "Encuentra publicaciones relevantes de LinkedIn, recibe borradores de comentarios con IA y entiende tu Social Selling Index (SSI). Cada acción es tuya.",
-    "ogTitle": "Link Into The SSI · Herramienta de SSI de LinkedIn",
+    "ogTitle": "Link Into The SSI · Herramienta de SSI de LinkedIn · Publicaciones relevantes",
     "ogDescription": "Encuentra publicaciones relevantes de LinkedIn, recibe borradores de comentarios y entiende tu Social Selling Index (SSI). Cada reacción y comentario es tuyo.",
     "keywords": [
       "SSI de LinkedIn",
@@ -21,15 +20,15 @@
   },
   "legalMeta": {
     "privacy": {
-      "title": "Política de Privacidad · Link Into The SSI",
+      "title": "Link Into The SSI · Política de Privacidad",
       "description": "Cómo Link Into The SSI recopila, usa y protege tus datos al iniciar sesión con LinkedIn e interactuar con el feed compartido."
     },
     "terms": {
-      "title": "Términos del Servicio · Link Into The SSI",
+      "title": "Link Into The SSI · Términos del Servicio",
       "description": "Los términos que rigen tu uso de Link Into The SSI, incluida la herramienta de SSI de LinkedIn, las suscripciones y la prueba gratuita."
     },
     "cookies": {
-      "title": "Política de Cookies y Almacenamiento · Link Into The SSI",
+      "title": "Link Into The SSI · Política de Cookies y Almacenamiento",
       "description": "Link Into The SSI usa solo almacenamiento esencial del navegador para el inicio de sesión y las preferencias. No usamos cookies de rastreo ni publicidad."
     }
   },

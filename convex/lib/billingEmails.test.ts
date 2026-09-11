@@ -119,6 +119,18 @@ describe('trialConvertedEmail', () => {
       expect(m.html).toContain(`href="${RECAP_URL}"`)
     }
   })
+  it('keeps singular interaction counts in pt', () => {
+    const m = trialConvertedEmail('pt', {
+      made: 1,
+      received: 1,
+      planName: 'Growth',
+      priceLabel: '$9/month',
+      recapUrl: RECAP_URL
+    })
+    expect(m.text).toContain('você fez 1 interação')
+    expect(m.text).toContain('receberam 1 interação')
+    expect(m.text).not.toContain('1 interações')
+  })
 })
 
 describe('billing emails stay transactional', () => {

@@ -6,7 +6,7 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Política de Privacidade</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última atualização:</strong> Setembro de 2026
+          <strong className="text-cream">Última atualização:</strong> setembro de 2026
         </p>
         {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts — see the note in en.tsx. */}
         <p>Policy version: 2026-09-08</p>

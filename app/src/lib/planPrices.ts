@@ -20,7 +20,7 @@ export const FEATURED_POST_PRICE = 'US$5'
 
 export function usdLabel(locale: string, label: string): string {
   const short = locale.slice(0, 2).toLowerCase()
-  if (short === 'en') return label
+  if (short !== 'pt' && short !== 'es') return label
   const units = short === 'es' ? { mo: '/mes', yr: '/año' } : { mo: '/mês', yr: '/ano' }
   return label.replace('US$', 'U$').replace('/mo', units.mo).replace('/yr', units.yr)
 }

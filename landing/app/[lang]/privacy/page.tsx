@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: Loc
   return pageMetadata({
     lang,
     path: '/privacy',
-    title: dict.legalMeta.privacy.title,
+    ogTitle: dict.legalMeta.privacy.title,
     description: dict.legalMeta.privacy.description
   })
 }

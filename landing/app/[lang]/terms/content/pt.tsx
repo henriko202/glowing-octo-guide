@@ -6,7 +6,7 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Termos de Serviço</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última atualização:</strong> Setembro de 2026
+          <strong className="text-cream">Última atualização:</strong> setembro de 2026
         </p>
 
         {/* 1. Aceitação */}

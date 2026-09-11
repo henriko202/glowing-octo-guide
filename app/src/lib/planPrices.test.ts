@@ -23,9 +23,11 @@ describe('FEATURED_POST_PRICE', () => {
 })
 
 describe('usdLabel', () => {
-  it('keeps the English labels for en', () => {
+  it('keeps the English labels for en and unknown locales', () => {
     expect(usdLabel('en', PLAN_PRICES.monthly.growth)).toBe('US$15/mo')
+    expect(usdLabel('EN', PLAN_PRICES.monthly.growth)).toBe('US$15/mo')
     expect(usdLabel('en-US', FEATURED_POST_PRICE)).toBe('US$5')
+    expect(usdLabel('fr', PLAN_PRICES.monthly.growth)).toBe('US$15/mo')
   })
 
   it('renders U$ with the interval word in pt and es', () => {

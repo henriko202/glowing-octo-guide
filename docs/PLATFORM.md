@@ -5440,18 +5440,28 @@ hreflang → OpenGraph locale map.
 **Per-locale metadata** (`app/[lang]/layout.tsx` `generateMetadata`):
 
 - `metadataBase` set to `SITE_URL`, so every relative canonical/OpenGraph URL below resolves to an absolute one.
-- `title`, `description`, and `keywords` sourced from `dict.meta`. `keywords` carries the SSI / LinkedIn search terms
+- `title` is the constant `SITE_NAME` on **every** route, so client-side navigation never changes the tab title (a
+  per-page `<title>` would flash the SEO string on each `next/link` transition before any client override could win).
+  `description` and `keywords` come from `dict.meta`; `keywords` carries the SSI / LinkedIn search terms
   (`LinkedIn SSI`, `Social Selling Index`, `SSI score`, `LinkedIn SSI tool`, `increase SSI`, `LinkedIn engagement`, …)
   in each locale.
 - `alternates.canonical` self-references `/<lang>`, and `alternates.languages` lists the three `hreflang` alternate
   URLs (`/en/…`, `/pt/…`, `/es/…`) plus `x-default` → `/en/…`.
 - `openGraph` (type `website`, `siteName`, per-locale `ogTitle`/`ogDescription`, `locale` in `language_TERRITORY`
-  form, and the 1200×630 `/og.png`) and `twitter` (`summary_large_image`) cards.
+  form, and the 1200×630 `/og.png`) and `twitter` (`summary_large_image`) cards. The descriptive, brand-first titles
+  live here (`dict.meta.ogTitle`, `dict.legalMeta.*.title`) instead of the `<title>` tag; JSON-LD carries the
+  localized `description`, FAQ and HowTo content.
+
+**SEO trade-off.** One constant `<title>` for the whole site means that tag no longer carries per-route keywords:
+search engines read the brand there and may lean on `og:title`, the localized `description`, or the page headings for
+context. The owner accepted this to keep the tab title stable (no flicker on client-side navigation); revisit if
+organic differentiation outweighs tab consistency.
 - `robots` allows indexing with `max-image-preview: large` and unlimited snippets.
 
 **Legal pages** (`privacy`/`terms`/`cookies`) export their own `generateMetadata` via `lib/seo.ts` `pageMetadata()`,
-which sets a **route-specific** canonical (`/<lang>/privacy`, …) and localized `title`/`description` from
-`dict.legalMeta`. It also sets the per-locale `og:locale` and `keywords: []` explicitly, because Next replaces an
+which sets a **route-specific** canonical (`/<lang>/privacy`, …) and the document `<title>` to `SITE_NAME` like every
+other route. The localized `description` comes from `dict.legalMeta`, whose `title` feeds `og:title`/`twitter:title`.
+It also sets the per-locale `og:locale` and `keywords: []` explicitly, because Next replaces an
 inherited `openGraph` object rather than merging it and otherwise passes the homepage keywords down. Without this they
 would inherit the Home layout's canonical and canonicalize every legal page to the homepage, wearing its OG locale and
 keyword set.
@@ -5529,7 +5539,7 @@ content** (encodes the business rules):
 - `FAQ` answers safety, trial, SSI, activity, and cancellation questions. Closed answers use the native `hidden`
   attribute, so they are absent from the accessibility tree. Open answers have no fixed maximum height.
 - `FinalCTA` repeats the selected Growth renewal offer, the same card and trial disclosure as the hero/pricing,
-  sign-in reassurance, and early-access status. `Footer` retains localized legal links and contact details.
+  sign-in reassurance. `Footer` retains localized legal links and contact details.
 
 ### Legal pages — pt/es drafts
 

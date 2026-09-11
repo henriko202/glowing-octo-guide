@@ -1,8 +1,7 @@
 {
   "meta": {
-    "title": "LinkedIn SSI Tool · Find Relevant LinkedIn Posts",
     "description": "Find relevant LinkedIn posts in one focused feed, get AI comment drafts, and understand your LinkedIn Social Selling Index (SSI). Every action stays yours.",
-    "ogTitle": "Link Into The SSI · LinkedIn SSI Tool",
+    "ogTitle": "Link Into The SSI · LinkedIn SSI Tool · Find Relevant LinkedIn Posts",
     "ogDescription": "Find relevant LinkedIn posts, get comment drafts, and understand your Social Selling Index (SSI). Every reaction and comment stays yours.",
     "keywords": [
       "LinkedIn SSI",
@@ -21,15 +20,15 @@
   },
   "legalMeta": {
     "privacy": {
-      "title": "Privacy Policy · Link Into The SSI",
+      "title": "Link Into The SSI · Privacy Policy",
       "description": "How Link Into The SSI collects, uses, and protects your data when you sign in with LinkedIn and engage with the shared feed."
     },
     "terms": {
-      "title": "Terms of Service · Link Into The SSI",
+      "title": "Link Into The SSI · Terms of Service",
       "description": "The terms that govern your use of Link Into The SSI, including the LinkedIn SSI tool, subscriptions, and your free trial."
     },
     "cookies": {
-      "title": "Cookie & Storage Policy · Link Into The SSI",
+      "title": "Link Into The SSI · Cookie & Storage Policy",
       "description": "Link Into The SSI uses essential browser storage only for sign-in and preferences. We do not use tracking or advertising cookies."
     }
   },

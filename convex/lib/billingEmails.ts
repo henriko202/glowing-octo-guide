@@ -285,7 +285,7 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
     },
     pt: {
       subject: `Seu plano ${a.planName} começou hoje`,
-      lead: `Durante o seu teste você fez ${a.made} interações e suas publicações receberam ${a.received} interações.`,
+      lead: `Durante o seu teste você fez ${a.made} ${a.made === 1 ? 'interação' : 'interações'} e suas publicações receberam ${a.received} ${a.received === 1 ? 'interação' : 'interações'}.`,
       term: `Seu plano ${a.planName} (${a.priceLabel}) está ativo.`,
       link: 'Veja seu resumo:',
       planLabel: 'Plano',

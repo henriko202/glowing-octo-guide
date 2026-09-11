@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import en from './dictionaries/en.json'
 import pt from './dictionaries/pt.json'
 import es from './dictionaries/es.json'
+import { SITE_NAME } from '../lib/site'
 
 function strings(value: unknown, path = ''): Record<string, string> {
   if (typeof value === 'string') return { [path]: value }
@@ -31,5 +32,16 @@ describe('landing translations', () => {
   ] as const)('%s keeps the same trial terms at every decision', (_locale, dictionary) => {
     expect(dictionary.hero.ctaDisclaimer).toBe(dictionary.pricing.trialNote)
     expect(dictionary.finalCta.subheadline).toBe(dictionary.pricing.trialNote)
+  })
+
+  it.each([
+    ['en', en],
+    ['pt', pt],
+    ['es', es]
+  ] as const)('%s keeps every social title brand-first', (_locale, dictionary) => {
+    expect(dictionary.meta.ogTitle.startsWith(`${SITE_NAME} · `)).toBe(true)
+    for (const page of Object.values(dictionary.legalMeta)) {
+      expect(page.title.startsWith(`${SITE_NAME} · `)).toBe(true)
+    }
   })
 })

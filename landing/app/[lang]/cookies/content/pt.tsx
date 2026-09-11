@@ -6,7 +6,7 @@ export default function Pt({ lang: _lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Política de Cookies &amp; Armazenamento</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última atualização:</strong> Junho de 2026
+          <strong className="text-cream">Última atualização:</strong> junho de 2026
         </p>
         <p>
           Link Into The SSI usa apenas armazenamento de navegador{' '}
