@@ -27,17 +27,18 @@ function Row({ row }: { row: HistoryRow }) {
   const { t, i18n } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const reaction = row.kind === 'reaction' ? REACTIONS.find(r => r.value === row.reaction) : undefined
-  const long = row.kind === 'comment' && !!row.comment && isLong(row.comment)
+  const aiDraft = row.kind === 'ai_draft'
+  const long = (row.kind === 'comment' || aiDraft) && !!row.comment && isLong(row.comment)
   const when = new Date(row.createdAt)
   return (
     <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 flex-1">
         <p className="text-foreground m-0 text-sm font-semibold">
           {/* Emoji and label are separate spans so AT reads only the label, never the glyph. */}
-          <span aria-hidden="true">{reaction ? reaction.emoji : '💬'}</span>{' '}
-          <span>{reaction ? t(reaction.labelKey) : t('history.commented')}</span>
+          <span aria-hidden="true">{reaction ? reaction.emoji : aiDraft ? '🤖' : '💬'}</span>{' '}
+          <span>{reaction ? t(reaction.labelKey) : aiDraft ? t('history.aiDrafted') : t('history.commented')}</span>
         </p>
-        {row.kind === 'comment' && row.comment && (
+        {(row.kind === 'comment' || aiDraft) && row.comment && (
           <>
             <p
               className={cn(

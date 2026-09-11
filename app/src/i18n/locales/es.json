@@ -74,7 +74,11 @@
     "doneCommented": "Comentaste",
     "doneBoth": "Reaccionaste y comentaste",
     "leavesIn": "Sale de tu feed en {{hours}} h",
+    "hide": "Ocultar",
     "hideNow": "Ocultar ahora",
+    "hideConfirmTitle": "¿Ocultar esta publicación?",
+    "hideConfirmBody": "Se eliminará de tu feed de forma permanente. No se puede deshacer.",
+    "hideConfirmCta": "Ocultar publicación",
     "caughtUpTitle": "Estás al día",
     "caughtUpBody": "Las publicaciones en las que reaccionaste o comentaste salen después de 24 horas. Aparecen nuevas publicaciones cuando los miembros las comparten.",
     "inviteLink": "Invitar a un colega",
@@ -82,7 +86,7 @@
       "title": "Primeros pasos",
       "signedIn": "Iniciaste sesión con LinkedIn",
       "firstPost": "Comparte una publicación",
-      "reactTwice": "Reacciona a dos publicaciones"
+      "reactTwice": "Reacciona o genera un comentario en dos publicaciones"
     },
     "filter": {
       "toggle": "Filtrar feed",
@@ -96,7 +100,7 @@
       "selectPlaceholder": "Seleccionar…",
       "noResults": "Sin resultados."
     },
-    "viewGeneratedComment": "Ver comentario generado"
+    "viewGeneratedComment": "Ver tu comentario"
   },
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mes",
@@ -167,9 +171,9 @@
     "language": "Idioma del comentario",
     "languageAuto": "Automático — idioma de la publicación",
     "generateError": "No se pudo generar un comentario. Inténtalo de nuevo.",
-    "generatedComment": "Comentario generado",
+    "generatedComment": "Tu comentario",
     "loadingSaved": "Cargando comentario guardado…",
-    "noSavedComment": "No se guardó ningún comentario generado para esta publicación.",
+    "noSavedComment": "No se guardó ningún comentario para esta publicación.",
     "reopenLinkedIn": "Comentar en LinkedIn de nuevo",
     "closeSaved": "Cerrar"
   },
@@ -459,7 +463,7 @@
   },
   "recap": {
     "title": "Resumen",
-    "lead": "Consulta las reacciones y los comentarios que hiciste y recibiste, además del uso de tu plan.",
+    "lead": "Consulta las reacciones y los comentarios que hiciste y recibiste, los borradores con IA que generaste y el uso de tu plan.",
     "window": {
       "7d": "Últimos 7 días",
       "30d": "Últimos 30 días",
@@ -471,6 +475,8 @@
     "reactionsCount_other": "{{count}} reacciones",
     "commentsCount_one": "{{count}} comentario",
     "commentsCount_other": "{{count}} comentarios",
+    "draftsCount_one": "{{count}} borrador con IA",
+    "draftsCount_other": "{{count}} borradores con IA",
     "postsCount_one": "en {{count}} publicación",
     "postsCount_other": "en {{count}} publicaciones",
     "delta": "{{delta}} frente a los {{days}} días anteriores",
@@ -480,7 +486,7 @@
     "postUsage": "{{total}} de {{cap}} interacciones",
     "noPosts": "No agregaste publicaciones en este período. Las publicaciones que compartes aparecen aquí con su conteo de interacciones.",
     "emptyTitle": "Nada registrado en los últimos {{days}} días",
-    "emptyBody": "Tu primera reacción o comentario en el feed aparece aquí, junto con lo que reciben tus publicaciones.",
+    "emptyBody": "Tu primera reacción, comentario o borrador con IA en el feed aparece aquí, junto con lo que reciben tus publicaciones.",
     "emptyCta": "Ir al feed",
     "honest": "Este resumen solo incluye las interacciones registradas en la aplicación; no consulta ni estima tu SSI.",
     "salesNav": "Consulta tu SSI en Sales Navigator:",
@@ -489,8 +495,9 @@
   },
   "history": {
     "title": "Historial",
-    "lead": "Cada reacción y comentario que registraste aquí.",
+    "lead": "Cada reacción, comentario y borrador con IA que registraste aquí.",
     "commented": "Comentaste",
+    "aiDrafted": "Comentario redactado con IA",
     "by": "de {{name}}",
     "removed": "Publicación eliminada",
     "showMore": "Mostrar más",

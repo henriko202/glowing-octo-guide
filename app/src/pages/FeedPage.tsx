@@ -15,8 +15,10 @@ import { FeedFilterPanel } from '@/components/FeedFilterPanel'
 import CardGateBanner, { useOwnPostState } from '@/components/CardGateBanner'
 import CardGateDialog, { type GateSource } from '@/components/CardGateDialog'
 import EmptyFeed from '@/components/EmptyFeed'
+import Modal from '@/components/Modal'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { useCardGate } from '@/hooks/useCardGate'
 import { friendlyError } from '@/lib/errors'
 import { captureEvent } from '@/lib/observability/analytics'
@@ -94,10 +96,33 @@ export default function FeedPage() {
   const [commentingOn, setCommentingOn] = useState<Id<'posts'> | null>(null)
   const [reactingPostId, setReactingPostId] = useState<Id<'posts'> | null>(null)
   const [reactError, setReactError] = useState<{ postId: Id<'posts'>; msg: string } | null>(null)
+  // Hiding is destructive, so the card's hide control opens this confirmation first.
+  const [hideTarget, setHideTarget] = useState<Id<'posts'> | null>(null)
+  const [hiding, setHiding] = useState(false)
 
   async function handlePostSubmit(url: string) {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl: url })
+  }
+
+  async function handleConfirmHide() {
+    if (!hideTarget) return
+    // The card arrives with its viewerState (non-null for a post the viewer already handled),
+    // which is all the analytics need: whether they had interacted, and how long ago.
+    const state = feedPosts.find(p => p._id === hideTarget)?.viewerState
+    setHiding(true)
+    try {
+      await hidePost({ sessionToken: sessionToken ?? '', postId: hideTarget })
+      captureEvent('post_hidden', {
+        interacted: !!state,
+        after: state ? Math.round((INTERACTED_TTL_MS - (state.hidesAt - Date.now())) / 3_600_000) : null
+      })
+    } catch (err: unknown) {
+      toast(friendlyError(err, String(err)))
+    } finally {
+      setHiding(false)
+      setHideTarget(null)
+    }
   }
 
   // ─── Virtualizer ────────────────────────────────────────────────────────────
@@ -270,23 +295,7 @@ export default function FeedPage() {
                     gated={gated}
                     onGated={setGateSource}
                     reacting={reactingPostId === post._id}
-                    onHide={async () => {
-                      const state = post.viewerState
-                      if (!state) return
-                      try {
-                        await hidePost({ sessionToken: sessionToken ?? '', postId: post._id })
-                        // How long after the interaction they hid it — the only number R21 wants.
-                        captureEvent('post_hidden', {
-                          after: Math.round((INTERACTED_TTL_MS - (state.hidesAt - Date.now())) / 3_600_000)
-                        })
-                      } catch (err: unknown) {
-                        // NOT_INTERACTED means the viewer's row for this post is gone (an author
-                        // erasure cascade beat the tap), so the card leaves on the next feed
-                        // update either way — a raw backend code in a toast helps nobody.
-                        const msg = friendlyError(err, String(err))
-                        if (msg !== 'NOT_INTERACTED') toast(msg)
-                      }
-                    }}
+                    onHide={() => setHideTarget(post._id)}
                   />
                   {reactError?.postId === post._id && (
                     <p className="text-destructive px-1 pt-1 text-xs">{reactError.msg}</p>
@@ -324,6 +333,37 @@ export default function FeedPage() {
         <div className="mt-6 flex justify-center">
           <LoadingSpinner />
         </div>
+      )}
+
+      {/* Hide confirmation — a destructive action, so Cancel sits first in the DOM (safe initial
+          focus) and the destructive confirm last. Both stay disabled while the hide is in flight. */}
+      {hideTarget && (
+        <Modal
+          onClose={() => setHideTarget(null)}
+          title={t('feed.hideConfirmTitle')}
+        >
+          <p className="text-foreground m-0 text-sm">{t('feed.hideConfirmBody')}</p>
+          <DialogFooter className="mt-5">
+            <Button
+              type="button"
+              variant="ghost"
+              className="cursor-pointer"
+              disabled={hiding}
+              onClick={() => setHideTarget(null)}
+            >
+              {t('privacy.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="cursor-pointer"
+              disabled={hiding}
+              onClick={() => void handleConfirmHide()}
+            >
+              {t('feed.hideConfirmCta')}
+            </Button>
+          </DialogFooter>
+        </Modal>
       )}
 
       <CardGateDialog

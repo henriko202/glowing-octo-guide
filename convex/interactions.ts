@@ -1,6 +1,6 @@
 // convex/interactions.ts
-import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
+import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { internal } from './_generated/api'
@@ -11,7 +11,6 @@ import { assertPostEngageable } from './feed'
 import { getPlanLimitsHelper, nextTier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { effectiveInteractionCap, shouldFlipInteractionLimit } from './lib/interactionLimit'
-import { canHide } from './lib/feedHygiene'
 import {
   crossesThreshold,
   pickTrialingSubscription,
@@ -19,7 +18,7 @@ import {
   TRIAL_WARNING_THRESHOLD
 } from './lib/trialMilestone'
 import { reactionValidator } from './lib/reactions'
-import { toHistoryRow, type HistoryRow } from './lib/history'
+import { type HistoryRow, toHistoryRow } from './lib/history'
 import {
   countInteractions,
   excerpt,
@@ -171,17 +170,45 @@ export const getCommentDraft = query({
   }
 })
 
-// Persist the last AI-generated comment for (user, post) onto userPostState so the comment box can
-// reload it. Upsert: patch the existing row or create one.
+/**
+ * Persist the last AI-generated comment for (user, post) onto userPostState so the comment box can
+ * reload it. Upsert: patch the existing row or create one. The FIRST draft on a post is also the
+ * interaction: it writes the append-only log row and bumps the trial counter. Regenerations only
+ * refresh `commentDraft` — otherwise the log would grow one row per click and the trial meter would
+ * race ahead of what the member actually did.
+ */
+export async function saveCommentDraftHandler(
+  ctx: MutationCtx,
+  userId: Id<'users'>,
+  postId: Id<'posts'>,
+  draft: string
+): Promise<void> {
+  const state = await ctx.db
+    .query('userPostState')
+    .withIndex('by_user_and_post', q => q.eq('userId', userId).eq('postId', postId))
+    .unique()
+  if (state?.aiDraftedAt !== undefined) {
+    await ctx.db.patch(state._id, { commentDraft: draft })
+    return
+  }
+  const now = Date.now()
+  if (state) await ctx.db.patch(state._id, { commentDraft: draft, aiDraftedAt: now })
+  else await ctx.db.insert('userPostState', { userId, postId, commentDraft: draft, aiDraftedAt: now })
+  // No authorId: a draft is not engagement "received" by the post's author.
+  await ctx.db.insert('userInteractions', {
+    userId,
+    postId,
+    kind: 'ai_draft',
+    comment: draft,
+    createdAt: now
+  })
+  await bumpTrialInteraction(ctx, userId, 'made')
+}
+
 export const saveCommentDraft = internalMutation({
   args: { userId: v.id('users'), postId: v.id('posts'), draft: v.string() },
   handler: async (ctx, { userId, postId, draft }) => {
-    const state = await ctx.db
-      .query('userPostState')
-      .withIndex('by_user_and_post', q => q.eq('userId', userId).eq('postId', postId))
-      .unique()
-    if (state) await ctx.db.patch(state._id, { commentDraft: draft })
-    else await ctx.db.insert('userPostState', { userId, postId, commentDraft: draft })
+    await saveCommentDraftHandler(ctx, userId, postId, draft)
   }
 })
 
@@ -244,13 +271,14 @@ export const incrementCommentCount = internalMutation({
     })
 
     // backlog/R21 — the per-viewer state that starts the 24 h "done" window. Upsert like
-    // saveCommentDraft: the row may already hold a draft or a reaction.
+    // saveCommentDraft: the row may already hold a draft or a reaction. Saving the submitted text as
+    // the draft means reopening the comment box shows what the member actually posted.
     const state = await ctx.db
       .query('userPostState')
       .withIndex('by_user_and_post', q => q.eq('userId', actorId).eq('postId', postId))
       .unique()
-    if (state) await ctx.db.patch(state._id, { commentedAt: now })
-    else await ctx.db.insert('userPostState', { userId: actorId, postId, commentedAt: now })
+    if (state) await ctx.db.patch(state._id, { commentedAt: now, commentDraft: comment })
+    else await ctx.db.insert('userPostState', { userId: actorId, postId, commentedAt: now, commentDraft: comment })
 
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
@@ -305,9 +333,9 @@ export const incrementLikeCount = internalMutation({
 })
 
 /**
- * backlog/R21 — "Hide now": the post leaves the viewer's feed at once instead of after 24 h.
- * Only for a post the viewer already reacted to or commented on (there is no hide for untouched
- * posts, and no unhide — /history keeps the record). Idempotent: a second call changes nothing.
+ * backlog/R21 — "Hide now": the post leaves the viewer's feed at once instead of after 24 h. Any
+ * post can be hidden, touched or not; there is no unhide — /history keeps the record. Idempotent: a
+ * second call changes nothing.
  */
 export const hidePost = mutation({
   args: { sessionToken: v.string(), postId: v.id('posts') },
@@ -317,8 +345,12 @@ export const hidePost = mutation({
       .query('userPostState')
       .withIndex('by_user_and_post', q => q.eq('userId', user._id).eq('postId', postId))
       .unique()
-    if (!state || !canHide(state)) throw new ConvexError('NOT_INTERACTED')
-    if (state.hiddenAt === undefined) await ctx.db.patch(state._id, { hiddenAt: Date.now() })
+    const now = Date.now()
+    if (state) {
+      if (state.hiddenAt === undefined) await ctx.db.patch(state._id, { hiddenAt: now })
+    } else {
+      await ctx.db.insert('userPostState', { userId: user._id, postId, hiddenAt: now })
+    }
     return null
   }
 })
@@ -341,12 +373,12 @@ export const commentOnPost = action({
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     assertCanEngage(user)
 
-    // Rate limit: 20 comments/hour (admins are exempt)
+    // Rate limit: 100 comments/hour (admins are exempt)
     if (!user.isAdmin) {
       await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
         userId: user._id,
         action: 'commentOnPost',
-        maxPerHour: 20
+        maxPerHour: 100
       })
     }
 
@@ -376,12 +408,12 @@ export const reactToPost = action({
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     assertCanEngage(user)
 
-    // Rate limit: 30 reactions/hour (admins are exempt)
+    // Rate limit: 100 reactions/hour (admins are exempt)
     if (!user.isAdmin) {
       await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
         userId: user._id,
         action: 'reactToPost',
-        maxPerHour: 30
+        maxPerHour: 100
       })
     }
 
@@ -494,7 +526,7 @@ const historyPostValidator = v.object({
 /** One `HistoryRow` as `toHistoryRow` (lib/history.ts) returns it — the exact return shape. */
 const historyRowValidator = v.object({
   id: v.string(),
-  kind: v.union(v.literal('reaction'), v.literal('comment')),
+  kind: v.union(v.literal('reaction'), v.literal('comment'), v.literal('ai_draft')),
   reaction: v.optional(reactionValidator),
   comment: v.optional(v.string()),
   createdAt: v.number(),

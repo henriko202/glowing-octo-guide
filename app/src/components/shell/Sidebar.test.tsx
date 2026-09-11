@@ -69,9 +69,9 @@ describe('Sidebar', () => {
 describe('Sidebar trial card (R06)', () => {
   it('shows the trial card while trialing', () => {
     renderSidebar()
-    expect(screen.getByText(/12/)).toBeInTheDocument()
-    // Scoped to "12/50" together (not a bare /50/): shell.trialGoal's own literal "starts at 50"
-    // clause also renders "50" as a separate text node, so an unscoped /50/ match is ambiguous.
+    // Scoped to "12/50" together (not a bare /12/ or /50/): the same card renders the trial end date
+    // — whose day can be 12 on some calendar days — and shell.trialGoal's own literal "starts at 50"
+    // clause renders "50" as a separate text node, so both loose matches are ambiguous.
     expect(screen.getByText(/12\s*\/\s*50/)).toBeInTheDocument()
   })
 

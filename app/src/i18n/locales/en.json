@@ -74,7 +74,11 @@
     "doneCommented": "Commented",
     "doneBoth": "Reacted · commented",
     "leavesIn": "Leaves your feed in {{hours}} h",
+    "hide": "Hide",
     "hideNow": "Hide now",
+    "hideConfirmTitle": "Hide this post?",
+    "hideConfirmBody": "It will be removed from your feed permanently. You can't undo this.",
+    "hideConfirmCta": "Hide post",
     "caughtUpTitle": "You're caught up",
     "caughtUpBody": "Posts you've reacted to or commented on leave after 24 hours. New posts appear as members share them.",
     "inviteLink": "Invite a peer",
@@ -82,7 +86,7 @@
       "title": "Getting started",
       "signedIn": "Signed in with LinkedIn",
       "firstPost": "Share a post",
-      "reactTwice": "React to two posts"
+      "reactTwice": "React to or generate a comment on two posts"
     },
     "filter": {
       "toggle": "Filter feed",
@@ -96,7 +100,7 @@
       "selectPlaceholder": "Select…",
       "noResults": "No results."
     },
-    "viewGeneratedComment": "View generated comment"
+    "viewGeneratedComment": "View your comment"
   },
   "myPosts": {
     "featuredPill": "{{used}} of {{limit}} featured this month",
@@ -167,9 +171,9 @@
     "language": "Comment language",
     "languageAuto": "Auto — match the post",
     "generateError": "Couldn't generate a comment. Please try again.",
-    "generatedComment": "Generated comment",
+    "generatedComment": "Your comment",
     "loadingSaved": "Loading saved comment…",
-    "noSavedComment": "No generated comment was saved for this post.",
+    "noSavedComment": "No comment was saved for this post.",
     "reopenLinkedIn": "Comment on LinkedIn again",
     "closeSaved": "Close"
   },
@@ -459,7 +463,7 @@
   },
   "recap": {
     "title": "Recap",
-    "lead": "See the reactions and comments you've made and received, plus your plan usage.",
+    "lead": "See the reactions and comments you made and received, plus the AI drafts you generated and your plan usage.",
     "window": {
       "7d": "Last 7 days",
       "30d": "Last 30 days",
@@ -471,6 +475,8 @@
     "reactionsCount_other": "{{count}} reactions",
     "commentsCount_one": "{{count}} comment",
     "commentsCount_other": "{{count}} comments",
+    "draftsCount_one": "{{count}} AI draft",
+    "draftsCount_other": "{{count}} AI drafts",
     "postsCount_one": "across {{count}} post",
     "postsCount_other": "across {{count}} posts",
     "delta": "{{delta}} vs the previous {{days}} days",
@@ -480,7 +486,7 @@
     "postUsage": "{{total}} of {{cap}} interactions",
     "noPosts": "No posts added in this window. Posts you share show up here with their interaction count.",
     "emptyTitle": "Nothing recorded in the last {{days}} days",
-    "emptyBody": "Your first reaction or comment in the feed shows up here, along with what your posts receive.",
+    "emptyBody": "Your first reaction, comment or AI draft in the feed shows up here, along with what your posts receive.",
     "emptyCta": "Go to the feed",
     "honest": "This recap only includes interactions recorded in the app; it doesn't read or estimate your SSI.",
     "salesNav": "Check your SSI in Sales Navigator:",
@@ -489,8 +495,9 @@
   },
   "history": {
     "title": "History",
-    "lead": "Every reaction and comment you recorded here.",
+    "lead": "Every reaction, comment and AI draft you recorded here.",
     "commented": "Commented",
+    "aiDrafted": "AI comment drafted",
     "by": "by {{name}}",
     "removed": "Post removed",
     "showMore": "Show more",

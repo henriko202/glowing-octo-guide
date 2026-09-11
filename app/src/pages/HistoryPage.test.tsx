@@ -70,6 +70,25 @@ describe('HistoryPage', () => {
     expect(mockPaginated.loadMore).toHaveBeenCalledWith(20)
   })
 
+  it('renders an AI draft row with its label and the draft text', () => {
+    mockPaginated = {
+      results: [
+        {
+          id: 'i4',
+          kind: 'ai_draft',
+          comment: 'A drafted comment.',
+          createdAt: Date.now(),
+          post: { id: 'p3', linkedinPostUrn: 'urn:li:share:3', excerpt: 'Target', authorName: 'Cy', removed: false }
+        }
+      ],
+      status: 'Exhausted',
+      loadMore: vi.fn()
+    }
+    renderPage()
+    expect(screen.getByText('AI comment drafted')).toBeInTheDocument()
+    expect(screen.getByText('A drafted comment.')).toBeInTheDocument()
+  })
+
   it('expands a long comment on demand', () => {
     mockPaginated = {
       results: [{ ...ROWS[1], comment: 'x'.repeat(300) }],

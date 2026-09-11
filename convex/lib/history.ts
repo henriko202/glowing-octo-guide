@@ -5,7 +5,7 @@ import { excerpt } from './recap'
 
 export interface HistoryRow {
   id: string
-  kind: 'reaction' | 'comment'
+  kind: 'reaction' | 'comment' | 'ai_draft'
   reaction?: Reaction
   comment?: string
   createdAt: number
@@ -21,7 +21,7 @@ export interface HistoryRow {
 
 interface InteractionDoc {
   _id: string
-  kind: 'reaction' | 'comment'
+  kind: 'reaction' | 'comment' | 'ai_draft'
   reaction?: Reaction
   comment?: string
   createdAt: number

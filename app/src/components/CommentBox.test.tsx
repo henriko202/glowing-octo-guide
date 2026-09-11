@@ -38,7 +38,7 @@ describe('saved comment', () => {
         commented
       />
     )
-    expect(screen.getByRole('textbox', { name: /generated comment/i })).toHaveValue(mocks.draft)
+    expect(screen.getByRole('textbox', { name: /your comment/i })).toHaveValue(mocks.draft)
     expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /comment on linkedin again/i }))
     await waitFor(() => expect(mocks.open).toHaveBeenCalledWith(props.postUrl))
@@ -68,7 +68,7 @@ describe('saved comment', () => {
         commented
       />
     )
-    expect(screen.getByText(/no generated comment was saved/i)).toBeInTheDocument()
+    expect(screen.getByText(/no comment was saved for this post/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /comment on linkedin again/i }))
     await waitFor(() => expect(mocks.open).toHaveBeenCalledWith(props.postUrl))
     expect(mocks.copy).not.toHaveBeenCalled()

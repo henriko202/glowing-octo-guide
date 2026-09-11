@@ -42,14 +42,25 @@ describe('countInteractions', () => {
       row({ _creationTime: 200, postId: 'p3' }),
       row({ _creationTime: 99, postId: 'p4' })
     ]
-    expect(countInteractions(rows, 100, 200)).toEqual({ reactions: 2, comments: 1, posts: 2, total: 3 })
+    expect(countInteractions(rows, 100, 200)).toEqual({ reactions: 2, comments: 1, drafts: 0, posts: 2, total: 3 })
     expect(countInteractions(rows, 200, Number.POSITIVE_INFINITY)).toEqual({
       reactions: 1,
       comments: 0,
+      drafts: 0,
       posts: 1,
       total: 1
     })
-    expect(countInteractions([], 0, 1)).toEqual({ reactions: 0, comments: 0, posts: 0, total: 0 })
+    expect(countInteractions([], 0, 1)).toEqual({ reactions: 0, comments: 0, drafts: 0, posts: 0, total: 0 })
+  })
+
+  it('files ai_draft rows under drafts, never comments, and counts them in total', () => {
+    const rows = [
+      row({ _creationTime: 100, postId: 'p1' }),
+      row({ _creationTime: 100, postId: 'p1', kind: 'comment' }),
+      row({ _creationTime: 100, postId: 'p2', kind: 'ai_draft' }),
+      row({ _creationTime: 100, postId: 'p3', kind: 'ai_draft' })
+    ]
+    expect(countInteractions(rows, 0, 200)).toEqual({ reactions: 1, comments: 1, drafts: 2, posts: 3, total: 4 })
   })
 })
 

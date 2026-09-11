@@ -1,6 +1,6 @@
 // app/src/pages/FeedPage.test.tsx
 import type { ReactNode } from 'react'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FeedPage from './FeedPage'
 
@@ -17,12 +17,13 @@ vi.mock('../convex', () => ({
 
 let mockQueryReturns: Record<string, unknown> = {}
 let mockPaginated: { results: unknown[]; status: string; loadMore: ReturnType<typeof vi.fn> }
+let mockHidePost: ReturnType<typeof vi.fn>
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
   usePaginatedQuery: vi.fn(() => mockPaginated),
   useAction: vi.fn(() => async () => {}),
-  useMutation: vi.fn(() => vi.fn(async () => {}))
+  useMutation: vi.fn(() => mockHidePost)
 }))
 
 // FeedPage always mounts CardGateDialog (and, for a gated member, CardGateBanner), both of which
@@ -44,7 +45,16 @@ vi.mock('@tanstack/react-virtual', () => ({
 }))
 
 vi.mock('../components/PostCard', () => ({
-  default: ({ post }: { post: { _id: string } }) => <article data-testid={`post-${post._id}`} />
+  default: ({ post, onHide }: { post: { _id: string }; onHide?: () => void }) => (
+    <article data-testid={`post-${post._id}`}>
+      <button
+        type="button"
+        onClick={onHide}
+      >
+        Hide
+      </button>
+    </article>
+  )
 }))
 
 function renderPage() {
@@ -53,6 +63,7 @@ function renderPage() {
 
 beforeEach(() => {
   sessionStorage.setItem('sessionToken', 'tok')
+  mockHidePost = vi.fn(async () => {})
   mockPaginated = { results: [], status: 'Exhausted', loadMore: vi.fn() }
   mockQueryReturns = {
     'users.getMe': { tier: 'starter', subscriptionStatus: 'trialing' },
@@ -200,5 +211,35 @@ describe('FeedPage feed hygiene (R21)', () => {
     mockPaginated = { ...mockPaginated, results: [], status: 'CanLoadMore' }
     rerender(<FeedPage />)
     expect(loadMore).toHaveBeenCalledTimes(6)
+  })
+})
+
+describe('FeedPage hide confirmation', () => {
+  beforeEach(() => {
+    mockPaginated = { results: [{ _id: 'p1' }, { _id: 'p2' }], status: 'Exhausted', loadMore: vi.fn() }
+  })
+
+  it('opens the confirmation dialog from a card hide control without hiding yet', () => {
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide' })[0])
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Hide this post?')).toBeInTheDocument()
+    expect(mockHidePost).not.toHaveBeenCalled()
+  })
+
+  it('closes on Cancel without hiding', () => {
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide' })[0])
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(mockHidePost).not.toHaveBeenCalled()
+  })
+
+  it('hides the targeted post on confirm and closes the dialog', async () => {
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide' })[1])
+    fireEvent.click(screen.getByRole('button', { name: 'Hide post' }))
+    await waitFor(() => expect(mockHidePost).toHaveBeenCalledWith({ sessionToken: 'tok', postId: 'p2' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 })

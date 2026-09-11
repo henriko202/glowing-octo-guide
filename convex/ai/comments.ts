@@ -24,12 +24,13 @@ export const generateComment = action({
     // before the rate limiter so a blocked user never consumes quota.
     assertCanEngage(user)
 
-    // Rate limit: 30 comment drafts/hour (admins exempt) — same budget shape as reactToPost.
+    // Rate limit: 100 comment drafts/hour (admins exempt) — the same budget as the 100/h tap
+    // actions, even though every draft spends on OpenRouter.
     if (!user.isAdmin) {
       await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
         userId: user._id,
         action: 'generateComment',
-        maxPerHour: 30
+        maxPerHour: 100
       })
     }
 

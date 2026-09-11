@@ -17,6 +17,8 @@ export const EXCERPT_LENGTH = 140
 export interface RecapCounts {
   reactions: number
   comments: number
+  // AI drafts count as a made interaction but are deliberately NOT comments (nothing was posted).
+  drafts: number
   posts: number // distinct posts touched
   total: number
 }
@@ -29,7 +31,7 @@ export interface WindowBounds {
 
 export interface InteractionLike {
   _creationTime: number
-  kind: 'reaction' | 'comment'
+  kind: 'reaction' | 'comment' | 'ai_draft'
   postId: string
   userId: string // always present (userInteractions.userId is required); authorId is the optional one
   authorId?: string
@@ -53,13 +55,15 @@ export function countInteractions(rows: InteractionLike[], from: number, to: num
   const posts = new Set<string>()
   let reactions = 0
   let comments = 0
+  let drafts = 0
   for (const r of rows) {
     if (r._creationTime < from || r._creationTime >= to) continue
     if (r.kind === 'reaction') reactions += 1
+    else if (r.kind === 'ai_draft') drafts += 1
     else comments += 1
     posts.add(r.postId)
   }
-  return { reactions, comments, posts: posts.size, total: reactions + comments }
+  return { reactions, comments, drafts, posts: posts.size, total: reactions + comments + drafts }
 }
 
 /** "Received" never counts what the author did on their own post. */

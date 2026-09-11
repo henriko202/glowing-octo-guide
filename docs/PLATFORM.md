@@ -719,26 +719,29 @@ Index: `by_enabled_and_created [enabled, createdAt]` — the viewer query walks 
 
 #### `userInteractions` — per-user engagement log
 
-One row per reaction or comment a user made on a post, written **inside** `incrementLikeCount` / `incrementCommentCount`
-(`convex/interactions.ts`) in the **same transaction** as the counter patch, so the log and the aggregate
-(`posts.likeCount` / `commentCount`) can never drift. This log is the authoritative source for the **recap** (§11,
-`interactions.getRecap`) and the **history page** (§11, `interactions.listMyInteractions`), and it powers the **DSR
-export** (§13B — included in the user's data bundle, deleted in the erasure cascade).
+One row per reaction, comment, or **first AI comment draft** a user made on a post, written **inside**
+`incrementLikeCount` / `incrementCommentCount` / `saveCommentDraft` (`convex/interactions.ts`) in the **same
+transaction**
+as any counter patch, so the log and the aggregate (`posts.likeCount` / `commentCount`) can never drift. This log is the
+authoritative source for the **recap** (§11, `interactions.getRecap`) and the **history page** (§11,
+`interactions.listMyInteractions`), and it powers the **DSR export** (§13B — included in the user's data bundle, deleted
+in the erasure cascade).
 
-| Field       | Type                      | Req | Meaning                                                |
-|-------------|---------------------------|:---:|--------------------------------------------------------|
-| `userId`    | `id('users')`             | ✓  | Who reacted / commented (the "made" side).             |
-| `postId`    | `id('posts')`             | ✓  | The target post.                                       |
-| `authorId`  | `id('users')`             |  –  | The post's author at write time (the "received" side). |
-| `kind`      | `'reaction' \| 'comment'` | ✓  | Which interaction this row records.                    |
-| `reaction`  | enum                      |  –  | Reaction value (set when `kind === 'reaction'`).       |
-| `comment`   | string                    |  –  | Comment text (set when `kind === 'comment'`).          |
-| `createdAt` | number                    | ✓  | Interaction timestamp (ms).                            |
+| Field       | Type                                    | Req | Meaning                                                                         |
+|-------------|-----------------------------------------|:---:|---------------------------------------------------------------------------------|
+| `userId`    | `id('users')`                           | ✓  | Who reacted / commented / drafted (the "made" side).                            |
+| `postId`    | `id('posts')`                           | ✓  | The target post.                                                                |
+| `authorId`  | `id('users')`                           |  –  | The post's author at write time (the "received" side). Never set on `ai_draft`. |
+| `kind`      | `'reaction' \| 'comment' \| 'ai_draft'` | ✓  | Which interaction this row records.                                             |
+| `reaction`  | enum                                    |  –  | Reaction value (set when `kind === 'reaction'`).                                |
+| `comment`   | string                                  |  –  | Submitted comment text (`'comment'`) or the generated draft (`'ai_draft'`).     |
+| `createdAt` | number                                  | ✓  | Interaction timestamp (ms).                                                     |
 
 `authorId` is **optional** because the field was added on 2026‑09‑07: rows written before that date carry no author and
 are therefore invisible to the `by_author` read, i.e. excluded from every "received" count. Dev data is disposable and
 prod has none, so no backfill was run (see [§19](#19-known-discrepancies-dead-code--roadmap) on the widen-not-backfill
-convention).
+convention). `ai_draft` rows (added 2026‑09‑11) never carry an `authorId`: generating a draft is the viewer's own
+activity, not engagement the author received, so it stays out of `by_author` and the "received" recap entirely.
 
 Indexes: `by_user [userId]` (DSR export, a user's activity, the history page), `by_post [postId]` (erasure cascade —
 §13B), `by_author [authorId]` (the recap's "received" side).
@@ -748,21 +751,25 @@ Indexes: `by_user [userId]` (DSR export, a user's activity, the history page), `
 One lazily-created row per (user, post), distinct from the append-only `userInteractions` log. Holds **current** state:
 `reactedAt` (set on the user's first reaction so a repeat doesn't double-count / double-bill — a member holds at most
 one reaction per post), `commentedAt` / `hiddenAt` (the **R21** 24-hour feed-hygiene stamps, see
-[§11](#11-feed--engagement)) and `commentDraft` (the last AI-generated comment for the post, reloaded into `CommentBox`
-for reuse/regeneration). Per-user data: included in the DSR export and deleted in the erasure cascade (§13B).
+[§11](#11-feed--engagement)), `commentDraft` (the text the comment box reloads: the last AI draft, replaced by the
+member's submitted text on submit) and `aiDraftedAt` (set on the first AI draft, the per-post dedupe for the counted
+`ai_draft` interaction). Per-user data: included in the DSR export and deleted in the erasure cascade (§13B).
 
-| Field          | Type          | Req | Meaning                                                        |
-|----------------|---------------|:---:|----------------------------------------------------------------|
-| `userId`       | `id('users')` | ✓  | Owner of the state row.                                        |
-| `postId`       | `id('posts')` | ✓  | The target post.                                               |
-| `reactedAt`    | number        |  –  | Set on the first reaction; presence = already counted (dedup). |
-| `commentedAt`  | number        |  –  | **R21** — set by `incrementCommentCount` on the Comment tap.   |
-| `hiddenAt`     | number        |  –  | **R21** — set by `interactions.hidePost`. No unhide.           |
-| `commentDraft` | string        |  –  | Last AI-generated comment for the post (reuse/regenerate).     |
+| Field          | Type          | Req | Meaning                                                                  |
+|----------------|---------------|:---:|--------------------------------------------------------------------------|
+| `userId`       | `id('users')` | ✓  | Owner of the state row.                                                  |
+| `postId`       | `id('posts')` | ✓  | The target post.                                                         |
+| `reactedAt`    | number        |  –  | Set on the first reaction; presence = already counted (dedup).           |
+| `commentedAt`  | number        |  –  | **R21** — set by `incrementCommentCount` on the Comment tap.             |
+| `hiddenAt`     | number        |  –  | **R21** — set by `interactions.hidePost`. No unhide.                     |
+| `commentDraft` | string        |  –  | Text the comment box reloads (AI draft, replaced by the submitted text). |
+| `aiDraftedAt`  | number        |  –  | First AI draft for this post — the counted `ai_draft` dedupe.            |
 
-`commentedAt` and `hiddenAt` are **widen-only, with no backfill**: rows written before 2026‑09‑07 have neither, so a
-pre-existing reaction shows the R21 done footer only because `reactedAt` was already there, and comments recorded
-before that date do not.
+`commentedAt`, `hiddenAt` and `aiDraftedAt` are **widen-only, with no backfill**: rows written before their date
+(2026‑09‑07
+for the R21 stamps, 2026‑09‑11 for `aiDraftedAt`) have none, so a pre-existing reaction shows the R21 done footer only
+because `reactedAt` was already there, comments recorded before that date do not, and a post whose draft was generated
+before that date is not counted as an `ai_draft` interaction.
 
 Indexes: `by_user_and_post [userId, postId]` — the dedup/draft lookups, the per-page R21 viewer-state read, and the
 by-user DSR/erasure scan; `by_post [postId]` — erasure of other members' state on a deleted member's posts
@@ -3078,7 +3085,11 @@ counter commit together or not at all, so the aggregate and the log cannot drift
 deduped**: `incrementLikeCount` sets `userPostState.reactedAt` on the first reaction and no-ops on
 repeats (no count, billing, or log) — a member holds at most one reaction per post; the action relays the mutation's
 `counted` flag so the client can tell a first tap from a repeat. The AI **comment draft** is saved to
-`userPostState.commentDraft` on generate and reloaded into `CommentBox` on open (reuse or regenerate). Counts propagate
+`userPostState.commentDraft` on generate and reloaded into `CommentBox` on open (reuse or regenerate); submitting the
+comment replaces it with the member's final text, so the reopened box shows what they actually posted, not the
+untouched model output. Generating is itself a counted interaction **once per post**: the first draft inserts an
+`ai_draft` row and bumps the trial `made` counter ([§11A](#11a-ai-reaction--comment-assistance)), while regenerations
+only refresh the draft — the post's count, cap and `commentedAt` are never touched by a draft. Counts propagate
 to all viewers in real time via Convex reactivity. The interaction‑limit flip decision is the pure helper
 `lib/interactionLimit.ts`
 `shouldFlipInteractionLimit(likeCount, commentCount, interactionsPerPost, alreadyReached)`; both increment mutations
@@ -3114,9 +3125,9 @@ at the new number — not a repeat of the first.
 
 | Action                                             | Validation                                                                 | Rate limit | Effect (no LinkedIn call)                |
 |----------------------------------------------------|----------------------------------------------------------------------------|------------|------------------------------------------|
-| `commentOnPost(postId, commentText, sessionToken)` | text ≤ 3000 chars                                                          | 20/hour    | count + `userInteractions` row (one txn) |
-| `reactToPost(postId, reactionType, sessionToken)`  | `reactionType ∈ {LIKE,PRAISE,EMPATHY,INTEREST,APPRECIATION,ENTERTAINMENT}` | 30/hour    | same, deduped — repeat tap is a no-op    |
-| `hidePost(postId, sessionToken)`                   | `canHide` — the viewer must have reacted/commented                         | –          | **R21** — stamps `hiddenAt`; idempotent  |
+| `commentOnPost(postId, commentText, sessionToken)` | text ≤ 3000 chars                                                          | 100/hour   | count + `userInteractions` row (one txn) |
+| `reactToPost(postId, reactionType, sessionToken)`  | `reactionType ∈ {LIKE,PRAISE,EMPATHY,INTEREST,APPRECIATION,ENTERTAINMENT}` | 100/hour   | same, deduped — repeat tap is a no-op    |
+| `hidePost(postId, sessionToken)`                   | any post the viewer can see                                                | –          | **R21** — stamps `hiddenAt`; idempotent  |
 
 > The feed's reaction control is a **single button** that _displays_ the AI‑suggested reaction
 > (`posts.suggestedReaction`, default `LIKE`) + count as a visual cue (reaction name in its tooltip)
@@ -3147,8 +3158,9 @@ sequenceDiagram
 
 A post the viewer has already handled is done work. It stays on screen for **24 hours** as a "done" card — so the tap
 has a visible result, and so a mis-tap is still recoverable in context — and then leaves _that viewer's_ feed.
-"Hide now" makes it leave immediately. All of it is per-viewer: nothing about the post, its counts, its cap or the
-author's view of it changes.
+"Hide" makes it leave immediately, on a done card or any other post the viewer wants out of the way (the card asks for
+confirmation first, because there is no unhide). All of it is per-viewer: nothing about the post, its counts, its cap or
+the author's view of it changes.
 
 ```mermaid
 flowchart TD
@@ -3157,9 +3169,9 @@ flowchart TD
     DONE --> W{"viewerPostStatus(state, now)"}
     W -->|" &lt; 24 h "| DONE
     W -->|" ≥ 24 h "| GONE["'gone' — the open feed removes it at hidesAt;<br/>subsequent feed queries also exclude it"]
-    DONE -->|" View generated comment "| SAVED["CommentBox reloads the saved generated text"]
+    DONE -->|" View your comment "| SAVED["CommentBox reloads the last submitted text (or the AI draft before submit)"]
     SAVED -->|" Comment on LinkedIn again "| LINKEDIN["Copy text and reopen LinkedIn;<br/>no new count or expiry reset"]
-    DONE -->|" Hide now "| HIDE["interactions.hidePost → hiddenAt<br/>(ConvexError NOT_INTERACTED unless canHide)"]
+    DONE -->|" Hide "| HIDE["interactions.hidePost → hiddenAt<br/>(any post, confirm dialog first)"]
     HIDE --> GONE
     GONE --> EMPTY{"page empty after ≤ 5 auto-loads?"}
     EMPTY -->|" no "| FEED["normal feed"]
@@ -3177,16 +3189,19 @@ without a `?? 0` sentinel, which `Math.max` would otherwise floor at zero and sw
 
 - `viewerPostStatus(row, now)` → `'fresh'` (no row, or a row with neither stamp — the normal card), `'done'`
   (interacted, inside `INTERACTED_TTL_MS` = 24 h), `'gone'` (hidden, or the window elapsed).
-- `canHide(row)` — Hide exists **only** on a post the viewer interacted with. It is not a way to curate untouched posts,
-  so `interactions.hidePost` throws `ConvexError('NOT_INTERACTED')` otherwise. Hiding is idempotent (a second call
-  changes nothing) and there is **no unhide** — `/history` keeps the record either way.
+- `canHide(row)` — **removed 2026‑09‑11.** Hide is no longer restricted to interacted posts: the feed's hide control
+  sits on every card (fresh and done), `FeedPage` confirms it in a destructive-action modal, and then
+  `interactions.hidePost` stamps `hiddenAt` on the viewer's row — creating it if the post was untouched. Hiding is
+  idempotent (a second call changes nothing) and there is **no unhide** — `/history` keeps the record either way.
 - `toFeedViewerState(row)` — the `{ reacted, commented, hidesAt }` the card renders. It deliberately takes **no `now`**:
   `hidesAt` is an absolute instant (`lastInteractedAt + INTERACTED_TTL_MS`), and the client turns it into "in N h".
 
 The card's remaining action stays live: a viewer who reacted still sees the Comment button, and vice versa.
-Commented posts also offer **View generated comment**. This opens the saved AI draft read-only with **Comment on
+Commented posts also offer **View your comment**. This opens the saved text read-only with **Comment on
 LinkedIn again**, which copies the text and reopens the post without recording another interaction
-or resetting the 24-hour window. A missing saved draft gets an explicit empty state and still permits reopening
+or resetting the 24-hour window. The text is the last submitted comment (`incrementCommentCount` writes it to
+`commentDraft`), so an edit the member made before posting is what comes back; a post whose only saved text is an AI
+draft shows that instead. A missing saved text gets an explicit empty state and still permits reopening
 LinkedIn. Clipboard failure leaves the text available for manual copying.
 
 `FeedPage` filters out cards at `viewerState.hidesAt`, including while the feed stays open without database updates.
@@ -3203,7 +3218,8 @@ feed they are not being shown. `FeedPage` subscribes to it **only** while the fe
 page comes back with posts. Empty because everything was handled → the caught-up state (which carries the R19 invite
 link); empty because nothing exists → the R05 `EmptyFeed` checklist.
 
-`post_hidden { after }` — hours between the interaction and the tap on Hide now — is the only event R21 emits; see
+`post_hidden { interacted, after }` — whether the hide followed an interaction, and the hours between that interaction
+and the tap (null when there was none) — is the only event R21 emits; see
 [§17](#17-security-posture).
 
 ### Reading the log back — recap & history (R15 / R16)
@@ -3259,7 +3275,8 @@ caller keeps its own window; `WINDOW_MS` defaults to 1h. The component performs 
 one transaction, closing the read‑modify‑write race the former hand‑rolled `rateLimits` table admitted (two concurrent
 taps could both read `count = N-1` and both write `N`). `checkRateLimit` accepts an optional `windowMs` + `windowLabel`
 (defaults to 1h / "hour") for non‑hourly windows. Limits: `submitPost` 10/h,
-`commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h, `profile_refresh` 2/day. The `profile_refresh` budget
+`commentOnPost` 100/h, `reactToPost` 100/h, `generateComment` 100/h, `profile_refresh` 2/day. The `profile_refresh`
+budget
 is **shared** by the manual Refresh button and the auto-scrape on identifier change; the latter uses the non-throwing
 `tryConsumeRateLimit` so an exhausted budget never blocks saving the identifier. **Admins (`user.isAdmin`) bypass the
 rate limit on `commentOnPost`, `reactToPost`, `generateComment`, and `profile_refresh`** — those call sites
@@ -3366,7 +3383,7 @@ confirms or changes before `reactToPost` sends the chosen reaction (§11).
 `api.ai.comments.generateComment({ sessionToken, postId, language? })` → `{ comment }`. It auth-checks, then **
 `assertCanEngage`** — AI drafting requires an active subscription (the same card-on-file gate as `commentOnPost`:
 `none`/`past_due` are blocked, all tiers otherwise pass, admins bypass), so the OpenRouter spend is never reachable
-without a subscription. It then rate-limits (30/h, admins exempt), loads the post through the shared
+without a subscription. It then rate-limits (100/h, admins exempt), loads the post through the shared
 `internal.interactions.getEngageablePost` gate (so a hidden / limit-reached / not-visible post is rejected exactly as in
 `commentOnPost` / `reactToPost` — see the per-post engageability gate in §11) plus the author's public name/headline
 (`internal.users.getPublicAuthor`), resolves the language, builds the comment prompt (≤2 paragraphs, concise, no
@@ -3376,13 +3393,17 @@ for reuse/regeneration — per-post scope avoids the cross-post text reuse that 
 `CommentBox` prefills the textarea (Generate / Regenerate) for the user to edit, then posts via the unchanged
 `commentOnPost`.
 
-**Generating a draft counts as nothing** (R15 decision, 2026‑09‑05). `generateComment` writes no `userInteractions`
-row, bumps no `commentCount`, and moves no trial counter — only the member's **Comment** tap does, inside
-`incrementCommentCount` ([§11](#11-feed--engagement)). The app cannot observe a draft landing on LinkedIn, so a draft
-the member never posts is not an interaction; keeping the generator counter-free also stops a 30-per-hour budget from
-being turned into engagement on someone else's post cap. The recap and the history
-([§14](#14-frontend--authenticated-app-app))
-therefore never show a number the member did not create with a tap.
+**The first draft on a post counts as an interaction** (product decision 2026‑09‑11, replacing the R15 "counts as
+nothing" rule of 2026‑09‑05). `saveCommentDraft` writes one `userInteractions` row (`kind: 'ai_draft'`, the draft text
+in
+`comment`, **no `authorId`**) and calls `bumpTrialInteraction(made)` the first time a draft is generated for that (user,
+post); `userPostState.aiDraftedAt` is the dedupe, so regenerating does not add a second row or a second trial
+bump. It still bumps no `commentCount` and consumes no author cap: the app cannot observe a draft landing on LinkedIn,
+so a draft is the member's own activity, never engagement the author received, and the 100-per-hour generation budget
+can still never be turned into engagement on someone else's post cap. The recap and the history
+([§14](#14-frontend--authenticated-app-app)) show the draft as its own `ai_draft` entry (Recap: a `drafts` part of the
+breakdown; History: an "AI comment drafted" row), separate from the member's comments. Submitting the comment later
+overwrites `commentDraft` with the member's final text, so the box reloads what they actually posted.
 
 ### Comment language
 
@@ -3890,6 +3911,11 @@ flowchart TD
       inviter's **first name only**, at render time, for the one-line gift notice on Billing.
     - `userPostState.commentedAt` / `hiddenAt` — per-viewer engagement timestamps of exactly the same kind as the
       `reactedAt` already in that table, used only for the 24-hour feed-hygiene window ([§11](#11-feed--engagement)).
+- **AI drafts are counted interactions (2026‑09‑11).** The first `generateComment` on a post writes one
+  `userInteractions` row (`kind: 'ai_draft'`, the draft text in `comment`, **no `authorId`**) and sets
+  `userPostState.aiDraftedAt`; regenerations write nothing. `userInteractions` and `userPostState` are already in the
+  DSR export and the erasure cascade, so **no new code path** and no new data category — the draft text is the member's
+  own content on rows the export and the cascade already cover.
 - **Featured-post purchase record (R17)** — `posts.featuredPurchase` (session id, amount, date) and
   `interactionCapBonus` live on the post: exported with it, deleted with it at erasure. The invoice/receipt stays in
   Stripe under the customer (Stripe is a sub-processor already listed). Audit rows `post.featured_purchased` /
@@ -4285,10 +4311,12 @@ sync with the compliance docs and live support inbox.
   the R05 checklist could need it); any gated tap on a `PostCard`
   (`onGated`) opens a shared **`CardGateDialog`** naming the benefit instead of a disabled control — see
   [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c) for the full R04 flow. **R21 (24-hour feed hygiene)** adds three things
-  here: each `PostCard` receives the server's `post.viewerState` and an `onHide` handler calling
-  `interactions.hidePost` (a `NOT_INTERACTED` error is swallowed — the viewer's row is already gone, so the card leaves
-  on the next update anyway — and any other error is toasted through `friendlyError`), and the tap fires
-  `post_hidden { after }` with the whole hours since the interaction; an **auto-load loop** keeps calling `loadMore`
+  here: each `PostCard` receives the server's `post.viewerState` and an `onHide` handler that opens a
+  destructive-action confirmation modal (`feed.hideConfirmTitle` / `feed.hideConfirmBody`, ghost Cancel first, then a
+  destructive `feed.hideConfirmCta`); confirming calls `interactions.hidePost` (any error is toasted through
+  `friendlyError`) and fires
+  `post_hidden { interacted, after }` — `after` is the whole hours since the interaction on a done card, `null` when the
+  post was hidden without one; an **auto-load loop** keeps calling `loadMore`
   while the page is empty and the status is `CanLoadMore`, bounded at `MAX_EMPTY_LOADS` (**5**, ≈100 posts) before the
   manual **Load more** button takes over, because the per-viewer filter can empty a page the index walk still considers
   full — the budget covers one _run_ of empty pages, so any page that comes back with posts resets the counter to `0`,
@@ -4839,14 +4867,20 @@ entry above and [§8](#8-subscriptions--billing)), plus the two LinkedIn‑embed
   in both branches (same `href`/`target`/`rel`); the gated branch just adds `preventDefault` + `onGated('linkedin')`.
   `FeedPage` renders a single shared `CardGateDialog` for whichever control fired `onGated`, driven by the source it
   reported. **R21** adds a `viewerState?: FeedViewerState | null` prop (the server's `{ reacted, commented, hidesAt }`,
-  attached per post by `feed.getFeed` — [§11](#11-feed--engagement)) and an `onHide?: () => void`. When it is present
-  the card renders its **done footer**: a "✓ you reacted / commented / both" line (`feed.doneReacted` /
-  `feed.doneCommented` / `feed.doneBoth`), `feed.leavesIn` with the whole hours left (rounded up and bounded to
-  1–24), and a ghost **Hide now** button. The reaction control disappears after reacting. After commenting, **View
-  generated comment** replaces the initial Comment action and toggles `CommentBox` in read-only review mode.
+  attached per post by `feed.getFeed` — [§11](#11-feed--engagement)) and an `onHide?: () => void`. The footer order is
+  **React first, then Comment / View your comment, then the done marker** — the react control keeps the same place
+  whether or not the viewer has interacted (only a reacted post hides it). When `viewerState` is present the card adds
+  a "✓ you reacted / commented / both" marker (`feed.doneReacted` / `feed.doneCommented` / `feed.doneBoth`) and
+  `feed.leavesIn` with the whole hours left (rounded up and bounded to 1–24); the trailing hide control reads
+  `feed.hideNow` on a done card. On a post without `viewerState` the same slot carries a ghost **`feed.hide`** button,
+  so **every card can be hidden** (the parent confirms before calling `hidePost` — [§11](#11-feed--engagement)). After
+  commenting, **View your comment** replaces the initial Comment action and toggles `CommentBox` in read-only review
+  mode.
   Its label uses the same 13px text size as the Reacted/commented status.
-  That mode reloads `interactions.getCommentDraft`, hides generation controls, and offers **Comment on LinkedIn
-  again**. Reopening copies the draft and hands off to LinkedIn without calling `commentOnPost` again.
+  That mode reloads `interactions.getCommentDraft` — the member's last submitted text, written to `commentDraft` by
+  `incrementCommentCount`, or the AI draft if they never submitted — hides generation controls, and offers **Comment on
+  LinkedIn again**. Reopening copies that text and hands off to LinkedIn without calling
+  `commentOnPost` again.
   `FeedPage` supplies the shared `now` prop and removes expired cards before virtualization, so countdowns and
   empty-feed handling update while the page remains open. English, Portuguese, and Spanish include the saved-comment
   action, loading, empty-state, and close labels.
@@ -4914,7 +4948,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                  | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5198,8 +5232,18 @@ is a second thing to keep in sync with `NO_TRIAL_MESSAGE`, and the gate contradi
 being fixed. Cross-namespace `t()` is already the pattern here — `UpgradeAtLimit` reads `billing.plans.*.name`. Neither
 new key carries `{{days}}`, for the same reason as the three above. No keys were removed.
 
-**State the counting method with the number.** All three files hold **409 keys with arrays counted once** — the same
-files are **419 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
+**AI draft + hide-any keys (2026-09-11):** **7 keys** were added and none removed, so the count below moved:
+
+- **4 `feed.*` keys** for hiding any post: `hide` (the fresh-card button), `hideConfirmTitle`, `hideConfirmBody` and
+  `hideConfirmCta` (the confirmation modal's copy and destructive confirm).
+- **`history.aiDrafted`** — the label on an `ai_draft` history row — and the `recap.draftsCount_one` / `_other` plural
+  pair for the recap tile's breakdown, shown only when the count is above zero.
+- **Three values were reworded in place, keys unchanged:** `feed.viewGeneratedComment` ("View your comment"),
+  `comment.generatedComment` ("Your comment") and `comment.noSavedComment` (a comment was saved, whether generated or
+  typed), because the box now reloads the member's submitted text, not only the AI draft.
+
+**State the counting method with the number.** All three files hold **418 keys with arrays counted once** — the same
+files are **428 string leaves**, the difference being the three `billing.plans.*.features` arrays (4 + 4 + 5 items). En,
 pt and es show **zero drift** under a recursive key-diff in either counting mode, and the same diff compares the
 `{{placeholder}}` set of every leaf — a translated string that drops or renames one is a runtime hole no key-diff
 alone would catch. There is still no automated parity test, so both are run by hand whenever keys change.
@@ -5851,7 +5895,7 @@ The codebase follows a consistent, defensible security model:
   maps any non‑access status (`incomplete`/`unpaid`/`paused`/unknown) to a **non‑active** state so a half‑finished or
   lapsed subscription never grants access; `getTierFromPriceId` fails to `starter`.
 - **Rate limiting** (fixed window per `userId+action`, via the `@convex-dev/rate-limiter` component — atomic
-  check+consume, no race): submitPost 10/h, comment 20/h, react 30/h, profile scrape 2/day (shared by manual Refresh +
+  check+consume, no race): submitPost 10/h, comment 100/h, react 100/h, profile scrape 2/day (shared by manual Refresh +
   auto‑scrape on identifier change). **Admins are exempt** from every rate limit. The billing surface is rate-limited
   too — checkout 10/h, featured-post purchase 10/h, portal 20/h, cancel-flow 10/h, plan-switch 10/h, downgrade undo
   20/h, resume 10/h — and the deletion cycle is bounded at request 3/day, cancel 10/h; these billing and deletion
@@ -5997,10 +6041,13 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
                   last
                   step;
                   a wait that times out fires a Sentry exception instead, never this event.
-                    - `post_hidden` — `FeedPage`, after `interactions.hidePost` resolves (**R21**). Props: **`after`** —
+                    - `post_hidden` — `FeedPage`, after `interactions.hidePost` resolves (**R21**; any card can be
+                      hidden since 2026‑09‑11, behind a confirmation modal). Props: **`interacted`** — whether the
+                      post had a `viewerState` (the viewer had already reacted or commented) — and **`after`** —
                       whole
                       hours
-                      between the interaction and the tap, derived from `INTERACTED_TTL_MS - (hidesAt - now)`. The one
+                      between that interaction and the tap, derived from `INTERACTED_TTL_MS - (hidesAt - now)`, or
+                      `null` when the post was hidden without interacting. The one
                       number
                       R21
                       wants: whether people clear a handled post immediately or leave it to age out.
@@ -6307,7 +6354,8 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                                                                              | [§9](#9-plan-limits-system)                                                                                                                                                                                                                                                                                                              |
 | Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                                                                          | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                                                                                                                                                                                                                                                            |
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                                                                                | [§11](#11-feed--engagement) (+ flows)                                                                                                                                                                                                                                                                                                    |
-| 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `EmptyFeed.tsx`)                                                                                                                                                                    | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
+| 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `app/src/pages/FeedPage.tsx` hide confirm, `EmptyFeed.tsx`)                                                                                                                         | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
+| AI comment drafting (`convex/ai/*`, `interactions.saveCommentDraft` / `commentOnPost`, `CommentBox`, `PostCard` "View your comment", `HistoryPage` / `RecapPage` draft rows)                                                                                                                                    | [§11A](#11a-ai-reaction--comment-assistance), [§11](#11-feed--engagement), [§5](#5-data-model), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                               |
 | Recap & History (`convex/lib/recap.ts`, `convex/lib/history.ts`, `interactions.getRecap` / `listMyInteractions`, `app/src/pages/RecapPage.tsx`, `app/src/pages/HistoryPage.tsx`)                                                                                                                                | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
 | Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                                                                          | [§11B Search & Command Palette](#11b-search--command-palette)                                                                                                                                                                                                                                                                            |
 | Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                                                                           | [§12](#12-admin--moderation)                                                                                                                                                                                                                                                                                                             |
@@ -6329,7 +6377,27 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑09‑10. **The landing is now discoverable by search engines and AI assistants.**
+_Last updated: 2026‑09‑11. **AI drafts now count, every card can be hidden behind a confirmation, submitted
+comments are what the box reloads, React keeps its place, and the tap budgets moved to 100/h.** The first
+`generateComment` on a post writes one `userInteractions` row (`kind: 'ai_draft'`, the draft text, no `authorId`) and
+bumps the trial `made` counter; `userPostState.aiDraftedAt` dedupes so regenerations only refresh `commentDraft`, and
+the post's count, cap and `commentedAt` stay untouched (the R15 "counts as nothing" decision of 2026‑09‑05 is
+superseded). Recap gained a `drafts` bucket (the tile shows it only above zero) and History an "AI comment drafted"
+row. `incrementCommentCount` now writes the member's submitted text to `commentDraft`, so **View your comment**
+reloads what they posted, not the untouched model output — three i18n values reworded, no key renamed. `hidePost` no
+longer requires `canHide` (deleted): every card carries a hide control, a fresh post stores the state row on hide, and
+`FeedPage` confirms in a destructive modal before firing `post_hidden { interacted, after }` (`after` is null on a
+fresh hide). `PostCard`'s footer order is React → comment control → done marker → LinkedIn link → hide, so the react
+button sits at the same x in the normal and commented states (verified in the browser at 1280 and 375 px). Rate limits:
+`commentOnPost` and `reactToPost` 20/30 → **100/h**; `generateComment` 30 → **100/h** too. Locale keys 411 → **418** (
+428
+string leaves). A review pass also corrected copy that the new counting made false (`recap.lead`, `recap.emptyBody`,
+`history.lead` and the `feed.checklist.reactTwice` step now name AI drafts, values only) and the compliance docs, which
+claimed generated drafts were never stored — untrue since the draft feature shipped, and now also incomplete without
+the first-draft `ai_draft` log entry. Sections updated: §5, §11, §11A, §13B, §14, §17, §21. Gates: convex **611/611**,
+app **486/486**, landing **24/24**, convex integration **8/8**, `pnpm verify` exit 0._
+
+_Prior: 2026‑09‑10. **The landing is now discoverable by search engines and AI assistants.**
 `landing/lib/site.ts`
 centralizes the canonical origin (`NEXT_PUBLIC_SITE_URL`, default `https://www.linkintothessi.com`). The Home layout
 emits `metadataBase`, absolute self-canonicals, per-locale SSI keywords (`LinkedIn SSI`, `Social Selling Index`, …),
@@ -6546,10 +6614,13 @@ upgrade mode drops the My Posts line rather than offer a second door, and the no
 plain-text support address, not a `mailto:`. `SUPPORT_EMAIL` moved to `convex/lib/support.ts` so the backend email
 and the app can share one constant, with `app/src/lib/support.ts` now a re-export (§8, §9, §11). **Feed hygiene (R21).**
 `userPostState` gained `commentedAt` and `hiddenAt` (widen-only, no backfill), and `convex/lib/feedHygiene.ts`
-turns them into three pure answers: `viewerPostStatus` (`fresh` / `done` / `gone` at `INTERACTED_TTL_MS` = 24 h),
-`canHide`, and `toFeedViewerState`. `feed.getFeed` reads the viewer's row per page item, drops `gone`, and attaches
-`viewerState` so `PostCard` can render a done footer with "leaves in N h" and a **Hide now** button (
-`interactions.hidePost`). Because the per-viewer filter can empty a page the index walk still considers full,
+turns them into pure answers: `viewerPostStatus` (`fresh` / `done` / `gone` at `INTERACTED_TTL_MS` = 24 h) and
+`toFeedViewerState` (`canHide` was removed on 2026‑09‑11, when every card gained a confirmed Hide). `feed.getFeed`
+reads the viewer's row per page item, drops `gone`, and attaches
+`viewerState` so `PostCard` can render a done footer with "leaves in N h" and a **Hide** control (
+`interactions.hidePost`, which since 2026‑09‑11 accepts any post — an untouched post gets its state row created
+instead of the old `NOT_INTERACTED` refusal). Because the per-viewer filter can empty a page the index walk still
+considers full,
 `FeedPage` auto-loads up to `MAX_EMPTY_LOADS` (5) pages before handing back to the manual button, shows **no** empty
 state while it is settling, and asks the new `feed.getCaughtUp` which empty state is the true one (§5, §11, §14).
 **Invite a peer (R19).** No invites table and no counters — `users` is the log: `inviteCode` and `referredByCode` with
@@ -6861,7 +6932,8 @@ locales now **274** keys in parity. Sections updated: §14. Gates green (convex 
   `app.use(rateLimiter)`; `lib/rateLimit.ts` was rewritten to delegate to it while keeping its three entry points
   identical (`checkRateLimit`, `tryConsumeRateLimit`, and the `checkAndIncrement` internal mutation), so **none of the
   eight call sites changed** — every call passes an inline `{ kind: 'fixed window', rate, period }` config, preserving
-  each caller's window and limit (`submitPost` 10/h, `commentOnPost` 20/h, `reactToPost` 30/h, `generateComment` 30/h,
+  each caller's window and limit (`submitPost` 10/h, `commentOnPost` 100/h, `reactToPost` 100/h, `generateComment`
+  100/h,
   `profile_refresh` 2/day). Erasure: the counters live outside the schema, so the pure `cascadeDeleteUser` can't reach
   them — `processAccountDeletions` now calls the new `resetUserRateLimits` (loops the component's `reset` over
   `RATE_LIMIT_ACTIONS`) on the terminal deletion pass, keeping erasure complete. The `rateLimits` OWNED entry was

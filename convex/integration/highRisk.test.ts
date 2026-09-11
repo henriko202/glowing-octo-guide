@@ -209,4 +209,110 @@ describe('high-risk backend paths', () => {
     const finalCodes = await t.run(async ctx => ctx.db.query('authCodes').collect())
     expect(finalCodes).toHaveLength(0)
   })
+
+  test('hide any post: an untouched post gets one hidden state row, idempotently, with nothing counted', async () => {
+    const t = convexTest(schema, modules)
+    const authorId = await insertUser(t, { linkedinId: 'li-hide-author', name: 'Hide Author' })
+    const viewerId = await insertUser(t, { linkedinId: 'li-hide-viewer', name: 'Hide Viewer' })
+    const postId = await insertPost(t, authorId)
+    const viewerToken = 'integration-hide-token'
+    await t.run(async ctx =>
+      ctx.db.insert('sessions', { token: viewerToken, userId: viewerId, expiresAt: Date.now() + 60_000 })
+    )
+
+    await t.mutation(api.interactions.hidePost, { sessionToken: viewerToken, postId })
+    const first = await t.run(async ctx => {
+      const state = await ctx.db
+        .query('userPostState')
+        .withIndex('by_user_and_post', q => q.eq('userId', viewerId).eq('postId', postId))
+        .unique()
+      const post = await ctx.db.get(postId)
+      return {
+        hiddenAt: state?.hiddenAt,
+        interactions: (
+          await ctx.db
+            .query('userInteractions')
+            .withIndex('by_post', q => q.eq('postId', postId))
+            .collect()
+        ).length,
+        likeCount: post?.likeCount,
+        commentCount: post?.commentCount
+      }
+    })
+    expect(first.hiddenAt).toBeTypeOf('number')
+    expect(first.interactions).toBe(0)
+    expect(first.likeCount).toBe(0)
+    expect(first.commentCount).toBe(0)
+
+    // Idempotent: a second hide keeps the first stamp and adds nothing.
+    await t.mutation(api.interactions.hidePost, { sessionToken: viewerToken, postId })
+    const second = await t.run(async ctx => {
+      const state = await ctx.db
+        .query('userPostState')
+        .withIndex('by_user_and_post', q => q.eq('userId', viewerId).eq('postId', postId))
+        .unique()
+      return { hiddenAt: state?.hiddenAt, states: (await ctx.db.query('userPostState').collect()).length }
+    })
+    expect(second).toEqual({ hiddenAt: first.hiddenAt, states: 1 })
+  })
+
+  test('an AI draft counts once per post, and the submitted comment becomes the reloaded draft', async () => {
+    const t = convexTest(schema, modules)
+    const authorId = await insertUser(t, { linkedinId: 'li-draft-author', name: 'Draft Author' })
+    const viewerId = await insertUser(t, { linkedinId: 'li-draft-viewer', name: 'Draft Viewer' })
+    const postId = await insertPost(t, authorId)
+
+    await t.mutation(internal.interactions.saveCommentDraft, { userId: viewerId, postId, draft: 'First draft' })
+    await t.mutation(internal.interactions.saveCommentDraft, { userId: viewerId, postId, draft: 'Regenerated draft' })
+
+    const afterDrafts = await t.run(async ctx => {
+      const state = await ctx.db
+        .query('userPostState')
+        .withIndex('by_user_and_post', q => q.eq('userId', viewerId).eq('postId', postId))
+        .unique()
+      const rows = await ctx.db
+        .query('userInteractions')
+        .withIndex('by_post', q => q.eq('postId', postId))
+        .collect()
+      const post = await ctx.db.get(postId)
+      return {
+        draft: state?.commentDraft,
+        aiDraftedAt: state?.aiDraftedAt,
+        drafts: rows.filter(r => r.kind === 'ai_draft'),
+        commentCount: post?.commentCount
+      }
+    })
+    // One logged interaction for the first draft, none for the regeneration; the log row carries the
+    // draft text but no authorId (a draft is not engagement the author received).
+    expect(afterDrafts.drafts).toHaveLength(1)
+    expect(afterDrafts.drafts[0]).toMatchObject({ kind: 'ai_draft', comment: 'First draft' })
+    expect(afterDrafts.drafts[0].authorId).toBeUndefined()
+    expect(afterDrafts.aiDraftedAt).toBeTypeOf('number')
+    expect(afterDrafts.draft).toBe('Regenerated draft')
+    expect(afterDrafts.commentCount).toBe(0)
+
+    await t.mutation(internal.interactions.incrementCommentCount, {
+      postId,
+      actorId: viewerId,
+      comment: 'What I actually wrote'
+    })
+    const afterSubmit = await t.run(async ctx => {
+      const state = await ctx.db
+        .query('userPostState')
+        .withIndex('by_user_and_post', q => q.eq('userId', viewerId).eq('postId', postId))
+        .unique()
+      const rows = await ctx.db
+        .query('userInteractions')
+        .withIndex('by_post', q => q.eq('postId', postId))
+        .collect()
+      return {
+        draft: state?.commentDraft,
+        commentedAt: state?.commentedAt,
+        comments: rows.filter(r => r.kind === 'comment').map(r => r.comment)
+      }
+    })
+    expect(afterSubmit.draft).toBe('What I actually wrote')
+    expect(afterSubmit.commentedAt).toBeTypeOf('number')
+    expect(afterSubmit.comments).toEqual(['What I actually wrote'])
+  })
 })

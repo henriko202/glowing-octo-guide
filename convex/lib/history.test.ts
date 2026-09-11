@@ -29,6 +29,24 @@ describe('toHistoryRow', () => {
       }
     })
   })
+  it('maps an ai_draft row with its draft text and no reaction', () => {
+    const draft = { _id: 'i2', kind: 'ai_draft' as const, comment: 'Congrats on the launch', createdAt: 9 }
+    expect(toHistoryRow(draft, post, { name: 'Ana' })).toEqual({
+      id: 'i2',
+      kind: 'ai_draft',
+      reaction: undefined,
+      comment: 'Congrats on the launch',
+      createdAt: 9,
+      post: {
+        id: 'p1',
+        linkedinPostUrn: 'urn:li:share:1',
+        sourceUrl: undefined,
+        excerpt: 'Hello world',
+        authorName: 'Ana',
+        removed: false
+      }
+    })
+  })
   it('marks hidden or deleted posts removed and falls back to an empty author name', () => {
     expect(toHistoryRow(base, { ...post, hidden: true }, null).post?.removed).toBe(true)
     expect(toHistoryRow(base, { ...post, deletedAt: 1 }, null).post?.removed).toBe(true)

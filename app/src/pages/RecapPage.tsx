@@ -48,7 +48,9 @@ function Tile({
         {[
           t('recap.reactionsCount', { count: counts.reactions }),
           t('recap.commentsCount', { count: counts.comments }),
-          t('recap.postsCount', { count: counts.posts })
+          t('recap.postsCount', { count: counts.posts }),
+          // Only shown when present, so the breakdown never carries a permanent "0 AI drafts".
+          ...(counts.drafts > 0 ? [t('recap.draftsCount', { count: counts.drafts })] : [])
         ].join(' · ')}
       </p>
       {previous.total > 0 && (

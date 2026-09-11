@@ -74,7 +74,11 @@
     "doneCommented": "Você comentou",
     "doneBoth": "Você reagiu e comentou",
     "leavesIn": "Sai do seu feed em {{hours}} h",
+    "hide": "Ocultar",
     "hideNow": "Ocultar agora",
+    "hideConfirmTitle": "Ocultar esta publicação?",
+    "hideConfirmBody": "Ela será removida do seu feed permanentemente. Não dá para desfazer.",
+    "hideConfirmCta": "Ocultar publicação",
     "caughtUpTitle": "Você está em dia",
     "caughtUpBody": "As publicações que você curtiu ou comentou saem depois de 24 horas. Novas publicações aparecem conforme os membros compartilham.",
     "inviteLink": "Convidar um colega",
@@ -82,7 +86,7 @@
       "title": "Primeiros passos",
       "signedIn": "Você entrou com o LinkedIn",
       "firstPost": "Compartilhe uma publicação",
-      "reactTwice": "Reaja a duas publicações"
+      "reactTwice": "Reaja ou gere um comentário em duas publicações"
     },
     "filter": {
       "toggle": "Filtrar feed",
@@ -96,7 +100,7 @@
       "selectPlaceholder": "Selecionar…",
       "noResults": "Sem resultados."
     },
-    "viewGeneratedComment": "Ver comentário gerado"
+    "viewGeneratedComment": "Ver seu comentário"
   },
   "myPosts": {
     "featuredPill": "{{used}} de {{limit}} destacadas este mês",
@@ -167,9 +171,9 @@
     "language": "Idioma do comentário",
     "languageAuto": "Automático — idioma da publicação",
     "generateError": "Não foi possível gerar um comentário. Tente novamente.",
-    "generatedComment": "Comentário gerado",
+    "generatedComment": "Seu comentário",
     "loadingSaved": "Carregando comentário salvo…",
-    "noSavedComment": "Nenhum comentário gerado foi salvo para esta publicação.",
+    "noSavedComment": "Nenhum comentário foi salvo para esta publicação.",
     "reopenLinkedIn": "Comentar no LinkedIn novamente",
     "closeSaved": "Fechar"
   },
@@ -459,7 +463,7 @@
   },
   "recap": {
     "title": "Resumo",
-    "lead": "Veja as reações e os comentários que você fez e recebeu, além do uso do seu plano.",
+    "lead": "Veja as reações e os comentários que você fez e recebeu, os rascunhos com IA que gerou e o uso do seu plano.",
     "window": {
       "7d": "Últimos 7 dias",
       "30d": "Últimos 30 dias",
@@ -471,6 +475,8 @@
     "reactionsCount_other": "{{count}} reações",
     "commentsCount_one": "{{count}} comentário",
     "commentsCount_other": "{{count}} comentários",
+    "draftsCount_one": "{{count}} rascunho com IA",
+    "draftsCount_other": "{{count}} rascunhos com IA",
     "postsCount_one": "em {{count}} publicação",
     "postsCount_other": "em {{count}} publicações",
     "delta": "{{delta}} em relação aos {{days}} dias anteriores",
@@ -480,7 +486,7 @@
     "postUsage": "{{total}} de {{cap}} interações",
     "noPosts": "Nenhuma publicação adicionada neste período. As publicações que você compartilha aparecem aqui com a contagem de interações.",
     "emptyTitle": "Nada registrado nos últimos {{days}} dias",
-    "emptyBody": "Sua primeira reação ou comentário no feed aparece aqui, junto com o que suas publicações recebem.",
+    "emptyBody": "Sua primeira reação, comentário ou rascunho com IA no feed aparece aqui, junto com o que suas publicações recebem.",
     "emptyCta": "Ir para o feed",
     "honest": "Este resumo inclui apenas as interações registradas no aplicativo; ele não consulta nem estima seu SSI.",
     "salesNav": "Consulte seu SSI no Sales Navigator:",
@@ -489,8 +495,9 @@
   },
   "history": {
     "title": "Histórico",
-    "lead": "Cada reação e comentário que você registrou aqui.",
+    "lead": "Cada reação, comentário e rascunho com IA que você registrou aqui.",
     "commented": "Comentou",
+    "aiDrafted": "Comentário rascunhado com IA",
     "by": "de {{name}}",
     "removed": "Publicação removida",
     "showMore": "Mostrar mais",

@@ -148,11 +148,6 @@ export default function PostCard({
         urn={post.linkedinPostUrn}
         footer={
           <div className="border-border bg-card flex min-h-[52px] flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-1.5">
-            {done && (
-              <span className="text-muted-foreground text-[13px]">
-                <span aria-hidden="true">✓</span> {t(doneLabel)}
-              </span>
-            )}
             {!done?.reacted && (
               <ReactionButton
                 postId={post._id}
@@ -187,6 +182,13 @@ export default function PostCard({
                 💬 {post.commentCount} {t('feed.comment')}
               </Button>
             )}
+            {done && (
+              // The ✓ trails the controls it describes, so the react button keeps its place as the
+              // leftmost action whether or not the viewer has interacted.
+              <span className="text-muted-foreground text-[13px]">
+                <span aria-hidden="true">✓</span> {t(doneLabel)}
+              </span>
+            )}
 
             {!!post.sourceUrl &&
               (gated ? (
@@ -213,7 +215,7 @@ export default function PostCard({
                 </a>
               ))}
 
-            {done && (
+            {done ? (
               // No ml-auto here: the LinkedIn link above already carries one, and two of them
               // split the free space and strand the link mid-row.
               <span className="flex items-center gap-2">
@@ -228,6 +230,16 @@ export default function PostCard({
                   {t('feed.hideNow')}
                 </Button>
               </span>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onHide}
+                className="text-muted-foreground h-7 min-h-11 cursor-pointer px-2 text-xs sm:min-h-0"
+              >
+                {t('feed.hide')}
+              </Button>
             )}
           </div>
         }

@@ -49,7 +49,7 @@ export function syncAnalyticsConsent(userId: string | undefined, consents: Conse
  * Consent is inherited, not re-checked: syncAnalyticsConsent opts PostHog in and out, and
  * posthog.capture does nothing while opted out. Props carry no PII — ids and enum-ish strings only.
  */
-export function captureEvent(name: string, props?: Record<string, string | number | boolean>): void {
+export function captureEvent(name: string, props?: Record<string, string | number | boolean | null>): void {
   if (!initialized) return
   posthog.capture(name, props)
 }

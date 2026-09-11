@@ -429,17 +429,19 @@ export default defineSchema({
     updatedAt: v.number()
   }).index('by_enabled_and_created', ['enabled', 'createdAt']),
 
-  // Per-user engagement log: one row per reaction or comment the user made on a post, written in
-  // the SAME transaction as the post counter bump (interactions.ts incrementLikeCount /
-  // incrementCommentCount) so counts and log never drift. Powers the recap + history pages, the
-  // DSR export and the trial-conversion email. `authorId` is the post's author at write time (rows
-  // written before 2026-09-07 lack it and are ignored by "received" counts).
-  // `reaction` is set when kind==='reaction'; `comment` when 'comment'.
+  // Per-user engagement log: one row per reaction, comment, or first AI draft the user made on a
+  // post, written in the SAME transaction as the post counter bump (interactions.ts
+  // incrementLikeCount / incrementCommentCount / saveCommentDraft) so counts and log never drift.
+  // Powers the recap + history pages, the DSR export and the trial-conversion email. `authorId` is
+  // the post's author at write time (rows written before 2026-09-07 lack it and are ignored by
+  // "received" counts; `ai_draft` rows never carry it — a draft is not engagement the author
+  // received).
+  // `reaction` is set when kind==='reaction'; `comment` when 'comment' or 'ai_draft' (the draft text).
   userInteractions: defineTable({
     userId: v.id('users'),
     postId: v.id('posts'),
     authorId: v.optional(v.id('users')),
-    kind: v.union(v.literal('reaction'), v.literal('comment')),
+    kind: v.union(v.literal('reaction'), v.literal('comment'), v.literal('ai_draft')),
     reaction: v.optional(reactionValidator),
     comment: v.optional(v.string()),
     createdAt: v.number()
@@ -466,7 +468,11 @@ export default defineSchema({
     commentedAt: v.optional(v.number()),
     // backlog/R21 — "Hide now": the post leaves this viewer's feed at once. No unhide (history has it).
     hiddenAt: v.optional(v.number()),
-    commentDraft: v.optional(v.string())
+    commentDraft: v.optional(v.string()),
+    // Set on the first AI draft for this post — that draft is the interaction (it also writes a
+    // userInteractions row and bumps the trial counter). Later regenerations only refresh
+    // `commentDraft`.
+    aiDraftedAt: v.optional(v.number())
   })
     .index('by_user_and_post', ['userId', 'postId'])
     // Locate rows referencing a given post so account erasure can delete OTHER users' per-post state

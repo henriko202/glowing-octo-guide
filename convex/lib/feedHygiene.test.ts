@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canHide, INTERACTED_TTL_MS, lastInteractedAt, toFeedViewerState, viewerPostStatus } from './feedHygiene'
+import { INTERACTED_TTL_MS, lastInteractedAt, toFeedViewerState, viewerPostStatus } from './feedHygiene'
 
 const NOW = 10_000_000
 const H = 3_600_000
@@ -37,15 +37,6 @@ describe('viewerPostStatus', () => {
   })
   it('is gone at once when hidden, whatever the timestamps say', () => {
     expect(viewerPostStatus({ reactedAt: NOW - 1, hiddenAt: NOW }, NOW)).toBe('gone')
-  })
-})
-
-describe('canHide', () => {
-  it('only offers Hide on a post the viewer interacted with', () => {
-    expect(canHide(null)).toBe(false)
-    expect(canHide({})).toBe(false)
-    expect(canHide({ reactedAt: 1 })).toBe(true)
-    expect(canHide({ commentedAt: 1 })).toBe(true)
   })
 })
 

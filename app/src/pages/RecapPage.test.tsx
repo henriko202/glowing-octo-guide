@@ -35,11 +35,12 @@ import { captureEvent } from '@/lib/observability/analytics'
 import { RECAP_ROW_CEILING } from '../../../convex/lib/recap'
 import RecapPage from './RecapPage'
 
-const COUNTS = (reactions: number, comments: number, posts: number) => ({
+const COUNTS = (reactions: number, comments: number, posts: number, drafts = 0) => ({
   reactions,
   comments,
   posts,
-  total: reactions + comments
+  drafts,
+  total: reactions + comments + drafts
 })
 
 const RECAP = {
@@ -127,6 +128,14 @@ describe('RecapPage', () => {
     expect(screen.getByText('+4 vs the previous 7 days')).toBeInTheDocument()
     expect(screen.getAllByText(/vs the previous/)).toHaveLength(1) // received had no previous data
     expect(screen.getByText('More than the previous 7 days. Keep going.')).toBeInTheDocument()
+  })
+
+  it('adds the AI-drafts part to the breakdown when drafts exist', () => {
+    mockQueryReturns['interactions.getRecap'] = { ...RECAP, made: { ...RECAP.made, current: COUNTS(5, 2, 4, 3) } }
+    renderPage()
+    expect(screen.getByText('5 reactions · 2 comments · across 4 posts · 3 AI drafts')).toBeInTheDocument()
+    // The big total stays counts.total (10): the backend folds drafts in, the Tile never adds them.
+    expect(screen.getByText('10')).toBeInTheDocument()
   })
 
   it('shows the near-cap upgrade ask with both numbers and the per-post bar', () => {

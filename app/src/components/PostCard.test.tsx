@@ -244,8 +244,25 @@ describe('PostCard done footer (R21)', () => {
     )
     expect(screen.getByText(/reacted · commented/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /react/i })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /view generated comment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /view your comment/i }))
     expect(onComment).toHaveBeenCalledWith(mockPost._id)
+  })
+
+  // The react button keeps its place as the leftmost action when the viewer commented without
+  // reacting, so the footer does not reshape around the reaction.
+  it('keeps the react button first when the viewer commented without reacting', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: { reacted: false, commented: true, hidesAt: inFiveHours } }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    const [first, second] = screen.getAllByRole('button')
+    expect(first).toHaveAccessibleName(/react/i)
+    expect(second).toHaveAccessibleName(/view your comment/i)
+    expect(screen.getByText(/commented/i)).toBeInTheDocument()
   })
 
   it('shows at most 24 hours when an interaction arrives after the card mounted', () => {
@@ -301,7 +318,7 @@ describe('PostCard done footer (R21)', () => {
     expect(onHide).toHaveBeenCalledOnce()
   })
 
-  it('renders the normal footer, with no Hide now, for an untouched post', () => {
+  it('keeps the react button first in the normal state', () => {
     render(
       <PostCard
         post={{ ...mockPost, viewerState: null }}
@@ -310,8 +327,24 @@ describe('PostCard done footer (R21)', () => {
         onHide={() => {}}
       />
     )
+    const [first] = screen.getAllByRole('button')
+    expect(first).toHaveAccessibleName(/react/i)
+  })
+
+  it('offers Hide instead of Hide now on an untouched post, and calls onHide', () => {
+    const onHide = vi.fn()
+    render(
+      <PostCard
+        post={{ ...mockPost, viewerState: null }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={onHide}
+      />
+    )
     expect(screen.getByRole('button', { name: /react/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /comment/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /hide now/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }))
+    expect(onHide).toHaveBeenCalledOnce()
   })
 })
