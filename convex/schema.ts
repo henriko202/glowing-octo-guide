@@ -16,10 +16,10 @@ export default defineSchema({
     location: v.optional(v.string()),
     // Scraped LinkedIn primary-locale language code (e.g. "en"). Drives the UI i18n seed only.
     primaryLocale: v.optional(v.string()),
-    // The UI language the member last checked out in ('en' | 'pt' | 'es'). Written by
-    // billingNode.createCheckoutSession and read by the billing mailers — the member's UI language
-    // choice otherwise lives only in a browser cookie the backend never sees. Distinct from
-    // primaryLocale (the scraped LinkedIn locale, which only seeds the initial UI language).
+    // The member's UI language ('en' | 'pt' | 'es'), persisted by the app through users.setLanguage
+    // on every change (session load + in-app switches) and read by the billing mailers;
+    // billingNode.createCheckoutSession keeps a backstop write. Distinct from primaryLocale (the
+    // scraped LinkedIn locale, which only seeds the initial UI language).
     language: v.optional(v.string()),
     // One-shot billing notice key, rendered as a dismissible banner on /billing (currently only
     // 'duplicate_canceled'). Set by the duplicate-subscription webhook, cleared by

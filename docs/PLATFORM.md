@@ -382,7 +382,7 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `country`                     | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                                                 |
 | `location`                    | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                                                                                                                                               |
 | `primaryLocale`               | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                                                                                                                                            |
-| `language`                    | string                                                 |  –  | UI language the member last checked out in (`'en'`/`'pt'`/`'es'`). Written by `billingNode.createCheckoutSession` via `internal.users.setLanguage`, read by the billing mailers — the UI-language choice otherwise lives only in a browser cookie the backend never sees. Distinct from `primaryLocale`. See [§8](#8-subscriptions--billing).                                                                       |
+| `language`                    | string                                                 |  –  | UI language the member last chose (`'en'`/`'pt'`/`'es'`). The app persists every change through `users.setLanguage` (`app/src/hooks/useLanguageSync.ts`); `billingNode.createCheckoutSession` keeps a backstop write via `internal.users.setLanguageFromCheckout`. Read by the billing mailers. Distinct from `primaryLocale`. See [§8](#8-subscriptions--billing).                                                 |
 | `billingNotice`               | string                                                 |  –  | One-shot billing notice key, rendered as a dismissible banner on `/billing` (only `'duplicate_canceled'` today). Set by the duplicate-subscription webhook, cleared by `users.clearBillingNotice`. Absent ⇒ no notice; a voided subscription is never silent.                                                                                                                                                       |
 | `commentLanguage`             | string                                                 |  –  | Default language for AI-drafted comments: an ISO 639-1 code or `'auto'`. Absent ⇒ resolves to `'auto'` (match the post). User-set in Settings. Distinct from `primaryLocale`. See [§11A](#11a-ai-reaction--comment-assistance).                                                                                                                                                                                     |
 | `defaultVisibilityIndustries` | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist copied onto every post this user authors from now on (`posts.visibilityIndustries`, set at insert time — not retroactive). Absent/empty ⇒ new posts are visible to everyone. Set via `users.setPostVisibility` (tier-gated server-side); a downgrade does **not** clear it. See [§11](#11-feed--engagement).                                                              |
@@ -1313,12 +1313,14 @@ Two pure guards run before the session is created, both reading `internal.billin
   and, since 2026‑09‑07, the three **card-gate** surfaces, which are gated on exactly the statuses (`'none'` /
   `past_due`) where this trap lives — `useCardGate().canTrial` (§14).
 
-**Language.** `createCheckoutSession` takes an optional `locale` argument (the app passes `i18n.language`) and persists
-the resolved value to `users.language` through `internal.users.setLanguage`. The member's UI language otherwise lives
-only in a browser cookie the backend never sees, and the transactional mailers run hours or days later. Resolution order
-for every transactional notice — billing, privacy/DSR and feedback alike — is
-`resolveBillingLocale(users.language, users.primaryLocale)`, falling back to `'en'`; regional and mis-cased tags
-(`pt-BR`, `ES`) normalize, unsupported ones fall through to the next candidate.
+**Language.** `createCheckoutSession` takes an optional `locale` argument (the app passes `i18n.language`), and
+`billingNode.createCheckoutSession` persists the resolved value to `users.language` through
+`internal.users.setLanguageFromCheckout` as a backstop. The normal path is the app itself:
+`app/src/hooks/useLanguageSync.ts` calls the public `users.setLanguage` on session load — catching a language chosen on
+the landing site (or any drift) — and on every in-app switch, so the account is in step before the mailers run; the
+cookie remains the client's own source of truth. Resolution order for every transactional notice — billing,
+privacy/DSR and feedback alike — is `resolveBillingLocale(users.language, users.primaryLocale)`, falling back to `'en'`;
+regional and mis-cased tags (`pt-BR`, `ES`) normalize, unsupported ones fall through to the next candidate.
 
 ```mermaid
 sequenceDiagram
@@ -1336,7 +1338,7 @@ sequenceDiagram
     B ->> B: trial = trialEligible(rows.length); days = trialDaysFor(user); billingLocale = resolveBillingLocale(...)
 B ->> SC: getOrCreateCustomer(userId, email, name)
 B ->> S: checkout.sessions.create(trial? days, card-required, promo-codes, locale, custom_text)
-B ->> DB: setStripeCustomerId (if unset) + users.setLanguage (if changed)
+B ->> DB: setStripeCustomerId (if unset) + users.setLanguageFromCheckout (if changed)
 B -->> A: { url }
 A ->> S: window.location = url
 ```
@@ -4977,7 +4979,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -6378,7 +6380,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                                                                      | [§5 Data Model](#5-data-model) (+ ER diagram)                                                                                                                                                                                                                                                                                            |
 | Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                                                                      | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                                                                                                                                                                                                                                                               |
 | Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                                                                             | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                                                                                                                                                                                                                                                |
-| Transactional emails — shell, builders and language resolution (`lib/emailLayout.ts`, `lib/html.ts`, `lib/billingEmails.ts`, `privacy/emails.ts`, `feedback/emails.ts`, `lib/checkoutCopy.ts`)                                                                                                                  | [§8](#8-subscriptions--billing), [§12A](#12a-feedback), [§13B](#13b-privacy--compliance)                                                                                                                                                                                                                                                 |
+| Transactional emails — shell, builders and language resolution (`lib/emailLayout.ts`, `lib/html.ts`, `lib/billingEmails.ts`, `privacy/emails.ts`, `feedback/emails.ts`, `lib/checkoutCopy.ts`, `app/src/hooks/useLanguageSync.ts`)                                                                              | [§8](#8-subscriptions--billing), [§12A](#12a-feedback), [§13B](#13b-privacy--compliance)                                                                                                                                                                                                                                                 |
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                                                                              | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
 | Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                                                                         | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Customer Portal configurations (`convex/lib/portalConfig.ts`, `billingNode.portalConfigurationId` / `portalSession` / `createPortalSession`, the portal block in `scripts/stripe-provision.mjs`)                                                                                                                | [§8](#8-subscriptions--billing) per-tier portal configurations + Dashboard table, [§14](#14-frontend--authenticated-app-app) BillingPage                                                                                                                                                                                                 |
@@ -6447,8 +6449,12 @@ language, with the senders resolving it through `resolveBillingLocale(users.lang
 builders also format `deletionAt` with `Intl.DateTimeFormat` (`pt` → `pt-BR`), so dates read "30 de setembro de 2026"
 instead of the old ISO string; `deletion.getUserEmail` became `getDeletionUser`, and the deletion-completed and dormancy
 actions carry a `locale` argument. Every `subject` and `text` body is otherwise byte-identical. New
-`lib/emailLayout.test.ts` guards all builders' documents. Sections updated: §8, §12A, §13B, §21. Gates: convex
-**623/623** unit + **8/8** integration, `tsc` clean, eslint 0 warnings._
+`lib/emailLayout.test.ts` guards all builders' documents. The member's UI language is also now persisted on every
+change:
+the app calls the new public `users.setLanguage` mutation from `app/src/hooks/useLanguageSync.ts` (session load + in-app
+switches), leaving `billingNode.createCheckoutSession`'s `users.setLanguageFromCheckout` write as a backstop. Sections
+updated: §5, §8, §12A, §13B, §21. Gates: convex **623/623** unit + **11/11** integration, app **492/492**,
+`tsc` clean, eslint 0 warnings._
 
 _Prior: 2026‑09‑10. **The landing is now discoverable by search engines and AI assistants.**
 `landing/lib/site.ts`

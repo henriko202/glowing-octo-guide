@@ -330,8 +330,11 @@ export const getSubscriptionInfo = query({
   }
 })
 
-/** Records the language the member checked out in, so billing emails reach them in it. */
-export const setLanguage = internalMutation({
+/**
+ * Records the language the member checked out in as a backstop; the app owns the normal path by
+ * persisting every UI-language change through `users.setLanguage`.
+ */
+export const setLanguageFromCheckout = internalMutation({
   args: { userId: v.id('users'), language: v.string() },
   handler: async (ctx, { userId, language }) => {
     await ctx.db.patch(userId, { language })
@@ -352,6 +355,21 @@ export const clearBillingNotice = mutation({
   handler: async (ctx, { sessionToken }) => {
     const user = await requireAuth(ctx, sessionToken)
     await ctx.db.patch(user._id, { billingNotice: undefined })
+  }
+})
+
+/**
+ * Persists the member's UI language so transactional email matches the interface. The language
+ * cookie stays the client's own source of truth; this keeps the account in step. Idempotent.
+ */
+export const setLanguage = mutation({
+  args: {
+    sessionToken: v.string(),
+    language: v.union(v.literal('en'), v.literal('pt'), v.literal('es'))
+  },
+  handler: async (ctx, { sessionToken, language }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    if (user.language !== language) await ctx.db.patch(user._id, { language })
   }
 })
 

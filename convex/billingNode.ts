@@ -92,10 +92,10 @@ export const createCheckoutSession = action({
       })
     }
 
-    // The member's UI language lives only in a browser cookie; billing emails are sent from the
-    // backend long after this request, so record it here.
+    // Backstop: the app persists UI-language changes through users.setLanguage, but billing emails
+    // are sent from the backend long after this request, so record the checkout language here too.
     if (user.language !== billingLocale) {
-      await ctx.runMutation(internal.users.setLanguage, { userId: user._id, language: billingLocale })
+      await ctx.runMutation(internal.users.setLanguageFromCheckout, { userId: user._id, language: billingLocale })
     }
 
     return { url: session.url }

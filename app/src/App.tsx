@@ -4,6 +4,7 @@ import { useQuery } from 'convex/react'
 import { api } from './convex'
 import i18n from './i18n'
 import { pickSeedLanguage } from './i18n/seedLanguage'
+import { useLanguageSync } from './hooks/useLanguageSync'
 import FeedPage from './pages/FeedPage'
 import SettingsPage from './pages/SettingsPage'
 import BillingPage from './pages/BillingPage'
@@ -59,6 +60,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
       if (seed) void i18n.changeLanguage(seed)
     }
   }, [me])
+
+  // After the seed effect: a first-login seed is already applied, so it persists in one write.
+  useLanguageSync(me, sessionToken)
 
   if (me === undefined || me === null) return <LoadingSpinner />
 
