@@ -15,11 +15,13 @@ export interface AuditEntry {
   metadata?: string
 }
 
-interface AuditInsertDb {
+/** Structural subset of MutationCtx['db'] that writeAuditLog needs. Exported so every call site
+ *  shares one shape (and so pure handlers can pass a mock). */
+export interface AuditDb {
   insert(table: string, doc: Record<string, unknown>): Promise<string>
 }
 
-export async function writeAuditLog(db: AuditInsertDb, entry: AuditEntry): Promise<void> {
+export async function writeAuditLog(db: AuditDb, entry: AuditEntry): Promise<void> {
   await db.insert('auditLogs', {
     actor: entry.actor,
     actorId: entry.actorId,
@@ -38,5 +40,5 @@ export const logAudit = internalMutation({
     targetUserId: v.optional(v.id('users')),
     metadata: v.optional(v.string())
   },
-  handler: async (ctx, args) => writeAuditLog(ctx.db as unknown as AuditInsertDb, args as unknown as AuditEntry)
+  handler: async (ctx, args) => writeAuditLog(ctx.db as unknown as AuditDb, args as unknown as AuditEntry)
 })

@@ -1,9 +1,11 @@
 // convex/motd/motd.ts
 // Message of the Day: admin authoring (CRUD) + the viewer query that resolves the single
-// active MOTD. Pure helpers (selectActiveMotd / validateMotdInput) are exported for unit tests.
+// active MOTD. Pure helpers (resolveMotdEnabled / validateMotdInput) are exported for unit tests.
+// `enabled` is materialized schedule state: admin writes and the reconcile cron both derive it
+// from the [startAt, expiresAt) window via resolveMotdEnabled, so getActiveMotd needs no clock.
 
-import { mutation, query } from '../_generated/server'
-import { v } from 'convex/values'
+import { internalMutation, mutation, query } from '../_generated/server'
+import { ConvexError, v } from 'convex/values'
 import { requireAuth, resolveSession } from '../lib/auth'
 import { assertAdmin } from '../admin'
 
@@ -17,16 +19,20 @@ type MotdActiveFields = {
   enabled: boolean
   startAt?: number
   expiresAt?: number
-  createdAt: number
 }
 
-// Pure: the newest enabled MOTD whose [startAt, expiresAt) window covers `now`, else null.
-export function selectActiveMotd<T extends MotdActiveFields>(rows: T[], now: number): T | null {
-  const active = rows
-    .filter(r => r.enabled)
-    .filter(r => (r.startAt == null || r.startAt <= now) && (r.expiresAt == null || r.expiresAt > now))
-    .sort((a, b) => b.createdAt - a.createdAt)
-  return active[0] ?? null
+/**
+ * Pure: the single source of truth for a MOTD's stored `enabled` flag. A requested enable is
+ * honored only while the [startAt, expiresAt) window covers `now` (inclusive start, exclusive
+ * expiry, matching the old in-query filter); a requested disable always stays off. The admin
+ * mutations and the reconcile cron both go through this helper, so the flag cannot drift from
+ * the schedule.
+ */
+export function resolveMotdEnabled(input: MotdActiveFields, now: number): boolean {
+  if (!input.enabled) return false
+  if (input.startAt != null && input.startAt > now) return false
+  if (input.expiresAt != null && input.expiresAt <= now) return false
+  return true
 }
 
 // Pure: trim per-locale bodies, drop empties, enforce a required English body, cap length,
@@ -39,20 +45,20 @@ export function validateMotdInput(input: {
   const cleaned: Record<string, string> = {}
   for (const [locale, body] of Object.entries(input.bodies)) {
     if (!(SUPPORTED_MOTD_LOCALES as readonly string[]).includes(locale)) {
-      throw new Error(`Unsupported MOTD locale "${locale}". Allowed: ${SUPPORTED_MOTD_LOCALES.join(', ')}.`)
+      throw new ConvexError(`Unsupported MOTD locale "${locale}". Allowed: ${SUPPORTED_MOTD_LOCALES.join(', ')}.`)
     }
     const trimmed = body.trim()
     if (trimmed.length === 0) continue
     if (trimmed.length > MAX_MOTD_BODY_LENGTH) {
-      throw new Error(`MOTD body for "${locale}" must be ${MAX_MOTD_BODY_LENGTH} characters or fewer.`)
+      throw new ConvexError(`MOTD body for "${locale}" must be ${MAX_MOTD_BODY_LENGTH} characters or fewer.`)
     }
     cleaned[locale] = trimmed
   }
   if (!cleaned[REQUIRED_LOCALE]) {
-    throw new Error('An English (en) MOTD body is required.')
+    throw new ConvexError('An English (en) MOTD body is required.')
   }
   if (input.startAt != null && input.expiresAt != null && input.expiresAt <= input.startAt) {
-    throw new Error('MOTD expiry must be after its start date.')
+    throw new ConvexError('MOTD expiry must be after its start date.')
   }
   return cleaned
 }
@@ -66,12 +72,15 @@ export const getActiveMotd = query({
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken)
     if (!user) return null
-    const enabledRows = await ctx.db
+    // No time check: `enabled` is materialized from the schedule window by resolveMotdEnabled on
+    // every admin write and re-derived by the reconcileMotdWindows cron, so this query stays
+    // wall-clock-free (no Date.now()) and cache-friendly. The by_enabled_and_created index is
+    // ordered by createdAt desc, so .first() is the newest enabled MOTD.
+    const active = await ctx.db
       .query('motds')
       .withIndex('by_enabled_and_created', q => q.eq('enabled', true))
       .order('desc')
-      .take(50)
-    const active = selectActiveMotd(enabledRows, Date.now())
+      .first()
     if (!active) return null
     return { _id: active._id, bodies: active.bodies, important: active.important }
   }
@@ -104,7 +113,9 @@ export const createMotd = mutation({
     return await ctx.db.insert('motds', {
       bodies: cleaned,
       important,
-      enabled,
+      // Stored enabled = requested enable AND the window covering `now`; a future-dated MOTD
+      // lands disabled and the reconcile cron enables it when startAt arrives.
+      enabled: resolveMotdEnabled({ enabled, startAt, expiresAt }, now),
       ...(startAt != null ? { startAt } : {}),
       ...(expiresAt != null ? { expiresAt } : {}),
       createdBy: admin._id,
@@ -128,16 +139,18 @@ export const updateMotd = mutation({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const existing = await ctx.db.get(motdId)
-    if (!existing) throw new Error('MOTD not found')
+    if (!existing) throw new ConvexError('MOTD not found')
     const cleaned = validateMotdInput({ bodies, startAt, expiresAt })
+    const now = Date.now()
     // Setting a field to undefined in patch clears it — so clearing a date removes the schedule.
     await ctx.db.patch(motdId, {
       bodies: cleaned,
       important,
-      enabled,
+      // Same schedule-derived flag as createMotd: an edit can move a MOTD into/out of its window.
+      enabled: resolveMotdEnabled({ enabled, startAt, expiresAt }, now),
       startAt: startAt ?? undefined,
       expiresAt: expiresAt ?? undefined,
-      updatedAt: Date.now()
+      updatedAt: now
     })
   }
 })
@@ -148,7 +161,7 @@ export const deleteMotd = mutation({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const existing = await ctx.db.get(motdId)
-    if (!existing) throw new Error('MOTD not found')
+    if (!existing) throw new ConvexError('MOTD not found')
     await ctx.db.delete(motdId)
   }
 })
@@ -159,7 +172,65 @@ export const toggleMotdEnabled = mutation({
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
     const existing = await ctx.db.get(motdId)
-    if (!existing) throw new Error('MOTD not found')
-    await ctx.db.patch(motdId, { enabled, updatedAt: Date.now() })
+    if (!existing) throw new ConvexError('MOTD not found')
+    const now = Date.now()
+    if (!enabled) {
+      // Explicit disable ALSO clears the schedule window. Without this, a row whose
+      // [startAt, expiresAt) window is still live is re-enabled by the next
+      // reconcileMotdWindows tick — the admin's off would not stick.
+      await ctx.db.patch(motdId, {
+        enabled: false,
+        startAt: undefined,
+        expiresAt: undefined,
+        updatedAt: now
+      })
+      return
+    }
+    // An enable is honored only inside the existing schedule window (an expired MOTD cannot be
+    // resurrected by toggling). A disable is stored as requested and clears the window above.
+    await ctx.db.patch(motdId, {
+      enabled: resolveMotdEnabled({ enabled: true, startAt: existing.startAt, expiresAt: existing.expiresAt }, now),
+      updatedAt: now
+    })
+  }
+})
+
+/**
+ * Cron (every 5 minutes): materialize schedule transitions into the `enabled` flag so
+ * getActiveMotd never reads a wall clock.
+ * - Enabled rows whose window has not started yet (e.g. written before this deploy) or has ended
+ *   are switched off.
+ * - Disabled rows with a scheduled start that has arrived (and no passed expiry) are switched on.
+ * Bounded scan: MOTDs are an admin-authored, tiny set. The same resolveMotdEnabled helper the
+ * admin mutations use decides both directions, so the cron cannot drift from the admin path.
+ */
+export const reconcileMotdWindows = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const now = Date.now()
+    const [enabledRows, disabledRows] = await Promise.all([
+      ctx.db
+        .query('motds')
+        .withIndex('by_enabled_and_created', q => q.eq('enabled', true))
+        .take(50),
+      ctx.db
+        .query('motds')
+        .withIndex('by_enabled_and_created', q => q.eq('enabled', false))
+        .take(50)
+    ])
+    for (const row of enabledRows) {
+      if (!resolveMotdEnabled({ enabled: true, startAt: row.startAt, expiresAt: row.expiresAt }, now)) {
+        await ctx.db.patch(row._id, { enabled: false, updatedAt: now })
+      }
+    }
+    for (const row of disabledRows) {
+      // Only a still-armed scheduled row (startAt present) is ever auto-enabled: an admin disable
+      // via toggleMotdEnabled clears startAt/expiresAt, so it stays off. A still-scheduled row
+      // awaits its start — the schedule is the source of truth for armed rows.
+      if (row.startAt == null) continue
+      if (resolveMotdEnabled({ enabled: true, startAt: row.startAt, expiresAt: row.expiresAt }, now)) {
+        await ctx.db.patch(row._id, { enabled: true, updatedAt: now })
+      }
+    }
   }
 })

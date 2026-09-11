@@ -14,12 +14,16 @@ vi.mock('../convex', () => ({
 }))
 
 let mockQueryReturns: Record<string, unknown> = {}
+let mockRecapError: Error | null = null
 const mockCancelFlow = vi.fn(async () => ({ url: '' }) as { url: string | null })
 const mockSubmitFeedback = vi.fn(async () => null)
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
   useAction: vi.fn(() => mockCancelFlow),
   useMutation: vi.fn(() => mockSubmitFeedback)
+}))
+vi.mock('@/lib/useQueryOnce', () => ({
+  useQueryOnce: vi.fn((ref: string) => ({ data: mockQueryReturns[ref], error: mockRecapError }))
 }))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }))
@@ -45,6 +49,7 @@ function renderIt(over: Partial<Parameters<typeof CancelInterstitial>[0]> = {}) 
 
 beforeEach(() => {
   sessionStorage.setItem('sessionToken', 'tok')
+  mockRecapError = null
   vi.mocked(captureEvent).mockClear()
   vi.mocked(toast).mockClear()
   mockCancelFlow.mockClear()
@@ -85,6 +90,14 @@ describe('CancelInterstitial', () => {
   it('tells a trialing member there is no charge', () => {
     renderIt({ isTrialing: true })
     expect(screen.getByText(/You won't be charged\. Your trial ends on 10\/1\/2026/)).toBeInTheDocument()
+  })
+
+  it('shows a minimal error state instead of an endless ellipsis when the recap read fails (F16)', () => {
+    mockRecapError = new Error('boom')
+    mockQueryReturns['interactions.getRecap'] = undefined
+    renderIt()
+    expect(screen.getByText('An unexpected error occurred. Reloading the page usually fixes it.')).toBeInTheDocument()
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
   })
 
   it('hides Schedule Starter on the Starter tier', async () => {

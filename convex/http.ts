@@ -1,16 +1,42 @@
 // convex/http.ts
-import { httpAction } from './_generated/server'
+import { env, httpAction } from './_generated/server'
 import { httpRouter } from 'convex/server'
 import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
+import type Stripe from 'stripe'
 import { registerRoutes } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
-import { eventCreatedMs, syncArgs } from './stripe'
+import { eventCreatedMs, invoiceSubscriptionId, syncArgs } from './stripe'
 import { scrubError } from './lib/scrubError'
 import { isInviteCode } from './lib/invite'
 import { isFeaturedPostCheckout } from './lib/featuredPurchase'
+import { readCookie } from './lib/cookies'
 
 const http = httpRouter()
+
+const NO_STORE = { 'Cache-Control': 'no-store', Pragma: 'no-cache' } as const
+
+// The OAuth browser-nonce cookie is namespaced per `state`: a single fixed name lets a second login
+// overwrite the first's nonce, so concurrent logins in one browser would clobber each other.
+function nonceCookieName(state: string): string {
+  return `oauth_nonce_${state}`
+}
+
+function setNonceCookie(state: string, nonce: string): string {
+  return `${nonceCookieName(state)}=${nonce}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`
+}
+
+// States are always UUIDs minted here by crypto.randomUUID() — pin the shape so an
+// attacker-supplied query value can never name a cookie we did not set (nor reach Set-Cookie).
+const OAUTH_STATE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function clearNonceCookie(state: string): string {
+  return `${nonceCookieName(state)}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
+}
+
+function redirect(location: string, extraHeaders: Record<string, string> = {}): Response {
+  return new Response(null, { status: 302, headers: { Location: location, ...NO_STORE, ...extraHeaders } })
+}
 
 // ─── LinkedIn OAuth ──────────────────────────────────────────────────────────
 
@@ -19,6 +45,7 @@ http.route({
   method: 'GET',
   handler: httpAction(async (ctx, req) => {
     const state = crypto.randomUUID()
+    const browserNonce = crypto.randomUUID()
 
     // Carry the user's chosen plan/interval through the OAuth round-trip.
     // Validate against the known-good sets to prevent tampering.
@@ -34,10 +61,15 @@ http.route({
     const rawRef = reqUrl.searchParams.get('ref')
     const ref = isInviteCode(rawRef) ? rawRef : undefined
 
+    // x-forwarded-for is best-effort/untrusted — a caller can omit or forge it — so the global
+    // backstop, not the per-client limit, is what actually bounds oauthStates growth; the
+    // per-client dimension just blunts a single-source flood.
+    const clientKey = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined
+    await ctx.runMutation(internal.lib.rateLimit.checkOAuthStartBudget, { clientKey })
+
     // Persist state server-side before redirecting — validated on callback (CSRF protection).
-    await ctx.runMutation(internal.sessions.createOAuthState, { state, plan, interval, ref })
-    const url = buildAuthUrl(state)
-    return new Response(null, { status: 302, headers: { Location: url } })
+    await ctx.runMutation(internal.sessions.createOAuthState, { state, browserNonce, plan, interval, ref })
+    return redirect(buildAuthUrl(state), { 'Set-Cookie': setNonceCookie(state, browserNonce) })
   })
 })
 
@@ -45,40 +77,51 @@ http.route({
   path: '/auth/linkedin/callback',
   method: 'GET',
   handler: httpAction(async (ctx, req) => {
-    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+    const appUrl = env.APP_URL ?? 'http://localhost:5173'
+    // The nonce cookie is namespaced per state, so every callback exit clears the same cookie name.
+    // State is read up front; the UUID guard keeps an attacker-supplied query value out of the
+    // Set-Cookie header and out of the cookie lookup.
+    let state: string | null = null
+    const clearNonce = (): Record<string, string> =>
+      state !== null && OAUTH_STATE_RE.test(state) ? { 'Set-Cookie': clearNonceCookie(state) } : {}
 
     try {
       const url = new URL(req.url)
       const code = url.searchParams.get('code')
       const error = url.searchParams.get('error')
+      state = url.searchParams.get('state')
 
       if (error) {
-        console.error('LinkedIn OAuth error param:', error, url.searchParams.get('error_description'))
-        return new Response(null, {
-          status: 302,
-          headers: { Location: `${appUrl}/?error=oauth_denied` }
-        })
+        // Log the error code only. `scrubError` redacts by key name and `error_description` is
+        // caller-influenced free text, so the description is deliberately not logged.
+        console.error('LinkedIn OAuth error param:', scrubError({ error }))
+        return redirect(`${appUrl}/?error=oauth_denied`, clearNonce())
       }
 
       if (!code) {
         console.error('LinkedIn callback: missing code parameter')
-        return new Response(null, {
-          status: 302,
-          headers: { Location: `${appUrl}/?error=oauth_failed` }
-        })
+        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
       }
 
-      // CSRF: validate the state parameter against the value we stored on initiation.
-      // If missing, expired, or unknown — reject the callback to prevent account takeover.
-      const state = url.searchParams.get('state')
-      if (!state) {
+      // CSRF: validate the state parameter against the value we stored on initiation, and require
+      // the HttpOnly browser nonce cookie set there — so a captured callback URL cannot log the
+      // victim's browser into the attacker's account. If either is missing/expired/unknown — reject.
+      if (!state || !OAUTH_STATE_RE.test(state)) {
         console.error('LinkedIn callback: missing state parameter')
-        return new Response(null, { status: 302, headers: { Location: `${appUrl}/?error=oauth_failed` } })
+        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
       }
-      const oauthState = await ctx.runMutation(internal.sessions.validateAndConsumeOAuthState, { state })
+      const nonce = readCookie(req.headers.get('cookie'), nonceCookieName(state))
+      if (!nonce) {
+        console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
+        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
+      }
+      const oauthState = await ctx.runMutation(internal.sessions.validateAndConsumeOAuthState, {
+        state,
+        browserNonce: nonce
+      })
       if (!oauthState.valid) {
         console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
-        return new Response(null, { status: 302, headers: { Location: `${appUrl}/?error=oauth_failed` } })
+        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
       }
 
       const tokens = await exchangeCodeForTokens(code)
@@ -116,18 +159,12 @@ http.route({
       if (oauthState.plan !== undefined) successUrl += `&plan=${oauthState.plan}`
       if (oauthState.interval !== undefined) successUrl += `&interval=${oauthState.interval}`
 
-      return new Response(null, {
-        status: 302,
-        headers: { Location: successUrl }
-      })
+      return redirect(successUrl, clearNonce())
     } catch (err) {
       // Log the real error server-side; send only a generic message to the client
       // to prevent leaking internal details (API responses, stack traces, etc.)
       console.error('OAuth callback error:', scrubError(err))
-      return new Response(null, {
-        status: 302,
-        headers: { Location: `${appUrl}/?error=auth_failed` }
-      })
+      return redirect(`${appUrl}/?error=auth_failed`, clearNonce())
     }
   })
 })
@@ -138,13 +175,16 @@ http.route({
 // `syncArgs` (payload → syncUserSubscription's args) lives in ./stripe so it can be unit-tested:
 // this file registers its routes at module scope and cannot be imported by a test.
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
-type StripeEvent = any
+// `Stripe.Event` is the SDK's discriminated union of every webhook payload. Each handler is typed
+// to the exact event its key registers; `onEvent` sees the whole union. `ctx` stays unannotated so
+// the component's own `GenericActionCtx<GenericDataModel>` types it (the generated `ActionCtx` is
+// stricter than the component's callback signature accepts).
+type StripeEvent = Stripe.Event
 
 registerRoutes(http, components.stripe, {
   webhookPath: '/stripe/webhook',
   events: {
-    'customer.subscription.created': async (ctx: StripeEvent, event: StripeEvent) => {
+    'customer.subscription.created': async (ctx, event: Stripe.CustomerSubscriptionCreatedEvent) => {
       // Two tabs, two checkouts: the checkout guard cannot see a second checkout completed between
       // session creation and Stripe confirming payment. syncUserSubscription decides, inside its own
       // transaction, whether this member now holds a duplicate and which row is the newer one. Only
@@ -159,10 +199,10 @@ registerRoutes(http, components.stripe, {
         })
       }
     },
-    'customer.subscription.updated': async (ctx: StripeEvent, event: StripeEvent) => {
+    'customer.subscription.updated': async (ctx, event: Stripe.CustomerSubscriptionUpdatedEvent) => {
       await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))
     },
-    'customer.subscription.deleted': async (ctx: StripeEvent, event: StripeEvent) => {
+    'customer.subscription.deleted': async (ctx, event: Stripe.CustomerSubscriptionDeletedEvent) => {
       const sub = event.data.object
       await ctx.runMutation(internal.stripe.cancelUserSubscription, {
         stripeSubscriptionId: sub.id
@@ -171,7 +211,7 @@ registerRoutes(http, components.stripe, {
     // Stripe fires this 3 days before trial_end. It NEVER fires for the 50-interaction path
     // (endTrialEarly sets trial_end:'now'), which is why that path has its own 40-of-50 notice.
     // Stripe's built-in trial-ending email must stay OFF so the member gets exactly one warning.
-    'customer.subscription.trial_will_end': async (ctx: StripeEvent, event: StripeEvent) => {
+    'customer.subscription.trial_will_end': async (ctx, event: Stripe.CustomerSubscriptionTrialWillEndEvent) => {
       const sub = event.data.object
       if (!sub.trial_end) return
       await ctx.scheduler.runAfter(0, internal.notifications.sendTrialEnding, {
@@ -179,12 +219,13 @@ registerRoutes(http, components.stripe, {
         trialEndsAt: sub.trial_end * 1000
       })
     },
-    'invoice.payment_failed': async (ctx: StripeEvent, event: StripeEvent) => {
+    'invoice.payment_failed': async (ctx, event: Stripe.InvoicePaymentFailedEvent) => {
       const invoice = event.data.object
-      if (invoice.subscription && invoice.customer) {
+      const subscriptionId = invoiceSubscriptionId(invoice)
+      if (subscriptionId && invoice.customer) {
         await ctx.runMutation(internal.stripe.markPastDue, {
           stripeCustomerId: String(invoice.customer),
-          stripeSubscriptionId: String(invoice.subscription),
+          stripeSubscriptionId: subscriptionId,
           eventCreated: eventCreatedMs(event)
         })
       }
@@ -193,7 +234,7 @@ registerRoutes(http, components.stripe, {
     // this event too; the pure filter lets only a PAID payment-mode session tagged by
     // purchaseFeaturedPost through. postId travels as a plain string and is normalised inside the
     // mutation: a malformed id must log and return, never throw (Stripe retries a 500 for days).
-    'checkout.session.completed': async (ctx: StripeEvent, event: StripeEvent) => {
+    'checkout.session.completed': async (ctx, event: Stripe.CheckoutSessionCompletedEvent) => {
       const session = event.data.object
       if (!isFeaturedPostCheckout(session)) return
       await ctx.runMutation(internal.posts.applyPurchasedFeature, {
@@ -204,7 +245,7 @@ registerRoutes(http, components.stripe, {
       })
     }
   },
-  onEvent: async (_ctx: StripeEvent, event: StripeEvent) => {
+  onEvent: async (_ctx, event: StripeEvent) => {
     // event.type/event.id are safe identifiers, but route through the scrub helper anyway so this
     // seam stays PII-safe if a future edit logs more of the event object.
     console.log('[Stripe webhook]', scrubError({ type: event.type, id: event.id }))

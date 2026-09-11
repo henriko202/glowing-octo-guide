@@ -1,15 +1,15 @@
 // convex/privacy/deletion.ts
 // Right to erasure. cascadeDeleteUser is pure (operates on a narrow db + storage interface) so the
 // full multi-table deletion is unit-tested. The registered request/cancel/cron wrappers follow below.
-import { internalAction, internalMutation, internalQuery, mutation } from '../_generated/server'
-import { v } from 'convex/values'
+import { env, internalAction, internalMutation, internalQuery, mutation } from '../_generated/server'
+import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import Stripe from 'stripe'
 import { resolveSession } from '../lib/auth'
 import { sendEmail } from '../lib/email'
 import { deletionScheduledEmail, deletionCompletedEmail } from './emails'
-import { writeAuditLog } from '../lib/audit'
-import { resetUserRateLimits } from '../lib/rateLimit'
+import { type AuditDb, writeAuditLog } from '../lib/audit'
+import { checkRateLimit, resetUserRateLimits } from '../lib/rateLimit'
 
 interface CascadeDb {
   query(table: string): {
@@ -38,11 +38,12 @@ const OWNED: Array<{ table: string; index: string; field: string }> = [
   // NOTE: rate-limit state is NOT here — it lives in the rate-limiter component's isolated tables,
   // which the by-index db drains below can't reach. processAccountDeletions calls resetUserRateLimits
   // on the terminal pass to erase it.
-  { table: 'featuredPostUsage', index: 'by_user_month', field: 'userId' },
+  { table: 'featuredPostUsage', index: 'by_user_id_and_month', field: 'userId' },
   { table: 'planLimits', index: 'by_user', field: 'userId' },
   { table: 'consentRecords', index: 'by_user', field: 'userId' },
   { table: 'userInteractions', index: 'by_user', field: 'userId' },
-  { table: 'userPostState', index: 'by_user_and_post', field: 'userId' }
+  { table: 'userPostState', index: 'by_user_and_post', field: 'userId' },
+  { table: 'trialCounters', index: 'by_user', field: 'userId' }
 ]
 
 // Tables with user references that are ANONYMIZED rather than deleted (userId cleared to undefined).
@@ -168,8 +169,9 @@ export const requestAccountDeletion = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken) // allow banned users to exercise erasure
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw new ConvexError('Unauthorized')
     if (user.deletionScheduledAt) return { deletionScheduledAt: user.deletionScheduledAt } // idempotent
+    await checkRateLimit(ctx, user._id, 'requestAccountDeletion', 3, 24 * 60 * 60 * 1000, 'day')
     const scheduledAt = Date.now() + GRACE_MS
     await ctx.db.patch(user._id, {
       deletionRequestedAt: Date.now(),
@@ -177,7 +179,7 @@ export const requestAccountDeletion = mutation({
       deletionReason: 'user_request'
     })
     await ctx.runMutation(internal.sessions.deleteAllForUser, { userId: user._id }) // revoke access now
-    await writeAuditLog(ctx.db as unknown as CascadeDb, {
+    await writeAuditLog(ctx.db as unknown as AuditDb, {
       actor: 'user',
       actorId: user._id,
       action: 'dsr.deletion_requested',
@@ -192,13 +194,14 @@ export const cancelAccountDeletion = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken)
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw new ConvexError('Unauthorized')
+    await checkRateLimit(ctx, user._id, 'cancelAccountDeletion', 10)
     await ctx.db.patch(user._id, {
       deletionRequestedAt: undefined,
       deletionScheduledAt: undefined,
       deletionReason: undefined
     })
-    await writeAuditLog(ctx.db as unknown as CascadeDb, {
+    await writeAuditLog(ctx.db as unknown as AuditDb, {
       actor: 'user',
       actorId: user._id,
       action: 'dsr.deletion_cancelled',
@@ -213,7 +216,7 @@ export const onDeletionRequested = internalAction({
   args: { userId: v.id('users'), scheduledAt: v.number() },
   handler: async (ctx, { userId, scheduledAt }) => {
     const subs = await ctx.runQuery(internal.privacy.deletion.listUserSubscriptions, { userId })
-    const key = process.env.STRIPE_SECRET_KEY
+    const key = env.STRIPE_SECRET_KEY
     if (key) {
       const stripe = new Stripe(key)
       for (const s of subs as Array<{ stripeSubscriptionId?: string; status?: string }>) {

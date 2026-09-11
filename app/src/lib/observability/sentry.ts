@@ -18,6 +18,19 @@ type ScrubbableEvent = {
 }
 
 /**
+ * Strip a `#…session=…` fragment from a URL. Fragments never reach servers, but Sentry records
+ * `location.href` (fragment included) into request URLs, breadcrumbs, and transaction payloads, and
+ * Session Replay bypasses `beforeSend` — so the OAuth return URL is scrubbed here too. Fragments
+ * without a `session=` field are preserved (they are normal SPA routes).
+ */
+export function stripUrlSecrets(url: string): string {
+  const i = url.indexOf('#')
+  if (i === -1) return url
+  const fragment = url.slice(i + 1)
+  return /(^|&)session=/.test(fragment) ? url.slice(0, i) : url
+}
+
+/**
  * Redact PII from an outbound Sentry event in place. Drops request cookies/headers and any user
  * identity, and runs the message + each exception value through `scrubError` (key-denylist redaction
  * + length cap). ponytail: scrubError redacts by KEY name, so a secret embedded inline in free text
@@ -29,6 +42,8 @@ export function sentryBeforeSend(event: ScrubbableEvent): ScrubbableEvent {
     delete event.request.headers
   }
   delete event.user
+  const req = event.request as { url?: unknown } | undefined
+  if (req && typeof req.url === 'string') req.url = stripUrlSecrets(req.url)
   if (typeof event.message === 'string') event.message = scrubError(event.message)
   for (const ex of event.exception?.values ?? []) {
     if (typeof ex.value === 'string') ex.value = scrubError(ex.value)
@@ -68,7 +83,11 @@ export function initSentry(): void {
     replaysSessionSampleRate: 0.1, // This sets the sample rate at 10%. You may want to change it to 100% while in development and then sample at a lower rate in production.
     replaysOnErrorSampleRate: 1.0, // If you're not already sampling the entire session, change the sample rate to 100% when sampling sessions where errors occur.
     // sentryBeforeSend mutates and returns the same object; the runtime value IS the real event.
-    beforeSend: event => sentryBeforeSend(event as unknown as ScrubbableEvent) as unknown as typeof event
+    beforeSend: event => sentryBeforeSend(event as unknown as ScrubbableEvent) as unknown as typeof event,
+    // Transactions carry request URLs too (and replay/breadcrumb data rides along) — scrub them the
+    // same way. Session Replay bypasses beforeSend entirely, so the index.html pre-bundle capture is
+    // the primary defense; this is defense in depth.
+    beforeSendTransaction: event => sentryBeforeSend(event as unknown as ScrubbableEvent) as unknown as typeof event
   })
 }
 

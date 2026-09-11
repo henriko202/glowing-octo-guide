@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkRateLimit, RATE_LIMIT_ACTIONS, resetUserRateLimits, tryConsumeRateLimit } from './rateLimit'
+import {
+  checkRateLimit,
+  enforceOAuthStartBudget,
+  OAUTH_START_GLOBAL_PER_HOUR,
+  OAUTH_START_PER_CLIENT_PER_HOUR,
+  RATE_LIMIT_ACTIONS,
+  resetUserRateLimits,
+  tryConsumeRateLimit
+} from './rateLimit'
 
 // The rate-limit algorithm itself now lives in @convex-dev/rate-limiter (tested upstream). These
 // tests pin OUR wiring: that each helper hands the component the right inline config + key, throws
@@ -72,5 +80,56 @@ describe('resetUserRateLimits', () => {
     await resetUserRateLimits(ctx, 'u1' as any)
     expect(calls.reset.map(r => r.name).sort()).toEqual([...RATE_LIMIT_ACTIONS].sort())
     for (const r of calls.reset) expect(r.args).toEqual({ key: 'u1' })
+  })
+})
+
+describe('enforceOAuthStartBudget', () => {
+  it('enforces the per-client 60/h limit and the global 1800/h backstop when a key is present', async () => {
+    await enforceOAuthStartBudget(ctx, '203.0.113.7')
+    expect(calls.limit).toHaveLength(2)
+    expect(calls.limit[0]).toMatchObject({
+      name: 'oauthStartClient',
+      opts: {
+        key: '203.0.113.7',
+        config: { kind: 'fixed window', rate: OAUTH_START_PER_CLIENT_PER_HOUR, period: 60 * 60 * 1000 }
+      }
+    })
+    expect(calls.limit[1]).toMatchObject({
+      name: 'oauthStart',
+      opts: {
+        key: 'global',
+        config: { kind: 'fixed window', rate: OAUTH_START_GLOBAL_PER_HOUR, period: 60 * 60 * 1000 }
+      }
+    })
+  })
+
+  it('enforces only the global backstop when no client key is present', async () => {
+    await enforceOAuthStartBudget(ctx)
+    expect(calls.limit).toHaveLength(1)
+    expect(calls.limit[0]).toMatchObject({ name: 'oauthStart', opts: { key: 'global' } })
+  })
+
+  it('throws the shared sign-in message when a dimension denies', async () => {
+    calls.nextOk = false
+    await expect(enforceOAuthStartBudget(ctx, '203.0.113.7')).rejects.toThrow(
+      'Too many sign-in attempts. Please try again shortly.'
+    )
+  })
+})
+
+describe('RATE_LIMIT_ACTIONS', () => {
+  it('registers every billing and deletion action (erasure completeness)', () => {
+    const added = [
+      'createCheckoutSession',
+      'purchaseFeaturedPost',
+      'createPortalSession',
+      'createCancelFlowSession',
+      'createPlanSwitchSession',
+      'undoScheduledDowngrade',
+      'resumeSubscription',
+      'requestAccountDeletion',
+      'cancelAccountDeletion'
+    ]
+    expect([...RATE_LIMIT_ACTIONS].sort()).toEqual(expect.arrayContaining([...added].sort()))
   })
 })

@@ -1,9 +1,11 @@
 // convex/feed.ts
 import { query, type QueryCtx } from './_generated/server'
 import { ConvexError, type Infer, v } from 'convex/values'
-import { paginationOptsValidator } from 'convex/server'
+import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth, resolveSession } from './lib/auth'
+import { articleValidator } from './lib/articleValidator'
+import { reactionValidator } from './lib/reactions'
 import { INTERACTED_TTL_MS, toFeedViewerState, viewerPostStatus } from './lib/feedHygiene'
 import { getPlanLimitsHelper } from './lib/planLimits'
 import { effectiveInteractionCap, hasReachedInteractionLimit } from './lib/interactionLimit'
@@ -153,11 +155,67 @@ export function assertPostEngageable(
 // `usePaginatedQuery` expects so the client renders an empty feed, not an error.
 const EMPTY_PAGE = { page: [], isDone: true, continueCursor: '' }
 
+/** The token-stripped author projection `toFeedAuthor` returns (allow-list, see above). */
+const feedAuthorValidator = v.object({
+  _id: v.id('users'),
+  name: v.string(),
+  headline: v.optional(v.string()),
+  profilePictureUrl: v.optional(v.string()),
+  industry: v.optional(v.string()),
+  country: v.optional(v.string()),
+  tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact')))
+})
+
+/** The per-viewer R21 done-state `toFeedViewerState` returns. */
+const feedViewerStateValidator = v.object({
+  reacted: v.boolean(),
+  commented: v.boolean(),
+  hidesAt: v.number()
+})
+
+/**
+ * One enriched feed page item: the full `posts` document plus the two fields `fetchFeedPage`
+ * attaches. Must cover the doc exactly — an extra field fails return validation at runtime and a
+ * missing field fails typecheck.
+ */
+const feedItemValidator = v.object({
+  _id: v.id('posts'),
+  _creationTime: v.number(),
+  linkedinPostUrn: v.string(),
+  authorId: v.id('users'),
+  content: v.string(),
+  publishedAt: v.number(),
+  likeCount: v.number(),
+  commentCount: v.number(),
+  mediaUrls: v.array(v.string()),
+  imageUrls: v.optional(v.array(v.string())),
+  isFeatured: v.boolean(),
+  featuredAt: v.optional(v.number()),
+  visibilityIndustries: v.array(v.string()),
+  visibilityCountries: v.array(v.string()),
+  hidden: v.boolean(),
+  authorTierRank: v.optional(v.number()),
+  interactionLimitReached: v.optional(v.boolean()),
+  interactionCapBonus: v.optional(v.number()),
+  featuredPurchase: v.optional(
+    v.object({ checkoutSessionId: v.string(), amountCents: v.number(), paidAt: v.number() })
+  ),
+  sourceUrl: v.optional(v.string()),
+  article: v.optional(articleValidator),
+  deletedAt: v.optional(v.number()),
+  feedRank: v.optional(v.number()),
+  inFeed: v.optional(v.boolean()),
+  suggestedReaction: v.optional(reactionValidator),
+  author: v.union(feedAuthorValidator, v.null()),
+  viewerState: v.union(feedViewerStateValidator, v.null())
+})
+
 export const getFeed = query({
   args: {
     paginationOpts: paginationOptsValidator,
     sessionToken: v.optional(v.string())
   },
+  returns: paginationResultValidator(feedItemValidator),
   handler: async (ctx, { paginationOpts, sessionToken }) => {
     if (!sessionToken) return EMPTY_PAGE
     let viewer: Doc<'users'>
@@ -199,7 +257,7 @@ export async function fetchFeedPage(
   const numItems = Math.min(Math.max(1, opts.paginationOpts.numItems), MAX_FEED_PAGE)
   const result = await ctx.db
     .query('posts')
-    .withIndex('by_feed_rank', q => q.eq('inFeed', true))
+    .withIndex('by_in_feed_and_feed_rank', q => q.eq('inFeed', true))
     .order('desc')
     .paginate({ ...opts.paginationOpts, numItems })
 

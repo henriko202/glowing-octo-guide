@@ -8,7 +8,7 @@
 //   • 7 elapsed days   → Stripe emits customer.subscription.trial_will_end 3 days ahead.
 //                        Ours handles it; Stripe's own trial-ending email stays OFF in the
 //                        Dashboard (see docs/PLATFORM.md §8, Stripe Dashboard setup).
-import { internalAction } from './_generated/server'
+import { env, internalAction } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { sendEmail } from './lib/email'
@@ -33,7 +33,7 @@ import { excerpt } from './lib/recap'
 import { SUPPORT_EMAIL } from './lib/support'
 
 function billingUrl(): string {
-  return `${process.env.APP_URL ?? 'http://localhost:5173'}/billing`
+  return `${env.APP_URL ?? 'http://localhost:5173'}/billing`
 }
 
 /**
@@ -147,7 +147,7 @@ export const sendTrialConverted = internalAction({
         currency: sub.priceCurrency,
         interval: sub.priceInterval
       }),
-      recapUrl: `${process.env.APP_URL ?? 'http://localhost:5173'}/recap`
+      recapUrl: `${env.APP_URL ?? 'http://localhost:5173'}/recap`
     })
     await deliver('trial_converted', c.email, m)
   }
@@ -193,7 +193,7 @@ export const sendPostCapReached = internalAction({
     // bonus (R17) makes a bought Starter post look like it already matches Growth and hides the upgrade.
     const mode = capNoticeMode(tier, limits.interactionsPerPost, nextLimits?.interactionsPerPost)
     const locale = resolveBillingLocale(c.language, c.primaryLocale)
-    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+    const appUrl = env.APP_URL ?? 'http://localhost:5173'
 
     const m = postCapReachedEmail(locale, {
       excerpt: excerpt(post.content),

@@ -46,9 +46,14 @@ type Props = {
   isAdmin: boolean | undefined
 }
 
+type FeedbackList = {
+  rows: FeedbackRow[]
+  repliesTruncated: boolean
+}
+
 export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
-  const rows = useQuery(api.feedback.feedback.listFeedback, sessionToken && isAdmin ? { sessionToken } : 'skip') as
-    | FeedbackRow[]
+  const data = useQuery(api.feedback.feedback.listFeedback, sessionToken && isAdmin ? { sessionToken } : 'skip') as
+    | FeedbackList
     | undefined
 
   const archiveFeedback = useMutation(api.feedback.feedback.archiveFeedback)
@@ -57,10 +62,11 @@ export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [respondTarget, setRespondTarget] = useState<FeedbackRow | null>(null)
 
-  if (rows === undefined) {
+  if (data === undefined) {
     return <LoadingSpinner />
   }
 
+  const rows = data.rows
   const filtered = filter === 'all' ? rows : rows.filter(r => r.status === filter)
 
   function actionsFor(row: FeedbackRow): RowAction[] {
@@ -102,6 +108,12 @@ export default function FeedbackTab({ sessionToken, isAdmin }: Props) {
       <p className="text-muted-foreground mb-2 text-xs">
         {filtered.length} {filtered.length === 1 ? 'item' : 'items'}
       </p>
+
+      {data.repliesTruncated && (
+        <p className="text-muted-foreground mb-2 text-xs">
+          Some reply threads are truncated; only the first 20 replies per item are shown.
+        </p>
+      )}
 
       <div className="border-border bg-card rounded-lg border">
         {filtered.length === 0 && (

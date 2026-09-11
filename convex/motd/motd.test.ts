@@ -1,35 +1,33 @@
 import { describe, it, expect } from 'vitest'
-import { selectActiveMotd, validateMotdInput, MAX_MOTD_BODY_LENGTH } from './motd'
+import { resolveMotdEnabled, validateMotdInput, MAX_MOTD_BODY_LENGTH } from './motd'
 
-describe('selectActiveMotd', () => {
-  it('returns null when there are no rows', () => {
-    expect(selectActiveMotd([], 1000)).toBeNull()
+// resolveMotdEnabled is the shared schedule decision: admin create/update/toggle writes and the
+// reconcileMotdWindows cron all derive the stored `enabled` flag through it, so getActiveMotd can
+// select on `enabled` alone without a wall clock. Boundaries match the old in-query filter:
+// startAt inclusive, expiresAt exclusive.
+describe('resolveMotdEnabled', () => {
+  it('stays off when the requested state is disabled, whatever the window says', () => {
+    expect(resolveMotdEnabled({ enabled: false }, 1000)).toBe(false)
+    expect(resolveMotdEnabled({ enabled: false, startAt: 500, expiresAt: 2000 }, 1000)).toBe(false)
   })
 
-  it('excludes disabled rows', () => {
-    expect(selectActiveMotd([{ enabled: false, createdAt: 1 }], 1000)).toBeNull()
+  it('enables an open-ended MOTD', () => {
+    expect(resolveMotdEnabled({ enabled: true }, 1000)).toBe(true)
   })
 
-  it('returns the newest enabled row within the window', () => {
-    const rows = [
-      { enabled: true, createdAt: 1 },
-      { enabled: true, createdAt: 5 },
-      { enabled: true, createdAt: 3 }
-    ]
-    expect(selectActiveMotd(rows, 1000)?.createdAt).toBe(5)
+  it('keeps a future-start MOTD disabled until startAt arrives (inclusive at startAt)', () => {
+    expect(resolveMotdEnabled({ enabled: true, startAt: 2000 }, 1000)).toBe(false)
+    expect(resolveMotdEnabled({ enabled: true, startAt: 1000 }, 1000)).toBe(true)
   })
 
-  it('excludes rows whose startAt is in the future', () => {
-    expect(selectActiveMotd([{ enabled: true, createdAt: 1, startAt: 2000 }], 1000)).toBeNull()
+  it('disables a MOTD once expiresAt has passed (exclusive at expiresAt)', () => {
+    expect(resolveMotdEnabled({ enabled: true, expiresAt: 500 }, 1000)).toBe(false)
+    expect(resolveMotdEnabled({ enabled: true, expiresAt: 1000 }, 1000)).toBe(false)
+    expect(resolveMotdEnabled({ enabled: true, expiresAt: 1001 }, 1000)).toBe(true)
   })
 
-  it('excludes rows whose expiresAt has passed', () => {
-    expect(selectActiveMotd([{ enabled: true, createdAt: 1, expiresAt: 500 }], 1000)).toBeNull()
-  })
-
-  it('includes a row exactly at startAt and strictly before expiresAt', () => {
-    const row = { enabled: true, createdAt: 1, startAt: 1000, expiresAt: 2000 }
-    expect(selectActiveMotd([row], 1000)).toEqual(row)
+  it('honors a bounded window covering now', () => {
+    expect(resolveMotdEnabled({ enabled: true, startAt: 500, expiresAt: 2000 }, 1000)).toBe(true)
   })
 })
 

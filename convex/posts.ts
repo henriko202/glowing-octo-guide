@@ -1,6 +1,7 @@
 // convex/posts.ts
 import {
   action,
+  env,
   internalMutation,
   internalQuery,
   mutation,
@@ -12,6 +13,7 @@ import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import {
+  fetchAllowedLinkedInUrl,
   isAllowedLinkedInUrl,
   isHttpsUrl,
   parseLinkedInPostUrl,
@@ -26,7 +28,7 @@ import { computeFeedFields } from './lib/feedRank'
 import { currentUtcMonthKey, hasPermanentFeaturedEntitlement, isFeaturedLimitReached } from './lib/postLimit'
 import { hasReachedInteractionLimit } from './lib/interactionLimit'
 import { featuredPurchaseBlocker, fulfilmentAction, purchasedFeaturePatch } from './lib/featuredPurchase'
-import { writeAuditLog } from './lib/audit'
+import { type AuditDb, writeAuditLog } from './lib/audit'
 import {
   appendMediaLinks,
   extractPostUrn,
@@ -75,60 +77,66 @@ export const getMyPosts = query({
     } catch {
       return []
     }
-    // Bounded read: take the 500 most-recently-added posts for this author instead of an
-    // unbounded .collect(). Ordered desc on the by_author index (_creationTime) so the cap
-    // keeps the newest posts; we re-sort by publishedAt below for display.
+    // Bounded read: the 500 most-recently-published posts for this author via the
+    // by_author_and_publishedAt index. Ordered desc on publishedAt, so the cap keeps the newest
+    // posts and the result is already in display order — no in-memory sort.
     const posts = await ctx.db
       .query('posts')
-      .withIndex('by_author', q => q.eq('authorId', user._id))
+      .withIndex('by_author_and_publishedAt', q => q.eq('authorId', user._id))
       .order('desc')
       .take(500)
     // Returns this user's posts EXCEPT soft-deleted ones. Hidden posts ARE included —
     // "hidden" means hidden from other users' feeds, not from the author's own My Posts
     // page (where they can unhide). Soft-deleted posts are dropped from this view, but
     // their rows persist so they still count toward the rolling weekly post limit.
-    // Sort by publishedAt descending — the by_author index orders by _creationTime,
-    // not publishedAt, so we sort in-memory to get correct chronological order.
-    return posts.filter(p => p.deletedAt === undefined).sort((a, b) => b.publishedAt - a.publishedAt)
+    return posts.filter(p => p.deletedAt === undefined)
   }
 })
 
 /**
- * Counts how many of the given posts were published at or after `since`.
- * Pure helper — the single source of truth for the rolling-window count shared
- * by weekly-limit enforcement (countRecentPosts → submitPost) and the My Posts
- * usage pill (getWeeklyUsage), so the two can never drift apart.
+ * Bounded count of this author's posts published at or after `since`, read through the
+ * `by_author_and_publishedAt` index — the SAME index and range the authoritative insert-path
+ * check uses (jobs/syncPosts.upsertPost), so the weekly-limit enforcement (countRecentPosts →
+ * submitPost) and the My Posts usage pill (getWeeklyUsage) can never drift apart. `limit` is the
+ * caller's plan cap: both callers only need to know whether the count reaches postsPerWeek, so
+ * scanning past it would be wasted work. The cutoff is inclusive.
  */
-export function countPostsSince(posts: { publishedAt: number }[], since: number): number {
-  return posts.filter(p => p.publishedAt >= since).length
+export async function countPostsPublishedSince(
+  ctx: QueryCtx,
+  authorId: Id<'users'>,
+  since: number,
+  limit: number
+): Promise<number> {
+  const posts = await ctx.db
+    .query('posts')
+    .withIndex('by_author_and_publishedAt', q => q.eq('authorId', authorId).gte('publishedAt', since))
+    .take(limit)
+  return posts.length
 }
 
 export const countRecentPosts = internalQuery({
   args: {
     authorId: v.id('users'),
-    since: v.number()
+    since: v.number(),
+    limit: v.number()
   },
-  handler: async (ctx, { authorId, since }) => {
-    const posts = await ctx.db
-      .query('posts')
-      .withIndex('by_author', q => q.eq('authorId', authorId))
-      .order('desc')
-      .take(20)
-    return countPostsSince(posts, since)
-  }
+  handler: async (ctx, { authorId, since, limit }) => countPostsPublishedSince(ctx, authorId, since, limit)
 })
 
 /**
  * Public: returns the authenticated user's weekly post usage for the My Posts
  * pill. `postsThisWeek` is counted over the SAME rolling 7-day window that
  * submitPost enforces, so the pill always reflects what the backend will allow.
- * Returns null when not signed in (mirrors getMe / getMyPosts).
+ * `now` is client-supplied (queries must not read the wall clock); the enforcement
+ * path still uses server time inside its action. Returns null when not signed in
+ * (mirrors getMe / getMyPosts).
  */
 export const getWeeklyUsage = query({
   args: {
-    sessionToken: v.optional(v.string())
+    sessionToken: v.optional(v.string()),
+    now: v.number()
   },
-  handler: async (ctx, { sessionToken }) => {
+  handler: async (ctx, { sessionToken, now }) => {
     if (!sessionToken) return null
     let user: Doc<'users'>
     try {
@@ -138,14 +146,10 @@ export const getWeeklyUsage = query({
     }
     const tier = user.tier ?? 'starter'
     const limits = await getPlanLimitsHelper(ctx, user._id, tier)
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-    const posts = await ctx.db
-      .query('posts')
-      .withIndex('by_author', q => q.eq('authorId', user._id))
-      .order('desc')
-      .take(20)
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
+    const postsThisWeek = await countPostsPublishedSince(ctx, user._id, sevenDaysAgo, limits.postsPerWeek)
     return {
-      postsThisWeek: countPostsSince(posts, sevenDaysAgo),
+      postsThisWeek,
       postsPerWeek: limits.postsPerWeek
     }
   }
@@ -154,14 +158,17 @@ export const getWeeklyUsage = query({
 /**
  * Public: returns the authenticated user's featured-post usage for the current UTC calendar
  * month — backs the My Posts quota pill and the feature-toggle disabled state. Reads the SAME
- * tier limit + `by_user_month` row that `featurePost` enforces, so the UI never disagrees with
- * what the backend will allow. Returns null when not signed in (mirrors getWeeklyUsage).
+ * tier limit + `by_user_id_and_month` row that `featurePost` enforces, so the UI never disagrees with
+ * what the backend will allow. `now` is client-supplied (queries must not read the wall clock);
+ * `featurePost` still uses server time inside its mutation. Returns null when not signed in
+ * (mirrors getWeeklyUsage).
  */
 export const getFeaturedUsage = query({
   args: {
-    sessionToken: v.optional(v.string())
+    sessionToken: v.optional(v.string()),
+    now: v.number()
   },
-  handler: async (ctx, { sessionToken }) => {
+  handler: async (ctx, { sessionToken, now }) => {
     if (!sessionToken) return null
     let user: Doc<'users'>
     try {
@@ -171,10 +178,10 @@ export const getFeaturedUsage = query({
     }
     const tier = user.tier ?? 'starter'
     const limits = await getPlanLimitsHelper(ctx, user._id, tier)
-    const month = currentUtcMonthKey()
+    const month = currentUtcMonthKey(now)
     const usage = await ctx.db
       .query('featuredPostUsage')
-      .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
+      .withIndex('by_user_id_and_month', q => q.eq('userId', user._id).eq('month', month))
       .unique()
     return {
       usedCount: usage?.usedCount ?? 0,
@@ -235,32 +242,23 @@ export const submitPost = action({
     postUrl: v.string()
   },
   handler: async (ctx, { sessionToken, postUrl }): Promise<{ postId: string }> => {
-    // 1. Resolve any lnkd.in shortlink to its underlying linkedin.com URL (SSRF-safe: manual
-    //    redirect, every hop re-validated against the host allowlist). A normal linkedin.com URL
-    //    passes straight through with no network call. Everything downstream uses `resolvedUrl`.
-    const resolvedUrl = await resolveLinkedInShortlink(postUrl)
-    const parsed = resolvedUrl ? parseLinkedInPostUrl(resolvedUrl) : null
-    if (!resolvedUrl || !parsed) {
-      throw new ConvexError('Unrecognized LinkedIn post URL. Use a /posts/… or /feed/update/… URL.')
-    }
-
-    // 2. Resolve authenticated user from session token (never trusts client-supplied userId)
+    // 1. Resolve authenticated user FIRST, so no anonymous caller can trigger outbound requests
+    //    (the per-user rate limit and weekly-limit checks below only exist for resolved users).
     const user = (await requireAuthAction(ctx, sessionToken)) as Doc<'users'>
     if (!user?.linkedinAccessToken) {
       throw new ConvexError('No LinkedIn access token. Please sign in again.')
     }
-    // No card-gate here: a not-yet-subscribed member CAN submit (incl. the onboarding first post).
-    // The post is created HIDDEN for non-active authors (postCreatedHidden, at the upsert below) and
-    // revealed when they become 'active'. Reactions/comments stay card-gated (see interactions.ts).
 
-    // Admin "share any post" override — TESTING ONLY, enabled only on the local /
-    // dev deployment via the ALLOW_ADMIN_SHARE_ANY_POST env var. When off (always
-    // the case in production), admins submit under the normal rules below.
-    const adminShareOverride = isAdminShareOverrideEnabled(user, process.env)
+    // 2. Admin "share any post" override — TESTING ONLY, enabled only on the local /
+    //    dev deployment via the ALLOW_ADMIN_SHARE_ANY_POST env var. When off (always
+    //    the case in production), admins submit under the normal rules below.
+    const adminShareOverride = isAdminShareOverrideEnabled(user, env)
 
-    // 3. Posting throttles — skipped only under the admin override. It lets a dev
-    //    admin curate the shared feed by submitting any post in any volume, so both
-    //    the hourly rate limit and the weekly per-plan limit are bypassed.
+    // 3. Posting throttles — BEFORE any outbound fetch (shortlink resolution and the page fetches
+    //    below), so submitting is what consumes budget: an invalid or hostile URL still consumes the
+    //    hourly budget (intended abuse control). Skipped only under the admin override. It lets a dev
+    //    admin curate the shared feed by submitting any post in any volume, so both the hourly rate
+    //    limit and the weekly per-plan limit are bypassed.
     // Hoisted out of the block so the per-post interaction cap (checked after we've read the post's
     // engagement, below) can reuse it; stays undefined under the admin override, so the cap check
     // there is skipped too — consistent with the other per-plan throttles.
@@ -283,7 +281,8 @@ export const submitPost = action({
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
       const recentPostCount = await ctx.runQuery(internal.posts.countRecentPosts, {
         authorId: user._id,
-        since: sevenDaysAgo
+        since: sevenDaysAgo,
+        limit: planLimits.postsPerWeek
       })
       if (recentPostCount >= planLimits.postsPerWeek) {
         // Prefixed code, not English prose: survives production error redaction and is
@@ -292,12 +291,27 @@ export const submitPost = action({
       }
     }
 
+    // 4. Resolve any lnkd.in shortlink to its underlying linkedin.com URL (SSRF-safe: manual
+    //    redirect, every hop re-validated) and parse it. Deliberately after the throttle: an invalid
+    //    URL consumes rate-limit budget too (abuse control).
+    const resolvedUrl = await resolveLinkedInShortlink(postUrl)
+    const parsed = resolvedUrl ? parseLinkedInPostUrl(resolvedUrl) : null
+    if (!resolvedUrl || !parsed) {
+      throw new ConvexError('Unrecognized LinkedIn post URL. Use a /posts/… or /feed/update/… URL.')
+    }
+    // No card-gate here: a not-yet-subscribed member CAN submit (incl. the onboarding first post).
+    // The post is created HIDDEN for non-active authors (postCreatedHidden, at the upsert below) and
+    // revealed when they become 'active'. Reactions/comments stay card-gated (see interactions.ts).
+
     // Fetch the post page, then extract its URN — namespace-preserving (ugcPost/share/activity),
     // since LinkedIn's embed auth-walls a post addressed under the wrong namespace. `extractPostUrn`
     // tries the legacy `data-attributed-urn` attribute, then the `-{ns}-{id}-` slug of the submitted
     // URL (preferred — it carries the shared ugcPost id) and the final redirected URL. It returns a
     // format-validated URN, so it's safe downstream (ownership check, DB, later API calls).
-    const rawLinkedinResponse = await fetchWithTimeout(resolvedUrl)
+    const rawLinkedinResponse = await fetchAllowedLinkedInUrl(resolvedUrl)
+    if (!rawLinkedinResponse) {
+      throw new ConvexError('Could not reach LinkedIn to read this post. Please try again in a moment.')
+    }
     // A public post page returns 200. A non-2xx here is a transient/blocked LinkedIn response
     // (429 rate-limit, 999 anti-bot, 5xx) — surface a retryable error instead of letting an empty
     // body fall through to the misleading "Could not find a valid LinkedIn post URN". ponytail:
@@ -411,9 +425,9 @@ export const submitPost = action({
     const articleUrl = parsedContent.media.find(m => m.type === 'article')?.url
     if (articleUrl && isAllowedLinkedInUrl(articleUrl)) {
       try {
-        const articleResponse = await fetchWithTimeout(articleUrl)
+        const articleResponse = await fetchAllowedLinkedInUrl(articleUrl)
         // Best-effort: skip a non-OK article page rather than parsing a block/error body into `article`.
-        if (articleResponse.ok) {
+        if (articleResponse?.ok) {
           const articleHtml = await articleResponse.text()
           article = { url: articleUrl, ...parseArticle(articleHtml) }
         }
@@ -448,7 +462,7 @@ export const submitPost = action({
     })
 
     if (!postId) {
-      throw new Error('Failed to upsert post')
+      throw new ConvexError('This post is already linked to another LinkedIn account and cannot be updated here.')
     }
 
     // The first successful submission clears the first-post onboarding step (set-once), whether the
@@ -587,7 +601,7 @@ export async function featurePostHandler(
   const month = currentUtcMonthKey()
   const usageRow = await ctx.db
     .query('featuredPostUsage')
-    .withIndex('by_user_month', q => q.eq('userId', user._id).eq('month', month))
+    .withIndex('by_user_id_and_month', q => q.eq('userId', user._id).eq('month', month))
     .unique()
   const usedCount = usageRow?.usedCount ?? 0
   if (isFeaturedLimitReached(usedCount, limits.featuredPerMonth)) {
@@ -660,8 +674,6 @@ export const assertFeaturedPurchasable = internalQuery({
     return null
   }
 })
-
-type AuditDb = Parameters<typeof writeAuditLog>[0]
 
 export interface ApplyPurchasedFeatureArgs {
   postId: string

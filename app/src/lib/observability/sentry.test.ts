@@ -11,6 +11,16 @@ describe('sentryBeforeSend', () => {
     expect(out.request?.url).toBe('https://app.example/feed') // non-PII request fields kept
   })
 
+  it('strips a session-bearing fragment from request.url', () => {
+    const out = sentryBeforeSend({ request: { url: 'https://app.example/auth/success#session=abc' } })
+    expect(out.request?.url).toBe('https://app.example/auth/success')
+  })
+
+  it('preserves a fragment without session=', () => {
+    const out = sentryBeforeSend({ request: { url: 'https://app.example/feed#top' } })
+    expect(out.request?.url).toBe('https://app.example/feed#top')
+  })
+
   it('drops any user identity', () => {
     const out = sentryBeforeSend({ user: { email: 'a@b.com', ip_address: '1.2.3.4' } })
     expect(out.user).toBeUndefined()

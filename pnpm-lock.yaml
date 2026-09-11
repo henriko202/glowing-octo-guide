@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       convex:
-        specifier: ^1.41.0
-        version: 1.41.0(react@19.2.7)
+        specifier: ^1.45.0
+        version: 1.45.0(react@19.2.7)
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.4
@@ -38,7 +38,7 @@ importers:
         version: 8.61.1(eslint@9.39.4(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@5.9.3)
       vitest:
         specifier: ^4.1.9
-        version: 4.1.9(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@25.5.0)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0))
+        version: 4.1.9(@edge-runtime/vm@5.0.0)(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@25.5.0)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0))
 
   app:
     dependencies:
@@ -64,8 +64,8 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       convex:
-        specifier: ^1.41.0
-        version: 1.41.0(react@19.2.7)
+        specifier: ^1.45.0
+        version: 1.45.0(react@19.2.7)
       i18next:
         specifier: ^25.10.10
         version: 25.10.10(typescript@5.9.3)
@@ -147,7 +147,7 @@ importers:
         version: 0.12.0(eslint@9.39.4(jiti@2.7.0)(supports-color@10.2.2))(optionator@0.9.4)(typescript@5.9.3)(vite@6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0))
       vitest:
         specifier: ^4.1.9
-        version: 4.1.9(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0))
+        version: 4.1.9(@edge-runtime/vm@5.0.0)(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0))
       wrangler:
         specifier: ^4.103.0
         version: 4.103.0
@@ -156,23 +156,32 @@ importers:
     dependencies:
       '@convex-dev/rate-limiter':
         specifier: ^0.3.2
-        version: 0.3.2(convex@1.41.0(react@19.2.7))(react@19.2.7)
+        version: 0.3.2(convex@1.45.0(react@19.2.7))(react@19.2.7)
       '@convex-dev/stripe':
-        specifier: ^0.1.4
-        version: 0.1.4(@types/node@25.5.0)(convex@1.41.0(react@19.2.7))(react@19.2.7)
+        specifier: ^0.1.6
+        version: 0.1.6(@types/node@25.5.0)(convex@1.45.0(react@19.2.7))(react@19.2.7)
       convex:
-        specifier: ^1.41.0
-        version: 1.41.0(react@19.2.7)
+        specifier: ^1.45.0
+        version: 1.45.0(react@19.2.7)
       stripe:
-        specifier: ^20.4.1
-        version: 20.4.1(@types/node@25.5.0)
+        specifier: ^22.2.1
+        version: 22.6.1(@types/node@25.5.0)
     devDependencies:
+      '@edge-runtime/vm':
+        specifier: ^5.0.0
+        version: 5.0.0
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.0
+      convex-test:
+        specifier: ^0.0.57
+        version: 0.0.57(convex@1.45.0(react@19.2.7))
+      vite:
+        specifier: 6.4.3
+        version: 6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.9
-        version: 4.1.9(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@25.5.0)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0))
+        version: 4.1.9(@edge-runtime/vm@5.0.0)(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0))
 
   landing:
     dependencies:
@@ -215,7 +224,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.9(@types/node@22.19.21)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0))
+        version: 4.1.9(@edge-runtime/vm@5.0.0)(@types/node@22.19.21)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0))
       wrangler:
         specifier: ^4.103.0
         version: 4.103.0
@@ -677,8 +686,8 @@ packages:
       react:
         optional: true
 
-  '@convex-dev/stripe@0.1.4':
-    resolution: {integrity: sha512-HnINm3K2QHGvP0X4YV7KruCjQ1Ni0HE1qpJ5rZYjfdUbMcqJsX4ZYTmOo7tL83qtokS3EahKVkhXLCH/9Ms/og==}
+  '@convex-dev/stripe@0.1.6':
+    resolution: {integrity: sha512-6+DLM6QDLiFYeBKwJGlPrpm9tgZKe/EWlTYcbLyIKqS5q4xZHjTsyvFE98TD0hPLfniVVoD+/rO+PAnhSsNXkg==}
     peerDependencies:
       convex: ^1.29.3
       react: ^18.3.1 || ^19.0.0
@@ -728,6 +737,14 @@ packages:
     engines: {bun: '>=1', deno: '>=2.7.10', node: '>=16'}
     peerDependencies:
       '@noble/ciphers': ^1.0.0
+
+  '@edge-runtime/primitives@6.0.0':
+    resolution: {integrity: sha512-FqoxaBT+prPBHBwE1WXS1ocnu/VLTQyZ6NMUBAdbP7N2hsFTTxMC/jMu2D/8GAlMQfxeuppcPuCUk/HO3fpIvA==}
+    engines: {node: '>=18'}
+
+  '@edge-runtime/vm@5.0.0':
+    resolution: {integrity: sha512-NKBGBSIKUG584qrS1tyxVpX/AKJKQw5HgjYEnPLC0QsTw79JrGn+qUr8CXFb955Iy7GUdiiUv1rJ6JBGvaKb6w==}
+    engines: {node: '>=18'}
 
   '@emnapi/core@1.9.1':
     resolution: {integrity: sha512-mukuNALVsoix/w1BJwFzwXBN/dHeejQtuVzcDsfOEsdpCumXb/E9j8w11h5S54tT1xhifGfbbSm/ICrObRb3KA==}
@@ -3641,9 +3658,14 @@ packages:
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
-  convex@1.41.0:
-    resolution: {integrity: sha512-euxVf6yfpB7/VGKOobkLgjpbJidsUgW+b0ezonEyCUPqlpHFwR4/yIiI1hjjErzraiw91GxrtxpXQClMLNqU+w==}
-    engines: {node: '>=18.0.0', npm: '>=7.0.0'}
+  convex-test@0.0.57:
+    resolution: {integrity: sha512-yedyPgFld7RYVXjozRB4WOVStsXrYuln4JfeZJTVbRNw9SjulK3w2Y7sta7Au/e//nZzzqj3a5T+eaIuWu2sAw==}
+    peerDependencies:
+      convex: ^1.43.0
+
+  convex@1.45.0:
+    resolution: {integrity: sha512-AV3B56Ptu/14d76g3urBJ50dwpiZa6uJaLT84OWox5aCwZIJiuAamdjv3lLHDzs8vv5kC31anEZohhUe3qJ2bA==}
+    engines: {node: '>=20.0.0', npm: '>=7.0.0'}
     hasBin: true
     peerDependencies:
       '@auth0/auth0-react': ^2.0.1
@@ -5816,11 +5838,11 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
-  stripe@20.4.1:
-    resolution: {integrity: sha512-axCguHItc8Sxt0HC6aSkdVRPffjYPV7EQqZRb2GkIa8FzWDycE7nHJM19C6xAIynH1Qp1/BHiopSi96jGBxT0w==}
-    engines: {node: '>=16'}
+  stripe@22.6.1:
+    resolution: {integrity: sha512-hAKSkGeVt2u46TRYhmnvwmVHxBNtOCJnPjc+SH5sP2B2ypElYzAAY3Ljx0Ar8C2w8nfpFQiZ95qoDCDsFkXMTA==}
+    engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': '>=16'
+      '@types/node': '>=18'
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6363,18 +6385,6 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
-
-  ws@8.20.1:
-    resolution: {integrity: sha512-It4dO0K5v//JtTXuPkfEOaI3uUN87iYPnqo/ZzqCoG3g8uhA66QUMs/SrM0YK7/NAu+r4LMh/9dq2A7k+rHs+w==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
 
   ws@8.21.0:
     resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
@@ -7285,17 +7295,17 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260617.1':
     optional: true
 
-  '@convex-dev/rate-limiter@0.3.2(convex@1.41.0(react@19.2.7))(react@19.2.7)':
+  '@convex-dev/rate-limiter@0.3.2(convex@1.45.0(react@19.2.7))(react@19.2.7)':
     dependencies:
-      convex: 1.41.0(react@19.2.7)
+      convex: 1.45.0(react@19.2.7)
     optionalDependencies:
       react: 19.2.7
 
-  '@convex-dev/stripe@0.1.4(@types/node@25.5.0)(convex@1.41.0(react@19.2.7))(react@19.2.7)':
+  '@convex-dev/stripe@0.1.6(@types/node@25.5.0)(convex@1.45.0(react@19.2.7))(react@19.2.7)':
     dependencies:
-      convex: 1.41.0(react@19.2.7)
+      convex: 1.45.0(react@19.2.7)
       react: 19.2.7
-      stripe: 20.4.1(@types/node@25.5.0)
+      stripe: 22.6.1(@types/node@25.5.0)
     transitivePeerDependencies:
       - '@types/node'
 
@@ -7357,6 +7367,12 @@ snapshots:
   '@ecies/ciphers@0.2.6(@noble/ciphers@1.3.0)':
     dependencies:
       '@noble/ciphers': 1.3.0
+
+  '@edge-runtime/primitives@6.0.0': {}
+
+  '@edge-runtime/vm@5.0.0':
+    dependencies:
+      '@edge-runtime/primitives': 6.0.0
 
   '@emnapi/core@1.9.1':
     dependencies:
@@ -9960,11 +9976,15 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  convex@1.41.0(react@19.2.7):
+  convex-test@0.0.57(convex@1.45.0(react@19.2.7)):
+    dependencies:
+      convex: 1.45.0(react@19.2.7)
+
+  convex@1.45.0(react@19.2.7):
     dependencies:
       esbuild: 0.27.0
       prettier: 3.8.4
-      ws: 8.20.1
+      ws: 8.21.0
     optionalDependencies:
       react: 19.2.7
     transitivePeerDependencies:
@@ -12690,7 +12710,7 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  stripe@20.4.1(@types/node@25.5.0):
+  stripe@22.6.1(@types/node@25.5.0):
     optionalDependencies:
       '@types/node': 25.5.0
 
@@ -13031,7 +13051,7 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  vitest@4.1.9(@types/node@22.19.21)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0)):
+  vitest@4.1.9(@edge-runtime/vm@5.0.0)(@types/node@22.19.21)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.9
       '@vitest/mocker': 4.1.9(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0))
@@ -13054,12 +13074,13 @@ snapshots:
       vite: 8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@edge-runtime/vm': 5.0.0
       '@types/node': 22.19.21
       jsdom: 26.1.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.9(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0)):
+  vitest@4.1.9(@edge-runtime/vm@5.0.0)(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.9
       '@vitest/mocker': 4.1.9(vite@6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0))
@@ -13082,12 +13103,13 @@ snapshots:
       vite: 6.4.3(@types/node@25.5.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@edge-runtime/vm': 5.0.0
       '@types/node': 25.5.0
       jsdom: 26.1.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.9(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@25.5.0)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0)):
+  vitest@4.1.9(@edge-runtime/vm@5.0.0)(@types/node@25.5.0)(jsdom@26.1.0(supports-color@10.2.2))(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@25.5.0)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.9
       '@vitest/mocker': 4.1.9(vite@8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@25.5.0)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0))
@@ -13110,6 +13132,7 @@ snapshots:
       vite: 8.0.0(@emnapi/core@1.9.1)(@emnapi/runtime@1.11.1)(@types/node@25.5.0)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.16.9)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@edge-runtime/vm': 5.0.0
       '@types/node': 25.5.0
       jsdom: 26.1.0(supports-color@10.2.2)
     transitivePeerDependencies:
@@ -13238,8 +13261,6 @@ snapshots:
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
-
-  ws@8.20.1: {}
 
   ws@8.21.0: {}
 

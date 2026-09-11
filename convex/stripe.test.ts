@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toSubscriptionStatus, resolveSyncedTier, syncArgs } from './stripe'
+import { toSubscriptionStatus, resolveSyncedTier, syncArgs, invoiceSubscriptionId } from './stripe'
 
 describe('toSubscriptionStatus', () => {
   it('passes through our known access-granting / explicit statuses', () => {
@@ -39,19 +39,22 @@ describe('resolveSyncedTier', () => {
 })
 
 describe('syncArgs', () => {
-  // A `customer.subscription.updated` payload, minus everything these tests do not read.
-  const event = (sub: Record<string, unknown>, item: Record<string, unknown> = {}) => ({
-    created: 1_700_000_000,
-    data: {
-      object: {
-        id: 'sub_1',
-        customer: 'cus_1',
-        status: 'active',
-        items: { data: [{ price: { id: 'price_x', unit_amount: 1500, currency: 'usd' }, ...item }] },
-        ...sub
+  // A `customer.subscription.updated` payload, minus everything these tests do not read. The cast
+  // is fixture-only: it keeps the minimal literal assignable to the real SDK event type.
+  const event = (sub: Record<string, unknown>, item: Record<string, unknown> = {}) =>
+    ({
+      type: 'customer.subscription.updated',
+      created: 1_700_000_000,
+      data: {
+        object: {
+          id: 'sub_1',
+          customer: 'cus_1',
+          status: 'active',
+          items: { data: [{ price: { id: 'price_x', unit_amount: 1500, currency: 'usd' }, ...item }] },
+          ...sub
+        }
       }
-    }
-  })
+    }) as unknown as Parameters<typeof syncArgs>[0]
 
   // The regression this pins: `current_period_end` moved onto the subscription ITEM in the 2025 API
   // versions. Reading only the subscription left currentPeriodEnd undefined on a modern account, so
@@ -88,5 +91,30 @@ describe('syncArgs', () => {
     expect(syncArgs(event({ cancel_at: 1_789_586_703, cancel_at_period_end: false })).cancelAtPeriodEnd).toBe(true)
     expect(syncArgs(event({ cancel_at_period_end: true })).cancelAtPeriodEnd).toBe(true)
     expect(syncArgs(event({ cancel_at: null, cancel_at_period_end: false })).cancelAtPeriodEnd).toBe(false)
+  })
+})
+
+describe('invoiceSubscriptionId', () => {
+  // Fixture-only cast: minimal literals assignable to the real SDK Invoice type.
+  const invoice = (fields: Record<string, unknown>) => fields as unknown as Parameters<typeof invoiceSubscriptionId>[0]
+
+  it('reads the legacy top-level string (pre-basil payloads)', () => {
+    expect(invoiceSubscriptionId(invoice({ subscription: 'sub_legacy' }))).toBe('sub_legacy')
+  })
+
+  it('reads the legacy expanded object form', () => {
+    expect(invoiceSubscriptionId(invoice({ subscription: { id: 'sub_legacy_obj' } }))).toBe('sub_legacy_obj')
+  })
+
+  it('reads the 2025+ parent path (basil moved the field under parent.subscription_details)', () => {
+    expect(invoiceSubscriptionId(invoice({ parent: { subscription_details: { subscription: 'sub_new' } } }))).toBe(
+      'sub_new'
+    )
+  })
+
+  it('is undefined when neither shape carries a subscription', () => {
+    expect(invoiceSubscriptionId(invoice({}))).toBeUndefined()
+    expect(invoiceSubscriptionId(invoice({ parent: { subscription_details: {} } }))).toBeUndefined()
+    expect(invoiceSubscriptionId(invoice({ subscription: null, parent: null }))).toBeUndefined()
   })
 })

@@ -1,3 +1,4 @@
+import { env } from '../_generated/server'
 import type { LinkedInTokenResponse, LinkedInUserInfo } from './types.js'
 import { callMemberApi } from './client'
 import { scrubError } from '../lib/scrubError'
@@ -13,7 +14,7 @@ const SCOPES = ['openid', 'profile', 'email'].join(' ')
 // (what `process.env.X!` yields when unset) into the auth URL / token request, which surfaces as a
 // cryptic LinkedIn error. Mirrors the explicit-guard pattern in ai/openrouter.callOpenRouter.
 function requireEnv(name: 'LINKEDIN_CLIENT_ID' | 'LINKEDIN_CLIENT_SECRET' | 'LINKEDIN_REDIRECT_URI'): string {
-  const value = process.env[name]
+  const value = env[name]
   if (!value) {
     console.error(`${name} not set`)
     throw new Error('LinkedIn sign-in is not configured.')

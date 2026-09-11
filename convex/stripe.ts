@@ -5,6 +5,7 @@
 
 import { internalMutation } from './_generated/server'
 import { v } from 'convex/values'
+import type Stripe from 'stripe'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { tierToRank } from './lib/planLimits'
@@ -21,8 +22,15 @@ import {
 import { resolvePendingDowngrade } from './lib/downgrade'
 import { getTierFromPriceId } from './lib/stripePrices'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe event types vary by SDK version
-type StripeEvent = any
+// `Stripe.Event` is the SDK's discriminated union of every webhook payload. `eventCreatedMs` works
+// on any of them; `syncArgs` narrows to the subscription lifecycle events it actually reshapes.
+type StripeEvent = Stripe.Event
+
+/** The subscription lifecycle payloads the `customer.subscription.created`/`updated` routes pass in. */
+type SubscriptionEvent = Extract<
+  StripeEvent,
+  { type: 'customer.subscription.created' | 'customer.subscription.updated' }
+>
 
 // Stripe's `created` of the EVENT itself (ms): the ordering stamp behind subscriptions.lastEventAt.
 export const eventCreatedMs = (event: StripeEvent) =>
@@ -33,8 +41,11 @@ export const eventCreatedMs = (event: StripeEvent) =>
  * created and updated routes in http.ts. Lives here rather than there so it can be unit-tested:
  * http.ts registers its routes at module scope and cannot be imported by a test.
  */
-export function syncArgs(event: StripeEvent) {
-  const sub = event.data.object
+export function syncArgs(event: SubscriptionEvent) {
+  // API 2025 moved `current_period_end` from the subscription onto its item, but the account's
+  // webhook endpoint API version decides which shape the payload carries — read the legacy
+  // subscription-level field too, off a narrow view since the SDK type no longer declares it.
+  const sub: Stripe.Subscription & { current_period_end?: number | null } = event.data.object
   const price = sub.items?.data?.[0]?.price
   // `current_period_end` moved from the SUBSCRIPTION onto the subscription ITEM in the 2025 API
   // versions. Reading only the subscription silently yields undefined on a modern account, which is
@@ -62,6 +73,21 @@ export function syncArgs(event: StripeEvent) {
     stripeCreated: typeof sub.created === 'number' ? sub.created * 1000 : undefined,
     eventCreated: eventCreatedMs(event)
   }
+}
+
+/**
+ * The subscription an invoice belongs to, from either API shape: 2025-03-31.basil removed the
+ * top-level `invoice.subscription` and moved it under `parent.subscription_details`. The account's
+ * webhook endpoint API version decides which shape the payload carries, so read both (newest
+ * first). Lives here, next to `syncArgs`, so the field extraction stays testable.
+ */
+export function invoiceSubscriptionId(invoice: Stripe.Invoice): string | undefined {
+  // The legacy top-level field is gone from the SDK's type but can still be in an older payload.
+  const legacy = (invoice as { subscription?: string | Stripe.Subscription | null }).subscription
+  const current = invoice.parent?.subscription_details?.subscription
+  const subscription = legacy ?? current
+  if (!subscription) return undefined
+  return typeof subscription === 'string' ? subscription : subscription.id
 }
 
 // Maps a raw Stripe subscription status onto our access-granting union. FAIL-SAFE:

@@ -26,7 +26,7 @@ const post = (id: string, authorId: string, over: Record<string, unknown> = {}) 
 const user = (id: string, over: Record<string, unknown> = {}) =>
   ({ _id: id, name: id, subscriptionStatus: 'active', ...over }) as unknown as Doc<'users'>
 
-// Minimal QueryCtx mock: the by_feed_rank page walk returns `page`, get() resolves authors, and the
+// Minimal QueryCtx mock: the by_in_feed_and_feed_rank page walk returns `page`, get() resolves authors, and the
 // per-post userPostState lookup (backlog/R21) answers from `states` keyed by post id.
 function feedCtx(
   page: Doc<'posts'>[],
@@ -396,7 +396,7 @@ describe('fetchFeedPage — growth tier auto-filter', () => {
 // ── Seeded-DB parity: every feed state, one page, both layers ──────────────────────────────────
 // Mirrors the states created by convex/seed.ts (each persona = one real seeded author) and runs the
 // whole pipeline with PRODUCTION logic for both layers:
-//   1. computeFeedFields()  → the by_feed_rank index: the inFeed gate (hidden / interaction-capped /
+//   1. computeFeedFields()  → the by_in_feed_and_feed_rank index: the inFeed gate (hidden / interaction-capped /
 //      soft-deleted never page in) and the feedRank order (featured → author-tier → recency),
 //   2. fetchFeedPage()      → the per-viewer read gate (own post / visibility allow-lists / author
 //      eligibility: banned, pending-deletion, canceled-lapsed vs canceled-but-paid).
@@ -404,7 +404,7 @@ describe('fetchFeedPage — growth tier auto-filter', () => {
 describe('fetchFeedPage — seeded feed-state parity', () => {
   const R = { pro: 3, growth: 2, starter: 1 }
 
-  // Simulate the by_feed_rank index walk: stamp the denormalized fields with the REAL helper, drop
+  // Simulate the by_in_feed_and_feed_rank index walk: stamp the denormalized fields with the REAL helper, drop
   // inFeed=false, and sort by feedRank desc — the exact page `fetchFeedPage` receives in production.
   const indexPage = (raw: Doc<'posts'>[]): Doc<'posts'>[] =>
     raw

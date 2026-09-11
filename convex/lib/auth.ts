@@ -12,6 +12,7 @@ import type { ActionCtx, MutationCtx, QueryCtx } from '../_generated/server'
 import { internal } from '../_generated/api'
 import type { Doc } from '../_generated/dataModel'
 import { sessionExpiryFrom, shouldRenewSession } from '../sessions'
+import { ConvexError } from 'convex/values'
 
 /**
  * Resolves a session token to a user document WITHOUT enforcing ban state.
@@ -49,7 +50,7 @@ export async function resolveSession(
  * endpoint is covered automatically.
  */
 export function assertNotBanned(user: { isBanned?: boolean }): void {
-  if (user.isBanned) throw new Error('Account suspended')
+  if (user.isBanned) throw new ConvexError('Account suspended')
 }
 
 /**
@@ -63,7 +64,7 @@ export async function requireAuth(
   sessionToken: string | undefined
 ): Promise<Doc<'users'>> {
   const user = await resolveSession(ctx, sessionToken)
-  if (!user) throw new Error('Unauthorized')
+  if (!user) throw new ConvexError('Unauthorized')
   assertNotBanned(user)
   return user
 }
@@ -75,12 +76,12 @@ export async function requireAuth(
  * "Account suspended" if the user is banned.
  */
 export async function requireAuthAction(ctx: ActionCtx, sessionToken: string | undefined): Promise<Doc<'users'>> {
-  if (!sessionToken) throw new Error('Unauthorized')
+  if (!sessionToken) throw new ConvexError('Unauthorized')
 
   const now = Date.now()
   const session = await ctx.runQuery(internal.sessions.getByToken, { token: sessionToken })
   if (!session || session.expiresAt < now) {
-    throw new Error('Unauthorized')
+    throw new ConvexError('Unauthorized')
   }
 
   // Sliding expiry: actions can't write, so renew via an internal mutation — but only once past the
@@ -90,7 +91,7 @@ export async function requireAuthAction(ctx: ActionCtx, sessionToken: string | u
   }
 
   const user = await ctx.runQuery(internal.users.getWithTokens, { userId: session.userId })
-  if (!user) throw new Error('Unauthorized')
+  if (!user) throw new ConvexError('Unauthorized')
   assertNotBanned(user)
 
   return user

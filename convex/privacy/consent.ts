@@ -3,14 +3,12 @@
 // purpose is the LATEST record (by createdAt). latestConsentByPurpose is pure + unit-tested.
 // Re-consent: acknowledgePolicy stamps the user's acknowledgedPolicyVersion to the current POLICY_VERSION.
 import { mutation, query } from '../_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { resolveSession } from '../lib/auth'
-import { writeAuditLog } from '../lib/audit'
+import { type AuditDb, writeAuditLog } from '../lib/audit'
 import { POLICY_VERSION } from '../lib/policy'
 
 export type ConsentPurpose = 'marketing' | 'analytics'
-
-type AuditDb = { insert: (t: string, d: Record<string, unknown>) => Promise<string> }
 
 export function latestConsentByPurpose(
   records: Array<{ purpose: string; granted: boolean; createdAt: number }>
@@ -33,7 +31,7 @@ export const recordConsent = mutation({
   },
   handler: async (ctx, { sessionToken, purpose, granted }) => {
     const user = await resolveSession(ctx, sessionToken)
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw new ConvexError('Unauthorized')
     await ctx.db.insert('consentRecords', {
       userId: user._id,
       purpose,
@@ -56,11 +54,22 @@ export const getConsents = query({
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken)
     if (!user) return null
-    const records = await ctx.db
-      .query('consentRecords')
-      .withIndex('by_user', q => q.eq('userId', user._id))
-      .collect()
-    return latestConsentByPurpose(records)
+    // One indexed read per purpose, newest-first. A shared window over both purposes is unsafe:
+    // recordConsent writes one purpose at a time, so a purpose toggled often can push the other
+    // purpose's latest grant past any fixed row bound.
+    const [marketing, analytics] = await Promise.all([
+      ctx.db
+        .query('consentRecords')
+        .withIndex('by_user_and_purpose_and_created_at', q => q.eq('userId', user._id).eq('purpose', 'marketing'))
+        .order('desc')
+        .first(),
+      ctx.db
+        .query('consentRecords')
+        .withIndex('by_user_and_purpose_and_created_at', q => q.eq('userId', user._id).eq('purpose', 'analytics'))
+        .order('desc')
+        .first()
+    ])
+    return latestConsentByPurpose([marketing, analytics].filter(r => r !== null))
   }
 })
 
@@ -68,7 +77,7 @@ export const acknowledgePolicy = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken)
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw new ConvexError('Unauthorized')
     await ctx.db.patch(user._id, { acknowledgedPolicyVersion: POLICY_VERSION })
     await writeAuditLog(ctx.db as unknown as AuditDb, {
       actor: 'user',
@@ -86,7 +95,7 @@ export const completeConsentPrompt = mutation({
   args: { sessionToken: v.string(), marketing: v.boolean(), analytics: v.boolean() },
   handler: async (ctx, { sessionToken, marketing, analytics }) => {
     const user = await resolveSession(ctx, sessionToken)
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw new ConvexError('Unauthorized')
     const now = Date.now()
     const choices: ReadonlyArray<readonly [ConsentPurpose, boolean]> = [
       ['marketing', marketing],

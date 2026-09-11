@@ -63,7 +63,7 @@ vi.mock('convex/react', () => ({ useQuery: vi.fn(), useMutation: vi.fn() }))
 
 beforeEach(() => {
   Object.values(mocks).forEach(m => m.mockReset().mockResolvedValue(undefined))
-  vi.mocked(useQuery).mockReturnValue(mockRows)
+  vi.mocked(useQuery).mockReturnValue({ rows: mockRows, repliesTruncated: false })
   vi.mocked(useMutation).mockImplementation((ref: unknown) => {
     const name =
       getFunctionName(ref as Parameters<typeof getFunctionName>[0])
@@ -89,6 +89,18 @@ describe('FeedbackTab', () => {
     expect(screen.getByText('Jane')).toBeInTheDocument()
     expect(screen.getByText(/the share button is broken/i)).toBeInTheDocument()
     expect(screen.getByText('bug')).toBeInTheDocument()
+    expect(screen.queryByText(/truncated/i)).not.toBeInTheDocument()
+  })
+
+  it('renders a truncation note when reply threads hit the 20-reply bound', () => {
+    vi.mocked(useQuery).mockReturnValue({ rows: mockRows, repliesTruncated: true })
+    render(
+      <FeedbackTab
+        sessionToken="tok"
+        isAdmin={true}
+      />
+    )
+    expect(screen.getByText(/truncated/i)).toBeInTheDocument()
   })
 
   it('filters to New only', () => {

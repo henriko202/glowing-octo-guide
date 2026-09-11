@@ -1,4 +1,5 @@
 // convex/linkedin/verifyPostOwnership.ts
+import { ConvexError } from 'convex/values'
 
 export interface OwnershipResult {
   confirmed: boolean
@@ -45,20 +46,25 @@ export function verifyPostOwnership(
 ): OwnershipResult {
   if (postAuthorName) {
     if (!sameName(postAuthorName, memberName)) {
-      throw new Error("This post doesn't belong to your LinkedIn account.")
+      throw new ConvexError("This post doesn't belong to your LinkedIn account.")
+    }
+    // When we already know the member's vanity, a Format 1 URL that points at a different vanity is
+    // a different account, whatever the display name says.
+    if (storedPublicIdentifier && vanityName && storedPublicIdentifier.toLowerCase() !== vanityName.toLowerCase()) {
+      throw new ConvexError("This post doesn't belong to your LinkedIn account.")
     }
     return { confirmed: true, content: '', publishedAt: Date.now(), strategy: 'author-name' }
   }
 
   // Fallback: the post page exposed no author block. Fall back to the vanity heuristic.
   if (!vanityName) {
-    throw new Error('Could not verify post ownership. Use a /posts/… URL format so we can check the author.')
+    throw new ConvexError('Could not verify post ownership. Use a /posts/… URL format so we can check the author.')
   }
   if (!storedPublicIdentifier) {
-    throw new Error("Couldn't verify this post's author. Submit a post whose page lists you as the author.")
+    throw new ConvexError("Couldn't verify this post's author. Submit a post whose page lists you as the author.")
   }
   if (storedPublicIdentifier.toLowerCase() !== vanityName.toLowerCase()) {
-    throw new Error("This post doesn't belong to your LinkedIn account.")
+    throw new ConvexError("This post doesn't belong to your LinkedIn account.")
   }
   return { confirmed: true, content: '', publishedAt: Date.now(), strategy: 'vanity-heuristic' }
 }

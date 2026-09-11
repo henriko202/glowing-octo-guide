@@ -59,6 +59,13 @@ export function httpAction(fn: any) {
   return fn
 }
 
+// `paginationResultValidator` is CALLED at module load to build a query's `returns` validator, so
+// unlike the other validator symbols it cannot be undefined. Tests never validate returns, so the
+// stub only has to be callable.
+export function paginationResultValidator(itemValidator: any) {
+  return itemValidator
+}
+
 export function makeFunctionReference<_T extends string>(path: string) {
   return path as any
 }

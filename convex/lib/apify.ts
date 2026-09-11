@@ -2,6 +2,7 @@
 // Shared Apify helpers: feature-gate logic + the REST task runner used by both
 // the post-sync and profile-scrape jobs.
 import { fetchWithTimeout } from './fetchWithTimeout'
+import { scrubError } from './scrubError'
 
 const APIFY_BASE = 'https://api.apify.com/v2'
 // 5 min: run-sync-get-dataset-items blocks until the actor finishes scraping, which legitimately
@@ -64,7 +65,7 @@ export async function runApifyTask(
 
   if (!res.ok) {
     const body = await res.text()
-    console.error(`Apify task run failed: ${res.status}`, body)
+    console.error(`Apify task run failed: ${res.status}`, scrubError(body))
     throw new Error(`Apify task run failed: ${res.status}`)
   }
 

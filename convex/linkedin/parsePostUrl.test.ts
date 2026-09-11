@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { parseLinkedInPostUrl, resolveLinkedInShortlink, isHttpsUrl } from './parsePostUrl'
+import { fetchAllowedLinkedInUrl, parseLinkedInPostUrl, resolveLinkedInShortlink, isHttpsUrl } from './parsePostUrl'
 
 describe('isHttpsUrl', () => {
   it('accepts https URLs (incl. non-linkedin CDN hosts like licdn)', () => {
@@ -120,6 +120,11 @@ describe('resolveLinkedInShortlink', () => {
     expect(await resolveLinkedInShortlink('https://lnkd.in/x')).toBeNull()
   })
 
+  it('returns null (not a throw) when a hop has a malformed Location', async () => {
+    stubRedirects({ 'https://lnkd.in/bad': 'http://[' })
+    expect(await resolveLinkedInShortlink('https://lnkd.in/bad')).toBeNull()
+  })
+
   it('gives up after the hop budget on a shortener loop', async () => {
     stubRedirects({ 'https://lnkd.in/loop': 'https://lnkd.in/loop' })
     expect(await resolveLinkedInShortlink('https://lnkd.in/loop')).toBeNull()
@@ -131,6 +136,76 @@ describe('resolveLinkedInShortlink', () => {
     expect(await resolveLinkedInShortlink('https://evil.com/x')).toBeNull()
     expect(await resolveLinkedInShortlink('http://www.linkedin.com/posts/x')).toBeNull()
     expect(await resolveLinkedInShortlink('not-a-url')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('fetchAllowedLinkedInUrl', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  // A string response is shorthand for a 302 with that Location; a Response is returned as-is.
+  function stubSequence(responses: Record<string, string | Response>) {
+    const fetchMock = vi.fn(async (input: string) => {
+      const response = responses[input]
+      if (response === undefined) throw new Error(`unexpected fetch to ${input}`)
+      if (typeof response === 'string') {
+        return { status: 302, headers: new Headers({ location: response }) } as unknown as Response
+      }
+      return response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('returns the response without redirecting', async () => {
+    const ok = { status: 200, headers: new Headers() } as unknown as Response
+    const fetchMock = stubSequence({ 'https://www.linkedin.com/a': ok })
+    expect(await fetchAllowedLinkedInUrl('https://www.linkedin.com/a')).toBe(ok)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows an allowlisted redirect and returns the final response', async () => {
+    const final = { status: 200, headers: new Headers() } as unknown as Response
+    const fetchMock = stubSequence({
+      'https://www.linkedin.com/a': 'https://www.linkedin.com/b',
+      'https://www.linkedin.com/b': final
+    })
+    expect(await fetchAllowedLinkedInUrl('https://www.linkedin.com/a')).toBe(final)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][0]).toBe('https://www.linkedin.com/b')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://www.linkedin.com/b',
+      expect.objectContaining({ redirect: 'manual' })
+    )
+  })
+
+  it('rejects an off-allowlist redirect WITHOUT fetching the target (SSRF)', async () => {
+    const fetchMock = stubSequence({ 'https://www.linkedin.com/a': 'https://evil.com/pwn' })
+    expect(await fetchAllowedLinkedInUrl('https://www.linkedin.com/a')).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1) // evil.com was never requested
+  })
+
+  it('rejects a redirect to a non-https target', async () => {
+    stubSequence({ 'https://www.linkedin.com/a': 'http://169.254.169.254/' })
+    expect(await fetchAllowedLinkedInUrl('https://www.linkedin.com/a')).toBeNull()
+  })
+
+  it('returns null (not a throw) when a redirect has a malformed Location', async () => {
+    stubSequence({ 'https://www.linkedin.com/a': 'http://[' })
+    expect(await fetchAllowedLinkedInUrl('https://www.linkedin.com/a')).toBeNull()
+  })
+
+  it('gives up after the redirect budget on a loop', async () => {
+    stubSequence({ 'https://www.linkedin.com/loop': 'https://www.linkedin.com/loop' })
+    expect(await fetchAllowedLinkedInUrl('https://www.linkedin.com/loop')).toBeNull()
+  })
+
+  it('returns null for non-allowlisted or malformed input without fetching', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await fetchAllowedLinkedInUrl('https://evil.com/x')).toBeNull()
+    expect(await fetchAllowedLinkedInUrl('http://www.linkedin.com/x')).toBeNull()
+    expect(await fetchAllowedLinkedInUrl('not-a-url')).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

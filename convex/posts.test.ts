@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   applyPurchasedFeatureHandler,
   canModifyPost,
-  countPostsSince,
+  countPostsPublishedSince,
   featurePostHandler,
   findTierDefaultRow,
   isAdminShareOverrideEnabled,
@@ -27,33 +27,81 @@ describe('getMyPosts handler', () => {
   })
 })
 
-// countPostsSince is the shared rolling-window counter behind both the weekly
-// limit enforcement and the My Posts usage pill. The cutoff is inclusive.
-describe('countPostsSince', () => {
+// countPostsPublishedSince is the shared rolling-window counter behind both the weekly
+// limit enforcement (countRecentPosts → submitPost) and the My Posts usage pill
+// (getWeeklyUsage). The mock applies the real index range to the fixture rows and records the
+// index name + take cap, so a revert to by_author (creation-time order) or an unbounded read
+// fails here. The cutoff is inclusive, matching the index's gte.
+type WeeklyRange = {
+  eq: (field: string, value: unknown) => WeeklyRange
+  gte: (field: string, value: number) => WeeklyRange
+}
+
+function weeklyCountCtx(rows: { publishedAt: number }[]) {
+  const calls: { index?: string; since?: number; take?: number } = {}
+  const ctx = {
+    db: {
+      query: () => ({
+        withIndex: (index: string, range: (q: WeeklyRange) => unknown) => {
+          calls.index = index
+          const q: WeeklyRange = {
+            eq: () => q,
+            gte: (_field, value) => {
+              calls.since = value
+              return q
+            }
+          }
+          range(q)
+          return {
+            take: async (n: number) => {
+              calls.take = n
+              return rows.filter(r => r.publishedAt >= (calls.since ?? Number.NEGATIVE_INFINITY)).slice(0, n)
+            }
+          }
+        }
+      })
+    }
+  }
+  return { ctx: ctx as unknown as QueryCtx, calls }
+}
+
+describe('countPostsPublishedSince', () => {
   const now = 1_700_000_000_000
   const day = 24 * 60 * 60 * 1000
   const since = now - 7 * day
+  const authorId = asUserId('u_author')
 
-  it('counts posts published at or after the cutoff (inclusive)', () => {
-    const posts = [
+  it('counts posts published at or after the cutoff (inclusive) via the publishedAt index', async () => {
+    const { ctx, calls } = weeklyCountCtx([
       { publishedAt: now }, // today
       { publishedAt: now - 2 * day }, // 2 days ago
       { publishedAt: since } // exactly on the cutoff
-    ]
-    expect(countPostsSince(posts, since)).toBe(3)
+    ])
+    await expect(countPostsPublishedSince(ctx, authorId, since, 10)).resolves.toBe(3)
+    expect(calls.index).toBe('by_author_and_publishedAt')
+    expect(calls.since).toBe(since)
+    expect(calls.take).toBe(10)
   })
 
-  it('excludes posts published before the cutoff', () => {
-    const posts = [
+  it('excludes posts published before the cutoff', async () => {
+    const { ctx } = weeklyCountCtx([
       { publishedAt: now - 8 * day }, // outside the window
       { publishedAt: now - 30 * day }, // outside the window
       { publishedAt: now - 1 * day } // inside the window
-    ]
-    expect(countPostsSince(posts, since)).toBe(1)
+    ])
+    await expect(countPostsPublishedSince(ctx, authorId, since, 10)).resolves.toBe(1)
   })
 
-  it('returns 0 for an empty list', () => {
-    expect(countPostsSince([], since)).toBe(0)
+  it('caps the read at limit — the callers only compare against their plan cap', async () => {
+    const rows = Array.from({ length: 6 }, (_, i) => ({ publishedAt: now - i * 60_000 }))
+    const { ctx, calls } = weeklyCountCtx(rows)
+    await expect(countPostsPublishedSince(ctx, authorId, since, 5)).resolves.toBe(5)
+    expect(calls.take).toBe(5)
+  })
+
+  it('returns 0 for an empty list', async () => {
+    const { ctx } = weeklyCountCtx([])
+    await expect(countPostsPublishedSince(ctx, authorId, since, 10)).resolves.toBe(0)
   })
 })
 

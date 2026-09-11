@@ -13,6 +13,8 @@
     "deploy:app": "pnpm --filter app build && pnpm --filter app exec wrangler deploy",
     "deploy:landing": "pnpm --filter landing deploy",
     "deploy:convex": "npx convex deploy",
+    "migrate:trialCounters": "npx convex run migrations/moveTrialCounters:moveTrialCounters",
+    "migrate:trialCounters:prod": "npx convex run migrations/moveTrialCounters:moveTrialCounters --prod",
     "preview:landing": "pnpm --filter landing preview",
     "watch:errors": "npx convex logs",
     "watch:errors:prod": "npx convex logs --prod",
@@ -21,10 +23,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm --filter convex exec tsc --noEmit -p tsconfig.json && pnpm --filter app exec tsc --noEmit && pnpm --filter landing exec tsc --noEmit",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm -r test"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm -r test && pnpm --filter convex test:integration"
   },
   "dependencies": {
-    "convex": "^1.41.0"
+    "convex": "^1.45.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

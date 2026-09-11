@@ -1,6 +1,7 @@
 // Single source of truth: Stripe price IDs (monthly + annual) → our tier.
 // Pure helpers (buildPriceMap/resolveTier) are unit-tested; the module-level
-// ALLOWED_PRICE_IDS / getTierFromPriceId read process.env once at load.
+// ALLOWED_PRICE_IDS / getTierFromPriceId read env once at load.
+import { env } from '../_generated/server'
 export type Tier = 'starter' | 'growth' | 'pro'
 
 type Env = Record<string, string | undefined>
@@ -27,7 +28,7 @@ export function resolveTier(map: Record<string, Tier>, priceId: string): Tier {
   return map[priceId]
 }
 
-const PRICE_MAP = buildPriceMap(process.env)
+const PRICE_MAP = buildPriceMap(env)
 export const ALLOWED_PRICE_IDS = new Set(Object.keys(PRICE_MAP))
 export function getTierFromPriceId(priceId: string): Tier {
   return resolveTier(PRICE_MAP, priceId)
@@ -56,4 +57,4 @@ export function intervalForPriceId(env: Env, priceId: string): 'month' | 'year' 
 // backlog/R17 — the one-time $5 "Featured post" Price (Checkout mode: payment). Deliberately NOT
 // part of buildPriceMap: it maps to no tier, so it can never enter ALLOWED_PRICE_IDS or resolve
 // through getTierFromPriceId. billingNode.purchaseFeaturedPost is its only consumer.
-export const FEATURED_POST_PRICE_ID = process.env.STRIPE_FEATURED_POST_PRICE_ID
+export const FEATURED_POST_PRICE_ID = env.STRIPE_FEATURED_POST_PRICE_ID

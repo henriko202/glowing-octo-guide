@@ -1,13 +1,17 @@
 // convex/jobs/syncPosts.ts
-import { internalAction, internalMutation, internalQuery } from '../_generated/server'
-import { v } from 'convex/values'
-import { internal } from '../_generated/api'
+import { internalMutation, internalQuery } from '../_generated/server'
+import { ConvexError, v } from 'convex/values'
 import { getPlanLimitsHelper, tierToRank } from '../lib/planLimits'
 import { computeFeedFields } from '../lib/feedRank'
-import { type ApifyFlags, isApifyPostSyncEnabled } from '../lib/apify'
 import { articleValidator } from '../lib/articleValidator'
 import { isWeeklyLimitReached } from '../lib/postLimit'
 import { effectiveInteractionCap, hasReachedInteractionLimit } from '../lib/interactionLimit'
+
+// Cross-author write guard: a URN already owned by a different member is never patched.
+// Returns true when the incoming write targets the same author and may proceed.
+export function isSamePostAuthor(existingAuthorId: string, incomingAuthorId: string): boolean {
+  return existingAuthorId === incomingAuthorId
+}
 
 // Upsert a single post — inserts new, updates like/comment counts on existing.
 // On insert, performs an atomic weekly-limit check within this transaction.
@@ -40,6 +44,14 @@ export const upsertPost = internalMutation({
       .first()
 
     if (existing) {
+      if (!isSamePostAuthor(existing.authorId, args.authorId)) {
+        // A different member submitted this URN (e.g. a display-name collision). Never let the
+        // incoming write touch the existing row's counts or hidden flag.
+        console.warn(
+          `[upsertPost] cross-author write ignored for ${args.linkedinPostUrn} (owner ${existing.authorId}, writer ${args.authorId})`
+        )
+        return { postId: null, created: false }
+      }
       // Update branch — never checks limits; only updates engagement counts.
       // `hidden` can change here (e.g. a re-sync after activation), so refresh the
       // denormalized feed fields from the existing post + the incoming hidden flag.
@@ -95,9 +107,7 @@ export const upsertPost = internalMutation({
         }
         return { postId: null, created: false }
       }
-      throw new Error(
-        `Weekly post limit reached. Your plan allows ${limits.postsPerWeek} post${limits.postsPerWeek === 1 ? '' : 's'} per week.`
-      )
+      throw new ConvexError(`WEEKLY_LIMIT:${limits.postsPerWeek}`)
     }
 
     const authorTierRank = tierToRank(author?.tier ?? 'starter')
@@ -128,21 +138,6 @@ export const upsertPost = internalMutation({
   }
 })
 
-// Fan-out action — checks if Apify sync is enabled, then delegates accordingly
-export const syncAllPosts = internalAction({
-  args: {},
-  handler: async ctx => {
-    const settings = await ctx.runQuery(internal.admin.getSettingsInternal, {})
-
-    // Honor the master kill-switch here too (the delegate re-checks, but gating early
-    // avoids an unnecessary action hop when Apify is disabled).
-    if (isApifyPostSyncEnabled(settings as ApifyFlags)) {
-      await ctx.runAction(internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
-      return
-    }
-  }
-})
-
 // ─── Feed engagement refresh (30-min cron) ────────────────────────────────────
 
 // Feed-eligible posts for the 30-min Apify engagement refresh. `inFeed === true` is the same
@@ -155,7 +150,7 @@ export const getFeedPostsForRefresh = internalQuery({
   handler: async ctx => {
     const posts = await ctx.db
       .query('posts')
-      .withIndex('by_feed_rank', q => q.eq('inFeed', true))
+      .withIndex('by_in_feed_and_feed_rank', q => q.eq('inFeed', true))
       .take(500)
     return posts.map(p => ({ _id: p._id, linkedinPostUrn: p.linkedinPostUrn, sourceUrl: p.sourceUrl }))
   }

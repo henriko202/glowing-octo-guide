@@ -1,6 +1,6 @@
 'use node'
 import Stripe from 'stripe'
-import { action, internalAction, type ActionCtx } from './_generated/server'
+import { action, env, internalAction, type ActionCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
@@ -23,7 +23,7 @@ import { assertCanEngage } from './lib/access'
 const stripeComponent = new StripeSubscriptions(components.stripe, {})
 
 function stripe(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY
+  const key = env.STRIPE_SECRET_KEY
   if (!key) throw new Error('STRIPE_SECRET_KEY is not configured')
   return new Stripe(key)
 }
@@ -38,6 +38,11 @@ export const createCheckoutSession = action({
 
     const user = await requireAuthAction(ctx, sessionToken)
     if (!user) throw new ConvexError('User not found')
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'createCheckoutSession',
+      maxPerHour: 10
+    })
 
     // One live subscription per user. A card holder who wants another plan switches in the
     // Customer Portal — the client branches on this prefix and opens it (lib/access.ts
@@ -61,7 +66,7 @@ export const createCheckoutSession = action({
       name: user.name
     })
 
-    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+    const appUrl = env.APP_URL ?? 'http://localhost:5173'
 
     const session = await stripe().checkout.sessions.create({
       mode: 'subscription',
@@ -107,6 +112,11 @@ export const purchaseFeaturedPost = action({
   handler: async (ctx, { sessionToken, postId }): Promise<{ url: string | null }> => {
     const user = await requireAuthAction(ctx, sessionToken)
     if (!user) throw new ConvexError('User not found')
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'purchaseFeaturedPost',
+      maxPerHour: 10
+    })
     assertCanEngage(user) // PAYMENT_REQUIRED: for no card / past due; trialing members pass
     if (!FEATURED_POST_PRICE_ID) throw new ConvexError('FEATURED_PRICE_UNSET')
     await ctx.runQuery(internal.posts.assertFeaturedPurchasable, { postId, userId: user._id })
@@ -116,7 +126,7 @@ export const purchaseFeaturedPost = action({
       email: user.email,
       name: user.name
     })
-    const appUrl = process.env.APP_URL ?? 'http://localhost:5173'
+    const appUrl = env.APP_URL ?? 'http://localhost:5173'
     const billingLocale = resolveBillingLocale(user.language, user.primaryLocale)
 
     const session = await stripe().checkout.sessions.create({
@@ -193,7 +203,7 @@ export const cancelDuplicateSubscription = internalAction({
 // existing customer.subscription.updated webhook either way.
 type FlowData = Stripe.BillingPortal.SessionCreateParams.FlowData
 
-const appOrigin = (): string => process.env.APP_URL ?? 'http://localhost:5173'
+const appOrigin = (): string => env.APP_URL ?? 'http://localhost:5173'
 
 /** The member and their live subscription row — where every billing action starts. */
 async function liveSubscriptionFor(
@@ -265,6 +275,11 @@ export const createPortalSession = action({
   handler: async (ctx, { sessionToken }): Promise<{ url: string }> => {
     const user = await requireAuthAction(ctx, sessionToken)
     if (!user) throw new ConvexError('User not found')
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'createPortalSession',
+      maxPerHour: 20
+    })
     if (!user.stripeCustomerId) throw new ConvexError('No Stripe customer found')
     return portalSession(ctx, user, user.tier)
   }
@@ -304,7 +319,7 @@ async function scheduleDowngrade(
 ): Promise<{ url: null }> {
   // Phase 1's duration needs the TARGET price's interval; the grid can send a monthly member to an
   // annual price, so it cannot come off the subscription we just retrieved.
-  const interval = intervalForPriceId(process.env, targetPriceId)
+  const interval = intervalForPriceId(env, targetPriceId)
   if (!interval) throw new ConvexError('Unknown price interval')
 
   const existingId = scheduleIdOf(sub)
@@ -371,6 +386,11 @@ export const createCancelFlowSession = action({
   args: { sessionToken: v.string(), flow: v.union(v.literal('cancel'), v.literal('downgrade')) },
   handler: async (ctx, { sessionToken, flow }): Promise<{ url: string | null }> => {
     const { user, live } = await liveSubscriptionFor(ctx, sessionToken)
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'createCancelFlowSession',
+      maxPerHour: 10
+    })
     const { sub, item } = await retrieveWithItem(live.stripeSubscriptionId)
 
     if (flow === 'cancel') {
@@ -396,7 +416,7 @@ export const createCancelFlowSession = action({
     // The retrieved item carries the authoritative interval; our snapshot (optional) is the fallback.
     const stripeInterval = item.price.recurring?.interval
     const interval = stripeInterval === 'month' || stripeInterval === 'year' ? stripeInterval : live.priceInterval
-    const price = starterPriceIdFor(process.env, interval)
+    const price = starterPriceIdFor(env, interval)
     if (!price) throw new ConvexError('Starter price not configured')
 
     // `active` and `past_due` both schedule. past_due used to take an immediate portal switch on the
@@ -416,6 +436,11 @@ export const createPlanSwitchSession = action({
   handler: async (ctx, { sessionToken, priceId }): Promise<{ url: string | null }> => {
     if (!ALLOWED_PRICE_IDS.has(priceId)) throw new ConvexError('Invalid price ID')
     const { user, live } = await liveSubscriptionFor(ctx, sessionToken)
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'createPlanSwitchSession',
+      maxPerHour: 10
+    })
     const { sub, item } = await retrieveWithItem(live.stripeSubscriptionId)
     // Nothing to confirm. Unreachable from the grid — the member's own plan carries the "current"
     // badge, trialing included — but a stale tab can still send it; the client falls back to the
@@ -471,7 +496,12 @@ export const createPlanSwitchSession = action({
 export const undoScheduledDowngrade = action({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }): Promise<null> => {
-    const { live } = await liveSubscriptionFor(ctx, sessionToken)
+    const { user, live } = await liveSubscriptionFor(ctx, sessionToken)
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'undoScheduledDowngrade',
+      maxPerHour: 20
+    })
     const sub = await stripe().subscriptions.retrieve(live.stripeSubscriptionId)
     await releaseScheduleOn(ctx, sub)
     return null
@@ -486,7 +516,12 @@ export const undoScheduledDowngrade = action({
 export const resumeSubscription = action({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }): Promise<null> => {
-    const { live } = await liveSubscriptionFor(ctx, sessionToken)
+    const { user, live } = await liveSubscriptionFor(ctx, sessionToken)
+    await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
+      userId: user._id,
+      action: 'resumeSubscription',
+      maxPerHour: 10
+    })
     if (!live.cancelAtPeriodEnd) return null
     const sub = await stripe().subscriptions.retrieve(live.stripeSubscriptionId)
     if (!isCancelPending(sub)) return null

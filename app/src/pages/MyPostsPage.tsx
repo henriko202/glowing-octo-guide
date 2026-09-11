@@ -97,10 +97,14 @@ function BuyFeaturedButton({
 export default function MyPostsPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
+  // Latched once per mount: the usage queries take a client-supplied `now` (queries must not read
+  // the wall clock themselves). A fresh Date.now() on every render would change the query args
+  // and re-subscribe each render, so capture it once — same pattern as RecapPage.
+  const [now] = useState(() => Date.now())
 
   const me = useQuery(api.users.getMe, { sessionToken })
-  const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
-  const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken }) as FeaturedUsage | null | undefined
+  const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken, now }) as WeeklyUsage | null | undefined
+  const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken, now }) as FeaturedUsage | null | undefined
   // Current tier's interaction cap, for the "reached N interactions" badge below — a post's own
   // cap isn't stored (it's evaluated against the author's tier at write time), so this shows the
   // CURRENT tier limit, same convention as getFeaturedUsage/getWeeklyUsage above.

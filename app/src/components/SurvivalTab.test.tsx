@@ -108,7 +108,7 @@ describe('SurvivalTab', () => {
     expect(screen.getByRole('row', { name: /started trial/i })).toHaveTextContent('60%')
   })
 
-  it('labels the wide return window 1–7 and scopes the tier table to the slice it reads', () => {
+  it('labels the wide return window 1–7 and scopes the tier table to the members it counts', () => {
     render(
       <SurvivalTab
         sessionToken="tok"
@@ -116,7 +116,7 @@ describe('SurvivalTab', () => {
       />
     )
     expect(screen.queryByRole('row', { name: /returned days 2–7/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /paying by tier \(newest 1000 members\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /paying by tier \(all active members\)/i })).toBeInTheDocument()
   })
 
   it('renders – for a null median', () => {
@@ -190,6 +190,32 @@ describe('SurvivalTab', () => {
       />
     )
     expect(screen.getByText(/2026-09-01 09:30 – 2026-09-08 09:30 UTC/)).toBeInTheDocument()
+  })
+
+  it('shows the no-snapshot state and keeps the window toggle live', () => {
+    mockUseQuery.mockReturnValue(null)
+    render(
+      <SurvivalTab
+        sessionToken="tok"
+        isAdmin
+      />
+    )
+    expect(screen.getByText(/no snapshot yet/i)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '28 days' }))
+    expect(mockUseQuery).toHaveBeenLastCalledWith('admin.survivalMetrics', { sessionToken: 'tok', days: 28 })
+  })
+
+  it('captions the snapshot with the nightly rebuild time', () => {
+    mockUseQuery.mockReturnValue({ ...FIXTURE, generatedAt: Date.UTC(2026, 8, 8, 3, 15) })
+    render(
+      <SurvivalTab
+        sessionToken="tok"
+        isAdmin
+      />
+    )
+    expect(screen.getByText(/snapshot as of 2026-09-08 03:15 utc/i)).toBeInTheDocument()
+    expect(screen.queryByText(/newest 1000 members/i)).not.toBeInTheDocument()
   })
 
   it('re-queries with days: 28 when the toggle is pressed and marks it pressed', () => {

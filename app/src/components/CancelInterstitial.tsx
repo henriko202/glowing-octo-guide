@@ -3,6 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import { Button } from '@/components/ui/button'
+import { useQueryOnce } from '@/lib/useQueryOnce'
 import {
   Dialog,
   DialogClose,
@@ -54,7 +55,9 @@ export default function CancelInterstitial({
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const [now] = useState(() => floorToHour(Date.now()))
-  const recap = useQuery(
+  // One-shot by design: the dialog only renders the numbers while it is open, so a live 4k-row recap
+  // subscription would buy nothing.
+  const { data: recap, error: recapError } = useQueryOnce(
     api.interactions.getRecap,
     open && sessionToken ? { sessionToken, window: '30d', now } : 'skip'
   )
@@ -87,6 +90,8 @@ export default function CancelInterstitial({
   let body: ReactNode
   if (isTrialing) {
     body = t(periodEndDate ? 'billing.cancel.trialBody' : 'billing.cancel.trialBodyNoDate', { date: periodEndDate })
+  } else if (recapError) {
+    body = <span className="text-destructive text-sm">{t('errorBoundary.body')}</span>
   } else if (received === undefined || liveCount === undefined) {
     body = (
       <span

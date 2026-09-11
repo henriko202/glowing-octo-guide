@@ -22,6 +22,40 @@ import {
 import type { DataModel } from "./dataModel.js";
 
 /**
+ * Typesafe environment variables.
+ *
+ * This includes platform-provided env vars and any variables declared in
+ * `convex.config.ts`.
+ */
+type Env = {
+  readonly CONVEX_CLOUD_URL: string;
+  readonly CONVEX_SITE_URL: string;
+  readonly ALLOW_ADMIN_SHARE_ANY_POST: string | undefined;
+  readonly APIFY_API_TOKEN: string | undefined;
+  readonly APIFY_TASK_ID: string | undefined;
+  readonly APIFY_TASK_ID_PROFILE_SCRAPE: string | undefined;
+  readonly APP_URL: string;
+  readonly EMAIL_FROM: string | undefined;
+  readonly FEEDBACK_REPLY_TO: string | undefined;
+  readonly LINKEDIN_CLIENT_ID: string;
+  readonly LINKEDIN_CLIENT_SECRET: string;
+  readonly LINKEDIN_REDIRECT_URI: string;
+  readonly OPENROUTER_API_KEY: string | undefined;
+  readonly OPENROUTER_MODEL: string | undefined;
+  readonly OPENROUTER_SITE_NAME: string | undefined;
+  readonly OPENROUTER_SITE_URL: string | undefined;
+  readonly RESEND_API_KEY: string | undefined;
+  readonly STRIPE_FEATURED_POST_PRICE_ID: string | undefined;
+  readonly STRIPE_GROWTH_ANNUAL_PRICE_ID: string | undefined;
+  readonly STRIPE_GROWTH_PRICE_ID: string | undefined;
+  readonly STRIPE_PRO_ANNUAL_PRICE_ID: string | undefined;
+  readonly STRIPE_PRO_PRICE_ID: string | undefined;
+  readonly STRIPE_SECRET_KEY: string;
+  readonly STRIPE_STARTER_ANNUAL_PRICE_ID: string | undefined;
+  readonly STRIPE_STARTER_PRICE_ID: string | undefined;
+};
+
+/**
  * Define a query in this Convex app's public API.
  *
  * This function will be allowed to read your Convex database and will be accessible from the client.
@@ -94,6 +128,14 @@ export declare const internalAction: ActionBuilder<DataModel, "internal">;
  * @returns The wrapped function. Import this function from `convex/http.js` and route it to hook it up.
  */
 export declare const httpAction: HttpActionBuilder;
+
+/**
+ * Typesafe environment variables.
+ *
+ * This includes platform-provided env vars and any variables declared in
+ * `convex.config.ts`.
+ */
+export declare const env: Env;
 
 /**
  * A set of services for use within Convex query functions.

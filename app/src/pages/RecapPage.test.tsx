@@ -17,14 +17,19 @@ vi.mock('../convex', () => ({
 }))
 
 let mockQueryReturns: Record<string, unknown> = {}
+let mockRecapError: Error | null = null
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref])
+}))
+vi.mock('@/lib/useQueryOnce', () => ({
+  useQueryOnce: vi.fn((ref: string) => ({ data: mockQueryReturns[ref], error: mockRecapError }))
 }))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { useQuery } from 'convex/react'
+import { useQueryOnce } from '@/lib/useQueryOnce'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { captureEvent } from '@/lib/observability/analytics'
 import { RECAP_ROW_CEILING } from '../../../convex/lib/recap'
@@ -77,8 +82,10 @@ function renderPage() {
 
 beforeEach(() => {
   sessionStorage.setItem('sessionToken', 'tok')
+  mockRecapError = null
   vi.mocked(captureEvent).mockClear()
   vi.mocked(useQuery).mockClear()
+  vi.mocked(useQueryOnce).mockClear()
   mockQueryReturns = {
     'interactions.getRecap': RECAP,
     'posts.getWeeklyUsage': { postsThisWeek: 1, postsPerWeek: 1 },
@@ -101,6 +108,16 @@ describe('RecapPage', () => {
     expect(screen.getByRole('heading', { name: 'Recap' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('renders a minimal error state instead of the loading skeleton when the recap fetch fails (F16)', () => {
+    mockRecapError = new Error('boom')
+    mockQueryReturns['interactions.getRecap'] = undefined
+    renderPage()
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument()
+    expect(screen.getByText('An unexpected error occurred. Reloading the page usually fixes it.')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(captureEvent).not.toHaveBeenCalled()
   })
 
   it('renders both tiles with breakdown, delta and the celebrate line only where earned', () => {
@@ -159,7 +176,7 @@ describe('RecapPage', () => {
     expect(captureEvent).toHaveBeenCalledWith('recap_viewed', { window: '7d', nearCap: true })
     fireEvent.click(screen.getByRole('button', { name: 'Last 30 days' }))
     const asked30 = vi
-      .mocked(useQuery)
+      .mocked(useQueryOnce)
       .mock.calls.some(
         ([ref, args]) => (ref as unknown) === 'interactions.getRecap' && (args as { window?: string })?.window === '30d'
       )

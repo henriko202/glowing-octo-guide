@@ -4,10 +4,14 @@
 // Unset in dev → a host-only cookie (cross-site sync is a prod-only feature).
 const COOKIE_DOMAIN = (import.meta.env.VITE_COOKIE_DOMAIN as string | undefined) || undefined
 
+function secureSuffix(): string {
+  return typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : ''
+}
+
 export function serializeCookie(name: string, value: string, days: number, domain?: string): string {
   const maxAge = days * 24 * 60 * 60
   const domainPart = domain ? `; Domain=${domain}` : ''
-  return `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${domainPart}`
+  return `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secureSuffix()}${domainPart}`
 }
 
 export function getCookie(name: string): string | null {

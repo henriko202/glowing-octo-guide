@@ -8,6 +8,7 @@
 // + PLATFORM.md §11A.
 // Content is either plain text or, for multimodal (vision) requests, an array of parts mixing
 // text with image_url parts (OpenAI-compatible). callOpenRouter just JSON-stringifies it.
+import { env } from '../_generated/server'
 import { scrubError } from '../lib/scrubError'
 import { fetchWithTimeout } from '../lib/fetchWithTimeout'
 
@@ -20,20 +21,20 @@ const PROVIDER_ROUTING = {
 } as const
 
 export async function callOpenRouter(messages: ChatMessage[], opts: { action: string }): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY
+  const apiKey = env.OPENROUTER_API_KEY
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY not set')
     throw new Error(`Failed to ${opts.action}. AI is not configured.`)
   }
-  const model = process.env.OPENROUTER_MODEL ?? 'google/gemma-4-26b-a4b-it'
+  const model = env.OPENROUTER_MODEL ?? 'google/gemma-4-26b-a4b-it'
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json'
   }
   // Optional attribution headers (OpenRouter rankings) — only sent when configured.
-  if (process.env.OPENROUTER_SITE_URL) headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL
-  if (process.env.OPENROUTER_SITE_NAME) headers['X-Title'] = process.env.OPENROUTER_SITE_NAME
+  if (env.OPENROUTER_SITE_URL) headers['HTTP-Referer'] = env.OPENROUTER_SITE_URL
+  if (env.OPENROUTER_SITE_NAME) headers['X-Title'] = env.OPENROUTER_SITE_NAME
 
   // 60s: LLM generation legitimately runs many seconds (prompts carry full article text), longer
   // than the 15s default seams.

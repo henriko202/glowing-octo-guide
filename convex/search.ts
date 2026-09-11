@@ -43,6 +43,9 @@ export const search = query({
       return { posts: [], people: [] }
     }
 
+    // Server clock required for the lapsed-author eligibility gate below — this mirrors the
+    // documented feed exception (getFeed reads its own Date.now()): do NOT take `now` from the
+    // client, or a direct caller could pass `now: 0` to surface canceled-and-lapsed authors.
     return searchPostsAndPeople(ctx, viewer, { text, now: Date.now() })
   }
 })
@@ -50,7 +53,8 @@ export const search = query({
 /**
  * Runs the command-palette search for `viewer`. Split out of the `search` wrapper so the filtering
  * is unit-testable with a mock `ctx` (the query wrapper isn't callable in unit tests). The wrapper
- * owns auth + the min-length guard; `now` is passed in to keep the query deterministic.
+ * owns auth + the min-length guard and supplies the server clock; the explicit `now` param exists
+ * for unit tests only — it is never client-supplied (see the `search` wrapper).
  */
 export async function searchPostsAndPeople(ctx: QueryCtx, viewer: Doc<'users'>, opts: { text: string; now: number }) {
   const { text, now } = opts

@@ -12,14 +12,18 @@ import { Input } from '@/components/ui/input'
 export default function PrivacyDataPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
-  const exportStatus = useQuery(api.privacy.export.getExportStatus, sessionToken ? { sessionToken } : 'skip') as
+  // Latched once per mount: the export queries take a client-supplied `now` (queries must not read
+  // the wall clock themselves). A fresh Date.now() on every render would change the query args and
+  // re-subscribe each render, so capture it once — same pattern as RecapPage.
+  const [now] = useState(() => Date.now())
+  const exportStatus = useQuery(api.privacy.export.getExportStatus, sessionToken ? { sessionToken, now } : 'skip') as
     | { status: string; requestedAt: number }
     | null
     | undefined
-  const downloadUrl = useQuery(api.privacy.export.getExportDownloadUrl, sessionToken ? { sessionToken } : 'skip') as
-    | string
-    | null
-    | undefined
+  const downloadUrl = useQuery(
+    api.privacy.export.getExportDownloadUrl,
+    sessionToken ? { sessionToken, now } : 'skip'
+  ) as string | null | undefined
   const requestExport = useMutation(api.privacy.export.requestDataExport)
   const requestDeletion = useMutation(api.privacy.deletion.requestAccountDeletion)
 

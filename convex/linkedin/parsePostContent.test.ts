@@ -4,6 +4,7 @@ import {
   extractArticleUrl,
   extractPostUrn,
   isEmbeddablePostHtml,
+  isValidPostUrn,
   parseArticle,
   parsePostAuthor,
   parsePostContent,
@@ -197,6 +198,25 @@ describe('extractPostUrn', () => {
   it('returns null when no URN source is present or usable', () => {
     expect(extractPostUrn('<html></html>', [])).toBeNull()
     expect(extractPostUrn('<html></html>', ['https://evil.com/posts/x_y-activity-7152671041134211072-z'])).toBeNull()
+  })
+})
+
+describe('isValidPostUrn', () => {
+  it('accepts ugcPost, activity, and share namespaces', () => {
+    expect(isValidPostUrn('urn:li:ugcPost:7152671040479911937')).toBe(true)
+    expect(isValidPostUrn('urn:li:activity:7152671041134211072')).toBe(true)
+    expect(isValidPostUrn('urn:li:share:7152671040479911937')).toBe(true)
+  })
+
+  it('rejects a host-in-urn / trailing junk', () => {
+    expect(isValidPostUrn('urn:li:ugcPost:7152671040479911937evil.com')).toBe(false)
+    expect(isValidPostUrn('urn:li:ugcPost:7152671040479911937?x=1')).toBe(false)
+  })
+
+  it('rejects empty, unknown namespaces, and non-numeric ids', () => {
+    expect(isValidPostUrn('')).toBe(false)
+    expect(isValidPostUrn('urn:li:foo:1')).toBe(false)
+    expect(isValidPostUrn('urn:li:ugcPost:abc')).toBe(false)
   })
 })
 

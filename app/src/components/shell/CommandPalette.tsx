@@ -24,9 +24,17 @@ export default function CommandPalette({ open, onOpenChange }: { open: boolean; 
   }, [text])
 
   const searching = debounced.trim().length >= MIN_QUERY
+  // No client clock in the args: the search query reads the server clock for its feed-eligibility
+  // gates (a client-supplied `now` could defeat them), and its args only change when the debounced
+  // text or session token does.
   const results = useQuery(
     api.search.search,
-    searching ? { sessionToken: sessionStorage.getItem('sessionToken') ?? undefined, queryText: debounced } : 'skip'
+    searching
+      ? {
+          sessionToken: sessionStorage.getItem('sessionToken') ?? undefined,
+          queryText: debounced
+        }
+      : 'skip'
   )
   const hasResults = !!results && (results.people.length > 0 || results.posts.length > 0)
 

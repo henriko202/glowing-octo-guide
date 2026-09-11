@@ -60,6 +60,11 @@ vi.mock('convex/react', () => ({
   useAction: vi.fn((ref: string) => ACTIONS[ref] ?? mockCheckout),
   useMutation: vi.fn(() => vi.fn(async () => {}))
 }))
+// BillingPage mounts CancelInterstitial, whose recap now goes through the one-shot hook; the page's
+// own data path is unchanged (undefined data, exactly as the useQuery mock returned before).
+vi.mock('@/lib/useQueryOnce', () => ({
+  useQueryOnce: vi.fn((ref: string) => ({ data: mockQueryReturns[ref], error: null }))
+}))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 
 // useSearchParams is mocked (not the real router) so tests can assert the setter was called and

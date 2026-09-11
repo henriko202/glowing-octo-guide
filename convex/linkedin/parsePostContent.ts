@@ -150,6 +150,12 @@ export function extractArticleUrl(html: string): string | null {
 
 const URN_RE = /^urn:li:(ugcPost|activity|share):\d+$/
 
+/** Validates a LinkedIn post URN's shape — the same gate `extractPostUrn` applies to the manual
+ *  path, exported so the Apify scraper path can drop malformed URNs before `upsertPost`. */
+export function isValidPostUrn(urn: string): boolean {
+  return URN_RE.test(urn)
+}
+
 /**
  * Extracts the post's LinkedIn URN, **preserving its namespace** (ugcPost / share / activity).
  *

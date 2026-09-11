@@ -1,13 +1,13 @@
 // convex/feedback/feedback.ts
 // User feedback: submission (authenticated), admin listing/triage, and admin email replies.
 // Replies are stored in the feedbackResponses table (Task 10); each admin reply is a separate row.
-import { internalAction, internalQuery, mutation, query } from '../_generated/server'
+import { env, internalAction, internalQuery, mutation, query } from '../_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { requireAuth } from '../lib/auth'
 import { assertAdmin } from '../admin'
 import { checkRateLimit } from '../lib/rateLimit'
-import { writeAuditLog } from '../lib/audit'
+import { type AuditDb, writeAuditLog } from '../lib/audit'
 import { sendEmail } from '../lib/email'
 import { feedbackReplyEmail } from './emails'
 
@@ -50,9 +50,6 @@ export function validateFeedbackMessage(message: string): string {
   return trimmed
 }
 
-// db cast for writeAuditLog (matches the pattern in convex/privacy/export.ts).
-type AuditDb = { insert: (t: string, d: Record<string, unknown>) => Promise<string> }
-
 export const submitFeedback = mutation({
   args: { sessionToken: v.string(), category: categoryValidator, message: v.string() },
   handler: async (ctx, { sessionToken, category, message }) => {
@@ -74,25 +71,32 @@ export const submitFeedback = mutation({
 
 // Admin-only. Newest-first, bounded. Enriches each row with submitter name + email
 // (null for anonymized rows whose userId was cleared on account deletion).
-// Returns responses[] (chronological asc) — replaces the deprecated responseText/respondedAt fields.
+// Returns { rows, repliesTruncated } — each row carries responses[] (chronological asc); the flag
+// tells the tab some reply threads are only partially shown. Replaces the deprecated
+// responseText/respondedAt fields.
 export const listFeedback = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
-    const rows = await ctx.db.query('feedback').order('desc').take(500)
+    const rows = await ctx.db.query('feedback').order('desc').take(200)
 
     // Fetch each item's responses (one bounded indexed read per item — the unavoidable join), then
     // resolve submitter + responder names through a single batched get() per unique id instead of one
-    // per row/response. Prevents the up-to-500×101 read fan-out on this admin listing.
+    // per row/response. The outer 200 and the per-item read keep the worst case inside the transaction
+    // limit; admin surfaces reply threads lazily when a row is expanded in a follow-up, so a partial
+    // thread here is acceptable — `repliesTruncated` flags it instead of silently dropping replies.
+    // Each read takes 21 so a thread of exactly 20 is not a false positive: the thread is truncated
+    // only when a 21st row exists, and the payload carries the first 20.
     const responseRowsByFeedback = await Promise.all(
       rows.map(f =>
         ctx.db
           .query('feedbackResponses')
-          .withIndex('by_feedback', q => q.eq('feedbackId', f._id))
-          .take(100)
+          .withIndex('by_feedback_id_and_created_at', q => q.eq('feedbackId', f._id))
+          .take(21)
       )
     )
+    const repliesTruncated = responseRowsByFeedback.some(responses => responses.length === 21)
 
     const userIds = new Set(rows.map(f => f.userId).filter((id): id is NonNullable<typeof id> => !!id))
     const responderIds = new Set(responseRowsByFeedback.flat().map(r => r.responderId))
@@ -101,24 +105,27 @@ export const listFeedback = query({
     const userMap = new Map(userDocs.filter(u => u !== null).map(u => [u!._id, u!]))
     const responderMap = new Map(responderDocs.filter(u => u !== null).map(u => [u!._id, u!]))
 
-    return rows.map((f, i) => {
-      const u = f.userId ? userMap.get(f.userId) : null
-      const responses = responseRowsByFeedback[i].map(r => ({
-        text: r.text,
-        createdAt: r.createdAt,
-        responderName: responderMap.get(r.responderId)?.name ?? null
-      }))
-      return {
-        _id: f._id,
-        category: f.category,
-        message: f.message,
-        status: f.status,
-        createdAt: f.createdAt,
-        userName: u?.name ?? null,
-        userEmail: u?.email ?? null,
-        responses
-      }
-    })
+    return {
+      rows: rows.map((f, i) => {
+        const u = f.userId ? userMap.get(f.userId) : null
+        const responses = responseRowsByFeedback[i].slice(0, 20).map(r => ({
+          text: r.text,
+          createdAt: r.createdAt,
+          responderName: responderMap.get(r.responderId)?.name ?? null
+        }))
+        return {
+          _id: f._id,
+          category: f.category,
+          message: f.message,
+          status: f.status,
+          createdAt: f.createdAt,
+          userName: u?.name ?? null,
+          userEmail: u?.email ?? null,
+          responses
+        }
+      }),
+      repliesTruncated
+    }
   }
 })
 
@@ -189,7 +196,7 @@ export const reopenFeedback = mutation({
     // Source of truth: feedbackResponses existence (not the legacy responseText field).
     const hasResponse = await ctx.db
       .query('feedbackResponses')
-      .withIndex('by_feedback', q => q.eq('feedbackId', feedbackId))
+      .withIndex('by_feedback_id_and_created_at', q => q.eq('feedbackId', feedbackId))
       .first()
     await ctx.db.patch(feedbackId, { status: hasResponse ? 'responded' : 'new' })
     await writeAuditLog(ctx.db as unknown as AuditDb, {
@@ -227,7 +234,7 @@ export const sendFeedbackReply = internalAction({
     const data = await ctx.runQuery(internal.feedback.feedback.getReplyData, { responseId })
     if (!data || !data.email) return
     const m = feedbackReplyEmail({ replyText: data.replyText, originalMessage: data.originalMessage })
-    const replyTo = process.env.FEEDBACK_REPLY_TO
+    const replyTo = env.FEEDBACK_REPLY_TO
     await sendEmail({
       to: data.email,
       subject: m.subject,

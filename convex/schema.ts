@@ -174,7 +174,7 @@ export default defineSchema({
     // ─── Feed cursor-pagination (denormalized, maintained by lib/feedRank.ts) ────
     // Single descending sort key encoding featured→tier→recency; see computeFeedFields.
     // Optional during the widen→backfill rollout — old posts are stamped by the
-    // backfill migration before getFeed switches to the by_feed_rank index.
+    // backfill migration before getFeed switches to the by_in_feed_and_feed_rank index.
     feedRank: v.optional(v.number()),
     // True iff the post passes the non-viewer-specific feed filters
     // (hidden === false && !interactionLimitReached && deletedAt === undefined).
@@ -188,9 +188,9 @@ export default defineSchema({
     .index('by_author_and_publishedAt', ['authorId', 'publishedAt'])
     // Cursor-pagination index for getFeed: walk inFeed=true posts in feedRank desc order.
     // NOTE: the older by_featured / by_published / by_feed indexes were removed once the
-    // feed migrated to by_feed_rank — they had no remaining withIndex callers and every
+    // feed migrated to by_in_feed_and_feed_rank — they had no remaining withIndex callers and every
     // index adds write amplification on this (highest-write) table.
-    .index('by_feed_rank', ['inFeed', 'feedRank'])
+    .index('by_in_feed_and_feed_rank', ['inFeed', 'feedRank'])
     // Full-text content search for the ⌘K command palette (convex/search.ts). filterField
     // `inFeed` pins the scan to feed-eligible posts so hidden/capped/deleted posts never
     // enter the candidate set; per-viewer visibility is still applied on top (mirrors getFeed).
@@ -231,11 +231,19 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_stripe_id', ['stripeSubscriptionId']),
 
+  // High-churn trial interaction counters, kept off the users doc so each interaction does not
+  // invalidate every query that reads the member (getMe, feed pages containing their posts).
+  trialCounters: defineTable({
+    userId: v.id('users'),
+    made: v.number(),
+    received: v.number()
+  }).index('by_user', ['userId']),
+
   featuredPostUsage: defineTable({
     userId: v.id('users'),
     month: v.string(),
     usedCount: v.number()
-  }).index('by_user_month', ['userId', 'month']),
+  }).index('by_user_id_and_month', ['userId', 'month']),
 
   appSettings: defineTable({
     apifySyncEnabled: v.boolean(),
@@ -270,6 +278,7 @@ export default defineSchema({
   // Validated on callback; deleted immediately after use (replay protection).
   oauthStates: defineTable({
     state: v.string(),
+    browserNonce: v.string(),
     expiresAt: v.number(),
     plan: v.optional(v.string()),
     interval: v.optional(v.string()),
@@ -314,14 +323,17 @@ export default defineSchema({
     .index('by_urn', ['linkedinPostUrn']),
 
   // Append-only consent/withdrawal log. Current effective consent for a purpose is the
-  // latest record for (userId, purpose).
+  // latest record for (userId, purpose). by_user_and_purpose_and_created_at lets getConsents
+  // read the newest row per purpose directly; by_user still serves the export/deletion drains.
   consentRecords: defineTable({
     userId: v.id('users'),
     purpose: v.union(v.literal('marketing'), v.literal('analytics')),
     granted: v.boolean(),
     policyVersion: v.string(),
     createdAt: v.number()
-  }).index('by_user', ['userId']),
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_and_purpose_and_created_at', ['userId', 'purpose', 'createdAt']),
 
   // Tracks asynchronous data-export jobs. The generated bundle is held in Convex file
   // storage; the link expires (fileStorageId/expiresAt) and is purged by the retention cron.
@@ -378,10 +390,11 @@ export default defineSchema({
     responderId: v.id('users'),
     text: v.string(),
     createdAt: v.number()
-  }).index('by_feedback', ['feedbackId', 'createdAt']),
+  }).index('by_feedback_id_and_created_at', ['feedbackId', 'createdAt']),
 
-  // Admin-authored Message of the Day. Exactly one is shown at a time (the newest enabled
-  // row whose [startAt, expiresAt) window covers "now" — see convex/motd/motd.ts:selectActiveMotd).
+  // Admin-authored Message of the Day. Exactly one is shown at a time (the newest enabled row —
+  // `enabled` is materialized from the [startAt, expiresAt) window by resolveMotdEnabled; see
+  // convex/motd/motd.ts).
   // `bodies` is a locale->markdown map; `en` is required (enforced in validation) and is the
   // fallback for locales without their own body. A record (not a fixed object) so new locales
   // need no schema migration. Admin content — not personal data, hard-deleted on removal.
@@ -438,5 +451,28 @@ export default defineSchema({
     .index('by_user_and_post', ['userId', 'postId'])
     // Locate rows referencing a given post so account erasure can delete OTHER users' per-post state
     // on the deleted user's posts (not caught by the by_user_and_post drain). See privacy/deletion.ts.
-    .index('by_post', ['postId'])
+    .index('by_post', ['postId']),
+
+  // Nightly admin cohort snapshots (survival panel). One row per window; the query reads one row
+  // instead of re-reading the whole cohort reactively. See jobs/survivalSnapshot.ts.
+  survivalSnapshots: defineTable({
+    days: v.union(v.literal(7), v.literal(28)),
+    generatedAt: v.number(),
+    since: v.number(),
+    cohort: v.object({
+      signups: v.number(),
+      startedTrial: v.number(),
+      activated: v.number(),
+      medianMinutesToFirstInteraction: v.union(v.number(), v.null()),
+      returnedDay1: v.number(),
+      returnedDays2to7: v.number(),
+      trialsEnded: v.number(),
+      converted: v.number(),
+      canceled: v.number(),
+      activatedEligible: v.number(),
+      returnedDay1Eligible: v.number(),
+      returnedDays2to7Eligible: v.number()
+    }),
+    payingByTier: v.object({ starter: v.number(), growth: v.number(), pro: v.number(), contact: v.number() })
+  }).index('by_days', ['days'])
 })

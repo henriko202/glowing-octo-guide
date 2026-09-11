@@ -8,8 +8,9 @@ const crons = cronJobs()
 
 // ─── Post sync ───────────────────────────────────────────────────────────────
 // Runs daily at 03:00 UTC — fetches latest LinkedIn posts for all active users.
+// Calls the Apify fan-out directly; it self-reschedules page by page (100 users/invocation).
 // crons.cron pins a wall-clock time; crons.interval would drift relative to deploy time.
-crons.cron('sync LinkedIn posts', '0 3 * * *', internal.jobs.syncPosts.syncAllPosts, {})
+crons.cron('sync LinkedIn posts', '0 3 * * *', internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
 
 // Refresh like/comment counts on ALL feed-eligible posts every 30 minutes via one batched Apify run.
 // Dev/local only: the job self-gates on isApifyPostSyncEnabled, so prod (Apify dormant) is untouched.
@@ -52,5 +53,17 @@ crons.interval('refresh LinkedIn tokens', { hours: 6 }, internal.linkedin.tokenR
 // Must run AFTER the refresh cron has a chance to act (see above) — retention only clears tokens
 // already past expiry, so ordering ensures a refreshable token is renewed first.
 crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retention.enforceDataRetention, {})
+
+// ─── Admin survival snapshots ────────────────────────────────────────────────
+// Rebuilds the 7- and 28-day cohort snapshots the admin Survival panel reads (backlog/R18).
+// Fixed 03:15 UTC, just after the daily post sync, so the numbers are stable and the panel's
+// "as of" caption changes at the same time every day.
+crons.cron('rebuild survival snapshots', '15 3 * * *', internal.jobs.survivalSnapshot.rebuildSurvivalSnapshots, {})
+
+// ─── MOTD schedule reconciliation ────────────────────────────────────────────
+// Materializes each MOTD's [startAt, expiresAt) window into its `enabled` flag so the viewer
+// query (motd.getActiveMotd) stays wall-clock-free. Every 5 minutes: an expired MOTD can linger
+// up to one tick, and a reached startAt activates within one tick.
+crons.interval('reconcile MOTD windows', { minutes: 5 }, internal.motd.motd.reconcileMotdWindows, {})
 
 export default crons

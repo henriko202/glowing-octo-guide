@@ -26,7 +26,7 @@ i18n
       caches: ['cookie', 'localStorage'],
       cookieMinutes: 525600, // ~1 year
       cookieDomain: (import.meta.env.VITE_COOKIE_DOMAIN as string | undefined) || undefined,
-      cookieOptions: { path: '/', sameSite: 'lax' }
+      cookieOptions: { path: '/', sameSite: 'lax', secure: window.location.protocol === 'https:' }
     },
     interpolation: {
       escapeValue: false

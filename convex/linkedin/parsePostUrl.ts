@@ -56,7 +56,11 @@ export async function resolveLinkedInShortlink(url: string): Promise<string | nu
     const res = await fetchWithTimeout(current, { redirect: 'manual' }, 10_000)
     const location = res.headers.get('location')
     if (!location) return null
-    current = new URL(location, current).toString() // resolve a possibly-relative Location
+    try {
+      current = new URL(location, current).toString() // resolve a possibly-relative Location
+    } catch {
+      return null // malformed Location (e.g. http://[) must not throw
+    }
   }
   return null // exceeded the hop budget without reaching linkedin.com
 }
@@ -90,6 +94,35 @@ export function isHttpsUrl(url: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Fetches an https LinkedIn URL while refusing to auto-follow redirects off the allowlist.
+ * Manually reads each 3xx Location, re-validates it with isAllowedLinkedInUrl, and fetches at most
+ * REDIRECT_BUDGET hops. Returns null when the input is not allowlisted, a hop leaves the allowlist,
+ * a redirect has no Location, or the budget is exceeded. The returned Response is the final
+ * (non-3xx) one.
+ */
+const REDIRECT_BUDGET = 5
+
+export async function fetchAllowedLinkedInUrl(url: string, timeoutMs: number = 15_000): Promise<Response | null> {
+  let current = url
+  for (let hop = 0; hop <= REDIRECT_BUDGET; hop++) {
+    if (!isAllowedLinkedInUrl(current)) return null
+    const res = await fetchWithTimeout(current, { redirect: 'manual' }, timeoutMs)
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location')
+      if (!location) return null
+      try {
+        current = new URL(location, current).toString()
+      } catch {
+        return null // malformed Location (e.g. http://[) must not throw
+      }
+      continue
+    }
+    return res
+  }
+  return null
 }
 
 export function parseLinkedInPostUrl(url: string): ParsedPostUrl | null {

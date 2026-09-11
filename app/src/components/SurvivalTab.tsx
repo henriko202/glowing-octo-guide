@@ -56,10 +56,44 @@ export default function SurvivalTab({ sessionToken, isAdmin }: Props) {
   const [days, setDays] = useState<Days>(7)
   const metrics = useQuery(api.admin.survivalMetrics, sessionToken && isAdmin ? { sessionToken, days } : 'skip') as
     | SurvivalMetrics
+    | null
     | undefined
 
   if (metrics === undefined) {
     return <LoadingSpinner />
+  }
+
+  // The toggle stays live even with no snapshot: the two windows are separate rows, so one may
+  // exist while the other does not.
+  const windowToggle = (
+    <div
+      role="group"
+      aria-label="Cohort window"
+      className="mb-3 flex gap-1"
+    >
+      {([7, 28] as Days[]).map(d => (
+        <Button
+          key={d}
+          size="sm"
+          variant={days === d ? 'default' : 'outline'}
+          aria-pressed={days === d}
+          onClick={() => setDays(d)}
+        >
+          {d} days
+        </Button>
+      ))}
+    </div>
+  )
+
+  // The panel reads a nightly snapshot (admin.survivalMetrics), so there is a real data-less state:
+  // the cron has not written a row for this window yet.
+  if (metrics === null) {
+    return (
+      <div>
+        {windowToggle}
+        <p className="text-muted-foreground text-sm">No snapshot yet — the nightly rebuild has not run.</p>
+      </div>
+    )
   }
 
   const c = metrics.cohort
@@ -140,23 +174,10 @@ export default function SurvivalTab({ sessionToken, isAdmin }: Props) {
 
   return (
     <div>
-      <div
-        role="group"
-        aria-label="Cohort window"
-        className="mb-3 flex gap-1"
-      >
-        {([7, 28] as Days[]).map(d => (
-          <Button
-            key={d}
-            size="sm"
-            variant={days === d ? 'default' : 'outline'}
-            aria-pressed={days === d}
-            onClick={() => setDays(d)}
-          >
-            {d} days
-          </Button>
-        ))}
-      </div>
+      {windowToggle}
+
+      {/* The panel is eventually consistent: the caption says which nightly rebuild these numbers are from. */}
+      <p className="text-muted-foreground mb-3 text-xs">Snapshot as of {utc(metrics.generatedAt)} UTC</p>
 
       {/* R18: an empty cohort says so and nothing else — a table of zeros reads like data. The tier
           table below is not cohort-bound, so it stays. */}
@@ -191,7 +212,7 @@ export default function SurvivalTab({ sessionToken, isAdmin }: Props) {
         </Table>
       )}
 
-      <h2 className="text-foreground mt-6 mb-2 text-base font-semibold">Paying by tier (newest 1000 members)</h2>
+      <h2 className="text-foreground mt-6 mb-2 text-base font-semibold">Paying by tier (all active members)</h2>
       <Table className="table-fixed">
         <TableHeader>
           <TableRow>
@@ -215,9 +236,8 @@ export default function SurvivalTab({ sessionToken, isAdmin }: Props) {
       </Table>
 
       <p className="text-muted-foreground mt-3 text-xs">
-        {utc(metrics.since)} – {utc(metrics.generatedAt)} UTC · cohort = members who signed up in the window · newest
-        1000 members · “Of” counts only the members whose window has already closed, so a share of “–” means not enough
-        data yet
+        {utc(metrics.since)} – {utc(metrics.generatedAt)} UTC · cohort = members who signed up in the window · “Of”
+        counts only the members whose window has already closed, so a share of “–” means not enough data yet
       </p>
     </div>
   )

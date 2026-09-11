@@ -33,12 +33,20 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
 
-  useEffect(() => {
+  useEffect(;() => {
     // Not authenticated. A user who explicitly signed out is sent back to the landing site so the
     // sign-out sticks (the persistent signedOut marker survives the return visit); everyone else
     // auto-starts LinkedIn OAuth (one-hop via LinkedIn's SSO).
     if (me === null) {
-      window.location.href = isSignedOut() ? LANDING_URL : AUTH_URL
+      if (isSignedOut()) {
+        window.location.href = LANDING_URL
+      } else {
+        // The stored token was rejected (expired or revoked). Drop it before auto-OAuth: the
+        // pre-bundle capture in index.html never overwrites an existing token, so a stale one would
+        // otherwise loop app -> LinkedIn -> app without ever storing the fresh callback token.
+        sessionStorage.removeItem('sessionToken')
+        window.location.href = AUTH_URL
+      }
     }
   }, [me])
 

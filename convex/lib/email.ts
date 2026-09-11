@@ -4,6 +4,7 @@
 // flows never fail merely because email isn't configured — the caller decides whether
 // a skipped send matters. The real upstream error is logged server-side; callers get
 // a generic error.
+import { env } from '../_generated/server'
 import { scrubError } from './scrubError'
 import { fetchWithTimeout } from './fetchWithTimeout'
 
@@ -28,10 +29,10 @@ export interface SendEmailResult {
 }
 
 export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
-  const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM
+  const apiKey = env.RESEND_API_KEY
+  const from = env.EMAIL_FROM
   if (!apiKey || !from) {
-    console.warn('[email] RESEND_API_KEY/EMAIL_FROM unset — skipping send to', args.to)
+    console.warn('[email] RESEND_API_KEY/EMAIL_FROM unset — skipping send')
     return { sent: false, skipped: true }
   }
 

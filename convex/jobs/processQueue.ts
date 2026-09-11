@@ -4,7 +4,8 @@
 // Design:
 // - Processes up to BATCH_SIZE queue rows per invocation (bounded transaction reads).
 // - Uses by_author index to fetch each author's queued posts (no full-table JS grouping).
-// - If the batch is full (suggesting more rows exist), schedules itself via runAfter(0).
+// - If the batch is full AND it made progress, schedules itself via runAfter(0); a full batch with
+//   zero progress stops, letting the daily cron retry.
 import { internalMutation } from '../_generated/server'
 import { internal } from '../_generated/api'
 import type { Id } from '../_generated/dataModel'
@@ -19,12 +20,22 @@ export function computeCapacity(recentCount: number, postsPerWeek: number): numb
   return Math.max(0, postsPerWeek - recentCount)
 }
 
+// Exported for testing. Reschedule a full batch only when it made progress; a full batch whose
+// authors are all at their weekly cap would otherwise spin forever at runAfter(0).
+export function shouldRescheduleQueue(batchFull: boolean, progressed: number): boolean {
+  return batchFull && progressed > 0
+}
+
 export const processPostQueue = internalMutation({
   args: {},
   handler: async ctx => {
     // Take a bounded sample of queue rows to discover which authors have queued posts.
     const batch = await ctx.db.query('postQueue').take(BATCH_SIZE)
     if (batch.length === 0) return
+
+    // Progress counter: rows actually promoted or deleted this invocation. Only a batch that made
+    // progress may reschedule itself (see the tail) — a saturated queue head must not spin.
+    let progressed = 0
 
     // Collect distinct authorIds from this batch
     const authorIds = [...new Set(batch.map(p => p.authorId as string))] as Array<Id<'users'>>
@@ -39,7 +50,10 @@ export const processPostQueue = internalMutation({
           .query('postQueue')
           .withIndex('by_author', q => q.eq('authorId', authorId))
           .take(BATCH_SIZE)
-        for (const p of orphaned) await ctx.db.delete(p._id)
+        for (const p of orphaned) {
+          await ctx.db.delete(p._id)
+          progressed++
+        }
         continue
       }
 
@@ -74,6 +88,7 @@ export const processPostQueue = internalMutation({
 
         if (existingInPosts) {
           await ctx.db.delete(queuedPost._id)
+          progressed++
           continue
         }
 
@@ -114,11 +129,14 @@ export const processPostQueue = internalMutation({
           ...feed
         })
         await ctx.db.delete(queuedPost._id)
+        // One increment per promoted row (insert + delete are one unit of progress).
+        progressed++
       }
     }
 
-    // If batch was full, more rows may remain — reschedule immediately
-    if (batch.length === BATCH_SIZE) {
+    // Reschedule only when this batch made progress; otherwise stop and let the daily cron retry.
+    // Without this, a saturated queue head whose authors are all at their weekly cap spins forever.
+    if (shouldRescheduleQueue(batch.length === BATCH_SIZE, progressed)) {
       await ctx.scheduler.runAfter(0, internal.jobs.processQueue.processPostQueue, {})
     }
   }

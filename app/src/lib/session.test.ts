@@ -49,6 +49,19 @@ describe('signOut', () => {
     expect(sessionStorage.getItem('sessionToken')).toBeNull()
     expect(assign).toHaveBeenCalledWith(LANDING_URL)
   })
+
+  it('clears motdDismissed along with the token on sign-out', () => {
+    sessionStorage.setItem('sessionToken', 'tok')
+    sessionStorage.setItem('motdDismissed', JSON.stringify({ token: 'tok', motdId: 'm1' }))
+    const assign = vi.fn()
+    Object.defineProperty(window, 'location', { value: { assign }, writable: true, configurable: true })
+
+    signOut()
+
+    expect(localStorage.getItem('signedOut')).toBe('1')
+    expect(sessionStorage.getItem('sessionToken')).toBeNull()
+    expect(sessionStorage.getItem('motdDismissed')).toBeNull()
+  })
 })
 
 describe('performSignOut', () => {

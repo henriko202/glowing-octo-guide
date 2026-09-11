@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { api } from '../convex'
+import { useQueryOnce } from '@/lib/useQueryOnce'
 import { PageHeader } from '@/components/PageHeader'
 import PlanUsagePills, { type FeaturedUsage, type WeeklyUsage } from '@/components/PlanUsagePills'
 import TrialMeter from '@/components/TrialMeter'
@@ -67,11 +68,17 @@ export default function RecapPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const [range, setRange] = useState<RecapWindow>('7d')
-  // Floored to the hour so the query args are stable across renders (one Convex subscription).
+  // Floored to the hour so the query args are stable across renders (useQueryOnce keys its one-shot
+  // fetch on them).
   const [now] = useState(() => floorToHour(Date.now()))
-  const recap = useQuery(api.interactions.getRecap, sessionToken ? { sessionToken, window: range, now } : 'skip')
-  const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken }) as WeeklyUsage | null | undefined
-  const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken }) as FeaturedUsage | null | undefined
+  // One-shot by design: getRecap reads thousands of rows, so it must not re-run as a live
+  // subscription on every like/comment. It refreshes when the page reopens or the window toggles.
+  const { data: recap, error: recapError } = useQueryOnce(
+    api.interactions.getRecap,
+    sessionToken ? { sessionToken, window: range, now } : 'skip'
+  )
+  const usage = useQuery(api.posts.getWeeklyUsage, { sessionToken, now }) as WeeklyUsage | null | undefined
+  const featuredUsage = useQuery(api.posts.getFeaturedUsage, { sessionToken, now }) as FeaturedUsage | null | undefined
   const { isTrialing, progress } = useTrialProgress()
   const tracked = useRef<RecapWindow | null>(null)
 
@@ -90,7 +97,7 @@ export default function RecapPage() {
 
   return (
     <div className="mx-auto max-w-160 px-4 py-8 font-sans">
-      {/* Header + window toggle stay mounted through loading (F1) — Convex's useQuery returns
+      {/* Header + window toggle stay mounted through loading (F1) — the one-shot hook's `data` is
           undefined for every arg change (not just the first load), so gating the whole page on it
           would unmount this on every 7d/30d toggle and blow away the button's keyboard focus. */}
       <PageHeader
@@ -104,7 +111,12 @@ export default function RecapPage() {
         />
       </PageHeader>
 
-      {recap === undefined ? (
+      {recapError ? (
+        <div className="bg-card rounded-xl border p-8 text-center">
+          <h2 className="text-foreground m-0 text-lg font-semibold">{t('errorBoundary.title')}</h2>
+          <p className="text-muted-foreground mt-2 mb-0 text-sm">{t('errorBoundary.body')}</p>
+        </div>
+      ) : recap === undefined ? (
         <div
           role="status"
           aria-live="polite"

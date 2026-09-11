@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { components, internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { requireAuth, resolveSession } from './lib/auth'
@@ -30,41 +31,31 @@ export const getPublicAuthor = internalQuery({
 
 // Internal: returns users with active subscriptions (excludes trialing) for the Apify post-sync
 // fan-out. Uses the by_subscription_status index so it reads only active subscribers, not the whole
-// users table. Bounded take(500) with a non-silent cap (mirrors getUsersWithLinkedin): the fan-out
-// spawns one job per subscriber, so an unbounded .collect() here would be the first thing to blow the
-// query read limit as the base grows. Revisit (paginate the fan-out) if the active base nears 500.
+// users table. Cursor-paginated: the fan-out action pages through with continueCursor until isDone,
+// so no user is silently skipped and each page bounds the read.
 export const getActiveSubscribers = internalQuery({
-  args: {},
-  handler: async ctx => {
-    const SCAN_CAP = 500
-    const users = await ctx.db
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    return await ctx.db
       .query('users')
       .withIndex('by_subscription_status', q => q.eq('subscriptionStatus', 'active'))
-      .take(SCAN_CAP)
-    if (users.length === SCAN_CAP) {
-      console.warn(`[apify-sync] getActiveSubscribers hit the ${SCAN_CAP}-subscriber cap — some may be skipped`)
-    }
-    return users
+      .paginate(paginationOpts)
   }
 })
 
 // Internal: ids of users who have a LinkedIn public identifier, for the profile-scrape fan-out.
 // Profile data (country/location/locale) is useful for everyone with a profile — not just active
-// subscribers — so this intentionally differs from getActiveSubscribers. Bounded take(500):
-// no index on linkedinPublicIdentifier, so this scans + filters, matching listUsers' bounded-scan style.
+// subscribers — so this intentionally differs from getActiveSubscribers. Cursor-paginated over the
+// full table scan (no index on linkedinPublicIdentifier), then filtered in JS: a page may carry
+// fewer usable users than numItems, which is fine because the cursor still advances.
 export const getUsersWithLinkedin = internalQuery({
-  args: {},
-  handler: async ctx => {
-    const SCAN_CAP = 500
-    const users = await ctx.db.query('users').take(SCAN_CAP)
-    // Non-silent cap: surface when the bounded scan saturates so users beyond the ceiling aren't
-    // dropped silently. Revisit (index or pagination) if/when the Apify profile scrape is re-enabled.
-    if (users.length === SCAN_CAP) {
-      console.warn(
-        `[profile-scrape] getUsersWithLinkedin hit the ${SCAN_CAP}-user scan cap — some users may be skipped`
-      )
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const result = await ctx.db.query('users').paginate(paginationOpts)
+    return {
+      ...result,
+      page: result.page.filter(u => !!u.linkedinPublicIdentifier).map(u => ({ _id: u._id }))
     }
-    return users.filter(u => !!u.linkedinPublicIdentifier).map(u => ({ _id: u._id }))
   }
 })
 
@@ -213,8 +204,13 @@ export const getTrialProgress = query({
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken)
     if (!user) return null
-    const made = user.trialInteractionsMade ?? 0
-    const received = user.trialInteractionsReceived ?? 0
+    // Counters live in their own high-churn table (schema.ts: trialCounters) — see plan 018.
+    const counter = await ctx.db
+      .query('trialCounters')
+      .withIndex('by_user', q => q.eq('userId', user._id))
+      .unique()
+    const made = counter?.made ?? 0
+    const received = counter?.received ?? 0
     const combined = made + received
     return {
       made,

@@ -2,11 +2,17 @@
 import { internalActionGeneric as internalAction } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from '../_generated/api.js'
-import type { ActionCtx } from '../_generated/server'
+import { env, type ActionCtx } from '../_generated/server'
 import type { Id } from '../_generated/dataModel'
 import { APIFY_FANOUT_CONCURRENCY, isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js'
 import { settledInBatches } from '../lib/concurrency.js'
 import { isAllowedLinkedInUrl, isHttpsUrl } from '../linkedin/parsePostUrl.js'
+import { isValidPostUrn } from '../linkedin/parsePostContent.js'
+
+// Users fetched per fan-out page (one page per action invocation; the action self-reschedules).
+// Kept small (20): each invocation fans out paid Apify scrapes, and a 100-user page can outlive the
+// action execution limit.
+const PAGE_SIZE = 20
 
 // ─── Types for Apify LinkedIn post scraper output ────────────────────────────
 
@@ -92,8 +98,8 @@ export const syncUserPostsViaApify = internalAction({
   // on the api — see the Convex guideline on same-file ctx.run* circularity (cf. posts.submitPost).
   handler: async (ctx, { userId }: { userId: Id<'users'> }): Promise<void> => {
     const actionCtx = ctx as unknown as ActionCtx
-    const token = process.env.APIFY_API_TOKEN
-    const actorId = process.env.APIFY_TASK_ID
+    const token = env.APIFY_API_TOKEN
+    const actorId = env.APIFY_TASK_ID
     if (!token || !actorId) {
       console.error('APIFY_API_TOKEN or APIFY_TASK_ID not configured')
       return
@@ -141,6 +147,12 @@ export const syncUserPostsViaApify = internalAction({
     }
 
     for (const post of posts) {
+      // Untrusted scraper output: drop a URN that doesn't match the same shape the manual path
+      // enforces (extractPostUrn) before it becomes a stored dedup key.
+      if (!isValidPostUrn(post.shareUrn)) {
+        console.warn(`[Apify] dropping post with invalid URN for user ${userId}`)
+        continue
+      }
       const result = await actionCtx.runMutation(internal.jobs.syncPosts.upsertPost, {
         ...apifyPostToUpsertArgs(post, userId, hidden, visibility),
         queueOnLimitReached: true
@@ -159,8 +171,8 @@ export const syncUserPostsViaApify = internalAction({
 // ─── Fan-out: sync all active users via Apify ────────────────────────────────
 
 export const syncAllPostsViaApify = internalAction({
-  args: {},
-  handler: async (ctx): Promise<void> => {
+  args: { cursor: v.optional(v.string()), failedSoFar: v.optional(v.number()) },
+  handler: async (ctx, { cursor, failedSoFar }): Promise<void> => {
     const actionCtx = ctx as unknown as ActionCtx
 
     const settings = await actionCtx.runQuery(internal.admin.getSettingsInternal, {})
@@ -169,23 +181,39 @@ export const syncAllPostsViaApify = internalAction({
       return
     }
 
-    const users = await actionCtx.runQuery(internal.users.getActiveSubscribers, {})
+    // One page per invocation; the next page is a fresh action. The per-user runAction hops below are
+    // intentional (independent retries and logs) — only the redundant same-runtime router hop was removed.
+    const page = await actionCtx.runQuery(internal.users.getActiveSubscribers, {
+      paginationOpts: { numItems: PAGE_SIZE, cursor: cursor ?? null }
+    })
 
     // Bounded fan-out: at most APIFY_FANOUT_CONCURRENCY users scraped at once (each is a paid,
     // rate-limited Apify run) instead of an unbounded users.map(). settledInBatches never rejects,
     // so one user's failure can't sink the sweep — mirrors the previous Promise.allSettled semantics.
-    const results = await settledInBatches(users, APIFY_FANOUT_CONCURRENCY, u =>
+    const results = await settledInBatches(page.page, APIFY_FANOUT_CONCURRENCY, u =>
       actionCtx.runAction(internal.jobs.syncPostsApify.syncUserPostsViaApify, { userId: u._id })
     )
 
     const failed = results.filter(r => r.status === 'rejected')
+    const totalFailed = (failedSoFar ?? 0) + failed.length
     if (failed.length > 0) {
-      console.error(`[Apify] ${failed.length}/${users.length} user syncs failed`)
+      console.error(`[Apify] ${failed.length}/${page.page.length} user syncs failed`)
     }
 
+    // Status is written after EVERY page, with the sweep's running failed count. An interrupted
+    // sweep therefore still shows the pages processed so far instead of a stale timestamp; the count
+    // is threaded through the self-reschedule and starts fresh when the next cron passes no cursor.
     await actionCtx.runMutation(internal.admin.updateSyncStatus, {
       lastApifySyncAt: Date.now(),
-      lastApifySyncError: failed.length > 0 ? `${failed.length} user(s) failed` : undefined
+      lastApifySyncError: totalFailed > 0 ? `${totalFailed} user(s) failed` : undefined
     })
+
+    // More pages remain: self-reschedule with the cursor.
+    if (!page.isDone) {
+      await actionCtx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncAllPostsViaApify, {
+        cursor: page.continueCursor,
+        failedSoFar: totalFailed
+      })
+    }
   }
 })

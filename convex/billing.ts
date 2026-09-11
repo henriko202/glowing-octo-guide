@@ -65,6 +65,11 @@ export const getBillingContext = internalQuery({
       .query('subscriptions')
       .withIndex('by_user', q => q.eq('userId', userId))
       .collect()
+    // Trial counters live in their own high-churn table (schema.ts: trialCounters) — see plan 018.
+    const counter = await ctx.db
+      .query('trialCounters')
+      .withIndex('by_user', q => q.eq('userId', userId))
+      .unique()
     return {
       email: user.email,
       language: user.language,
@@ -72,8 +77,8 @@ export const getBillingContext = internalQuery({
       tier: user.tier,
       subscriptionStatus: user.subscriptionStatus,
       trialEndsAt: user.trialEndsAt,
-      made: user.trialInteractionsMade ?? 0,
-      received: user.trialInteractionsReceived ?? 0,
+      made: counter?.made ?? 0,
+      received: counter?.received ?? 0,
       subscriptions
     }
   }

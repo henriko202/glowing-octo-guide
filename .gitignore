@@ -1,4 +1,6 @@
 node_modules/
+# pnpm-only workspace: block stray npm lockfiles.
+package-lock.json
 .env*
 !.env.example
 !.env.local.example

@@ -17,7 +17,7 @@ import { RateLimiter } from '@convex-dev/rate-limiter'
 import { components } from '../_generated/api'
 import type { MutationCtx } from '../_generated/server'
 import { internalMutation } from '../_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import type { Id } from '../_generated/dataModel'
 
 const WINDOW_MS = 60 * 60 * 1000 // 1 hour — backward-compatible default window
@@ -34,7 +34,16 @@ export const RATE_LIMIT_ACTIONS = [
   'submitPost',
   'generateComment',
   'commentOnPost',
-  'reactToPost'
+  'reactToPost',
+  'createCheckoutSession',
+  'purchaseFeaturedPost',
+  'createPortalSession',
+  'createCancelFlowSession',
+  'createPlanSwitchSession',
+  'undoScheduledDowngrade',
+  'resumeSubscription',
+  'requestAccountDeletion',
+  'cancelAccountDeletion'
 ] as const
 
 // The component reads + writes via ctx.runQuery/runMutation, both of which MutationCtx and ActionCtx
@@ -84,7 +93,7 @@ export async function checkRateLimit(
 ): Promise<void> {
   const allowed = await consume(ctx, userId, action, maxPerWindow, windowMs)
   if (!allowed) {
-    throw new Error(
+    throw new ConvexError(
       `Rate limit exceeded. You can perform this action at most ${maxPerWindow} times per ${windowLabel}.`
     )
   }
@@ -114,5 +123,44 @@ export const checkAndIncrement = internalMutation({
   },
   handler: async (ctx, { userId, action, maxPerHour, windowMs, windowLabel }) => {
     await checkRateLimit(ctx, userId, action, maxPerHour, windowMs, windowLabel)
+  }
+})
+
+// Anonymous (no user key) limiter for the OAuth start route, whose caller has no identity yet.
+// `key` is supplied by the caller: the global backstop uses the fixed 'global' key, while the
+// per-client dimension uses a best-effort client value (untrusted x-forwarded-for) — see
+// enforceOAuthStartBudget.
+export async function checkAnonymousRateLimit(
+  ctx: RunMutationCtx,
+  action: string,
+  key: string,
+  maxPerWindow: number,
+  windowMs: number = WINDOW_MS
+): Promise<void> {
+  const { ok } = await rateLimiter.limit(ctx, action, {
+    key,
+    config: { kind: 'fixed window', rate: maxPerWindow, period: windowMs }
+  })
+  if (!ok) throw new ConvexError('Too many sign-in attempts. Please try again shortly.')
+}
+
+// Two-dimensional budget for the OAuth start route (both 1-hour fixed windows). The per-client
+// limit blunts a single-source flood but is best-effort: clientKey comes from x-forwarded-for,
+// which a caller can omit or forge. The global backstop is what actually bounds oauthStates growth.
+export const OAUTH_START_PER_CLIENT_PER_HOUR = 60
+export const OAUTH_START_GLOBAL_PER_HOUR = 1800
+
+/** Plain-function core (directly unit-testable) for the checkOAuthStartBudget mutation below. */
+export async function enforceOAuthStartBudget(ctx: RunMutationCtx, clientKey?: string): Promise<void> {
+  if (clientKey) {
+    await checkAnonymousRateLimit(ctx, 'oauthStartClient', clientKey, OAUTH_START_PER_CLIENT_PER_HOUR)
+  }
+  await checkAnonymousRateLimit(ctx, 'oauthStart', 'global', OAUTH_START_GLOBAL_PER_HOUR)
+}
+
+export const checkOAuthStartBudget = internalMutation({
+  args: { clientKey: v.optional(v.string()) },
+  handler: async (ctx, { clientKey }) => {
+    await enforceOAuthStartBudget(ctx, clientKey)
   }
 })

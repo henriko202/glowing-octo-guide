@@ -4,6 +4,7 @@
 // an `action` label for the sanitized message, and any per-call headers (X-Restli, Linkedin-Version).
 // `soft` lists statuses to return `null` for instead of throwing (e.g. 403 = scope not granted).
 import { fetchWithTimeout } from '../lib/fetchWithTimeout'
+import { scrubError } from '../lib/scrubError'
 
 const BASE = 'https://api.linkedin.com'
 
@@ -23,7 +24,7 @@ export async function callMemberApi(
   })
   if (!res.ok) {
     if (opts.soft?.includes(res.status)) return null
-    console.error(`LinkedIn ${opts.action} failed: ${res.status}`, await res.text())
+    console.error(`LinkedIn ${opts.action} failed: ${res.status}`, scrubError(await res.text()))
     throw new Error(`Failed to ${opts.action}. Please try again.`)
   }
   return res

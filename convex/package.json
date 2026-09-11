@@ -6,16 +6,20 @@
     "dev": "convex dev",
     "deploy": "convex deploy",
     "build": "convex deploy",
-    "test": "vitest run"
+    "test": "vitest run --exclude \"**/integration/**\"",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@convex-dev/rate-limiter": "^0.3.2",
-    "@convex-dev/stripe": "^0.1.4",
-    "convex": "^1.41.0",
-    "stripe": "^20.4.1"
+    "@convex-dev/stripe": "^0.1.6",
+    "convex": "^1.45.0",
+    "stripe": "^22.2.1"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@types/node": "^25.5.0",
+    "convex-test": "^0.0.57",
+    "vite": "6.4.3",
     "vitest": "^4.1.9"
   }
 }

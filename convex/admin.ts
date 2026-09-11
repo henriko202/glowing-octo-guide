@@ -7,14 +7,12 @@ import { requireAuth } from './lib/auth'
 import { tierToRank, buildTierDefaultRow, DEFAULTS } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
 import { type ApifyFlags, isApifyPostSyncEnabled, isApifyProfileScrapeEnabled } from './lib/apify'
-import { DAY_MS, payingByTier, returnWindows, summarizeCohort, type CohortRow } from './lib/survival'
-import { findLiveSubscription } from './lib/trialMilestone'
 
 // SECURITY: Every admin endpoint MUST call this.
 // Accepts the user doc already resolved by requireAuth — never re-fetches from client ID.
 export function assertAdmin(user: Doc<'users'>): void {
   if (!user.isAdmin) {
-    throw new Error('Forbidden: admin access required')
+    throw new ConvexError('Forbidden: admin access required')
   }
 }
 
@@ -48,7 +46,7 @@ async function assertApifyTriggerEnabled(
   const user = await requireAuth(ctx, sessionToken)
   assertAdmin(user)
   const settings = await ctx.db.query('appSettings').first()
-  if (!isEnabled(settings)) throw new Error(disabledMessage)
+  if (!isEnabled(settings)) throw new ConvexError(disabledMessage)
 }
 
 export const checkIsAdmin = query({
@@ -129,7 +127,7 @@ export const syncAllPosts = mutation({
       isApifyPostSyncEnabled,
       'Post sync is disabled — enable it in Settings first.'
     )
-    await ctx.scheduler.runAfter(0, internal.jobs.syncPosts.syncAllPosts, {})
+    await ctx.scheduler.runAfter(0, internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
   }
 })
 
@@ -389,54 +387,33 @@ export const listUsers = query({
 })
 
 // ─── Survival panel (backlog/R18) ────────────────────────────────────────────
-// "Who survives the first week", from the database only. Cohort = members who signed up inside the
-// window, taken from the same newest-1000 slice listUsers reads (newest first, so a 7- or 28-day
-// cohort is always inside it). Date.now() in a query matches getFeed/getRecap; the panel tolerates
-// staleness. No new index: the two return windows range over the _creationTime tail Convex appends
-// to userInteractions.by_user (createdAt and _creationTime are written in the same mutation).
-// ponytail: ~4 indexed reads per cohort member; precompute nightly if a 28-day cohort passes ~1500.
+// Reads the nightly snapshot built by jobs/survivalSnapshot.ts — one row per window instead of the
+// old reactive query's ~4 indexed reads per cohort member (and its silent newest-1000 cap). The
+// panel is as-of the last rebuild: generatedAt is rendered by SurvivalTab. Returns null until the
+// first rebuild runs. The cohort semantics live in lib/survival.summarizeCohort.
+// Exported for testing: the pure projection from a stored row to the panel payload.
+export function toSurvivalMetrics(snapshot: Doc<'survivalSnapshots'> | null) {
+  if (!snapshot) return null
+  return {
+    days: snapshot.days,
+    since: snapshot.since,
+    generatedAt: snapshot.generatedAt,
+    cohort: snapshot.cohort,
+    payingByTier: snapshot.payingByTier
+  }
+}
+
 export const survivalMetrics = query({
   args: { sessionToken: v.string(), days: v.union(v.literal(7), v.literal(28)) },
   handler: async (ctx, { sessionToken, days }) => {
     const admin = await requireAuth(ctx, sessionToken)
     assertAdmin(admin)
 
-    const now = Date.now()
-    const since = now - days * DAY_MS
-    const users = await ctx.db.query('users').order('desc').take(1000)
-    const cohort = users.filter(u => u.createdAt >= since)
-
-    const rows: CohortRow[] = await Promise.all(
-      cohort.map(async u => {
-        const subs = await ctx.db
-          .query('subscriptions')
-          .withIndex('by_user', q => q.eq('userId', u._id))
-          .order('desc')
-          .take(5)
-        // by_user is ordered by _creationTime, so .first() is the member's OLDEST interaction.
-        const first = await ctx.db
-          .query('userInteractions')
-          .withIndex('by_user', q => q.eq('userId', u._id))
-          .first()
-        const { day1, days2to7 } = returnWindows(u.createdAt)
-        const returnedIn = async ([a, b]: [number, number]): Promise<boolean> =>
-          (await ctx.db
-            .query('userInteractions')
-            .withIndex('by_user', q => q.eq('userId', u._id).gte('_creationTime', a).lt('_creationTime', b))
-            .first()) !== null
-        return {
-          createdAt: u.createdAt,
-          subscriptionStatus: u.subscriptionStatus,
-          startedTrial: subs.length > 0,
-          cancelPending: findLiveSubscription(subs)?.cancelAtPeriodEnd === true,
-          firstInteractionAt: first?.createdAt,
-          returnedDay1: await returnedIn(day1),
-          returnedDays2to7: await returnedIn(days2to7)
-        }
-      })
-    )
-
-    return { days, since, generatedAt: now, cohort: summarizeCohort(rows, now), payingByTier: payingByTier(users) }
+    const snapshot = await ctx.db
+      .query('survivalSnapshots')
+      .withIndex('by_days', q => q.eq('days', days))
+      .unique()
+    return toSurvivalMetrics(snapshot)
   }
 })
 

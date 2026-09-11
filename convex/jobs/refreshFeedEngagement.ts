@@ -3,7 +3,7 @@
 // §16 / lib/apify.ts) is never scraped. Counts only — scrapeComments/scrapeReactions stay off.
 import { internalActionGeneric as internalAction } from 'convex/server'
 import { internal } from '../_generated/api.js'
-import type { ActionCtx } from '../_generated/server'
+import { env, type ActionCtx } from '../_generated/server'
 import type { Id } from '../_generated/dataModel'
 import { isApifyPostSyncEnabled, runApifyTask } from '../lib/apify.js' // Only the fields we read from the (much larger) profile-posts scraper payload.
 
@@ -55,8 +55,8 @@ export const refreshFeedEngagement = internalAction({
   args: {},
   handler: async (ctx): Promise<void> => {
     const actionCtx = ctx as unknown as ActionCtx
-    const token = process.env.APIFY_API_TOKEN
-    const actorId = process.env.APIFY_TASK_ID
+    const token = env.APIFY_API_TOKEN
+    const actorId = env.APIFY_TASK_ID
     if (!token || !actorId) {
       console.error('APIFY_API_TOKEN or APIFY_TASK_ID not configured')
       return

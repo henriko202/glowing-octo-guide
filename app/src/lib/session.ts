@@ -47,6 +47,8 @@ export function beginSignOut(): void {
 export function signOut(): void {
   markSignedOut()
   sessionStorage.removeItem('sessionToken')
+  // The dismissed-MOTD memory stores the session token, so it must die with the session.
+  sessionStorage.removeItem('motdDismissed')
   window.location.assign(LANDING_URL)
 }
 

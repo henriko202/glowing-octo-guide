@@ -4,12 +4,11 @@
 // unbounded number of posts/interactions can't blow a single query's read limit; the action stores
 // the JSON bundle in Convex file storage behind a 7-day owner-only link and emails the user.
 import { internalAction, internalMutation, internalQuery, mutation, query } from '../_generated/server'
-import { paginationOptsValidator } from 'convex/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internal } from '../_generated/api'
 import { resolveSession } from '../lib/auth'
 import { checkRateLimit } from '../lib/rateLimit'
-import { writeAuditLog } from '../lib/audit'
+import { type AuditDb, writeAuditLog } from '../lib/audit'
 import { sendEmail } from '../lib/email'
 import { exportReadyEmail } from './emails'
 
@@ -28,6 +27,7 @@ export interface ExportInput {
   feedbackResponses?: AnyDoc[]
   interactions?: AnyDoc[]
   userPostState?: AnyDoc[]
+  trialCounters?: AnyDoc[]
   exportedAt?: number
 }
 
@@ -46,6 +46,8 @@ export function buildExportBundle(input: ExportInput) {
     interactions: input.interactions ?? [],
     // Per-post state: which posts they reacted to + their saved AI comment drafts.
     userPostState: input.userPostState ?? [],
+    // Trial interaction counters (plan 018 — high-churn, kept off the users doc).
+    trialCounters: input.trialCounters ?? [],
     // The user is entitled to data ABOUT them, not the internal admin trail — keep the
     // action + when, drop other actors' identifiers and internal fields.
     auditLog: input.audits.map(a => ({ action: a.action, createdAt: a.createdAt, metadata: a.metadata }))
@@ -63,7 +65,8 @@ const EXPORT_TABLES: Array<{ key: string; table: string; index: string; field: s
   { key: 'audits', table: 'auditLogs', index: 'by_target', field: 'targetUserId' },
   { key: 'feedback', table: 'feedback', index: 'by_user', field: 'userId' },
   { key: 'interactions', table: 'userInteractions', index: 'by_user', field: 'userId' },
-  { key: 'userPostState', table: 'userPostState', index: 'by_user_and_post', field: 'userId' }
+  { key: 'userPostState', table: 'userPostState', index: 'by_user_and_post', field: 'userId' },
+  { key: 'trialCounters', table: 'trialCounters', index: 'by_user', field: 'userId' }
 ]
 
 const EXPORT_PAGE_SIZE = 500
@@ -89,16 +92,19 @@ export const getExportUser = internalQuery({
 // One page of a single user-owned table. The action loops this per table with the returned cursor
 // until isDone, so no single query reads more than EXPORT_PAGE_SIZE rows — the whole point of the
 // pagination refactor (a single unbounded .collect() would fail the export for a very active user).
+// Takes the cursor/numItems explicitly rather than a reconstructed `paginationOpts`: the client is
+// the action, the server owns the cursor, and rebuilding the opts object field by field drops the
+// optional pagination fields (Convex pagination guideline).
 export const gatherUserTablePage = internalQuery({
-  args: { userId: v.id('users'), table: v.string(), paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { userId, table, paginationOpts }) => {
+  args: { userId: v.id('users'), table: v.string(), cursor: v.union(v.string(), v.null()), numItems: v.number() },
+  handler: async (ctx, { userId, table, cursor, numItems }) => {
     const cfg = EXPORT_TABLES.find(t => t.table === table)
     if (!cfg) throw new Error(`Unknown export table: ${table}`)
     const db = ctx.db as unknown as PaginatedDb
     return await db
       .query(cfg.table)
       .withIndex(cfg.index, q => q.eq(cfg.field, userId))
-      .paginate(paginationOpts)
+      .paginate({ cursor, numItems })
   }
 })
 
@@ -116,7 +122,7 @@ export const gatherFeedbackResponses = internalQuery({
       feedbackIds.slice(0, 100).map(fid =>
         ctx.db
           .query('feedbackResponses')
-          .withIndex('by_feedback', q => q.eq('feedbackId', fid))
+          .withIndex('by_feedback_id_and_created_at', q => q.eq('feedbackId', fid))
           .take(100)
       )
     )
@@ -128,14 +134,14 @@ export const requestDataExport = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     const user = await resolveSession(ctx, sessionToken) // allow banned users to exercise access
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw new ConvexError('Unauthorized')
     if (!user.isAdmin) await checkRateLimit(ctx, user._id, 'dataExport', 1, 24 * 60 * 60 * 1000, 'day')
     const requestId = await ctx.db.insert('dataExportRequests', {
       userId: user._id,
       status: 'pending',
       requestedAt: Date.now()
     })
-    await writeAuditLog(ctx.db as unknown as { insert: (t: string, d: Record<string, unknown>) => Promise<string> }, {
+    await writeAuditLog(ctx.db as unknown as AuditDb, {
       actor: 'user',
       actorId: user._id,
       action: 'dsr.export_requested',
@@ -165,7 +171,7 @@ export const generateExport = internalAction({
         for (let page = 0; page < 10_000; page++) {
           const res: { page: AnyDoc[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(
             internal.privacy.export.gatherUserTablePage,
-            { userId, table, paginationOpts: { numItems: EXPORT_PAGE_SIZE, cursor } }
+            { userId, table, cursor, numItems: EXPORT_PAGE_SIZE }
           )
           rows.push(...res.page)
           if (res.isDone) break
@@ -188,6 +194,7 @@ export const generateExport = internalAction({
         feedbackResponses,
         interactions: collected.interactions ?? [],
         userPostState: collected.userPostState ?? [],
+        trialCounters: collected.trialCounters ?? [],
         exportedAt: Date.now()
       })
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
@@ -224,8 +231,8 @@ export const markExportFailed = internalMutation({
 })
 
 export const getExportStatus = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, { sessionToken }) => {
+  args: { sessionToken: v.string(), now: v.number() },
+  handler: async (ctx, { sessionToken, now }) => {
     const user = await resolveSession(ctx, sessionToken)
     if (!user) return null
     const latest = await ctx.db
@@ -234,23 +241,23 @@ export const getExportStatus = query({
       .order('desc')
       .first()
     if (!latest) return null
-    const expired = latest.expiresAt !== undefined && latest.expiresAt < Date.now()
+    const expired = latest.expiresAt !== undefined && latest.expiresAt < now
     return { status: expired ? 'expired' : latest.status, requestedAt: latest.requestedAt }
   }
 })
 
 export const getExportDownloadUrl = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, { sessionToken }) => {
+  args: { sessionToken: v.string(), now: v.number() },
+  handler: async (ctx, { sessionToken, now }) => {
     const user = await resolveSession(ctx, sessionToken)
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw new ConvexError('Unauthorized')
     const latest = await ctx.db
       .query('dataExportRequests')
       .withIndex('by_user', q => q.eq('userId', user._id))
       .order('desc')
       .first()
     if (!latest || latest.status !== 'ready' || !latest.fileStorageId) return null
-    if (latest.expiresAt !== undefined && latest.expiresAt < Date.now()) return null
+    if (latest.expiresAt !== undefined && latest.expiresAt < now) return null
     return await ctx.storage.getUrl(latest.fileStorageId)
   }
 })

@@ -2,7 +2,7 @@
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
-import { paginationOptsValidator } from 'convex/server'
+import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth, requireAuthAction } from './lib/auth'
@@ -31,16 +31,41 @@ import {
 } from './lib/recap'
 
 /** The slice of the member's row the milestone reads — narrow so a test can build one inline. */
-type TrialCounts = { subscriptionStatus?: string; trialInteractionsMade?: number; trialInteractionsReceived?: number }
+type TrialUserRow = {
+  subscriptionStatus?: string
+  // Legacy pre-plan-018 counters. The writer consumes these on first touch; the migration only
+  // sees members the writer has not touched since the deploy.
+  trialInteractionsMade?: number
+  trialInteractionsReceived?: number
+}
+
+/** The counter row slice the handler reads/updates — narrow so a test can build one inline. */
+type TrialCounterRow = { _id: Id<'trialCounters'>; made: number; received: number }
 
 /** The slice of a subscription row `pickTrialingSubscription` and `shouldEndTrialEarly` need. */
 type TrialSubscriptionRow = { status: string; stripeSubscriptionId?: string; cancelAtPeriodEnd?: boolean }
 
+/** The counter fields a bump patches, or the legacy fields the first touch clears from the users row. */
+type TrialCounterPatch = { made?: number; received?: number }
+type TrialLegacyClear = { trialInteractionsMade: undefined; trialInteractionsReceived: undefined }
+
 /** The slice of MutationCtx the handler touches. Same narrowing as users.setPostVisibilityHandler. */
 export interface TrialBumpCtx {
   db: {
-    get: (id: string) => Promise<TrialCounts | null>
-    patch: (id: string, fields: Record<string, number>) => Promise<void>
+    get: (id: Id<'users'>) => Promise<TrialUserRow | null>
+    // The counters live in their own high-churn table (schema.ts: trialCounters) so a bump never
+    // patches the shared users doc — see plan 018. The only users patch is the one-time legacy clear.
+    query: (table: 'trialCounters') => {
+      withIndex(
+        index: 'by_user',
+        range: (q: { eq: (field: 'userId', value: Id<'users'>) => unknown }) => unknown
+      ): { unique: () => Promise<TrialCounterRow | null> }
+    }
+    patch: (id: Id<'trialCounters'> | Id<'users'>, fields: TrialCounterPatch | TrialLegacyClear) => Promise<void>
+    insert: (
+      table: 'trialCounters',
+      doc: { userId: Id<'users'>; made: number; received: number }
+    ) => Promise<Id<'trialCounters'>>
   }
   scheduler: { runAfter: (delay: number, fn: unknown, args: Record<string, unknown>) => Promise<unknown> }
 }
@@ -53,23 +78,53 @@ export interface TrialBumpCtx {
  * covered, but nothing pinned the wiring between them — that the 50th interaction is the one that
  * charges the card. `loadSubscriptions` is lazy on purpose, so the index read still happens only on
  * that one interaction in fifty.
+ *
+ * Deploy window (plan 018): on a member's first interaction after the writer switch, if no
+ * `trialCounters` row exists yet, the insert is SEEDED from the legacy
+ * `users.trialInteractionsMade` / `trialInteractionsReceived` fields and both fields are cleared in
+ * the same transaction. So a member whose counts still live on the users row neither restarts from
+ * zero nor waits for `migrations/moveTrialCounters.ts` (which therefore only handles members the
+ * writer has never touched). Because the writer consumes the fields atomically, the migration can
+ * never add them on top of a counter row the writer created — the two cannot double-count.
  */
 export async function bumpTrialInteractionHandler(
   ctx: TrialBumpCtx,
-  userId: string,
+  userId: Id<'users'>,
   kind: 'made' | 'received',
   loadSubscriptions: () => Promise<readonly TrialSubscriptionRow[]>
 ): Promise<void> {
   const u = await ctx.db.get(userId)
   if (!u || u.subscriptionStatus !== 'trialing') return
-  const made = u.trialInteractionsMade ?? 0
-  const received = u.trialInteractionsReceived ?? 0
+  const counter = await ctx.db
+    .query('trialCounters')
+    .withIndex('by_user', q => q.eq('userId', userId))
+    .unique()
+  // Seed from the legacy fields only while no counter row exists (the deploy window); once the row
+  // exists it is authoritative and the fields below have already been consumed.
+  const made = counter?.made ?? u.trialInteractionsMade ?? 0
+  const received = counter?.received ?? u.trialInteractionsReceived ?? 0
   const combined = made + received
-  if (kind === 'made') await ctx.db.patch(userId, { trialInteractionsMade: made + 1 })
-  else await ctx.db.patch(userId, { trialInteractionsReceived: received + 1 })
+  if (counter) {
+    await ctx.db.patch(counter._id, kind === 'made' ? { made: made + 1 } : { received: received + 1 })
+  } else {
+    // First trial interaction: create the row from the legacy counts + this bump. Both sides are
+    // always written, so readers need no undefined-coalescing and the row's shape never changes.
+    await ctx.db.insert('trialCounters', {
+      userId,
+      made: kind === 'made' ? made + 1 : made,
+      received: kind === 'received' ? received + 1 : received
+    })
+  }
+  // Same transaction as the counter write: clearing the legacy fields is what stops the migration
+  // from adding them to an already-written row (which could jump a threshold `crossesThreshold`
+  // never saw). Clear both sides, not just the bumped one, so neither can linger.
+  if (u.trialInteractionsMade !== undefined || u.trialInteractionsReceived !== undefined) {
+    await ctx.db.patch(userId, { trialInteractionsMade: undefined, trialInteractionsReceived: undefined })
+  }
 
   // 80% of the way: one heads-up before the plan starts, never an alarm. crossesThreshold's
-  // semantics guarantee it fires exactly once per member.
+  // semantics guarantee it fires exactly once per member. `combined` is pre-increment, so a seeded
+  // 49 + this interaction fires `crossesThreshold(49, 1)` — the charge, not a late warning.
   if (crossesThreshold(combined, 1, TRIAL_WARNING_THRESHOLD)) {
     await ctx.scheduler.runAfter(0, internal.notifications.sendTrialNearEnd, { userId })
   }
@@ -439,23 +494,58 @@ export const getRecap = query({
 })
 
 // ── History (backlog/R16) ──────────────────────────────────────────────────────────────────────
-// `since` = 0 means all time. Newest first; 20 per page from the client.
+// `since` = 0 means all time. Newest first; 20 per page from the client. The server clamps the page
+// size so a caller can't ask for thousands of rows in one query (mirrors getFeed's clamp).
+const MAX_HISTORY_PAGE = 100
+
+/** The `post` join inside a history row (`toHistoryRow`'s non-null branch). */
+const historyPostValidator = v.object({
+  id: v.string(),
+  linkedinPostUrn: v.string(),
+  sourceUrl: v.optional(v.string()),
+  excerpt: v.string(),
+  authorName: v.string(),
+  removed: v.boolean()
+})
+
+/** One `HistoryRow` as `toHistoryRow` (lib/history.ts) returns it — the exact return shape. */
+const historyRowValidator = v.object({
+  id: v.string(),
+  kind: v.union(v.literal('reaction'), v.literal('comment')),
+  reaction: v.optional(reactionValidator),
+  comment: v.optional(v.string()),
+  createdAt: v.number(),
+  post: v.union(historyPostValidator, v.null())
+})
+
+/** Clamp a client-supplied page size into [1, MAX_HISTORY_PAGE] before it reaches `.paginate()`. */
+export function clampHistoryPageSize(numItems: number): number {
+  return Math.min(Math.max(1, numItems), MAX_HISTORY_PAGE)
+}
+
 export const listMyInteractions = query({
   args: { sessionToken: v.string(), since: v.number(), paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(historyRowValidator),
   handler: async (ctx, { sessionToken, since, paginationOpts }) => {
     const user = await requireAuth(ctx, sessionToken)
+    // Spread the validator's fields so optional ones (endCursor/maximumRowsRead/…) survive; the
+    // clamp overrides only numItems.
     const result = await ctx.db
       .query('userInteractions')
       .withIndex('by_user', q => q.eq('userId', user._id).gte('_creationTime', since))
       .order('desc')
-      .paginate(paginationOpts)
-    const page: HistoryRow[] = await Promise.all(
-      result.page.map(async row => {
-        const post = await ctx.db.get(row.postId)
-        const author = post ? await ctx.db.get(post.authorId) : null
-        return toHistoryRow(row, post, author)
-      })
-    )
+      .paginate({ ...paginationOpts, numItems: clampHistoryPageSize(paginationOpts.numItems) })
+    // One get() per unique post/author instead of two per row.
+    const postIds = [...new Set(result.page.map(r => r.postId))]
+    const posts = await Promise.all(postIds.map(id => ctx.db.get(id)))
+    const postMap = new Map(posts.filter((p): p is Doc<'posts'> => p !== null).map(p => [p._id, p]))
+    const authorIds = [...new Set([...postMap.values()].map(p => p.authorId))]
+    const authors = await Promise.all(authorIds.map(id => ctx.db.get(id)))
+    const authorMap = new Map(authors.filter((a): a is Doc<'users'> => a !== null).map(a => [a._id, a]))
+    const page: HistoryRow[] = result.page.map(row => {
+      const post = postMap.get(row.postId) ?? null
+      return toHistoryRow(row, post, post ? (authorMap.get(post.authorId) ?? null) : null)
+    })
     return { ...result, page }
   }
 })

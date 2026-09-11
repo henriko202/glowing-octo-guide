@@ -29,6 +29,24 @@ describe('verifyPostOwnership', () => {
         "doesn't belong to your LinkedIn account"
       )
     })
+
+    it('throws when the URL vanity contradicts the stored identifier, even on a name match', () => {
+      expect(() => verifyPostOwnership('Henri Durand', 'Henri Durand', 'someone-else', 'henri-durand')).toThrow(
+        "doesn't belong to your LinkedIn account"
+      )
+    })
+
+    it('confirms when the URL vanity matches the stored identifier case-insensitively', () => {
+      const r = verifyPostOwnership('Henri Durand', 'Henri Durand', 'Henri-Durand', 'henri-durand')
+      expect(r.confirmed).toBe(true)
+      expect(r.strategy).toBe('author-name')
+    })
+
+    it('confirms a Format 2 URL (null vanity) on the name match alone (documented bypass)', () => {
+      const r = verifyPostOwnership('Henri Durand', 'Henri Durand', null, 'henri-durand')
+      expect(r.confirmed).toBe(true)
+      expect(r.strategy).toBe('author-name')
+    })
   })
 
   describe('fallback: vanity heuristic (post page has no author block)', () => {

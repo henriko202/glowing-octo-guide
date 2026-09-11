@@ -17,6 +17,29 @@
       name="theme-color"
     />
     <script>
+      // OAuth return: move the session token out of the URL before any bundle, Sentry replay, or
+      // error handler can observe location.href, then scrub the fragment from history.
+      // Only the /auth/success route captures anything: a crafted #session= fragment on any other
+      // path must be ignored, and an existing stored token is never overwritten.
+      ;(function () {
+        try {
+          if (!window.location.pathname.endsWith('/auth/success')) return
+          var hash = window.location.hash.replace(/^#/, '')
+          if (!hash) return
+          var p = new URLSearchParams(hash)
+          var session = p.get('session')
+          var plan = p.get('plan')
+          var interval = p.get('interval')
+          if (session && !sessionStorage.getItem('sessionToken')) sessionStorage.setItem('sessionToken', session)
+          if (plan) sessionStorage.setItem('chosenPlan', plan)
+          if (interval) sessionStorage.setItem('chosenInterval', interval)
+          if (session || plan || interval) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search)
+          }
+        } catch (e) {}
+      })()
+    </script>
+    <script>
       // Pre-hydration theme guard: apply the stored/system theme before first paint so a
       // dark-preferring user never sees a flash of the light theme. Mirrors the logic in
       // src/lib/theme.ts (resolveTheme/applyTheme); kept inline because it must run pre-bundle.
