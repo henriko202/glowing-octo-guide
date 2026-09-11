@@ -17,3 +17,10 @@ export const PLAN_PRICES: Record<Interval, Record<string, string>> = {
 
 // backlog/R17 — the one-time featured-post add-on. A label like the rest: Stripe's Price is charged.
 export const FEATURED_POST_PRICE = 'US$5'
+
+export function usdLabel(locale: string, label: string): string {
+  const short = locale.slice(0, 2).toLowerCase()
+  if (short === 'en') return label
+  const units = short === 'es' ? { mo: '/mes', yr: '/año' } : { mo: '/mês', yr: '/ano' }
+  return label.replace('US$', 'U$').replace('/mo', units.mo).replace('/yr', units.yr)
+}

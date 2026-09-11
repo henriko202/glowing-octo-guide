@@ -6,7 +6,7 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Termos de Serviço</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última atualização:</strong> Setembro 2026
+          <strong className="text-cream">Última atualização:</strong> Setembro de 2026
         </p>
 
         {/* 1. Aceitação */}
@@ -24,12 +24,12 @@ export default function Pt({ lang }: { lang: Locale }) {
         {/* 2. O serviço */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">2. O Serviço</h2>
         <p>
-          Link Into The SSI é uma plataforma SaaS conectada ao LinkedIn que oferece um feed compartilhado de posts de
-          membros e ajuda você a engajar com eles. Reações e comentários são feitos por você, diretamente no LinkedIn: o
-          Serviço mostra posts relevantes, pode sugerir uma reação e um rascunho de comentário, e então abre o post no
-          LinkedIn para que você decida agir. O Serviço não publica, comenta nem reage no LinkedIn em seu nome. Seu
-          objetivo é ajudar profissionais a aumentar seu Índice de Vendas Sociais (SSI) do LinkedIn por meio de
-          engajamento autêntico e mútuo dentro da comunidade.
+          Link Into The SSI é uma plataforma SaaS conectada ao LinkedIn que oferece um feed compartilhado de publicações
+          de membros e ajuda você a engajar com elas. Reações e comentários são feitos por você, diretamente no
+          LinkedIn: o Serviço mostra publicações relevantes, pode sugerir uma reação e um rascunho de comentário, e
+          então abre a publicação no LinkedIn para que você decida agir. O Serviço não publica, comenta nem reage no
+          LinkedIn em seu nome. Seu objetivo é ajudar profissionais a aumentar seu Índice de Vendas Sociais (SSI) do
+          LinkedIn por meio de engajamento autêntico e mútuo dentro da comunidade.
         </p>
         <p>
           <strong className="text-cream">O que você compra.</strong> Você compra acesso a este software. Sua assinatura
@@ -51,8 +51,8 @@ export default function Pt({ lang }: { lang: Locale }) {
         </p>
         <p>
           Você permanece totalmente responsável por toda a atividade que ocorra em sua conta do LinkedIn, incluindo
-          quaisquer comentários ou reações que você faça no LinkedIn após abrir um post por meio do Serviço. Você pode
-          revogar esta autorização a qualquer momento pelas configurações da sua conta do LinkedIn ou excluindo sua
+          quaisquer comentários ou reações que você faça no LinkedIn após abrir uma publicação por meio do Serviço. Você
+          pode revogar esta autorização a qualquer momento pelas configurações da sua conta do LinkedIn ou excluindo sua
           conta.
         </p>
 
@@ -101,7 +101,7 @@ export default function Pt({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Compras avulsas.</strong> Alguns recursos são vendidos separadamente da
-          assinatura. Destacar uma publicação sua custa <strong className="text-cream">$5</strong>, cobrados uma única
+          assinatura. Destacar uma publicação sua custa <strong className="text-cream">U$5</strong>, cobrados uma única
           vez pelo Stripe quando você confirma a compra. A compra vale para a{' '}
           <strong className="text-cream">publicação que você escolher</strong>, não é renovada e não é reembolsável
           depois que essa publicação for destacada.

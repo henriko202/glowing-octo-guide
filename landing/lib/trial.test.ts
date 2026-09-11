@@ -38,8 +38,8 @@ describe('landing trial offer', () => {
   )
 
   it('formats fractional prices for the visitor language without changing the currency', () => {
-    expect(formatPrice(12.5, 'pt', 2)).toContain('12,50')
-    expect(formatPrice(12.5, 'en', 2)).toContain('12.50')
-    expect(formatPrice(150, 'es')).toContain('USD')
+    expect(formatPrice(12.5, 'pt', 2)).toBe('U$12,50')
+    expect(formatPrice(12.5, 'en', 2)).toBe('$12.50')
+    expect(formatPrice(150, 'es')).toBe('U$150')
   })
 })

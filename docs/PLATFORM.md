@@ -1487,8 +1487,8 @@ not happen. A member who already cancelled receives nothing.
 nothing else, and the `$150/yr` strings live on the client. Rather than duplicate a price table that drifts the day
 pricing changes, both subscription webhooks persist `items.data[0].price`'s `unit_amount`, `currency` and
 `recurring.interval` onto the `subscriptions` row (`priceAmount` / `priceCurrency` / `priceInterval`), and
-`formatPriceLabel` renders them with `Intl.NumberFormat` in the member's locale. A missing snapshot degrades to an empty
-label, never to a wrong number.
+`formatPriceLabel` renders them with `Intl.NumberFormat` in the member's locale, writing the dollar as `U$` in pt/es and
+`$` in en. A missing snapshot degrades to an empty label, never to a wrong number.
 
 `sendEmail` (`lib/email.ts`) no-ops when `RESEND_API_KEY` / `EMAIL_FROM` are unset. For a privacy flow that is a
 convenience; for a pre-charge notice it is a compliance hole, so `notifications.deliver` logs
@@ -4979,7 +4979,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5112,11 +5112,25 @@ substantively unchanged. This was a value-only pass, so the key and leaf counts 
 "Start trial" with the card requirement and exact first trigger: 50 interactions made or received as recorded in the
 app, or up to the
 member's `trialDays`, whichever comes first. Pricing describes the observable cap consequence (when a post leaves the
-feed), scopes visibility controls to the shared feed, and uses `US$` on client-side fallback labels. Explicit plan
+feed), scopes visibility controls to the shared feed, and uses `US$` on client-side fallback labels in English (`U$` in
+pt/es). Explicit plan
 choices use `billing.selected`; only the unchosen Growth fallback uses the reasoned `billing.recommended`. The
 cancellation downsell gained `billing.cancel.alternativeNoDate` so both dated and no-date states disclose Starter's
 price, current limits, timing, and lost filter before **Schedule Starter**. These two new keys exist in all three
 locales with identical placeholders.
+
+**PT copy standard (2026-09-11):** the Brazilian Portuguese surfaces (`app/src/i18n/locales/pt.json`,
+`landing/i18n/dictionaries/pt.json`, the legal content modules, and the `pt` records in `convex/lib/billingEmails.ts`)
+were reviewed for context, tense, and agreement instead of literal translation. Examples: `{{made}} feitas ·
+{{received}} recebidas` puts the number first; a failed payment is "não foi processado"; `feed.leavesIn` names the
+feed; plan caps read "até atingir N" (the wording the landing `axis` already used); `billing.cancelsOn` drops the
+dangling "em"; `billing.switchTimeout` names "o novo plano"; the landing SSI pillar reads "Interaja com conteúdo
+relevante", proof copy uses "afirmamos" (not the false friend "alegamos"), and the FAQ says "É necessário informar um
+cartão". Privacy copy uses LGPD vocabulary ("tratamento de dados") and "ficam desativadas por padrão". The legal
+`/privacy` and `/terms` modules translate "posts" as "publicações" to match the product UI and use "publicidade
+comportamental de contexto cruzado". Dollar labels render as `U$` in pt/es across the landing cards, the app fallbacks
+and the billing emails (en keeps `$`/`US$`). Value-only: no key, leaf, or placeholder changed, and the legal
+`[PLACEHOLDER]` tokens stay verbatim.
 
 **Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and confirmation copy used
 by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
@@ -5498,7 +5512,8 @@ content** (encodes the business rules):
 - `Pricing` has three cards and an annual/monthly selector. Annual remains the initial interval; Growth remains the
   recommended plan. Monthly prices are Starter $10, Growth $15, and Pro $50, with annual prices at ten times monthly.
   `landing/lib/trial.ts` supplies both card prices and the Growth offer beside the generic CTAs. `Intl.NumberFormat`
-  formats USD in the page locale. These are display values; Stripe Prices remain authoritative for charges.
+  formats USD in the page locale, with pt/es writing the dollar as `U$` and en keeping `$`. These are display values;
+  Stripe Prices remain authoritative for charges.
 - Each pricing card states its **per-post** visibility cap of 25, 50, or 200 reactions and comments. The
   **account-wide**
   trial threshold is separate. Immediately below every plan CTA, the page states that a card is required, the trial
@@ -6484,7 +6499,9 @@ and leads with the provable shared-feed/draft/recap mechanism. Pro visibility is
 explicitly scoped to the shared feed, post limits name when posts leave that feed, Growth's badge explains the use case,
 and explicit choices read "Your choice". `EmptyFeed` offers the invite action when a member has posted but has nothing
 to respond to. `CancelInterstitial` now shows Starter's effective date, interval price, live limits and lost filtering
-before **Schedule Starter**, with a no-date fallback. PT/ES retain `Custom`; all fallback prices use `US$`. Two i18n
+before **Schedule Starter**, with a no-date fallback. PT/ES retain `Custom`; all fallback prices use `US$` in English
+and
+`U$` in pt/es. Two i18n
 keys were added (`billing.selected`, `billing.cancel.alternativeNoDate`), while the unused `hero.eyebrow` key was
 removed:
 app **409 keys / 419 string leaves**, landing **88 / 152**, with identical key and placeholder sets across locales.

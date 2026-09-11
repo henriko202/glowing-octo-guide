@@ -23,7 +23,7 @@ import { timeAgo } from '@/lib/relativeDay'
 import { toast } from '@/components/ui/toast'
 import { captureEvent } from '@/lib/observability/analytics'
 import { useCardGate } from '@/hooks/useCardGate'
-import { FEATURED_POST_PRICE } from '@/lib/planPrices'
+import { FEATURED_POST_PRICE, usdLabel } from '@/lib/planPrices'
 import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
 import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
 import { hasPermanentFeaturedEntitlement, isUnlimitedFeatured } from '../../../convex/lib/postLimit'
@@ -67,7 +67,7 @@ function BuyFeaturedButton({
   pending: boolean
   onBuy: (post: MyPost, source: BuySource) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const hint = `${t('myPosts.buyFeaturedHint', { newCap })}${isTrialing ? ` ${t('myPosts.buyFeaturedTrial')}` : ''}`
   return (
     <Tooltip>
@@ -83,7 +83,7 @@ function BuyFeaturedButton({
           {pending
             ? '...'
             : t(post.isFeatured ? 'myPosts.buyFeaturedRoom' : 'myPosts.buyFeatured', {
-                price: FEATURED_POST_PRICE
+                price: usdLabel(i18n.language, FEATURED_POST_PRICE)
               })}
         </Button>
       </TooltipTrigger>
@@ -95,7 +95,7 @@ function BuyFeaturedButton({
 }
 
 export default function MyPostsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   // Latched once per mount: the usage queries take a client-supplied `now` (queries must not read
   // the wall clock themselves). A fresh Date.now() on every render would change the query args
@@ -191,7 +191,11 @@ export default function MyPostsPage() {
     // backlog/R17 order bump: one line, no second action — the new card below carries the control.
     // Members who cannot buy (card-gated, unlimited tier, canceled — F2) get the plain "feature it" line.
     const bump = featuredAtCap && !gated && !featuredUnlimited && me?.subscriptionStatus !== 'canceled'
-    toast(t(bump ? 'myPosts.postAddedBuy' : 'myPosts.postAddedFeature', { price: FEATURED_POST_PRICE }))
+    toast(
+      t(bump ? 'myPosts.postAddedBuy' : 'myPosts.postAddedFeature', {
+        price: usdLabel(i18n.language, FEATURED_POST_PRICE)
+      })
+    )
   }
 
   // Toggle a post's feed visibility. Convex queries are reactive, so getMyPosts

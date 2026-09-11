@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { captureEvent } from '@/lib/observability/analytics'
 import { resolveTargetPlan } from '@/lib/targetPlan'
-import { PLAN_PRICES } from '@/lib/planPrices'
+import { PLAN_PRICES, usdLabel } from '@/lib/planPrices'
 import { useCardGate } from '@/hooks/useCardGate'
 import { TRIAL_INTERACTION_THRESHOLD, TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 
@@ -33,7 +33,7 @@ export default function CardGateDialog({
   onOpenChange: (open: boolean) => void
   source: GateSource
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [searchParams] = useSearchParams()
   const plan = resolveTargetPlan(searchParams)
   // A past_due member already has a card and already had a trial — "start your trial" copy is
@@ -96,8 +96,8 @@ export default function CardGateDialog({
               <>
                 {t('feed.cardGatePriceNoTrial', {
                   plan: t(`billing.plans.${plan}.name`),
-                  monthly: PLAN_PRICES.monthly[plan],
-                  annual: PLAN_PRICES.annual[plan]
+                  monthly: usdLabel(i18n.language, PLAN_PRICES.monthly[plan]),
+                  annual: usdLabel(i18n.language, PLAN_PRICES.annual[plan])
                 })}{' '}
                 {t('billing.noTrialNote')}
               </>

@@ -33,7 +33,7 @@
     "trialGoalNoDate": "Seu plano {{plan}} começa quando você atingir {{threshold}} interações.",
     "trialStartsAt": "Seu plano começa em {{threshold}} interações ou em {{date}}.",
     "trialNearEnd": "Faltam {{remaining}} interações para o plano {{plan}} começar.",
-    "trialMadeReceived": "feitas {{made}} · recebidas {{received}}",
+    "trialMadeReceived": "{{made}} feitas · {{received}} recebidas",
     "trialPill": "{{combined}}/{{threshold}}",
     "trialPillAriaLabel": "Progresso do teste: {{combined}} de {{threshold}} interações"
   },
@@ -64,7 +64,7 @@
     "cardGateLater": "Agora não",
     "cardGateCost": "Cartão necessário. Grátis até {{threshold}} interações feitas ou recebidas, registradas no app, ou por até {{days}} dias, o que ocorrer primeiro. Depois, seu plano começa. Cancele quando quiser.",
     "hiddenPostBanner": "Sua primeira publicação está salva e oculta até você iniciar seu teste.",
-    "cardGateBodyPastDue": "Seu último pagamento não foi concluído. Atualize sua forma de pagamento para que suas publicações voltem a aparecer no feed.",
+    "cardGateBodyPastDue": "Seu último pagamento não foi processado. Atualize sua forma de pagamento para que suas publicações voltem a aparecer no feed.",
     "cardGatePastDueCta": "Atualizar forma de pagamento",
     "hiddenPostBannerPastDue": "Sua publicação fica oculta até você atualizar sua forma de pagamento.",
     "cardGateBodyNoTrial": "Suas publicações aparecem no feed, e as reações e os comentários entram no total de interações.",
@@ -75,14 +75,14 @@
     "doneReacted": "Você reagiu",
     "doneCommented": "Você comentou",
     "doneBoth": "Você reagiu e comentou",
-    "leavesIn": "Sai em {{hours}} h",
+    "leavesIn": "Sai do feed em {{hours}} h",
     "hide": "Ocultar",
     "hideNow": "Ocultar agora",
     "hideConfirmTitle": "Ocultar esta publicação?",
     "hideConfirmBody": "Ela será removida do seu feed permanentemente. Não dá para desfazer.",
     "hideConfirmCta": "Ocultar publicação",
     "caughtUpTitle": "Você está em dia",
-    "caughtUpBody": "As publicações que você curtiu ou comentou saem depois de 24 horas. Novas publicações aparecem conforme os membros compartilham.",
+    "caughtUpBody": "As publicações que você curtiu ou comentou saem do feed depois de 24 horas. Novas publicações aparecem conforme os membros compartilham.",
     "inviteLink": "Convidar um colega",
     "checklist": {
       "title": "Primeiros passos",
@@ -111,7 +111,7 @@
     "feature": "Destacar",
     "unfeature": "Remover destaque",
     "unfeatureConfirmTitle": "Remover o destaque desta publicação?",
-    "unfeatureConfirm": "Isso remove a publicação da posição de destaque. Você pode destacá-la novamente mais tarde sem usar outro benefício do plano nem pagar de novo.",
+    "unfeatureConfirm": "Isso remove a publicação da posição de destaque. Você pode destacá-la novamente mais tarde sem consumir outra cota do plano nem pagar de novo.",
     "featureLimitReached": "Limite mensal de destaques atingido",
     "today": "Hoje",
     "daysAgo_one": "há {{count}} dia",
@@ -134,14 +134,14 @@
     "buyFeaturedRoom": "Aumentar limite por {{price}}",
     "buyFeaturedHint": "Compra única para esta publicação. Aumenta o limite para {{newCap}} interações. Não há reembolso se você remover o destaque.",
     "buyFeaturedTrial": "Cobrado hoje, separado do seu período de teste.",
-    "buyFeaturedCapped": "Atingiu {{cap}} e saiu do feed. Comprar espaço para {{newCap}} traz a publicação de volta ao topo.",
+    "buyFeaturedCapped": "Atingiu {{cap}} interações e saiu do feed. Aumentar o limite para {{newCap}} traz a publicação de volta ao topo.",
     "featuredPaidBadge": "Em destaque · pago · limite {{cap}}",
     "featuredPaidToast": "Pagamento confirmado. Estamos aumentando o limite desta publicação para {{newCap}} interações.",
     "confirmingPayment": "Confirmando seu pagamento…",
-    "postAddedBuy": "Publicação adicionada. Destaque esta publicação por {{price}} abaixo.",
-    "postAddedFeature": "Publicação adicionada. Destaque esta publicação abaixo.",
+    "postAddedBuy": "Publicação adicionada. Destaque-a por {{price}} abaixo.",
+    "postAddedFeature": "Publicação adicionada. Destaque-a abaixo.",
     "buyFeaturedError": "Não foi possível iniciar essa compra. Atualize a página e tente de novo.",
-    "featuredCappedTitle": "Esta publicação atingiu o limite de interações. Destacada, ela não volta ao feed."
+    "featuredCappedTitle": "Esta publicação atingiu o limite de interações. Destacá-la não a traz de volta ao feed."
   },
   "composer": {
     "shareLabel": "Compartilhar uma publicação",
@@ -229,12 +229,12 @@
     "currentPlanLabel": "Plano atual",
     "contact": "Fale conosco",
     "enterprise": "Precisa de limites maiores? Fale conosco sobre o plano Custom.",
-    "featuredAddon": "Adicional avulso de {{price}} · fixe uma publicação no topo até {{newCap}} reações e comentários",
+    "featuredAddon": "Adicional avulso de {{price}} · fixe uma publicação no topo até atingir {{newCap}} reações e comentários",
     "featuredAddonCta": "Escolher uma publicação",
     "subscriptionInfo": "Sua assinatura",
     "status": "Status",
     "nextBilling": "Próxima data de cobrança",
-    "cancelsOn": "Cancelamento em",
+    "cancelsOn": "Cancelamento",
     "renewsOn": "Renova em {{date}}",
     "accessUntil": "Acesso até {{date}}",
     "cancelPending": "Sua assinatura não será renovada.",
@@ -292,7 +292,7 @@
     "activatingTimeout": "Seu pagamento foi processado; seu plano vai aparecer aqui em instantes.",
     "switching": "Mudando seu plano para {{plan}}…",
     "switched": "Agora você está no {{plan}}.",
-    "switchTimeout": "A troca de plano foi confirmada; ela vai aparecer aqui em instantes.",
+    "switchTimeout": "A troca de plano foi confirmada; o novo plano vai aparecer aqui em instantes.",
     "cancel": {
       "link": "Cancelar plano",
       "title": "Antes de sair",
@@ -302,8 +302,8 @@
       "body_other": "Suas {{count}} publicações saem do feed em {{date}}. Nos últimos 30 dias elas receberam {{received}} reações e comentários.",
       "bodyNoPosts": "Seu plano termina em {{date}}. Nos últimos 30 dias suas publicações receberam {{received}} reações e comentários.",
       "bodyNoDate": "Suas publicações saem do feed no fim do período de cobrança. Nos últimos 30 dias elas receberam {{received}} reações e comentários.",
-      "alternative": "Mude para o Starter em {{date}} por {{price}}. Limite semanal de publicações: {{posts}}. Cada publicação fica no feed até {{interactions}} reações e comentários. O filtro por setor será removido.",
-      "alternativeNoDate": "Mude para o Starter no fim do período atual por {{price}}. Limite semanal de publicações: {{posts}}. Cada publicação fica no feed até {{interactions}} reações e comentários. O filtro por setor será removido.",
+      "alternative": "Mude para o Starter em {{date}} por {{price}}. Limite semanal de publicações: {{posts}}. Cada publicação fica no feed até atingir {{interactions}} reações e comentários. Você deixa de ter o filtro por setor.",
+      "alternativeNoDate": "Mude para o Starter no fim do período atual por {{price}}. Limite semanal de publicações: {{posts}}. Cada publicação fica no feed até atingir {{interactions}} reações e comentários. Você deixa de ter o filtro por setor.",
       "alternativeCta": "Agendar Starter",
       "question": "O que teria feito você ficar?",
       "questionPlaceholder": "Opcional. Uma linha basta.",
@@ -319,7 +319,7 @@
         "name": "Starter",
         "description": "Para compartilhar publicações e navegar pelo feed completo",
         "features": [
-          "As publicações ficam no feed até 25 reações e comentários",
+          "As publicações ficam no feed até atingir 25 reações e comentários",
           "Veja o feed completo em tempo real",
           "Rascunhos de comentário e sugestões de reação com IA",
           "1 publicação no feed por semana"
@@ -329,7 +329,7 @@
         "name": "Growth",
         "description": "Para um feed filtrado por setor e país",
         "features": [
-          "As publicações ficam no feed até 50 reações e comentários",
+          "As publicações ficam no feed até atingir 50 reações e comentários",
           "Feed filtrado por setor + país",
           "Tudo do Starter",
           "2 publicações no feed por semana"
@@ -339,7 +339,7 @@
         "name": "Pro",
         "description": "Para filtros personalizados e controle de visibilidade no feed",
         "features": [
-          "As publicações ficam no feed até 200 reações e comentários",
+          "As publicações ficam no feed até atingir 200 reações e comentários",
           "Filtros personalizados de setor + país",
           "Controle quem vê suas publicações no feed compartilhado",
           "Tudo do Growth",
@@ -399,13 +399,13 @@
     "title": "Privacidade e dados",
     "consentPrompt": {
       "title": "Defina suas preferências",
-      "intro": "Antes de continuar, escolha como podemos contatá-lo. São opcionais e desativadas por padrão — você pode alterá-las quando quiser em Configurações → Privacidade e dados.",
+      "intro": "Antes de continuar, escolha como podemos contatá-lo. Elas são opcionais e ficam desativadas por padrão — você pode alterá-las quando quiser em Configurações → Privacidade e dados.",
       "save": "Salvar e continuar",
-      "note": "O processamento de serviço, segurança e obrigações legais ocorre independentemente dessas escolhas."
+      "note": "O tratamento de dados para prestação de serviço, segurança e cumprimento de obrigações legais ocorre independentemente dessas escolhas."
     },
     "consent": {
       "title": "Preferências de comunicação e análise",
-      "note": "São opcionais e desativadas por padrão. Altere quando quiser.",
+      "note": "São opcionais e ficam desativadas por padrão. Altere quando quiser.",
       "marketing": "Enviar novidades e dicas do produto por e-mail",
       "analytics": "Permitir análise de uso com foco em privacidade"
     },
@@ -429,7 +429,7 @@
     "deletionScheduledBody": "Sua conta será excluída permanentemente em {{date}}. Você foi desconectado. Entre novamente antes dessa data para cancelar. Enviamos uma confirmação por e-mail.",
     "policyUpdate": {
       "title": "Atualizamos nossa Política de Privacidade",
-      "body": "Fizemos alterações em como tratamos seus dados. Revise e confirme para continuar.",
+      "body": "Fizemos alterações na forma como tratamos seus dados. Revise e confirme para continuar.",
       "readPolicy": "Ler a política",
       "acknowledge": "Estou ciente"
     }
@@ -453,7 +453,7 @@
     "title": "Publicação do LinkedIn"
   },
   "upgrade": {
-    "weeklyPosts": "Você atingiu o limite semanal de {{used}} publicações do seu plano. O {{nextPlan}} oferece {{next}} por semana, cada uma podendo receber até {{interactions}} interações.",
+    "weeklyPosts": "Você atingiu o limite semanal de {{used}} publicações do seu plano. O {{nextPlan}} oferece {{next}} por semana, e cada uma pode receber até {{interactions}} interações.",
     "featured": "Você usou todas as publicações em destaque deste mês. O {{nextPlan}} oferece {{next}} por mês.",
     "interactionCap": "Esta publicação saiu do feed depois de atingir o limite de interações. No {{nextPlan}}, suas próximas publicações recebem até {{next}} cada uma.",
     "interactionCapNear": "Sua publicação está em {{total}} de {{cap}} interações. No {{nextPlan}} ela continua acumulando até {{next}}.",

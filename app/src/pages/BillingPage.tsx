@@ -23,7 +23,7 @@ import { isUnlimitedFeatured } from '../../../convex/lib/postLimit'
 import { DEFAULTS, FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
 import { effectiveInteractionCap } from '../../../convex/lib/interactionLimit'
 import { isPlanId, PLAN_IDS, type PlanId, resolveTargetPlan } from '@/lib/targetPlan'
-import { FEATURED_POST_PRICE, type Interval, isInterval, PLAN_PRICES } from '@/lib/planPrices'
+import { FEATURED_POST_PRICE, type Interval, isInterval, PLAN_PRICES, usdLabel } from '@/lib/planPrices'
 
 /** How long we give the Stripe webhook to land before the activating state times out (R07). */
 const ACTIVATION_TIMEOUT_MS = 20_000
@@ -196,9 +196,7 @@ export default function BillingPage() {
       amount: subscriptionInfo?.priceAmount,
       currency: subscriptionInfo?.priceCurrency,
       interval: subscriptionInfo?.priceInterval
-    }) ||
-    PLAN_PRICES[chargedInterval][me?.tier ?? 'growth'] ||
-    ''
+    }) || usdLabel(i18n.language, PLAN_PRICES[chargedInterval][me?.tier ?? 'growth'] ?? '')
 
   const isTrialing = me?.subscriptionStatus === 'trialing'
   const trialEndsAt = me?.trialEndsAt
@@ -697,7 +695,9 @@ export default function BillingPage() {
                 </Badge>
               )}
               <h2 className="text-foreground mt-0 text-lg font-bold">{t(`billing.plans.${planId}.name`)}</h2>
-              <p className="text-foreground my-2 text-2xl font-bold">{PLAN_PRICES[billingInterval][planId]}</p>
+              <p className="text-foreground my-2 text-2xl font-bold">
+                {usdLabel(i18n.language, PLAN_PRICES[billingInterval][planId])}
+              </p>
               <p className="text-muted-foreground mb-4 text-[13px]">{t(`billing.plans.${planId}.description`)}</p>
               {Array.isArray(features) && (
                 <ul className="text-muted-foreground mb-5 space-y-2 text-[13px]">
@@ -763,7 +763,7 @@ export default function BillingPage() {
       {showAddon && addonLimits && (
         <p className="text-muted-foreground mt-6 text-[13px]">
           {t('billing.featuredAddon', {
-            price: FEATURED_POST_PRICE,
+            price: usdLabel(i18n.language, FEATURED_POST_PRICE),
             newCap: effectiveInteractionCap(addonLimits.interactionsPerPost, FEATURED_CAP_BONUS[addonTier])
           })}{' '}
           <Link
@@ -800,7 +800,7 @@ export default function BillingPage() {
         isTrialing={isTrialing}
         periodEndDate={periodEndDate}
         pendingTier={subscriptionInfo?.pendingTier}
-        starterPrice={PLAN_PRICES[chargedInterval].starter}
+        starterPrice={usdLabel(i18n.language, PLAN_PRICES[chargedInterval].starter)}
         starterInteractions={starterLimits.interactionsPerPost}
         starterPosts={starterLimits.postsPerWeek}
       />

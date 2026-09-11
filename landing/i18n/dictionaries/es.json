@@ -164,8 +164,8 @@
     "monthlySubLabel": "2 meses gratis si pagas anualmente",
     "trialNote": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
     "enterpriseNote": "Custom para un mayor volumen de uso, desde",
-    "enterprisePriceMonth": "US$100/mes",
-    "enterprisePriceYear": "US$1,000/año",
+    "enterprisePriceMonth": "U$100/mes",
+    "enterprisePriceYear": "U$1,000/año",
     "enterpriseCta": "Contáctanos",
     "plans": [
       {
@@ -246,8 +246,7 @@
     "headlineLine2": "Tú decides el siguiente paso.",
     "subheadline": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
     "cta": "Empezar mi prueba",
-    "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos en tu nombre",
-    "earlyAccess": "El acceso anticipado está disponible."
+    "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos en tu nombre"
   },
   "footer": {
     "privacy": "Privacidad",

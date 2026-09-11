@@ -88,7 +88,7 @@
       },
       {
         "icon": "💡",
-        "title": "Engaje com relevância",
+        "title": "Interaja com conteúdo relevante",
         "body": "Reaja e comente sobre assuntos que você conhece bem.",
         "pts": 25
       },
@@ -109,9 +109,9 @@
     "founderName": "Henriko",
     "founderRole": "Fundador · Especialista em Front-end (7+ anos)",
     "founderMessage": "Aoooba, bão? Sou o Henriko. Criei o Link Into The SSI para facilitar a busca por conversas relevantes. Estamos em acesso antecipado e ainda não temos resultados de clientes para apresentar. O feed, os rascunhos de comentários e o resumo de atividades já estão disponíveis para você experimentar.",
-    "proofCardBody": "Seu resumo semanal lista as reações e os comentários que você fez e recebeu. Não criamos uma pontuação própria nem alegamos resultados que não podemos verificar.",
+    "proofCardBody": "Seu resumo semanal lista as reações e os comentários que você fez e recebeu. Não criamos uma pontuação própria nem afirmamos resultados que não podemos verificar.",
     "proofCardNote": "Se você tem o Sales Navigator, pode consultar seu SSI no LinkedIn.",
-    "earlyAccess": "Entre com a gente desde o começo.",
+    "earlyAccess": "Venha com a gente desde o começo.",
     "recapLabel": "O que seu resumo semanal registra",
     "recapFields": [
       "Reações que você fez",
@@ -164,8 +164,8 @@
     "monthlySubLabel": "2 meses grátis no plano anual",
     "trialNote": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
     "enterpriseNote": "Custom para volumes maiores de uso, a partir de",
-    "enterprisePriceMonth": "US$100/mês",
-    "enterprisePriceYear": "US$1.000/ano",
+    "enterprisePriceMonth": "U$100/mês",
+    "enterprisePriceYear": "U$1.000/ano",
     "enterpriseCta": "Fale conosco",
     "plans": [
       {
@@ -225,7 +225,7 @@
       },
       {
         "q": "O que inclui o período grátis e quando serei cobrado?",
-        "a": "O teste inclui o plano que você escolher. O cartão é necessário. O teste é grátis até 50 interações feitas ou recebidas, registradas no app, ou por até 7 dias, o que ocorrer primeiro. Cancele antes e você não paga nada."
+        "a": "O teste inclui o plano que você escolher. É necessário informar um cartão. O teste é grátis até 50 interações feitas ou recebidas, registradas no app, ou por até 7 dias, o que ocorrer primeiro. Cancele antes e você não paga nada."
       },
       {
         "q": "O que é o SSI e em quanto tempo ele vai mudar?",
@@ -246,8 +246,7 @@
     "headlineLine2": "Você decide o próximo passo.",
     "subheadline": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
     "cta": "Começar meu teste",
-    "ctaTrust": "Login oficial do LinkedIn · Recebemos apenas nome, foto e e-mail · Nunca publicamos em seu nome",
-    "earlyAccess": "O acesso antecipado está aberto."
+    "ctaTrust": "Login oficial do LinkedIn · Recebemos apenas nome, foto e e-mail · Nunca publicamos em seu nome"
   },
   "footer": {
     "privacy": "Privacidade",

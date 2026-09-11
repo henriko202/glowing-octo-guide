@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { captureEvent } from '@/lib/observability/analytics'
 import { resolveTargetPlan } from '@/lib/targetPlan'
-import { PLAN_PRICES } from '@/lib/planPrices'
+import { PLAN_PRICES, usdLabel } from '@/lib/planPrices'
 import { useCardGate } from '@/hooks/useCardGate'
 
 /**
@@ -29,7 +29,7 @@ export function useOwnPostState(enabled: boolean): { hasHiddenPost: boolean; has
 
 /** Names what the member already owns — their hidden first post — with the one CTA that reveals it. */
 export default function CardGateBanner({ className }: { className?: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [searchParams] = useSearchParams()
   const plan = resolveTargetPlan(searchParams)
   // A past_due member already has a card and already had a trial — "start your trial" copy is
@@ -70,8 +70,8 @@ export default function CardGateBanner({ className }: { className?: string }) {
         <p className="text-muted-foreground mt-2 mb-0 text-xs">
           {t('feed.cardGatePriceNoTrial', {
             plan: t(`billing.plans.${plan}.name`),
-            monthly: PLAN_PRICES.monthly[plan],
-            annual: PLAN_PRICES.annual[plan]
+            monthly: usdLabel(i18n.language, PLAN_PRICES.monthly[plan]),
+            annual: usdLabel(i18n.language, PLAN_PRICES.annual[plan])
           })}
         </p>
       )}

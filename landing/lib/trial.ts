@@ -15,13 +15,14 @@ export function planPrice(plan: string, interval: BillingInterval) {
 }
 
 export function formatPrice(amount: number, lang: Locale, decimals = 0) {
-  return new Intl.NumberFormat(lang, {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'code',
+  const fractionDigits = {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
-  }).format(amount)
+  }
+  if (lang === 'en') {
+    return new Intl.NumberFormat(lang, { style: 'currency', currency: 'USD', ...fractionDigits }).format(amount)
+  }
+  return `U$${new Intl.NumberFormat(lang, fractionDigits).format(amount)}`
 }
 
 // Keep in sync with convex/lib/invite.ts; the landing never imports backend code.

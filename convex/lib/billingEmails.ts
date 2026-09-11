@@ -44,11 +44,20 @@ export function formatPriceLabel(
   price: { amount?: number; currency?: string; interval?: string }
 ): string {
   if (typeof price.amount !== 'number' || !price.currency) return ''
-  const amount = new Intl.NumberFormat(INTL_TAG[locale], {
-    style: 'currency',
-    currency: price.currency.toUpperCase(),
-    minimumFractionDigits: price.amount % 100 === 0 ? 0 : 2
-  }).format(price.amount / 100)
+  const currency = price.currency.toUpperCase()
+  const digits = price.amount % 100 === 0 ? 0 : 2
+  const value = price.amount / 100
+  const amount =
+    currency === 'USD' && locale !== 'en'
+      ? `U$${new Intl.NumberFormat(INTL_TAG[locale], {
+          minimumFractionDigits: digits,
+          maximumFractionDigits: 2
+        }).format(value)}`
+      : new Intl.NumberFormat(INTL_TAG[locale], {
+          style: 'currency',
+          currency,
+          minimumFractionDigits: digits
+        }).format(value)
   const unit = price.interval ? PERIOD[locale][price.interval] : undefined
   return unit ? `${amount} / ${unit}` : amount
 }
@@ -276,7 +285,7 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
     },
     pt: {
       subject: `Seu plano ${a.planName} começou hoje`,
-      lead: `Durante o seu teste você fez ${a.made} interações e suas publicações receberam ${a.received}.`,
+      lead: `Durante o seu teste você fez ${a.made} interações e suas publicações receberam ${a.received} interações.`,
       term: `Seu plano ${a.planName} (${a.priceLabel}) está ativo.`,
       link: 'Veja seu resumo:',
       planLabel: 'Plano',

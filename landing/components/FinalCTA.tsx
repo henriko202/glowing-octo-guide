@@ -35,7 +35,6 @@ export default function FinalCTA({
           />
           <p className="text-[13px] leading-relaxed text-cream-muted">{dict.subheadline}</p>
           <p className="text-[13px] leading-relaxed text-cream-muted">{dict.ctaTrust}</p>
-          <p className="text-sm font-medium text-cream-muted">{dict.earlyAccess}</p>
         </div>
       </div>
     </section>

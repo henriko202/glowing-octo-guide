@@ -24,6 +24,12 @@ describe('formatPriceLabel', () => {
   it('degrades to an empty string when Stripe sent no price', () => {
     expect(formatPriceLabel('en', { amount: undefined, currency: undefined, interval: undefined })).toBe('')
   })
+  it('writes the dollar as U$ in pt/es and keeps the en symbol', () => {
+    expect(formatPriceLabel('pt', PRICE)).toBe('U$150 / ano')
+    expect(formatPriceLabel('es', PRICE)).toBe('U$150 / año')
+    expect(formatPriceLabel('en', PRICE)).toBe('$150 / year')
+    expect(formatPriceLabel('pt', { amount: 1250, currency: 'usd', interval: 'month' })).toBe('U$12,50 / mês')
+  })
 })
 
 describe('trialNearEndEmail', () => {

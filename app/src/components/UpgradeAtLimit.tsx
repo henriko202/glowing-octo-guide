@@ -11,7 +11,7 @@ import { SUPPORT_EMAIL } from '@/lib/support'
 import { captureEvent } from '@/lib/observability/analytics'
 import { useCardGate } from '@/hooks/useCardGate'
 import { resolveTargetPlan } from '@/lib/targetPlan'
-import { FEATURED_POST_PRICE, PLAN_PRICES } from '@/lib/planPrices'
+import { FEATURED_POST_PRICE, PLAN_PRICES, usdLabel } from '@/lib/planPrices'
 
 export type LimitKind = 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibility'
 
@@ -35,7 +35,7 @@ export default function UpgradeAtLimit({
   capBonus?: number
   className?: string
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const me = useQuery(api.users.getMe, { sessionToken })
   const tierLimits = useQuery(api.posts.getTierLimits, {})
@@ -62,8 +62,8 @@ export default function UpgradeAtLimit({
           <>
             {t('feed.cardGatePriceNoTrial', {
               plan: t(`billing.plans.${plan}.name`),
-              monthly: PLAN_PRICES.monthly[plan],
-              annual: PLAN_PRICES.annual[plan]
+              monthly: usdLabel(i18n.language, PLAN_PRICES.monthly[plan]),
+              annual: usdLabel(i18n.language, PLAN_PRICES.annual[plan])
             })}{' '}
           </>
         )}
@@ -160,7 +160,9 @@ export default function UpgradeAtLimit({
           member has no buy control on My Posts either (MyPostsPage.tsx canBuy), so the price has
           nothing to point at here. */}
       {limit === 'featured' && me.subscriptionStatus !== 'canceled' && (
-        <span className="block">{t('upgrade.featuredAddon', { price: FEATURED_POST_PRICE })}</span>
+        <span className="block">
+          {t('upgrade.featuredAddon', { price: usdLabel(i18n.language, FEATURED_POST_PRICE) })}
+        </span>
       )}
     </span>
   )

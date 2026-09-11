@@ -99,8 +99,8 @@ export default function Es({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Compras únicas.</strong> Algunas funciones se venden por separado de la
-          suscripción. Destacar una de sus publicaciones cuesta <strong className="text-cream">$5</strong>, cobrados una
-          sola vez por Stripe cuando confirma la compra. Se aplica a la{' '}
+          suscripción. Destacar una de sus publicaciones cuesta <strong className="text-cream">U$5</strong>, cobrados
+          una sola vez por Stripe cuando confirma la compra. Se aplica a la{' '}
           <strong className="text-cream">publicación que elija</strong>, no se renueva y no es reembolsable una vez que
           esa publicación ha sido destacada.
         </p>

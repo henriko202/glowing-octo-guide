@@ -6,7 +6,7 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Política de Privacidade</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última atualização:</strong> Setembro 2026
+          <strong className="text-cream">Última atualização:</strong> Setembro de 2026
         </p>
         {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts — see the note in en.tsx. */}
         <p>Policy version: 2026-09-08</p>
@@ -50,15 +50,15 @@ export default function Pt({ lang }: { lang: Locale }) {
           seu setor e país nas configurações do perfil.
         </p>
         <p>
-          <strong className="text-cream">Posts que você envia.</strong> Armazenamos os posts que você envia ao feed
-          compartilhado pela plataforma.
+          <strong className="text-cream">Publicações que você envia.</strong> Armazenamos as publicações que você envia
+          ao feed compartilhado pela plataforma.
         </p>
         <p>
-          <strong className="text-cream">Atividade de engajamento.</strong> Quando você escolhe reagir ou comentar em um
-          post do feed, registramos esse engajamento (o tipo de reação ou o texto do comentário que você usa) para medir
-          sua atividade e a contagem de interações. A reação ou o comentário em si você faz por conta própria,
-          diretamente no LinkedIn. O Serviço abre o post para que você aja e não reage nem comenta no LinkedIn em seu
-          nome.
+          <strong className="text-cream">Atividade de engajamento.</strong> Quando você escolhe reagir ou comentar em
+          uma publicação do feed, registramos esse engajamento (o tipo de reação ou o texto do comentário que você
+          escreve) para medir sua atividade e a contagem de interações. A reação ou o comentário em si você faz por
+          conta própria, diretamente no LinkedIn. O Serviço abre a publicação para que você aja e não reage nem comenta
+          no LinkedIn em seu nome.
         </p>
         <p>
           <strong className="text-cream">Cobrança.</strong> Os pagamentos de assinatura são processados pelo Stripe.
@@ -83,7 +83,8 @@ export default function Pt({ lang }: { lang: Locale }) {
         </h2>
         <p>
           <strong className="text-cream">Contrato (Art. 6(1)(b) GDPR).</strong> Fornecimento do serviço principal:
-          autenticação, exibição do feed, envio de posts e registro do seu engajamento, e gerenciamento da assinatura.
+          autenticação, exibição do feed, envio de publicações e registro do seu engajamento, e gerenciamento da
+          assinatura.
         </p>
         <p>
           <strong className="text-cream">Interesses legítimos (Art. 6(1)(f) GDPR).</strong> Otimização da qualidade do
@@ -92,9 +93,9 @@ export default function Pt({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Consentimento (Art. 6(1)(a) GDPR).</strong> Comunicações de marketing e
-          análises opcionais são processadas somente com seu consentimento explícito. Ambas estão{' '}
+          análises opcionais são tratadas somente com seu consentimento explícito. Ambas estão{' '}
           <strong className="text-cream">desativadas por padrão</strong> e podem ser alteradas a qualquer momento em{' '}
-          <strong className="text-cream">Configurações &rarr; Privacidade &amp; Dados</strong>.
+          <strong className="text-cream">Configurações &rarr; Privacidade e dados</strong>.
         </p>
         <p>
           <strong className="text-cream">Obrigação legal (Art. 6(1)(c) GDPR).</strong> Retenção de registros de cobrança
@@ -124,9 +125,9 @@ export default function Pt({ lang }: { lang: Locale }) {
           </li>
           <li>
             <strong className="text-cream">OpenRouter (inferência de IA)</strong> &mdash; geração de sugestões de reação
-            e rascunhos de comentários a partir do conteúdo dos seus posts públicos, incluindo imagens. O OpenRouter
-            encaminha apenas para provedores de inferência com retenção zero de dados (os prompts não são armazenados
-            nem usados para treinamento).
+            e rascunhos de comentários a partir do conteúdo das suas publicações públicas, incluindo imagens. O
+            OpenRouter encaminha apenas para provedores de inferência com retenção zero de dados (os prompts não são
+            armazenados nem usados para treinamento).
           </li>
         </ul>
         <p>
@@ -145,7 +146,7 @@ export default function Pt({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Não vendemos nem compartilhamos suas informações pessoais</strong> para
-          publicidade comportamental contextual cruzada ou qualquer outra finalidade comercial.
+          publicidade comportamental de contexto cruzado ou qualquer outra finalidade comercial.
         </p>
 
         {/* 5. Transferencias internacionais */}
@@ -202,10 +203,10 @@ export default function Pt({ lang }: { lang: Locale }) {
             ao esquecimento&rdquo;).
           </li>
           <li>
-            <strong className="text-cream">Restrição</strong> &mdash; pedir que limitemos como processamos seus dados.
+            <strong className="text-cream">Restrição</strong> &mdash; pedir que limitemos como tratamos seus dados.
           </li>
           <li>
-            <strong className="text-cream">Oposição</strong> &mdash; opor-se ao processamento baseado em interesses
+            <strong className="text-cream">Oposição</strong> &mdash; opor-se ao tratamento baseado em interesses
             legítimos.
           </li>
           <li>
@@ -214,7 +215,7 @@ export default function Pt({ lang }: { lang: Locale }) {
           </li>
           <li>
             <strong className="text-cream">Retirada de consentimento</strong> &mdash; revogar o consentimento para
-            marketing ou análises a qualquer momento, sem afetar o processamento anterior.
+            marketing ou análises a qualquer momento, sem afetar o tratamento anterior.
           </li>
           <li>
             <strong className="text-cream">Apresentar reclamação</strong> &mdash; junto à sua autoridade supervisora
@@ -224,8 +225,8 @@ export default function Pt({ lang }: { lang: Locale }) {
         </ul>
         <p>
           <strong className="text-cream">Como exercer seus direitos.</strong> A forma mais rápida é por meio de{' '}
-          <strong className="text-cream">Configurações &rarr; Privacidade &amp; Dados</strong>, onde você pode exportar
-          seus dados, excluir sua conta e gerenciar os consentimentos. Você também pode nos contatar em{' '}
+          <strong className="text-cream">Configurações &rarr; Privacidade e dados</strong>, onde você pode exportar seus
+          dados, excluir sua conta e gerenciar os consentimentos. Você também pode nos contatar em{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
@@ -246,7 +247,7 @@ export default function Pt({ lang }: { lang: Locale }) {
         </p>
         <p>
           <strong className="text-cream">Sem venda ou compartilhamento.</strong> Não vendemos informações pessoais. Não
-          compartilhamos informações pessoais para publicidade comportamental contextual cruzada.
+          compartilhamos informações pessoais para publicidade comportamental de contexto cruzado.
         </p>
         <p>
           <strong className="text-cream">Seus direitos CCPA/CPRA.</strong> Residentes da Califórnia podem exercer o
@@ -261,7 +262,7 @@ export default function Pt({ lang }: { lang: Locale }) {
         </p>
         <p>
           Para enviar uma solicitação de privacidade da Califórnia, use{' '}
-          <strong className="text-cream">Configurações &rarr; Privacidade &amp; Dados</strong> ou envie um e-mail para{' '}
+          <strong className="text-cream">Configurações &rarr; Privacidade e dados</strong> ou envie um e-mail para{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
@@ -306,8 +307,8 @@ export default function Pt({ lang }: { lang: Locale }) {
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">11. Crianças &amp; Idade Mínima</h2>
         <p>
           O serviço é destinado a usuários <strong className="text-cream">com 16 anos ou mais</strong>. Não coletamos
-          intencionalmente informações pessoais de menores de 16 anos. Se você acredita que uma criança com menos de 16
-          anos nos forneceu informações pessoais, entre em contato em{' '}
+          intencionalmente informações pessoais de menores de 16 anos. Se você acredita que um menor de 16 anos nos
+          forneceu informações pessoais, entre em contato em{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
