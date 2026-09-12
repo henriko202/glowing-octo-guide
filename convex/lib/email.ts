@@ -8,6 +8,12 @@ import { env } from '../_generated/server'
 import { scrubError } from './scrubError'
 import { fetchWithTimeout } from './fetchWithTimeout'
 
+const FROM_NAME = 'Link Into The SSI'
+
+function brandedFrom(address: string): string {
+  return address.includes('<') ? address : `${FROM_NAME} <${address}>`
+}
+
 /** A rendered transactional message, ready for sendEmail. Built by pure per-flow modules. */
 export interface EmailContent {
   subject: string
@@ -43,7 +49,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      from,
+      from: brandedFrom(from),
       to: args.to,
       subject: args.subject,
       html: args.html,

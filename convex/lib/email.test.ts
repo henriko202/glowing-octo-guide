@@ -34,9 +34,21 @@ describe('sendEmail', () => {
     expect(url).toBe('https://api.resend.com/emails')
     expect(opts.headers.Authorization).toBe('Bearer key_123')
     const body = JSON.parse(opts.body)
-    expect(body.from).toBe('noreply@linkintothessi.com')
+    expect(body.from).toBe('Link Into The SSI <noreply@linkintothessi.com>')
     expect(body.to).toBe('a@b.com')
     expect(body.subject).toBe('Hi')
+  })
+
+  it('forwards an EMAIL_FROM that already carries a display name unchanged', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'key_123')
+    vi.stubEnv('EMAIL_FROM', 'SSI Alerts <noreply@linkintothessi.com>')
+    const fetchMock = vi.fn(async (_url: string, _opts: any) => ({ ok: true, json: async () => ({ id: 'e1' }) }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendEmail({ to: 'a@b.com', subject: 'Hi', html: '<p>x</p>' })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.from).toBe('SSI Alerts <noreply@linkintothessi.com>')
   })
 
   it('throws a generic error when Resend responds non-ok', async () => {

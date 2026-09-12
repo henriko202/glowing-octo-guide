@@ -1490,7 +1490,9 @@ pricing changes, both subscription webhooks persist `items.data[0].price`'s `uni
 `formatPriceLabel` renders them with `Intl.NumberFormat` in the member's locale, writing the dollar as `U$` in pt/es and
 `$` in en. A missing snapshot degrades to an empty label, never to a wrong number.
 
-`sendEmail` (`lib/email.ts`) no-ops when `RESEND_API_KEY` / `EMAIL_FROM` are unset. For a privacy flow that is a
+`sendEmail` (`lib/email.ts`) no-ops when `RESEND_API_KEY` / `EMAIL_FROM` are unset. Every message it does send is
+addressed `From: Link Into The SSI <EMAIL_FROM>`, so mail clients show the brand instead of the bare `noreply` local
+part; an `EMAIL_FROM` that already carries a display name is forwarded unchanged. For a privacy flow that is a
 convenience; for a pre-charge notice it is a compliance hole, so `notifications.deliver` logs
 `console.error('[billing] notification skipped — email not configured', scrubError(…))`, which surfaces in
 `pnpm watch:errors` and the Convex dashboard. If Resend returns a non-2xx, `sendEmail` throws and the scheduled action
@@ -2487,7 +2489,8 @@ and "Keep my plan". `trial_update_behavior: 'continue_trial'` stays in every por
 the portal home, which is now the one surface our own gates cannot reach.
 
 **Resend sending domain — ✅ done** (verified against the Resend API, 2026-09-08): `notifications.linkintothessi.com`
-reports `verified` in region `sa-east-1`, and `EMAIL_FROM` is `noreply@` that domain. Domains are account-level in
+reports `verified` in region `sa-east-1`, and `EMAIL_FROM` is `noreply@` that domain (sent with the
+`Link Into The SSI` display name). Domains are account-level in
 Resend, not per-key, so this holds for production as long as production uses the same Resend account. Without a
 verified domain every billing notice no-ops (loudly logged, but not delivered).
 
@@ -4979,7 +4982,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5456,6 +5459,7 @@ hreflang → OpenGraph locale map.
 search engines read the brand there and may lean on `og:title`, the localized `description`, or the page headings for
 context. The owner accepted this to keep the tab title stable (no flicker on client-side navigation); revisit if
 organic differentiation outweighs tab consistency.
+
 - `robots` allows indexing with `max-image-preview: large` and unlimited snippets.
 
 **Legal pages** (`privacy`/`terms`/`cookies`) export their own `generateMetadata` via `lib/seo.ts` `pageMetadata()`,
@@ -5790,7 +5794,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `APIFY_TASK_ID`                  |                ✓ (sync)                | `jobs/syncPostsApify.ts`, `jobs/refreshFeedEngagement.ts`                  | Apify actor (`harvestapi~linkedin-profile-posts`) — **already a real value in the `.example`, not a placeholder; no change needed.**                                                                                                                                                                                                                                                                                                      |
 | `APIFY_TASK_ID_PROFILE_SCRAPE`   |           ✓ (profile scrape)           | `jobs/scrapeProfileApify.ts`                                               | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment). **Already a real value in the `.example`; no change needed.**                                                                                                                                                                                                                                                                                            |
 | `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                                                             | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                                                                                                                                                                                                                                                              |
-| `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                                                             | From‑address for transactional email (e.g. `noreply@linkintothessi.com`).                                                                                                                                                                                                                                                                                                                                                                 |
+| `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                                                             | Bare From‑address for transactional email (e.g. `noreply@linkintothessi.com`); `sendEmail` sends it as `Link Into The SSI <address>`, and a value that already carries a display name is kept as-is.                                                                                                                                                                                                                                      |
 | `CONVEX_DEPLOYMENT`              |                ✓ (CLI)                 | Convex CLI                                                                 | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)                                                  | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`).                                                                                                                                                                                                                                     |
 | `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`                                              | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                                                                                                                                                                                                                                                         |
