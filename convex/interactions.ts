@@ -1,5 +1,5 @@
 // convex/interactions.ts
-import type { MutationCtx } from './_generated/server'
+import type { MutationCtx, QueryCtx } from './_generated/server'
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
@@ -28,6 +28,8 @@ import {
   RECAP_ROW_CEILING,
   windowBounds
 } from './lib/recap'
+import { tallyMadeByPerson, tallyReceivedByPost, type CounterpartyTally } from './lib/interactionGraph'
+import { toSearchPerson } from './search'
 
 /** The slice of the member's row the milestone reads — narrow so a test can build one inline. */
 type TrialUserRow = {
@@ -108,7 +110,7 @@ export async function bumpTrialInteractionHandler(
   // semantics guarantee it fires exactly once per member. `combined` is pre-increment, so the
   // 40th/50th interaction is the one that fires.
   if (crossesThreshold(combined, 1, TRIAL_WARNING_THRESHOLD)) {
-    await ctx.scheduler.runAfter(0, internal.notifications.sendTrialNearEnd, { userId })
+    await ctx.scheduler.runAfter(0, internal.billingNotices.sendTrialNearEnd, { userId })
   }
 
   if (crossesThreshold(combined, 1)) {
@@ -242,7 +244,7 @@ async function flipCapIfReached(
     deletedAt: post.deletedAt
   })
   await ctx.db.patch(post._id, { interactionLimitReached: true, ...feed })
-  await ctx.scheduler.runAfter(0, internal.notifications.sendPostCapReached, { postId: post._id })
+  await ctx.scheduler.runAfter(0, internal.billingNotices.sendPostCapReached, { postId: post._id })
 }
 
 // Internal mutation to increment comment count
@@ -269,6 +271,18 @@ export const incrementCommentCount = internalMutation({
       comment,
       createdAt: now
     })
+
+    // R23 — same transaction: the inbox row for the author. Self-interactions never notify.
+    if (post.authorId !== actorId) {
+      await ctx.db.insert('notifications', {
+        recipientId: post.authorId,
+        actorId,
+        postId,
+        kind: 'comment',
+        excerpt: excerpt(comment),
+        createdAt: now
+      })
+    }
 
     // backlog/R21 — the per-viewer state that starts the 24 h "done" window. Upsert like
     // saveCommentDraft: the row may already hold a draft or a reaction. Saving the submitted text as
@@ -322,6 +336,18 @@ export const incrementLikeCount = internalMutation({
       reaction,
       createdAt: now
     })
+
+    // R23 — same transaction: the inbox row for the author. Self and repeat taps never notify.
+    if (post.authorId !== actorId) {
+      await ctx.db.insert('notifications', {
+        recipientId: post.authorId,
+        actorId,
+        postId,
+        kind: 'reaction',
+        reaction,
+        createdAt: now
+      })
+    }
 
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
@@ -564,3 +590,120 @@ export const listMyInteractions = query({
     return { ...result, page }
   }
 })
+
+// ── Interaction graph (R22) ──────────────────────────────────────────────────────────────────────
+// `now` is client-floored to the hour (same contract as getRecap). Reads are newest-first with the 2000-row ceiling
+// per side per window; `truncated` tells the page. Tallies are pure (lib/interactionGraph).
+
+/** One `get` per unique user id, projected with the same safe profile fields as people search. */
+async function projectPeople<T extends { userId: string }>(
+  ctx: QueryCtx,
+  tallies: T[]
+): Promise<Array<T & ReturnType<typeof toSearchPerson>>> {
+  const ids = [...new Set(tallies.map(t => t.userId))]
+  const users = await Promise.all(ids.map(id => ctx.db.get(id as Id<'users'>)))
+  const map = new Map(
+    users
+      .filter((u): u is Doc<'users'> => u !== null && !u.isBanned && u.deletionScheduledAt === undefined)
+      .map(u => [u._id as string, u])
+  )
+  return tallies.flatMap(t => {
+    const user = map.get(t.userId)
+    return user ? [{ ...t, ...toSearchPerson(user) }] : []
+  })
+}
+
+export const listPeopleIInteractedWith = query({
+  args: { sessionToken: v.string(), window: v.union(v.literal('7d'), v.literal('30d')), now: v.number() },
+  handler: async (ctx, { sessionToken, window, now }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const { since } = windowBounds(window, now)
+    const rows = await ctx.db
+      .query('userInteractions')
+      .withIndex('by_user', q => q.eq('userId', user._id).gte('_creationTime', since))
+      .order('desc')
+      .take(RECAP_ROW_CEILING)
+    const tallies = tallyMadeByPerson(
+      rows.map(r => ({
+        _creationTime: r._creationTime,
+        userId: r.userId as string,
+        authorId: r.authorId as string | undefined,
+        postId: r.postId as string,
+        kind: r.kind
+      })),
+      since
+    )
+    return {
+      window,
+      since,
+      total: tallies.reduce((sum, t) => sum + t.total, 0),
+      people: await projectPeople(ctx, tallies),
+      truncated: rows.length >= RECAP_ROW_CEILING
+    }
+  }
+})
+
+export const listInteractionsByPost = query({
+  args: { sessionToken: v.string(), window: v.union(v.literal('7d'), v.literal('30d')), now: v.number() },
+  handler: async (ctx, { sessionToken, window, now }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const { since } = windowBounds(window, now)
+    const rows = await ctx.db
+      .query('userInteractions')
+      .withIndex('by_author', q => q.eq('authorId', user._id).gte('_creationTime', since))
+      .order('desc')
+      .take(RECAP_ROW_CEILING)
+    const posts = tallyReceivedByPost(
+      rows.map(r => ({
+        _creationTime: r._creationTime,
+        userId: r.userId as string,
+        authorId: r.authorId as string | undefined,
+        postId: r.postId as string,
+        kind: r.kind
+      })),
+      since
+    )
+    const postIds = [...new Set(posts.map(p => p.postId))]
+    const postDocs = await Promise.all(postIds.map(id => ctx.db.get(id as Id<'posts'>)))
+    const postMap = new Map(postDocs.filter((p): p is Doc<'posts'> => p !== null).map(p => [p._id as string, p]))
+    const actorIds = [...new Set(posts.flatMap(p => p.actors.map(a => a.userId)))]
+    const actorDocs = await Promise.all(actorIds.map(id => ctx.db.get(id as Id<'users'>)))
+    const actorMap = new Map(
+      actorDocs
+        .filter((u): u is Doc<'users'> => u !== null && !u.isBanned && u.deletionScheduledAt === undefined)
+        .map(u => [u._id as string, toSearchPerson(u)])
+    )
+    return {
+      window,
+      since,
+      truncated: rows.length >= RECAP_ROW_CEILING,
+      posts: posts.flatMap(p => {
+        const post = postMap.get(p.postId)
+        if (!post) return []
+        return [
+          {
+            postId: p.postId,
+            excerpt: excerpt(post.content),
+            linkedinPostUrn: post.linkedinPostUrn,
+            sourceUrl: post.sourceUrl,
+            total: p.total,
+            lastAt: p.lastAt,
+            removed: post.deletedAt !== undefined || post.hidden,
+            actors: projectTallies(p.actors, actorMap)
+          }
+        ]
+      })
+    }
+  }
+})
+
+/** Pure projection shared by the by-post accordion: drops actors missing from the user map. */
+function projectTallies(
+  tallies: CounterpartyTally[],
+  users: Map<string, ReturnType<typeof toSearchPerson>>
+): Array<CounterpartyTally & ReturnType<typeof toSearchPerson>> {
+  return tallies.flatMap(t => {
+    const user = users.get(t.userId)
+    return user ? [{ ...t, ...user }] : []
+  })
+}

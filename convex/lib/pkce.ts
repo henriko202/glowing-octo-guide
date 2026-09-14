@@ -18,7 +18,8 @@ export function isPkceVerifier(value: string): boolean {
 
 const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 
-function base64UrlEncode(bytes: Uint8Array): string {
+/** Unpadded base64url, shared with the unsubscribe token (`lib/unsubscribeToken.ts`). */
+export function base64UrlEncode(bytes: Uint8Array): string {
   let encoded = ''
   for (let i = 0; i < bytes.length; i += 3) {
     const b0 = bytes[i]

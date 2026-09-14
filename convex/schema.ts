@@ -45,6 +45,14 @@ export default defineSchema({
     // filtered. A downgrade does NOT clear these; only the setter is tier-gated.
     feedFilterIndustries: v.optional(v.array(v.string())),
     feedFilterCountries: v.optional(v.array(v.string())),
+    // R22 — set via users.setLeaderboardOptOut. Absent ⇒ the member appears in the site-wide rankings.
+    // Hides only from rankings; the members directory and the mutual interaction lists are unaffected.
+    leaderboardOptOut: v.optional(v.boolean()),
+    // R24 — 3-day activity digest (backlog/R24). Absent ⇒ enabled: the preference is an opt-out, the email carries
+    // the unsubscribe link, and the first sign-in consent prompt explains it. lastDigestAt is stamped only after a
+    // successful send, so a failed send retries on the next daily sweep.
+    digestEmailsEnabled: v.optional(v.boolean()),
+    lastDigestAt: v.optional(v.number()),
     tier: v.optional(v.union(v.literal('starter'), v.literal('growth'), v.literal('pro'), v.literal('contact'))),
     subscriptionStatus: v.union(
       v.literal('trialing'),
@@ -479,6 +487,25 @@ export default defineSchema({
     // on the deleted user's posts (not caught by the by_user_and_post drain). See privacy/deletion.ts.
     .index('by_post', ['postId']),
 
+  // R23 — one row per reaction or comment a member received on their post, written in the same transaction as the
+  // interaction and the counter bump (interactions.incrementLikeCount / incrementCommentCount), so the three never
+  // drift. Self-interactions never write a row. `readAt` absent ⇒ unread. Banned recipients are filtered at read
+  // time (keep the log complete). `by_created_at` serves the 180-day retention purge.
+  notifications: defineTable({
+    recipientId: v.id('users'),
+    actorId: v.id('users'),
+    postId: v.id('posts'),
+    kind: v.union(v.literal('reaction'), v.literal('comment')),
+    reaction: v.optional(reactionValidator),
+    excerpt: v.optional(v.string()),
+    createdAt: v.number(),
+    readAt: v.optional(v.number())
+  })
+    .index('by_recipient_and_created_at', ['recipientId', 'createdAt'])
+    .index('by_recipient_and_read_at', ['recipientId', 'readAt'])
+    .index('by_actor', ['actorId'])
+    .index('by_created_at', ['createdAt']),
+
   // Nightly admin cohort snapshots (survival panel). One row per window; the query reads one row
   // instead of re-reading the whole cohort reactively. See jobs/survivalSnapshot.ts.
   survivalSnapshots: defineTable({
@@ -501,5 +528,20 @@ export default defineSchema({
       returnedDays2to7Eligible: v.number()
     }),
     payingByTier: v.object({ starter: v.number(), growth: v.number(), pro: v.number(), contact: v.number() })
-  }).index('by_days', ['days'])
+  }).index('by_days', ['days']),
+
+  // R22 — daily site-wide ranking board. One row per (window, day); the query reads the two newest generations to
+  // show movement. User IDs are stored, never names: reads join `users` and drop banned or opted-out members. The
+  // counts arrays let the page state an exact position for members outside the top 100. See jobs/rankingSnapshot.ts.
+  rankingSnapshots: defineTable({
+    window: v.union(v.literal('7d'), v.literal('30d')),
+    generatedAt: v.number(),
+    since: v.number(),
+    topPosters: v.array(v.object({ userId: v.id('users'), count: v.number(), lastAt: v.number() })),
+    topInteractors: v.array(v.object({ userId: v.id('users'), count: v.number(), lastAt: v.number() })),
+    posterCountsDescending: v.array(v.number()),
+    interactorCountsDescending: v.array(v.number()),
+    // True when a scan ceiling was hit: the board is a truncated view, never a wrong one.
+    partial: v.boolean()
+  }).index('by_window_and_generated_at', ['window', 'generatedAt'])
 })

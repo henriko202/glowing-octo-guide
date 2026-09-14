@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Menu, Search } from 'lucide-react'
 import { useTrialProgress } from '../../hooks/useTrialProgress'
 import LanguageMenu from './LanguageMenu'
+import NotificationBell from './NotificationBell'
 import ThemeToggle from './ThemeToggle'
 
 /**
@@ -81,6 +82,7 @@ export default function TopBar({
         </Link>
       )}
 
+      <NotificationBell />
       <LanguageMenu />
       <ThemeToggle />
     </header>

@@ -63,6 +63,21 @@ crons.interval('enforce data retention', { hours: 24 }, internal.privacy.retenti
 // "as of" caption changes at the same time every day.
 crons.cron('rebuild survival snapshots', '15 3 * * *', internal.jobs.survivalSnapshot.rebuildSurvivalSnapshots, {})
 
+// ─── Ranking snapshots (R22) ─────────────────────────────────────────────────
+// Daily site-wide ranking board, one row per window, keeping the newest 4 generations. 03:30 and 03:35 UTC,
+// after the 03:15 survival snapshot, so the boards and the panel move at the same predictable time.
+crons.cron('rebuild 7d ranking snapshot', '30 3 * * *', internal.jobs.rankingSnapshot.rebuildRankingSnapshots, {
+  window: '7d'
+})
+crons.cron('rebuild 30d ranking snapshot', '35 3 * * *', internal.jobs.rankingSnapshot.rebuildRankingSnapshots, {
+  window: '30d'
+})
+
+// ─── 3-day activity digest (R24) ─────────────────────────────────────────────
+// Daily sweep at 10:00 UTC; lib/digest.isDigestDue gates each member on the 3-day cadence, so the cron stays a
+// simple daily pass. Batches of 50 sends per invocation with self-rescheduling.
+crons.cron('send activity digests', '0 10 * * *', internal.jobs.digest.sendDueDigests, {})
+
 // ─── MOTD schedule reconciliation ────────────────────────────────────────────
 // Materializes each MOTD's [startAt, expiresAt) window into its `enabled` flag so the viewer
 // query (motd.getActiveMotd) stays wall-clock-free. Every 5 minutes: an expired MOTD can linger

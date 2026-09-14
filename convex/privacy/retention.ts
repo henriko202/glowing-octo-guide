@@ -13,6 +13,7 @@ const AUDIT_TTL_MS = 24 * 30 * 24 * 60 * 60 * 1000 // ~24 months
 const DORMANCY_MS = 24 * 30 * 24 * 60 * 60 * 1000 // ~24 months
 const GRACE_MS = 30 * 24 * 60 * 60 * 1000
 const RETENTION_BATCH = 100
+const NOTIFICATION_RETENTION_DAYS = 180
 
 export function isTokenExpired(u: { linkedinAccessToken?: string; tokenExpiresAt?: number }, now: number): boolean {
   return !!u.linkedinAccessToken && typeof u.tokenExpiresAt === 'number' && u.tokenExpiresAt < now
@@ -45,7 +46,7 @@ export const enforceDataRetention = internalMutation({
     // 1. Null expired LinkedIn tokens. The by_token_expiry index targets users whose
     // tokenExpiresAt is set and already in the past, so we read only expired rows instead
     // of scanning every token holder. We also clear tokenExpiresAt so the row leaves the
-    // index range — that's what lets the batch drain across reschedules (see step 5).
+    // index range — that's what lets the batch drain across reschedules (see step 6).
     const expiredTokenUsers = await ctx.db
       .query('users')
       .withIndex('by_token_expiry', q => q.gte('tokenExpiresAt', 1).lt('tokenExpiresAt', now))
@@ -82,7 +83,14 @@ export const enforceDataRetention = internalMutation({
       .take(RETENTION_BATCH)
     for (const a of oldAudits) await ctx.db.delete(a._id)
 
-    // 4. Dormancy: flag long-inactive non-subscribers for deletion (feeds processAccountDeletions).
+    // 4. R23 — notifications older than 180 days (in-app inbox only; the interaction log itself is kept).
+    const oldNotifications = await ctx.db
+      .query('notifications')
+      .withIndex('by_created_at', q => q.lte('createdAt', now - NOTIFICATION_RETENTION_DAYS * 86_400_000))
+      .take(RETENTION_BATCH)
+    for (const row of oldNotifications) await ctx.db.delete(row._id)
+
+    // 5. Dormancy: flag long-inactive non-subscribers for deletion (feeds processAccountDeletions).
     // Compound index: eq(deletionScheduledAt, undefined) restricts to not-yet-flagged users,
     // then a range on lastLoginAt selects stale logins. gte(1) skips users who never logged in
     // (isDormant requires a numeric lastLoginAt anyway). Already-flagged users have
@@ -120,13 +128,16 @@ export const enforceDataRetention = internalMutation({
       }
     }
 
-    // 5. If a fully-draining step filled its batch, more rows remain — reschedule immediately.
-    // We only key off the token and audit steps: each clears/deletes every row it reads, so the
-    // matched set strictly shrinks and the loop is guaranteed to terminate. The export and
-    // dormancy steps can legitimately re-return unprocessed rows (a not-yet-expired "ready"
+    // 6. If a fully-draining step filled its batch, more rows remain — reschedule immediately.
+    // We only key off the token, audit and notification steps: each clears/deletes every row it
+    // reads, so the matched set strictly shrinks and the loop is guaranteed to terminate. The export
+    // and dormancy steps can legitimately re-return unprocessed rows (a not-yet-expired "ready"
     // export, an active user with a stale login), so including them could spin forever — they
     // instead make bounded progress once per run and rely on the daily schedule for the tail.
-    const moreToProcess = expiredTokenUsers.length === RETENTION_BATCH || oldAudits.length === RETENTION_BATCH
+    const moreToProcess =
+      expiredTokenUsers.length === RETENTION_BATCH ||
+      oldAudits.length === RETENTION_BATCH ||
+      oldNotifications.length === RETENTION_BATCH
     if (moreToProcess) {
       await ctx.scheduler.runAfter(0, internal.privacy.retention.enforceDataRetention, {})
     }

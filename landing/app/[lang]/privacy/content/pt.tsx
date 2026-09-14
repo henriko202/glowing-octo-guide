@@ -89,7 +89,11 @@ export default function Pt({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Interesses legítimos (Art. 6(1)(f) GDPR).</strong> Otimização da qualidade do
           feed, prevenção de abuso, garantia de segurança da plataforma e manutenção de estatísticas agregadas e não
-          identificáveis sobre o desempenho do serviço.
+          identificáveis sobre o desempenho do serviço. Também nos baseamos em interesses legítimos para enviar um
+          resumo de atividade a cada 3 dias por e-mail, e você pode opor-se a qualquer momento pelo link de cancelamento
+          no próprio e-mail ou em Configurações &rarr; Emails. Membros conectados também podem ver o ranking do site dos
+          que mais publicam e mais interagem, e você pode optar por não aparecer nele a qualquer momento em
+          Configurações &rarr; Emails.
         </p>
         <p>
           <strong className="text-cream">Consentimento (Art. 6(1)(a) GDPR).</strong> Comunicações de marketing e

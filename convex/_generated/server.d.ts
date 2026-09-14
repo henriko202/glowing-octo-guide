@@ -53,6 +53,7 @@ type Env = {
   readonly STRIPE_SECRET_KEY: string;
   readonly STRIPE_STARTER_ANNUAL_PRICE_ID: string | undefined;
   readonly STRIPE_STARTER_PRICE_ID: string | undefined;
+  readonly UNSUBSCRIBE_SECRET: string | undefined;
 };
 
 /**

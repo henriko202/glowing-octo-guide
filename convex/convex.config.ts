@@ -31,7 +31,8 @@ const app = defineApp({
     STRIPE_STARTER_ANNUAL_PRICE_ID: v.optional(v.string()),
     STRIPE_GROWTH_ANNUAL_PRICE_ID: v.optional(v.string()),
     STRIPE_PRO_ANNUAL_PRICE_ID: v.optional(v.string()),
-    ALLOW_ADMIN_SHARE_ANY_POST: v.optional(v.string())
+    ALLOW_ADMIN_SHARE_ANY_POST: v.optional(v.string()),
+    UNSUBSCRIBE_SECRET: v.optional(v.string())
   }
 })
 app.use(stripe)

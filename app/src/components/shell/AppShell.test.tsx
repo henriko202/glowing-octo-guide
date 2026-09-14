@@ -2,7 +2,11 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 
-vi.mock('convex/react', () => ({ useMutation: () => vi.fn(), useQuery: () => undefined }))
+vi.mock('convex/react', () => ({
+  useMutation: () => vi.fn(),
+  useQuery: () => undefined,
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() })
+}))
 
 import { ThemeProvider } from '../ThemeProvider'
 import AppShell from './AppShell'

@@ -1,216 +1,190 @@
-// convex/notifications.ts
-// Transactional billing notices. I/O only — every string comes from lib/billingEmails.ts and every
-// branch from lib/trialMilestone.ts, so the copy and the rules are unit-tested without a database.
-//
-// Two trial-end paths exist and must never both fire for one event:
-//   • 50 interactions  → endTrialEarly sets trial_end:'now', so Stripe emits no trial_will_end.
-//                        Ours is the only warning, sent at 40 (lib/trialMilestone.ts).
-//   • 7 elapsed days   → Stripe emits customer.subscription.trial_will_end 3 days ahead.
-//                        Ours handles it; Stripe's own trial-ending email stays OFF in the
-//                        Dashboard (see docs/PLATFORM.md §8, Stripe Dashboard setup).
-import { env, internalAction } from './_generated/server'
+// R23 — in-app notifications. One row per received reaction/comment, written by interactions.increment*. Read paths
+// join the actor and the post at query time; banned recipients are filtered here so the row itself is never lost.
+import { internalMutation, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
+import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
-import { sendEmail } from './lib/email'
-import type { EmailContent } from './lib/email'
-import { scrubError } from './lib/scrubError'
-import { resolveBillingLocale } from './lib/checkoutCopy'
-import {
-  duplicateSubscriptionCanceledEmail,
-  formatPriceLabel,
-  INTL_TAG,
-  planName,
-  postCapReachedEmail,
-  trialConvertedEmail,
-  trialEndingEmail,
-  trialNearEndEmail
-} from './lib/billingEmails'
-import { findLiveSubscription, pickTrialingSubscription, TRIAL_INTERACTION_THRESHOLD } from './lib/trialMilestone'
-import { effectiveInteractionCap } from './lib/interactionLimit'
-import { billingIntervalParam, capNoticeMode, shouldSendCapNotice } from './lib/postCapNotice'
-import { nextTier, type Tier } from './lib/planLimits'
+import { requireAuth } from './lib/auth'
+import type { Reaction } from './lib/reactions'
 import { excerpt } from './lib/recap'
-import { SUPPORT_EMAIL } from './lib/support'
+// Reused rather than copied: the [1, 100] clamp is identical for every cursor-paginated client-facing list.
+import { clampHistoryPageSize } from './interactions'
 
-function billingUrl(): string {
-  return `${env.APP_URL ?? 'http://localhost:5173'}/billing`
+const MARK_ALL_BATCH = 100
+
+interface NotificationRow {
+  id: string
+  kind: 'reaction' | 'comment'
+  reaction?: Reaction
+  excerpt?: string
+  createdAt: number
+  readAt?: number
+  unread: boolean
+  actorName: string
+  actorHeadline?: string
+  actorPictureUrl?: string
+  postExcerpt: string
+  postUrn: string
+  postSourceUrl?: string
+  removed: boolean
 }
 
-/**
- * sendEmail no-ops when RESEND_API_KEY / EMAIL_FROM are unset (lib/email.ts). For a privacy
- * flow that is a convenience; for a pre-charge notice it is a compliance hole, so make it loud
- * in `pnpm watch:errors` and the Convex dashboard.
- */
-async function deliver(kind: string, to: string, m: EmailContent): Promise<void> {
-  const result = await sendEmail({ to, subject: m.subject, html: m.html, text: m.text })
-  if (result.skipped) {
-    console.error('[billing] notification skipped — email not configured', scrubError({ kind }))
+async function resolveActors(ctx: Parameters<typeof requireAuth>[0], ids: Id<'users'>[]) {
+  const unique = [...new Set(ids.map(id => id as string))]
+  const users = await Promise.all(unique.map(id => ctx.db.get(id as Id<'users'>)))
+  return new Map(
+    users
+      .filter((u): u is Doc<'users'> => u !== null && !u.isBanned && u.deletionScheduledAt === undefined)
+      .map(u => [u._id as string, u])
+  )
+}
+
+async function resolvePosts(ctx: Parameters<typeof requireAuth>[0], ids: Id<'posts'>[]) {
+  const unique = [...new Set(ids.map(id => id as string))]
+  const posts = await Promise.all(unique.map(id => ctx.db.get(id as Id<'posts'>)))
+  return new Map(posts.filter((p): p is Doc<'posts'> => p !== null).map(p => [p._id as string, p]))
+}
+
+function toRow(
+  row: Doc<'notifications'>,
+  actors: Map<string, Doc<'users'>>,
+  posts: Map<string, Doc<'posts'>>
+): NotificationRow {
+  const actor = actors.get(row.actorId as string)
+  const post = posts.get(row.postId as string)
+  return {
+    id: row._id as string,
+    kind: row.kind,
+    reaction: row.reaction,
+    excerpt: row.excerpt,
+    createdAt: row.createdAt,
+    readAt: row.readAt,
+    unread: row.readAt === undefined,
+    actorName: actor?.name ?? '',
+    actorHeadline: actor?.headline,
+    actorPictureUrl: actor?.profilePictureUrl,
+    postExcerpt: post ? excerpt(post.content) : '',
+    postUrn: post?.linkedinPostUrn ?? '',
+    postSourceUrl: post?.sourceUrl,
+    removed: post === undefined || post.deletedAt !== undefined || post.hidden
   }
 }
 
-/** Fired once, on the interaction that reaches 40 of 50. Progress note first, then the term. */
-export const sendTrialNearEnd = internalAction({
-  args: { userId: v.id('users') },
-  handler: async (ctx, { userId }) => {
-    const c = await ctx.runQuery(internal.billing.getBillingContext, { userId })
-    if (!c?.email) return
-    // Never mail someone who already left: status moved on, or they cancelled at period end.
-    if (c.subscriptionStatus !== 'trialing') return
-    const sub = pickTrialingSubscription(c.subscriptions)
-    if (!sub) return
-    // Cancelled mid-trial: Stripe keeps status 'trialing', but no charge is coming.
-    if (sub.cancelAtPeriodEnd) return
-
-    const locale = resolveBillingLocale(c.language, c.primaryLocale)
-    const combined = c.made + c.received
-    const m = trialNearEndEmail(locale, {
-      made: c.made,
-      received: c.received,
-      remaining: Math.max(0, TRIAL_INTERACTION_THRESHOLD - combined),
-      planName: planName(locale, sub.tier),
-      priceLabel: formatPriceLabel(locale, {
-        amount: sub.priceAmount,
-        currency: sub.priceCurrency,
-        interval: sub.priceInterval
-      }),
-      billingUrl: billingUrl()
-    })
-    await deliver('trial_near_end', c.email, m)
+export const listMine = query({
+  args: { sessionToken: v.string(), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { sessionToken, paginationOpts }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const page = await ctx.db
+      .query('notifications')
+      .withIndex('by_recipient_and_created_at', q => q.eq('recipientId', user._id))
+      .order('desc')
+      .paginate({ ...paginationOpts, numItems: clampHistoryPageSize(paginationOpts.numItems) })
+    const [actors, posts] = await Promise.all([
+      resolveActors(
+        ctx,
+        page.page.map(r => r.actorId)
+      ),
+      resolvePosts(
+        ctx,
+        page.page.map(r => r.postId)
+      )
+    ])
+    const visible = page.page.filter(r => actors.has(r.actorId as string))
+    return { ...page, page: visible.map(r => toRow(r, actors, posts)) }
   }
 })
 
-/** Stripe's customer.subscription.trial_will_end, 3 days before the 7-day trial elapses. */
-export const sendTrialEnding = internalAction({
-  args: { stripeSubscriptionId: v.string(), trialEndsAt: v.number() },
-  handler: async (ctx, { stripeSubscriptionId, trialEndsAt }) => {
-    const owner = await ctx.runQuery(internal.billing.getUserBySubscriptionId, { stripeSubscriptionId })
-    if (!owner) return
-    const c = await ctx.runQuery(internal.billing.getBillingContext, { userId: owner.userId })
-    if (!c?.email || c.subscriptionStatus !== 'trialing') return
-    const sub = c.subscriptions.find(s => s.stripeSubscriptionId === stripeSubscriptionId)
-    if (!sub || sub.status !== 'trialing') return
-    if (sub.cancelAtPeriodEnd) return
-
-    const locale = resolveBillingLocale(c.language, c.primaryLocale)
-    const m = trialEndingEmail(locale, {
-      endsOn: new Date(trialEndsAt).toLocaleDateString(INTL_TAG[locale], {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      }),
-      planName: planName(locale, sub.tier),
-      priceLabel: formatPriceLabel(locale, {
-        amount: sub.priceAmount,
-        currency: sub.priceCurrency,
-        interval: sub.priceInterval
-      }),
-      billingUrl: billingUrl()
-    })
-    await deliver('trial_ending', c.email, m)
+export const getUnreadCount = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const rows = await ctx.db
+      .query('notifications')
+      .withIndex('by_recipient_and_read_at', q => q.eq('recipientId', user._id).eq('readAt', undefined))
+      .take(MARK_ALL_BATCH)
+    return rows.length
   }
 })
 
-/** A duplicate subscription was voided by the webhook — say so, never silently. */
-export const sendDuplicateCanceled = internalAction({
-  args: { userId: v.id('users'), tier: v.string() },
-  handler: async (ctx, { userId, tier }) => {
-    const c = await ctx.runQuery(internal.billing.getBillingContext, { userId })
-    if (!c?.email) return
-    const locale = resolveBillingLocale(c.language, c.primaryLocale)
-    await deliver(
-      'duplicate_canceled',
-      c.email,
-      duplicateSubscriptionCanceledEmail(locale, { planName: planName(locale, tier), billingUrl: billingUrl() })
-    )
-  }
-})
-
-/** Fired by stripe.syncUserSubscription when a row goes trialing → active (backlog/R14). */
-export const sendTrialConverted = internalAction({
-  args: { userId: v.id('users') },
-  handler: async (ctx, { userId }) => {
-    const c = await ctx.runQuery(internal.billing.getBillingContext, { userId })
-    if (!c?.email) return
-    if (c.subscriptionStatus !== 'active') return
-    const sub = findLiveSubscription(c.subscriptions)
-    if (!sub) return
-    // Nothing recorded means nothing to recap — Henriko's call: skip the email at zero.
-    if (c.made + c.received === 0) return
-
-    const locale = resolveBillingLocale(c.language, c.primaryLocale)
-    const m = trialConvertedEmail(locale, {
-      made: c.made,
-      received: c.received,
-      planName: planName(locale, sub.tier),
-      priceLabel: formatPriceLabel(locale, {
-        amount: sub.priceAmount,
-        currency: sub.priceCurrency,
-        interval: sub.priceInterval
-      }),
-      recapUrl: `${env.APP_URL ?? 'http://localhost:5173'}/recap`
-    })
-    await deliver('trial_converted', c.email, m)
-  }
-})
-
-/**
- * backlog/R20 — the author's post reached its interaction cap and left the feed. Scheduled by
- * `interactions.flipCapIfReached`, so it runs at most once per post. Everything that could make
- * the email wrong is re-checked at send time: the post must still be capped and not deleted, the
- * author must have an email and a live plan that is not cancelling, and the caps are read fresh.
- * Pro and contact get the support line; Starter/Growth get one checkout deep link.
- */
-export const sendPostCapReached = internalAction({
-  args: { postId: v.id('posts') },
-  handler: async (ctx, { postId }) => {
-    const post = await ctx.runQuery(internal.interactions.getPost, { postId })
-    if (!post || !post.interactionLimitReached || post.deletedAt !== undefined) return
-    const c = await ctx.runQuery(internal.billing.getBillingContext, { userId: post.authorId })
-    if (!c) return
-    const live = findLiveSubscription(c.subscriptions)
-    const to = c.email
-    if (
-      !to ||
-      !shouldSendCapNotice({
-        email: to,
-        subscriptionStatus: c.subscriptionStatus,
-        cancelAtPeriodEnd: live?.cancelAtPeriodEnd
-      })
-    ) {
-      return
+export const getLatest = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    // Scan a few rows, not just the newest: listMine drops notifications whose actor is banned or pending
+    // deletion, and the toast must join the same read path so a stale row can never surface.
+    const rows = await ctx.db
+      .query('notifications')
+      .withIndex('by_recipient_and_created_at', q => q.eq('recipientId', user._id))
+      .order('desc')
+      .take(10)
+    for (const row of rows) {
+      const actor = await ctx.db.get(row.actorId)
+      if (!actor || actor.isBanned === true || actor.deletionScheduledAt !== undefined) continue
+      const post = await ctx.db.get(row.postId)
+      return {
+        _id: row._id as string,
+        actorName: actor.name,
+        kind: row.kind,
+        postUrn: post?.linkedinPostUrn ?? '',
+        postSourceUrl: post?.sourceUrl,
+        removed: post === null || post.deletedAt !== undefined || post.hidden
+      }
     }
+    return null
+  }
+})
 
-    const tier: Tier = c.tier ?? 'starter'
-    const limits = await ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, { userId: post.authorId, tier })
-    // A bought featured post is measured (and reported here) against plan cap + its bonus (backlog/R17).
-    const cap = effectiveInteractionCap(limits.interactionsPerPost, post.interactionCapBonus)
-    const next = nextTier(tier)
-    const nextLimits = next
-      ? await ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, { userId: post.authorId, tier: next })
-      : null
-    // capNoticeMode's `planCap` compares plan cap to plan cap to decide if there's a bigger plan
-    // worth naming — feed it the plain limit, not the effective `cap` above, or this post's one-time
-    // bonus (R17) makes a bought Starter post look like it already matches Growth and hides the upgrade.
-    const mode = capNoticeMode(tier, limits.interactionsPerPost, nextLimits?.interactionsPerPost)
-    const locale = resolveBillingLocale(c.language, c.primaryLocale)
-    const appUrl = env.APP_URL ?? 'http://localhost:5173'
+export const markRead = mutation({
+  args: { sessionToken: v.string(), ids: v.array(v.string()) },
+  handler: async (ctx, { sessionToken, ids }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const now = Date.now()
+    for (const raw of ids.slice(0, MARK_ALL_BATCH)) {
+      // Client-supplied ids: normalize before get(), so a malformed or foreign-table id is a no-op instead of a
+      // thrown transaction that rolls back valid ids earlier in the array (mirrors posts.ts's normalizeId usage).
+      const id = ctx.db.normalizeId('notifications', raw)
+      if (!id) continue
+      const row = await ctx.db.get(id)
+      if (!row || row.recipientId !== user._id || row.readAt !== undefined) continue
+      await ctx.db.patch(row._id, { readAt: now })
+    }
+  }
+})
 
-    const m = postCapReachedEmail(locale, {
-      excerpt: excerpt(post.content),
-      // The post's own number for the subject line. It can exceed the cap — a Growth → Starter
-      // downgrade drops the cap under what the post already collected — and the subject must not
-      // claim the post has fewer interactions than it does.
-      total: post.likeCount + post.commentCount,
-      cap,
-      mode,
-      nextPlanName: next ? planName(locale, next) : undefined,
-      nextCap: nextLimits?.interactionsPerPost,
-      upgradeUrl: next
-        ? `${appUrl}/billing?plan=${next}&interval=${billingIntervalParam(live?.priceInterval)}&src=cap_email`
-        : undefined,
-      myPostsUrl: `${appUrl}/my-posts`,
-      supportEmail: SUPPORT_EMAIL
-    })
-    await deliver('post_cap_reached', to, m)
+function markAllInternal(ctx: Parameters<typeof requireAuth>[0], userId: Id<'users'>) {
+  return ctx.db
+    .query('notifications')
+    .withIndex('by_recipient_and_read_at', q => q.eq('recipientId', userId).eq('readAt', undefined))
+    .take(MARK_ALL_BATCH)
+}
+
+/**
+ * Marks the caller's unread inbox as read, one bounded batch per transaction. A full batch schedules the continuation
+ * (internalMutation, same logic, no auth) so a large backlog drains across transactions instead of risking the
+ * single-transaction read/write limit; the public mutation returns immediately either way.
+ */
+export const markAllReadBatch = internalMutation({
+  args: { userId: v.id('users') },
+  handler: async (ctx, { userId }) => {
+    const rows = await markAllInternal(ctx, userId)
+    const now = Date.now()
+    for (const row of rows) await ctx.db.patch(row._id, { readAt: now })
+    if (rows.length === MARK_ALL_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.notifications.markAllReadBatch, { userId })
+    }
+  }
+})
+
+export const markAllRead = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    const rows = await markAllInternal(ctx, user._id)
+    const now = Date.now()
+    for (const row of rows) await ctx.db.patch(row._id, { readAt: now })
+    if (rows.length === MARK_ALL_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.notifications.markAllReadBatch, { userId: user._id })
+    }
   }
 })

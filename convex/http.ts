@@ -1,5 +1,6 @@
 // convex/http.ts
 import { env, httpAction } from './_generated/server'
+import type { ActionCtx } from './_generated/server'
 import { httpRouter } from 'convex/server'
 import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
@@ -12,6 +13,8 @@ import { isInviteCode } from './lib/invite'
 import { isFeaturedPostCheckout } from './lib/featuredPurchase'
 import { readCookie } from './lib/cookies'
 import { isPkceChallenge } from './lib/pkce'
+import { verifyUnsubscribeToken } from './lib/unsubscribeToken'
+import { pickUnsubscribeLocale, unsubscribePageHtml } from './lib/unsubscribePage'
 
 const http = httpRouter()
 
@@ -187,6 +190,47 @@ http.route({
   })
 })
 
+// R24 — one-click unsubscribe for the 3-day digest. Stateless signed token, works without a session, idempotent.
+// POST is the acting path (the RFC 8058 List-Unsubscribe-Post target) and redirects to /unsubscribed. GET only
+// confirms: mail scanners and chat unfurlers prefetch links, so a GET verifies the token and renders a POST form
+// without touching the preference.
+http.route({
+  path: '/unsubscribe/digest',
+  method: 'GET',
+  handler: httpAction(async (_ctx, req) => {
+    const token = new URL(req.url).searchParams.get('token') ?? ''
+    const appUrl = env.APP_URL ?? 'http://localhost:5173'
+    const secret = env.UNSUBSCRIBE_SECRET
+    if (!secret) return redirect(`${appUrl}/unsubscribed?status=unavailable`)
+    const userId = await verifyUnsubscribeToken(token, secret)
+    if (!userId) return redirect(`${appUrl}/unsubscribed?status=invalid`)
+    const locale = pickUnsubscribeLocale(req.headers.get('accept-language'))
+    return new Response(unsubscribePageHtml(locale, { token, appUrl }), {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', ...NO_STORE }
+    })
+  })
+})
+
+http.route({
+  path: '/unsubscribe/digest',
+  method: 'POST',
+  handler: httpAction(async (ctx, req) => {
+    const token = new URL(req.url).searchParams.get('token') ?? ''
+    return handleUnsubscribe(ctx, token)
+  })
+})
+
+async function handleUnsubscribe(ctx: ActionCtx, token: string): Promise<Response> {
+  const appUrl = env.APP_URL ?? 'http://localhost:5173'
+  const secret = env.UNSUBSCRIBE_SECRET
+  if (!secret) return redirect(`${appUrl}/unsubscribed?status=unavailable`)
+  const userId = await verifyUnsubscribeToken(token, secret)
+  if (!userId) return redirect(`${appUrl}/unsubscribed?status=invalid`)
+  await ctx.runMutation(internal.jobs.digest.disableDigestByUserId, { userId: userId as Id<'users'> })
+  return redirect(`${appUrl}/unsubscribed?status=ok`)
+}
+
 // ─── Stripe Webhooks (via @convex-dev/stripe component) ─────────────────────
 // The component auto-syncs customers, subscriptions, payments, and invoices.
 // Custom handlers below keep our app's users + subscriptions tables in sync.
@@ -232,7 +276,7 @@ registerRoutes(http, components.stripe, {
     'customer.subscription.trial_will_end': async (ctx, event: Stripe.CustomerSubscriptionTrialWillEndEvent) => {
       const sub = event.data.object
       if (!sub.trial_end) return
-      await ctx.scheduler.runAfter(0, internal.notifications.sendTrialEnding, {
+      await ctx.scheduler.runAfter(0, internal.billingNotices.sendTrialEnding, {
         stripeSubscriptionId: sub.id,
         trialEndsAt: sub.trial_end * 1000
       })

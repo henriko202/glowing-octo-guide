@@ -8,11 +8,13 @@ export type ToggleWindow = '7d' | '30d' | 'all'
 export default function WindowToggle<T extends ToggleWindow>({
   value,
   onChange,
-  options
+  options,
+  labelPrefix = 'recap.window'
 }: {
   value: T
   onChange: (next: T) => void
   options: readonly T[]
+  labelPrefix?: string
 }) {
   const { t } = useTranslation()
   return (
@@ -28,7 +30,7 @@ export default function WindowToggle<T extends ToggleWindow>({
             option === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
           )}
         >
-          {t(`recap.window.${option}`)}
+          {t(`${labelPrefix}.${option}`)}
         </button>
       ))}
     </div>

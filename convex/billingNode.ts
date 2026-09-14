@@ -185,7 +185,7 @@ export const cancelDuplicateSubscription = internalAction({
     }
     console.error('[billing] voided duplicate subscription', scrubError({ stripeSubscriptionId }))
     await ctx.runMutation(internal.users.setBillingNotice, { userId, notice: 'duplicate_canceled' })
-    await ctx.scheduler.runAfter(0, internal.notifications.sendDuplicateCanceled, { userId, tier })
+    await ctx.scheduler.runAfter(0, internal.billingNotices.sendDuplicateCanceled, { userId, tier })
   }
 })
 

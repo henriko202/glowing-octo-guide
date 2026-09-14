@@ -250,7 +250,7 @@ export const syncUserSubscription = internalMutation({
     })
 
     if (converted) {
-      await ctx.scheduler.runAfter(0, internal.notifications.sendTrialConverted, { userId: user._id })
+      await ctx.scheduler.runAfter(0, internal.billingNotices.sendTrialConverted, { userId: user._id })
     }
 
     // Re-stamp authorTierRank + feed fields on all this user's posts, and reveal any created hidden

@@ -165,7 +165,7 @@ flowchart LR
         direction TB
         Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
         Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-        DB[("Convex DB<br/>20 tables")]
+        DB[("Convex DB<br/>22 tables")]
         Crons["Cron scheduler"]
         Cloud --- DB
         Site --- DB
@@ -295,7 +295,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 
 ## 5. Data Model
 
-All state lives in **Convex** (`convex/schema.ts`). There are **20 tables**. Every document also carries Convex‑managed
+All state lives in **Convex** (`convex/schema.ts`). There are **22 tables**. Every document also carries Convex‑managed
 `_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
 
 Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential integrity**;
@@ -365,6 +365,10 @@ erDiagram
 by the `by_invite_code` / `by_referred_by_code` indexes on **string codes**, not a `v.id('users')` foreign key — so an
 inviter's erasure leaves the invitee's stamp behind as an inert code that resolves to nobody.
 
+**R22 adds a table but still no relationship line:** `rankingSnapshots` is an aggregate board like `survivalSnapshots`.
+Its top lists carry `v.id('users')` values so reads can join them, but there is no foreign key and no cascade; banned,
+pending-deletion and opted-out members are dropped at read time, never at write time (see [§11](#11-feed--engagement)).
+
 ### Table reference
 
 #### `users` — central identity / subscription / OAuth / admin record
@@ -389,6 +393,9 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `defaultVisibilityCountries`  | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist copied onto every post this user authors from now on (`posts.visibilityCountries`, set at insert time — not retroactive). Same semantics as `defaultVisibilityIndustries` above.                                                                                                                                                                                           |
 | `feedFilterIndustries`        | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist that filters the viewer's **own** feed (`feed.getFeed` reads it off the viewer doc). Absent/empty ⇒ that dimension isn't filtered. Set via `users.setFeedFilter` (tier-gated server-side); a downgrade does **not** clear it. A "what I want to see" preference — distinct from the author-side `defaultVisibility*`. See [§11](#11-feed--engagement).                    |
 | `feedFilterCountries`         | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist filtering the viewer's own feed. ANDed with `feedFilterIndustries` (each list ORs internally). Same source/semantics as `feedFilterIndustries` above.                                                                                                                                                                                                                      |
+| `leaderboardOptOut`           | boolean                                                |  –  | **R22** — set via `users.setLeaderboardOptOut`. Absent ⇒ the member appears in the site‑wide rankings. Hides only from rankings; the members directory and the mutual interaction lists are unaffected.                                                                                                                                                                                                             |
+| `digestEmailsEnabled`         | boolean                                                |  –  | **R24** — 3-day activity-digest preference. Absent ⇒ enabled (opt-out, not opt-in). Read/written by `users.getEmailPreferences` / `users.setDigestEmailsEnabled` (Settings → Emails) and set to `false` by the one-click unsubscribe endpoint. See [§8](#8-subscriptions--billing).                                                                                                                                 |
+| `lastDigestAt`                | number                                                 |  –  | **R24** — timestamp of the member's last **successful** digest send (ms). Stamped only after `sendEmail` resolves without throwing, so a failed send retries on the next daily sweep; absent ⇒ due immediately.                                                                                                                                                                                                     |
 | `tier`                        | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                                                                                                                                           |
 | `subscriptionStatus`          | `'trialing'\|'active'\|'canceled'\|'past_due'\|'none'` | ✓  | Stripe‑mirrored status; also admin‑overridable via `setUserSubscriptionStatus`. New users start at `none`; `trialing` begins on card-add (Stripe trial for the chosen tier — see §8); trialing users' posts are now **visible** in the feed. Engage access is granted for `{trialing, active, canceled}` — cancellation never revokes it (see `canEngage`).                                                         |
 | `trialEndsAt`                 | number                                                 |  –  | Trial expiry (ms).                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -798,13 +805,39 @@ emails).
 Index: `by_user [userId]` — one row per member (read with `.unique()`; absent ⇒ 0/0). Included in the
 DSR export and deleted in the erasure cascade ([§13B](#13b-privacy--compliance)).
 
+#### `notifications` — in-app inbox (R23)
+
+One row per **reaction or comment a member received on their post**, written by `incrementLikeCount` /
+`incrementCommentCount` (`convex/interactions.ts`) in the **same transaction** as the post's counter patch and the
+`userInteractions` insert, so the inbox, the aggregate and the log can never drift. Self‑interactions never write a
+row; a repeat reaction can't either (the dedupe returns before any write). `readAt` absent ⇒ unread. The inbox is
+private to its recipient — every read path authenticates through `requireAuth`, so a banned member cannot read theirs
+at all, while the rows themselves stay in place ([§11](#11-feed--engagement)). `by_created_at` serves the 180‑day
+retention purge; the DSR export and the erasure cascade cover both the recipient and the actor side
+([§13B](#13b-privacy--compliance)).
+
+| Field         | Type                      | Req | Meaning                                                                |
+|---------------|---------------------------|:---:|------------------------------------------------------------------------|
+| `recipientId` | `id('users')`             | ✓  | The post's author — who receives the notification.                     |
+| `actorId`     | `id('users')`             | ✓  | Who reacted or commented.                                              |
+| `postId`      | `id('posts')`             | ✓  | The engaged post.                                                      |
+| `kind`        | `'reaction' \| 'comment'` | ✓  | Which interaction this row records.                                    |
+| `reaction`    | enum                      |  –  | Reaction value (set when `kind === 'reaction'`).                       |
+| `excerpt`     | string                    |  –  | Comment text, flattened and capped at 140 chars (`lib/recap.excerpt`). |
+| `createdAt`   | number                    | ✓  | When the interaction happened (ms); the inbox's ordering key.          |
+| `readAt`      | number                    |  –  | Set by `markRead` / `markAllRead`; absent ⇒ unread.                    |
+
+Indexes: `by_recipient_and_created_at [recipientId, createdAt]` — the inbox page (newest first);
+`by_recipient_and_read_at [recipientId, readAt]` — the unread count and the mark‑all drain; `by_actor [actorId]` —
+erasure when the member is the actor; `by_created_at [createdAt]` — the retention purge.
+
 #### `survivalSnapshots` — nightly admin survival-panel aggregates
 
 One row per cohort window (`7` and `28`), replaced in place by the `rebuild survival snapshots` cron
-(`jobs/survivalSnapshot.ts`). This is the **only** stored table that is neither user data nor an operational log: it
-holds the `summarizeCohort` output and the whole-table `payingByTier` counts so `admin.survivalMetrics` reads one row
-instead of re-reading the cohort reactively ([§12](#12-admin--moderation)). No FK — the aggregates deliberately carry
-no `userId`.
+(`jobs/survivalSnapshot.ts`). This is a stored aggregate — neither user data nor an operational log; R22's
+`rankingSnapshots` below is the other aggregate board. It holds the `summarizeCohort` output and the whole-table
+`payingByTier` counts so `admin.survivalMetrics` reads one row instead of re-reading the cohort reactively
+([§12](#12-admin--moderation)). No FK — the cohort counts deliberately carry no `userId`.
 
 | Field          | Type      | Req | Meaning                                                                                                                                                                                                                                                  |
 |----------------|-----------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -815,6 +848,33 @@ no `userId`.
 | `payingByTier` | object    | ✓  | Active members per tier across the **whole** table.                                                                                                                                                                                                      |
 
 Indexes: `by_days [days]` — the query's one-row lookup and the job's replace.
+
+#### `rankingSnapshots` — daily site‑wide ranking board (R22)
+
+One row per window (`7d` / `30d`) per daily generation, written by the two ranking‑snapshot crons
+(`jobs/rankingSnapshot.ts`) and read by `rankings.getSiteRankings` ([§11](#11-feed--engagement)). Only user **ids** are
+stored: the read joins `users` and drops banned, pending‑deletion and opted‑out members there. Each rebuild keeps the
+newest **4** generations per window, so the board can show movement against the previous one.
+
+The job is a **single bounded pass** (the spec's cursor chain was not built): it reads the newest
+`SNAPSHOT_ROW_CEILING` (**10,000**) `userInteractions` and `posts` rows, tallies in memory, writes one generation and
+sets `partial` when either read hit that ceiling — a truncated board, never a wrong one. Both counts distributions are
+additionally capped at `MAX_DISTRIBUTION` (**8,000**, headroom under Convex's 8,192-element array cap); dropping the
+tail also sets `partial`, and a position beyond the cap reads as no position because `positionOf` returns `null` for a
+count that is absent from the stored distribution.
+
+| Field                        | Type        | Req | Meaning                                                                                                                    |
+|------------------------------|-------------|:---:|----------------------------------------------------------------------------------------------------------------------------|
+| `window`                     | `7d \| 30d` | ✓  | Board window. Indexed with `generatedAt`; a rebuild appends a generation, it never replaces one.                           |
+| `generatedAt`                | number      | ✓  | Rebuild timestamp (ms) — the generation's ordering key.                                                                    |
+| `since`                      | number      | ✓  | Window start = `generatedAt − window` (ms). A member's live count for the board is read against this instant.              |
+| `topPosters`                 | object[]    | ✓  | Up to 100 `{ userId, count, lastAt }` — authors of posts published in the window (hidden and soft‑deleted posts excluded). |
+| `topInteractors`             | object[]    | ✓  | Up to 100 `{ userId, count, lastAt }` — made‑side interactions in the window (`ai_draft` and self‑interactions excluded).  |
+| `posterCountsDescending`     | number[]    | ✓  | Every poster's count, descending. Lets the read place a member outside the top 100 exactly.                                |
+| `interactorCountsDescending` | number[]    | ✓  | Every interactor's count, descending — the distribution behind the caller's exact position.                                |
+| `partial`                    | boolean     | ✓  | `true` when either scan hit `SNAPSHOT_ROW_CEILING` **or** a counts distribution was capped at `MAX_DISTRIBUTION`.          |
+
+Index: `by_window_and_generated_at [window, generatedAt]` — the newest‑first read and the generation trim (keep 4).
 
 ---
 
@@ -1433,22 +1493,23 @@ Two trial-end paths exist, and they must never both warn about the same event:
   `bumpTrialInteraction` through the same `crossesThreshold` helper — so it fires exactly once per member.
 - **The elapsed-days side** (7 days, or 14 for an invited member — **R19**, see "Checkout (subscribe) flow") — Stripe
   emits `customer.subscription.trial_will_end` three days ahead; `http.ts` schedules
-  `internal.notifications.sendTrialEnding`. Stripe's own built-in trial-ending email stays **OFF** in the Dashboard (see
+  `internal.billingNotices.sendTrialEnding`. Stripe's own built-in trial-ending email stays **OFF** in the Dashboard
+  (see
   "Stripe Dashboard setup" below), so exactly one warning reaches the member. Nothing here reads the trial **length**:
   the warning is driven by Stripe's own event and by the stored `trial_end`, so a 14-day trial needs no extra branch.
 
-| Event                              | Channel                                         | Sender                                                |
-|------------------------------------|-------------------------------------------------|-------------------------------------------------------|
-| 40 of 50 combined interactions     | Email + emphasised in-app banner on `/billing`  | Ours — `internal.notifications.sendTrialNearEnd`      |
-| 3 days before the trial's last day | Email                                           | Ours — `internal.notifications.sendTrialEnding`       |
-| Trial converted: trialing → active | Email                                           | Ours — `internal.notifications.sendTrialConverted`    |
-| First successful charge            | Email receipt                                   | **Stripe** (Dashboard setting, kept ON)               |
-| Duplicate subscription voided      | Email + dismissible in-app notice on `/billing` | Ours — `internal.notifications.sendDuplicateCanceled` |
+| Event                              | Channel                                         | Sender                                                 |
+|------------------------------------|-------------------------------------------------|--------------------------------------------------------|
+| 40 of 50 combined interactions     | Email + emphasised in-app banner on `/billing`  | Ours — `internal.billingNotices.sendTrialNearEnd`      |
+| 3 days before the trial's last day | Email                                           | Ours — `internal.billingNotices.sendTrialEnding`       |
+| Trial converted: trialing → active | Email                                           | Ours — `internal.billingNotices.sendTrialConverted`    |
+| First successful charge            | Email receipt                                   | **Stripe** (Dashboard setting, kept ON)                |
+| Duplicate subscription voided      | Email + dismissible in-app notice on `/billing` | Ours — `internal.billingNotices.sendDuplicateCanceled` |
 
 **The conversion email (R14).** `syncUserSubscription` decides it, not a cron: when the incoming webhook moves _this
 subscription row_ from `trialing` to `active`, `isTrialConversion(existing?.status, args.status)` returns true. The call
 is made **before** the row is patched (the old status is still readable) and the send is scheduled **after** the user
-doc is patched, so the mailer re-reads a settled member. The action is `internal.notifications.sendTrialConverted`, the
+doc is patched, so the mailer re-reads a settled member. The action is `internal.billingNotices.sendTrialConverted`, the
 copy comes from `trialConvertedEmail`, and the mail links to **`/recap`** — the first paid touch points at the receipts,
 not at an upsell. It re-reads state and **skips** when the member has no email, when `subscriptionStatus` is no longer
 `active` at send time, when `findLiveSubscription` finds no live row, or when `made + received === 0` (the trial
@@ -1459,7 +1520,7 @@ timing, accepted for launch (2026‑09‑07):** the trigger is `trialing → act
 trial that converts via `past_due → active` (first charge failed, retry succeeded) gets no email. Revisit after launch —
 a first‑paid‑invoice trigger (`invoice.paid`) or a row flag for the first `active` after a `trialing`.
 
-`convex/notifications.ts` is I/O only. Every string comes from the pure `lib/billingEmails.ts` — five builders
+`convex/billingNotices.ts` is I/O only. Every string comes from the pure `lib/billingEmails.ts` — five builders
 (`trialNearEndEmail`, `trialEndingEmail`, `trialConvertedEmail`, `duplicateSubscriptionCanceledEmail` and
 `postCapReachedEmail`, the last one **not** a trial notice — see "Post-cap email (R20)" below) plus
 `formatPriceLabel`, the `INTL_TAG` map and `planName(locale, tier)` — and every branch from `lib/trialMilestone.ts`, so
@@ -1493,7 +1554,7 @@ pricing changes, both subscription webhooks persist `items.data[0].price`'s `uni
 `sendEmail` (`lib/email.ts`) no-ops when `RESEND_API_KEY` / `EMAIL_FROM` are unset. Every message it does send is
 addressed `From: Link Into The SSI <EMAIL_FROM>`, so mail clients show the brand instead of the bare `noreply` local
 part; an `EMAIL_FROM` that already carries a display name is forwarded unchanged. For a privacy flow that is a
-convenience; for a pre-charge notice it is a compliance hole, so `notifications.deliver` logs
+convenience; for a pre-charge notice it is a compliance hole, so `billingNotices.deliver` logs
 `console.error('[billing] notification skipped — email not configured', scrubError(…))`, which surfaces in
 `pnpm watch:errors` and the Convex dashboard. If Resend returns a non-2xx, `sendEmail` throws and the scheduled action
 fails loudly; there is no retry loop, because the in-app banner is the durable channel.
@@ -1517,7 +1578,7 @@ flowchart TD
     INC --> CAP{"flipCapIfReached:<br/>shouldFlipInteractionLimit(likes, comments, cap)"}
     CAP -->|" not yet "| STOP["nothing"]
     CAP -->|" reached "| FLIP["patch interactionLimitReached + computeFeedFields<br/>(post leaves the feed)"]
-    FLIP --> SCHED["scheduler.runAfter(0, internal.notifications.sendPostCapReached)"]
+    FLIP --> SCHED["scheduler.runAfter(0, internal.billingNotices.sendPostCapReached)"]
     SCHED --> RR["re-read: interactions.getPost · billing.getBillingContext · lib.planLimitsQuery.getPlanLimits"]
     RR --> G1{"post still capped<br/>and not soft-deleted?"}
     G1 -->|" no "| DROP["silent"]
@@ -1551,7 +1612,7 @@ actionable line and still the only link. A locale-wide unit test bans the old "k
 **One flip, one email — until a purchase resets it.** Both `incrementLikeCount` and `incrementCommentCount` call a
 single helper, `flipCapIfReached` (`convex/interactions.ts`), instead of duplicating the cap check. It patches
 `interactionLimitReached` together with the recomputed `computeFeedFields`, then schedules
-`internal.notifications.sendPostCapReached({ postId })` at 0 ms. Because both callers return early when the post is
+`internal.billingNotices.sendPostCapReached({ postId })` at 0 ms. Because both callers return early when the post is
 **already** capped, an organic flip happens exactly once against a given cap — so the schedule, and therefore the
 email, cannot repeat against that same number. `posts.applyPurchasedFeature` (backlog/R17) is the one path that
 un-flips `interactionLimitReached`, against the post's new, bigger `effectiveInteractionCap`; from there the same
@@ -1614,7 +1675,7 @@ see [§17](#17-security-posture).
 |---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), persist the **price snapshot** (`unit_amount` / `currency` / `recurring.interval` off `items.data[0].price`) and `cancelAtPeriodEnd`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). Also persists `stripeCreated` + `lastEventAt`, **refuses a stale replay** (a live status for a row already `canceled` — Stripe retries on any non-2xx) **and an out‑of‑order event** (`event.created` older than the row's `lastEventAt`; only the duplicate decision still runs), and when **another row defines the member** (this row is the duplicate, or this is a non-live event while they still hold a live row) leaves the user doc alone. Returns the **duplicate to void**, which only the `created` handler acts on (below). Mirrors `sub.schedule` as `stripeScheduleId`; a landed **scheduled downgrade** clears the pending mirror and releases the schedule (B07). |
 | `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`. If the member **still holds a live row** (the voided duplicate's own `deleted`, or a period-end cancel landing after a re-subscribe) their `tier` / `subscriptionStatus` / `subscriptionEndsAt` follow that row — nothing is downgraded. Otherwise set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this), downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `customer.subscription.trial_will_end`      | Schedules `internal.notifications.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `customer.subscription.trial_will_end`      | Schedules `internal.billingNotices.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears. Skips an event older than the row's `lastEventAt`, so a retried failure cannot re‑block a member whose payment already cleared, and ignores a failure for a row already `canceled` (Stripe's dunning end delivers the final failure and the `deleted` in either order).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `checkout.session.completed`                | `isFeaturedPostCheckout` (`lib/featuredPurchase.ts`) lets through only a **paid** `payment`-mode session tagged `metadata.kind === 'featured_post'` — a subscription checkout completes through this same event and is ignored here. `posts.applyPurchasedFeature` normalises `postId`, no-ops on a redelivery (same session id) or logs a `post.featured_purchase_duplicate` audit row for a second paid session on an already-featured post (no refund), and otherwise features the post with its tier's cap bonus. Never throws — Stripe always sees 200. See "Featured post add-on" above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
@@ -1639,7 +1700,7 @@ flowchart TD
     T -->|created| DUP{"sync returned a duplicate (2 live rows; newest by Stripe created)?"}
     DUP -->|yes| CDS["scheduler → cancelDuplicateSubscription (void the NEWER one)"]
     DUP -->|no| OK["nothing to do"]
-    T -->|trial_will_end| TWE["scheduler → notifications.sendTrialEnding (day-7 reminder)"]
+    T -->|trial_will_end| TWE["scheduler → billingNotices.sendTrialEnding (day-7 reminder)"]
     T -->|deleted| CAN["cancelUserSubscription → follow the surviving live row if any, else tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
     T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement; skips an out-of-order event or a canceled row)"]
     T -->|checkout . session . completed| CSC{"isFeaturedPostCheckout? (payment mode + paid + metadata.kind=featured_post)"}
@@ -1670,7 +1731,7 @@ the surviving row (table above):
   invoice; financially the duplicate never existed.
 - `internal.users.setBillingNotice(userId, 'duplicate_canceled')` — raises the dismissible banner on `/billing`
   (`users.billingNotice`; cleared by `users.clearBillingNotice`).
-- `internal.notifications.sendDuplicateCanceled({ userId, tier })` — the email, in the member's language.
+- `internal.billingNotices.sendDuplicateCanceled({ userId, tier })` — the email, in the member's language.
 
 A voided subscription is **never silent**: the member is told in-app **and** by email, in the same pass that cancels it.
 
@@ -1709,7 +1770,7 @@ flowchart TD
     RET --> CDS["created handler: scheduler → billingNode.cancelDuplicateSubscription"]
     CDS --> C1["stripe.subscriptions.cancel(prorate:false, invoice_now:false)"]
     CDS --> C2["users.setBillingNotice('duplicate_canceled')"]
-    CDS --> C3["notifications.sendDuplicateCanceled(userId, keepTier)"]
+    CDS --> C3["billingNotices.sendDuplicateCanceled(userId, keepTier)"]
     C1 --> DEL["customer.subscription.deleted → cancelUserSubscription follows the surviving live row"]
 ```
 
@@ -2285,7 +2346,7 @@ as
 > (`idem()` appends a per-run nonce): duplicates across runs are prevented by the identity lookups, never by the key,
 > whose only job is making one run's write safe to retry. Also caught on the same pass: prod `APP_URL` carried a
 > **trailing slash**, and every consumer
-> concatenates (`${APP_URL}/billing` in `convex/notifications.ts:36`, the checkout and portal `return_url` in
+> concatenates (`${APP_URL}/billing` in `convex/billingNotices.ts:36`, the checkout and portal `return_url` in
 > `convex/billingNode.ts`), so each Stripe redirect built `//billing` — a path React Router does not match, i.e. a
 > blank page after a successful payment.
 >
@@ -2493,6 +2554,90 @@ reports `verified` in region `sa-east-1`, and `EMAIL_FROM` is `noreply@` that do
 `Link Into The SSI` display name). Domains are account-level in
 Resend, not per-key, so this holds for production as long as production uses the same Resend account. Without a
 verified domain every billing notice no-ops (loudly logged, but not delivered).
+
+### 3-day activity digest (R24)
+
+The one **scheduled member email** of the interaction-graph batch: every third day a member gets a factual summary of
+their own activity. It is **not** a billing notice and **not** marketing — it is the app's own interaction graph sent by
+email, and it carries its own opt-out (`users.digestEmailsEnabled`, Settings → Emails, or the one-click unsubscribe in
+the email itself). Preference changes append `auditLogs` rows (`digest_preference_changed`), so the objection is its
+own record; `consentRecords` keeps only `marketing`/`analytics` (an opt-out preference is not consent).
+
+**The sweep (`jobs/digest.ts`).** `send activity digests` runs daily at **10:00 UTC** ([§13](#13-scheduled-jobs-crons))
+and pages `users` in batches of 50, self-rescheduling with the cursor; each candidate is tested by the pure
+`lib/digest.isDigestDue`: `email` present, `digestEmailsEnabled !== false`, not banned, no `deletionScheduledAt`, and
+`lastDigestAt` either absent or at least 3 days old (`DIGEST_SPAN_MS`). The cadence is a filter on a daily pass — not a
+per-member scheduled chain — which keeps the job idempotent and easy to debug. **If `UNSUBSCRIBE_SECRET` is unset the
+sweep logs and returns without sending anything**: no digest goes out without a working opt-out link
+([§16](#16-environment-variables)). A single member's send failure (Resend non-OK, network error, corrupt row) is
+caught and logged (`scrubError`) inside the loop, so one bad recipient cannot abort the page or stop the cursor
+continuation from being scheduled — every later due member still gets their pass that day.
+
+**The window and the numbers (`getDigestData`).** The personal window is `digestWindow(now, lastDigestAt)` — the last 3
+days, or back to the previous digest when one was missed. Made and received tallies come from `by_user` / `by_author`
+over `userInteractions` (self-interactions and `ai_draft` excluded, exactly like the rankings); the site tops, the
+member's position (`positionOf`) and movement come from the newest `7d` `rankingSnapshots` generation, with movement
+measured against the generation closest to `lastDigestAt`, so it means "since your last digest", not "since yesterday".
+The member's board-window count is read live (the same way `getSiteRankings` does), so a member outside the snapshot's
+top 100 still gets an exact position. All four top lists drop banned and pending-deletion members at read time; the two
+site lists additionally drop `leaderboardOptOut` members, mirroring `getSiteRankings` — the two personal mutual lists
+keep opted-out people (opt-out is rankings-only). Position and movement are unaffected by the filter.
+
+**Content order (`lib/digestEmails.ts`, spec §8).** 1) personal numbers — reactions/comments received and made; 2) who
+interacted most with your posts (top 3); 3) who you interacted most with (top 3); 4) site-wide top posters and top
+interactors for the stated 7-day window (top 3 each); 5) position and movement; 6) CTA buttons to `/people` and
+`/rankings`, then the footer with the unsubscribe link, the Settings link and the support address. The subject carries
+the precise personal number (e.g. "3 reactions and 1 comment on your posts"). The builder renders through the shared
+`emailLayout` shell and formats the window start with `Intl.DateTimeFormat` (`INTL_TAG`) in en/pt/es. The copy is an
+activity summary: no promotional verbs, no urgency, no exclamation marks.
+
+**Skip-on-empty.** `settleDigest` returns before building the email when `made + received === 0` — the digest reports
+activity, so a member with none gets silence, not an empty summary. `lastDigestAt` is stamped **only** after
+`sendEmail` reports a send (`result.sent`); a provider failure leaves the member due, and the next daily sweep retries.
+The throw is caught per member, so the failure delays only that member.
+
+**Headers and unsubscribe.** `SendEmailArgs` gained an optional `headers` passthrough (`lib/email.ts`, forwarded to
+Resend), and every digest carries `List-Unsubscribe: <url>` and
+`List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058). The URL is
+`${CONVEX_SITE_URL}/unsubscribe/digest?token=…`; the token is a stateless HMAC-SHA256 over `digest:<userId>`
+(`lib/unsubscribeToken.ts`), base64url-encoded and compared in constant time. It deliberately never expires — an old
+email in an inbox must keep working — and there is nothing to clean up. Both `GET` (human click) and `POST` (mail-client
+one-click) are registered in `http.ts`. `POST` is the acting path: it verifies the token, sets
+`digestEmailsEnabled = false` through `disableDigestByUserId` (idempotent, audited `digest_unsubscribed_email`), and
+redirects to `${APP_URL}/unsubscribed?status=ok`, `?status=invalid` for a bad token, or `?status=unavailable` when the
+secret is unset. `GET` must not act (mail scanners and chat unfurlers prefetch links): it verifies the token and renders
+a script-free confirmation page whose form POSTs back to the same URL — the member's confirmed click is what
+unsubscribes — with the same invalid/unavailable redirects, and the token never appears outside the form action.
+Re-enabling requires a session in Settings → Emails (`users.setDigestEmailsEnabled`). The page and the endpoint are
+documented in
+[§14](#14-frontend--authenticated-app-app); the env var in [§16](#16-environment-variables).
+
+```mermaid
+flowchart TD
+    CRON["send activity digests — daily 10:00 UTC"] --> SEC{"UNSUBSCRIBE_SECRET set?"}
+    SEC -->|no| SKIP["log + skip entire sweep (no email without opt-out)"]
+    SEC -->|yes| PAGE["page users, 50 per invocation, self-reschedule"]
+    PAGE --> DUE{"isDigestDue? email, enabled, not banned/deleting, 3 days since lastDigestAt"}
+    DUE -->|no| NEXT["next member"]
+    DUE -->|yes| DATA["3-day tallies + newest 7d rankingSnapshots generation"]
+    DATA --> EMPTY{"made + received zero?"}
+    EMPTY -->|yes| NEXT
+    EMPTY -->|no| SEND["digestEmail en/pt/es → Resend + List-Unsubscribe headers"]
+    SEND -->|throws| NEXT
+    SEND --> OK{"sent?"}
+    OK -->|yes| STAMP["markDigestSent → lastDigestAt = now"]
+    OK -->|no| NEXT
+    CLICK["member opens /unsubscribe/digest?token=…"] --> VERIFY{"HMAC token valid?"}
+    VERIFY -->|no| BAD["redirect /unsubscribed?status=invalid"]
+    VERIFY -->|yes| METHOD{"GET or POST?"}
+    METHOD -->|GET| CONFIRM["render confirmation page (no state change)"]
+    METHOD -->|POST| OFF["disableDigestByUserId + audit → /unsubscribed?status=ok"]
+```
+
+**CAN-SPAM postal address — resolved.** Every digest footer carries the controller's fiscal address
+(`AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`): `includePostalAddress` is `true` at the
+call site (`jobs/digest.ts`) and the verbatim constant lives in `lib/digestEmails.ts`
+(`docs/compliance/GAP-ASSESSMENT.md`, item 11).
 
 ---
 
@@ -3121,7 +3266,7 @@ variant="warning"` reading `myPosts.interactionCapBadge` ("Reached {{limit}} int
 shared `UpgradeAtLimit limit="interactionCap"` naming the next tier's higher cap. **In-app that is still the whole
 story** — deliberately no toast and no notice surfaced on the next feed visit, so a member who never revisits My Posts
 is never interrupted elsewhere. What **R20** added is out of band: the author gets **one email at the moment of the
-flip** (`interactions.flipCapIfReached` → `notifications.sendPostCapReached`), because a post leaving the feed is a
+flip** (`interactions.flipCapIfReached` → `billingNotices.sendPostCapReached`), because a post leaving the feed is a
 thing that happened to their account, not an in-page state they can be expected to go looking for. See
 [§8 "Post-cap email (R20)"](#post-cap-email-r20) for the send rules and the copy,
 [§14](#14-frontend--authenticated-app-app) (`MyPostsPage`) for the in-app placement, and
@@ -3286,6 +3431,112 @@ request thousands of rows in one query (the validator itself does not cap `numIt
 instead of two per row. Every row is mapped through the pure `toHistoryRow` (`convex/lib/history.ts`), which joins the
 post and its author and sets **`removed`** when the post is soft-deleted **or** hidden; a post row that no longer exists
 at all yields `post: null`, and the page renders the same "removed" badge for it. The client pages 20 at a time.
+
+### People, interaction graph and rankings (R22)
+
+The interaction log read back as **people**, not counts. Two public queries in `convex/interactions.ts` (all
+`requireAuth`, all indexed on the caller's own id) read the graph; `now` is client‑floored to the hour like `getRecap`,
+so a window's args are stable across renders:
+
+- **`listPeopleIInteractedWith({ window, now })`** — "made": `by_user` rows grouped by the post's author
+  (`tallyMadeByPerson`).
+- **`listInteractionsByPost({ window, now })`** — "received", grouped by post with the actors nested
+  (`tallyReceivedByPost`); a hidden or soft‑deleted post comes back with `removed: true` rather than dropped. This is
+  the shape `/people`'s received tab renders.
+
+`ai_draft` rows never count as interactions **between people**, and neither side counts a self‑interaction. Each read is
+newest‑first with the recap's **2000‑row ceiling** (`RECAP_ROW_CEILING`) per side per window: truncation drops the
+oldest rows first, and `truncated` tells the page (`people.truncated`). The ceiling and its future fix path are
+specified in `docs/superpowers/specs/2026-09-14-interaction-graph-notifications-digest-design.md` §6. Banned members
+and members pending deletion are dropped from the counterpart join at read time in every personal read
+(`listPeopleIInteractedWith`, `listInteractionsByPost`, `rankings.getMyRankings` and the notifications actor join);
+an opted‑out member still appears in all of them — opt‑out covers the site boards only.
+
+**The directory (`users.listMembers`).** The `/people` "All" tab pages the `users` table in creation order (50 per
+page), drops banned members and members pending deletion, and projects only `toSearchPerson`'s safe fields (name,
+headline, picture, public identifier) — the same projection people search uses. The tab carries a debounced search
+box (300 ms, `people.searchLabel`): from **two characters** it answers from `api.search.search`'s `people`
+results instead of the paginated list, and below the minimum it falls back to the directory. The client-supplied
+`paginationOpts.numItems` is clamped to `[1, 100]` (`clampHistoryPageSize`, shared with history and the inbox) before
+`.paginate`.
+
+**Rankings.** `rankings.getMyRankings` aggregates the caller's own log live, top 10 each direction, with the same
+2000‑row reads and `truncated` flag (surfaced on `/rankings` under the "You" block with `people.truncated`'s copy).
+`rankings.getSiteRankings` reads the newest stored `rankingSnapshots` generation
+and, for movement, the newest one before it; it joins every stored id to its user and drops banned, pending‑deletion
+and opted‑out members **at read time** — the snapshot stores ids, never names, so a ban or an opt‑out lands without a
+rebuild. Each board serves at most **20** rows after that filtering (the snapshot keeps the top 100). The caller's own
+block is computed live: their count for the snapshot's window comes from their `by_user` rows (excluding `ai_draft`
+and self), and the exact position comes from the snapshot's full `interactorCountsDescending` distribution (`positionOf`
+in `lib/ranking.ts`), so "you are #87" works beyond the top 100. Positions are competition ranks — equal
+counts share the best (lowest) position number (`[9,7,7,5]` → positions `1,2,2,4`) — and `movement` compares the
+position with the previous generation (positive = climbed). A `partial: true` board hit the job's 10,000‑row scan
+ceiling or the 8,000-count distribution cap and says so. Personal
+rankings are live; the site boards only move when the daily crons rebuild them ([§13](#13-scheduled-jobs-crons)).
+
+**The opt‑out (`users.setLeaderboardOptOut`).** One boolean on `users`, **rankings only**: an opted‑out member
+disappears from the site boards for everyone else, while the `/people` directory and both mutual interaction lists are
+unaffected (their own `me` block still shows their count and position). The mutation is idempotent and audited
+(`leaderboard_opt_out_changed`), and the read‑time filter above means the change lands immediately.
+
+**The pre‑2026‑09‑07 `authorId` gap.** `userInteractions.authorId` was added on 2026‑09‑07 and never backfilled
+([§5](#5-data-model)): rows older than that are invisible to every `by_author` read, so they contribute nothing to any
+"received" tally, nothing to `listPeopleIInteractedWith` (no counterpart to group by) and nothing to the snapshot's
+poster attribution. They still carry a `userId`, so `tallySiteActors` counts them on the site interactor side.
+
+### In-app notifications (R23)
+
+One `notifications` row per **received** reaction or comment, written in the **same transaction** as the counter patch
+and the `userInteractions` insert — `incrementCommentCount` / `incrementLikeCount` (`convex/interactions.ts`) insert it
+right after the log row, so the inbox, the counters and the log can never disagree. The write is skipped when the actor
+is the post's author (self-interactions never notify), and a repeat reaction can never notify either (the `reactedAt`
+dedupe returns before any write). A comment row carries the flattened 140-char excerpt (`lib/recap.excerpt`); a
+reaction row carries the reaction value.
+
+Read paths live in `convex/notifications.ts` — the in-app inbox. That filename belonged to the transactional billing
+mailer until R23; the mailer is now `convex/billingNotices.ts` (rename note below).
+
+- **`listMine({ sessionToken, paginationOpts })`** — the inbox, newest first through `by_recipient_and_created_at`.
+  The client-supplied `numItems` is clamped to `[1, 100]` (`clampHistoryPageSize`, shared with history and the
+  members directory) before `.paginate`.
+  Actor and post are joined per unique row at read time; a post that is hidden, soft-deleted or gone entirely comes
+  back with `removed: true` rather than dropped (the History treatment), so the row is never a blank. A banned or
+  pending-deletion actor's page row drops from the inbox (the stored row itself stays, ready for an unban).
+- **`getUnreadCount({ sessionToken })`** — a bounded `.take(100)` over `by_recipient_and_read_at`; the bell renders
+  "9+" past nine.
+- **`getLatest({ sessionToken })`** — the newest row only (actor name, kind, post URN/URL and `removed`), the client's
+  toast seed; the post link lets the toast open the post on click.
+- **`markRead({ sessionToken, ids })`** — idempotent, and ownership-checked: ids pass `normalizeId` first, and a row
+  that is not the caller's own (or is already read) is a no-op, so a foreign id can never mark another member's inbox.
+- **`markAllRead({ sessionToken })`** — marks one **100-row** batch of the caller's unread rows and, when the batch
+  fills, schedules `internal.notifications.markAllReadBatch` (`runAfter(0)`, the same logic without auth) so the
+  remainder drains in fresh transactions; the caller's own transaction stays bounded and returns after its batch.
+
+Every read path authenticates through `requireAuth`, whose `assertNotBanned` is the **read-time ban filter**: a banned
+member cannot open their inbox (or the bell), while the rows themselves stay in place — a ban never deletes the log.
+
+**The bell, the toast and the page.** `NotificationBell` sits in the `TopBar`: an icon button with the unread badge
+and a popover of the five newest rows (`NotificationRow` — actor avatar, an unread dot on unread rows, actor name,
+action text, comment excerpt and time); clicking a row marks it read and opens the post on
+LinkedIn, with **See all** (`/notifications`) and **Mark all as read** in the footer. The toast fires when `getLatest`
+returns an id newer than the one already seen — the first **resolved** value only **seeds** a ref (`undefined` while
+the query loads is not a resolved value, and a resolved `null` from an empty inbox seeds too), so a reload never
+repeats a toast for the row that was already there and a member's first-ever notification still toasts; when the
+notification has a live post the toast renders as a button that opens that post (`window.open`, new tab). Browser
+notifications are Phase 2, out of this cut. `/notifications`
+(`NotificationsPage`) pages 20 at a time, highlights unread rows, draws the **"New since your last visit"** divider
+above the first unread row, offers **Mark all as read**, and points an empty inbox back to the feed; a `removed` row
+renders without a link.
+
+**Retention.** The existing `enforce data retention` cron (`privacy/retention.ts`) purges notifications older than **180
+days** in its fourth sweep (`by_created_at`, 100-row batches). The inbox is a convenience copy; the
+`userInteractions` log itself is kept.
+
+**The file rename.** The transactional billing email actions used to live in `convex/notifications.ts`. R23 renamed
+that file to **`convex/billingNotices.ts`** so the in-app inbox could take the obvious name — the mailer logic itself
+is untouched, and every call site moved in the same change: `http.ts` (trial ending), `stripe.ts` (trial converted),
+`interactions.ts` (trial near-end and post-cap), `billingNode.ts` (duplicate canceled), plus the milestone test. No
+compatibility alias.
 
 ### Rate limiting (`lib/rateLimit.ts` + `@convex-dev/rate-limiter`)
 
@@ -3806,23 +4057,27 @@ RELOGIN[Re-login rotates sessionToken] -. stored token no longer matches .-> SEL
 
 ## 13. Scheduled Jobs (Crons)
 
-`convex/crons.ts` is the **only** file Convex reads for scheduled work. The post‑ingest jobs and the survival‑snapshot
-rebuild run at fixed wall‑clock times in UTC (`crons.cron`); the feed‑engagement refresh, session/OAuth cleanup,
-account‑deletion, and retention jobs run on fixed intervals from deploy time (`crons.interval`).
+`convex/crons.ts` is the **only** file Convex reads for scheduled work. The post‑ingest jobs, the survival‑snapshot
+rebuild, the ranking snapshots and the activity digest run at fixed wall‑clock times in UTC (`crons.cron`); the
+feed‑engagement refresh, session/OAuth cleanup, account‑deletion, and retention jobs run on fixed intervals from deploy
+time (`crons.interval`).
 
 | Cron name                      | Schedule            | Target                                             | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |--------------------------------|---------------------|----------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `sync LinkedIn posts`          | daily **03:00 UTC** | `jobs/syncPostsApify.syncAllPostsViaApify`         | Apify sync **iff** `apifySyncEnabled` (else no‑op). Cursor‑paged fan‑out over active subscribers (20/invocation, self‑reschedules until `isDone`; status written after every page with the running failed count). Ingests each active subscriber's latest posts (profile scrape) and inserts new rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `rebuild survival snapshots`   | daily **03:15 UTC** | `jobs/survivalSnapshot.rebuildSurvivalSnapshots`   | Rebuild the 7‑ and 28‑day admin Survival panel aggregates (`survivalSnapshots`, one row per window): pages users per window (filters each page by `createdAt >= since` and walks to `isDone` — backdated signups break `createdAt` monotonicity), repeats the panel's five bounded per‑user reads, runs `summarizeCohort` / `payingByTier`, and replaces the window's row. See [§12](#12-admin--moderation).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `rebuild 7d ranking snapshot`  | daily **03:30 UTC** | `jobs/rankingSnapshot.rebuildRankingSnapshots`     | Rebuild the 7‑day site‑wide ranking board (`rankingSnapshots`, one row per generation): one bounded pass reads the newest 10,000 `userInteractions` + `posts` rows, tallies made‑side interactions (excluding `ai_draft` and self) and window posters (excluding hidden/soft‑deleted posts), writes the top 100 ids per board plus the full counts distributions and `partial`, then keeps the newest 4 generations (`window: '7d'`). See [§11](#11-feed--engagement).                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `rebuild 30d ranking snapshot` | daily **03:35 UTC** | `jobs/rankingSnapshot.rebuildRankingSnapshots`     | Same rebuild for the 30‑day board (`window: '30d'`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `refresh feed engagement`      | every **30 min**    | `jobs/refreshFeedEngagement.refreshFeedEngagement` | Refresh `likeCount`/`commentCount` on **all feed‑eligible posts** (`inFeed=true`, `.take(500)`) via **one batched Apify run** — `targetUrls` = each post's URL (`sourceUrl` or a `/feed/update/{urn}/` reconstruction). Same `isApifyPostSyncEnabled` gate as the daily sync, so it is **dev/local‑only** (Apify dormant in prod). Counts‑only (`scrapeComments`/`scrapeReactions` off); matches results back by `shareUrn` and re‑evaluates `interactionLimitReached` from the refreshed counts (`applyEngagementCounts`), so a post that crosses its cap on external growth drops out of the feed. Items with no `engagement` object are skipped (never overwrites real counts with 0). ponytail: `run‑sync` blocks per tick — chunk `targetUrls` if a feed ever exceeds a few hundred posts.                                                                                              |
 | `process post queue`           | daily **04:00 UTC** | `jobs/processQueue.processPostQueue`               | Promote queued posts when authors regain weekly capacity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `send activity digests`        | daily **10:00 UTC** | `jobs/digest.sendDueDigests`                       | R24 3-day activity digest email: pages `users` (50/invocation, self-reschedules), filters with `lib/digest.isDigestDue` (email present, `digestEmailsEnabled !== false`, not banned, no `deletionScheduledAt`, `lastDigestAt` at least 3 days old), builds the member's 3-day tallies and reads the newest `7d` `rankingSnapshots` generation for site tops + position/movement, **skips when `made + received === 0`**, sends the localized digest through Resend with one-click `List-Unsubscribe` headers, and stamps `lastDigestAt` only on success. **Logs and skips the whole sweep when `UNSUBSCRIBE_SECRET` is unset** (no digest without a working opt-out). See [§8](#8-subscriptions--billing) and [§16](#16-environment-variables).                                                                                                                                              |
 | `reconcile MOTD windows`       | every **5 min**     | `motd/motd.reconcileMotdWindows`                   | Materialize MOTD schedule transitions into the `enabled` flag (enable a reached `startAt`, disable a passed `expiresAt`; bounded `.take(50)` per state; a quick-toggle disable clears `startAt`/`expiresAt` first so it is not re-enabled) so `getActiveMotd` stays wall-clock-free. See [§12B](#12b-message-of-the-day-motd).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`                   | Purge expired sessions in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`                | Purge expired CSRF nonces in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `cleanup expired auth codes`   | every **1h**        | `sessions.deleteExpiredAuthCodes`                  | Purge expired 2‑minute login codes in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions`         | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `refresh LinkedIn tokens`      | every **6h**        | `linkedin/tokenRefresh.refreshExpiringTokens`      | Renews tokens entering their pre-expiry window (`tokenExpiresAt` in `[now, now+7d)` **and** a refresh token on file) via `linkedin.oauth.refreshAccessToken` + `linkedin.auth.updateTokens`. Reads via `by_token_expiry`, **cursor-paginated** (≤100/page, mirrors `migrations/backfillFeedFields.ts`'s pattern) rather than a single `.take(100)` snapshot — the cursor is captured before any refresh attempt and advances every run regardless of per-user outcome, so a full 6h tick pages through the **entire** pre-expiry window even if rows near the front keep failing. Each user's refresh is try/caught independently (one `invalid_grant` skips that user, never aborts the batch or stalls the cursor). **Runs more often than `enforce data retention` below on purpose** — see ordering note. Best-effort/mostly dormant in practice: see [§7](#7-authentication--identity). |
-| `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`           | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit sweeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`           | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); purge notifications older than **180 days**; flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit/notification sweeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 > **Ordering: refresh before retention.** `refresh LinkedIn tokens` only acts on tokens that are **not yet** expired
 > (the pre-expiry window); `enforce data retention` only nulls tokens that **already are** expired. Because the
@@ -3831,6 +4086,10 @@ account‑deletion, and retention jobs run on fixed intervals from deploy time (
 > well inside retention's 24h cadence — so a refreshable token cannot be nulled by retention before the refresh
 > cron has had a chance at it. Retention itself never attempts a refresh; it stays a pure minimization/cleanup job
 > (see [§13B](#13b-privacy--compliance)).
+
+> **Ordering: ranking boards after the survival panel.** The two ranking rebuilds run at 03:30 / 03:35 UTC, after the
+> 03:15 `rebuild survival snapshots` (which itself follows the 03:00 post sync), so the admin funnel numbers and the
+> member‑facing boards move at the same predictable time every day.
 
 ---
 
@@ -3921,7 +4180,7 @@ flowchart TD
   See [§16](#16-environment-variables).
 - **Transactional billing email.** Three billing notices are sent to `users.email` — trial near-end (40 of 50), trial
   ending (3 days before day 7), and duplicate-subscription cancelled — all built in `convex/lib/billingEmails.ts` and
-  delivered by `convex/notifications.ts` (see [§8](#8-subscriptions--billing)). Legal basis: **performance of a
+  delivered by `convex/billingNotices.ts` (see [§8](#8-subscriptions--billing)). Legal basis: **performance of a
   contract** (and, for the pre-charge reminders, the card-network trial rules that require the amount, the date and the
   cancellation route to be stated before the first charge) — **not** consent, and **not** marketing. They are therefore
   **not** gated on the `marketing` consent purpose and a member cannot opt out of them while holding a subscription;
@@ -4000,7 +4259,7 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
 - `processAccountDeletions` (daily cron) erases accounts past their grace window, **one account per invocation**. The
   pure `cascadeDeleteUser` deletes up to a bounded batch of rows **per table per pass** — every owned row (posts,
   postQueue, subscriptions, sessions, featuredPostUsage, planLimits, consentRecords, dataExportRequests + their storage
-  files, trialCounters) — and **pseudonymizes
+  files, trialCounters, notifications by recipient **and** by actor) — and **pseudonymizes
   `auditLogs`** (nulls `targetUserId`/`actorId`, keeps action/metadata). **Posts are handled specially**: before a post
   is deleted, the cross-user rows referencing it (`userInteractions`/`userPostState` from OTHER users who reacted or
   commented — located via each table's `by_post` index) are drained first, and the post is only deleted once none
@@ -4018,6 +4277,17 @@ Backend for self-service **access/portability** and **erasure**. Both resolve id
   is, by construction, attached to that author's post, so the existing `by_post` drain above removes it when the post
   goes; and every row the _actor_ owns is already removed by the `by_user` drain. The two existing paths therefore cover
   the new field between them — the DSR export is likewise unchanged, since it exports the member's rows via `by_user`.
+- **Notifications are covered on both sides (R23).** `privacy/export.ts` ships `notificationsReceived` (the member's
+  inbox, by `recipientId`) and `notificationsActed` (the rows their own engagement wrote into other members' inboxes,
+  by `actorId`); `privacy/deletion.ts` drains both indexes — its two `OWNED` entries share a table name and differ only
+  by index.
+- **The digest preference and its objection trail are covered (R24).** `users.digestEmailsEnabled` and
+  `users.lastDigestAt` live on the user doc, so the existing row-level DSR export (`getExportUser` returns the whole
+  `users` doc, minus the token secrets redacted by `buildExportBundle`) and the erasure cascade cover them with **no new
+  code path**. Preference changes and one-click unsubscribes append `auditLogs` rows (`digest_preference_changed`,
+  `digest_unsubscribed_email`); `consentRecords` gains no new purpose because an opt-out preference is not consent. The
+  digest email itself is never stored by Link Into The SSI — only the send stamp. See
+  [§8](#8-subscriptions--billing) for the sweep and unsubscribe flow.
 
 ```mermaid
 flowchart TD
@@ -4075,19 +4345,20 @@ and [§15](#15-frontend--landing-site-landing).
 
 **Data retention & dormancy** — `convex/privacy/retention.ts`:
 
-The `enforceDataRetention` cron (daily — see [§13](#13-scheduled-jobs-crons)) runs four sequential batched sweeps using
+The `enforceDataRetention` cron (daily — see [§13](#13-scheduled-jobs-crons)) runs five sequential batched sweeps using
 pure predicate helpers for testability. The token-expiry and dormancy sweeps read through indexes (`by_token_expiry`,
 `by_deletion_and_last_login`) rather than scanning the whole `users` table, and each processed row leaves its index
 range (token fields incl. `tokenExpiresAt` cleared; dormant rows gain `deletionScheduledAt`). The cron
-**self-reschedules** (`runAfter(0)`) whenever the token or audit sweep fills its batch, so a large backlog drains across
-runs; rescheduling keys only off those two strictly-draining sweeps to guarantee termination (the export and dormancy
-sweeps make bounded progress per run):
+**self-reschedules** (`runAfter(0)`) whenever the token, audit or notification sweep fills its batch, so a large
+backlog drains across runs; rescheduling keys only off those three strictly-draining sweeps to guarantee termination
+(the export and dormancy sweeps make bounded progress per run):
 
 | Sweep                 | Predicate                                                                                                     | Action                                                                                                                                             |
 |-----------------------|---------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
 | LinkedIn token expiry | `isTokenExpired(user)` — `tokenExpiresAt` in the past                                                         | Nulls `linkedinAccessToken`, `linkedinRefreshToken`, `tokenExpiresAt`, `tokenScope` on the `users` row.                                            |
 | Export file expiry    | `isExportExpired(req)` — status `ready` + `expiresAt` in the past                                             | Deletes the file from Convex storage, sets status → `expired`.                                                                                     |
 | Audit log purge       | `isAuditExpired(log)` — older than ~24 months                                                                 | Deletes the `auditLogs` row entirely.                                                                                                              |
+| Notification purge    | `createdAt` older than 180 days (R23)                                                                         | Deletes the `notifications` row; the `userInteractions` log is kept.                                                                               |
 | Dormancy              | `isDormant(user)` — `lastLoginAt` (or `_creationTime`) >24 months ago **and** no active/trialing subscription | Sets `deletionScheduledAt` (+30 days from now) + `deletionReason='dormancy'` and sends a dormancy-warning email in the member's resolved language. |
 
 The dormancy path **reuses the Phase 2a deletion cascade**: once `deletionScheduledAt` is set,
@@ -4105,8 +4376,11 @@ flowchart TD
     EXP -->|no| AUD
     DELFILE --> AUD["Sweep 3: isAuditExpired? (>24mo)"]
     AUD -->|yes| DELLOG["delete auditLogs row"]
-    AUD -->|no| DORM
-    DELLOG --> DORM["Sweep 4: isDormant? (>24mo inactive, no sub)"]
+    AUD -->|no| NOTIF
+    DELLOG --> NOTIF["Sweep 4: notification older than 180d?"]
+    NOTIF -->|yes| DELNOTIF["delete notifications rows"]
+    NOTIF -->|no| DORM
+    DELNOTIF --> DORM["Sweep 5: isDormant? (>24mo inactive, no sub)"]
     DORM -->|yes| FLAG["set deletionScheduledAt=+30d, reason=dormancy + warning email"]
     DORM -->|no| END["done"]
     FLAG --> GRACE{"within 30d grace?"}
@@ -4237,19 +4511,23 @@ sibling of `<Routes>` resets `window.scrollTo(0, 0)` on every pathname change (s
 `#anchor`) — the declarative router doesn't restore scroll on its own, and the app uses a page-scroll model (the window
 is the scroller; see AppShell), so without it a scrolled feed would carry its scroll into the next page.
 
-| Path            | Page              |                                                                           Guarded                                                                            |
-|-----------------|-------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| `/auth/start`   | `AuthStartPage`   |                               – (PKCE entry: generates verifier/challenge → `beginOAuthLogin` → Convex `/auth/linkedin?vc=…`)                                |
-| `/auth/success` | `AuthSuccessPage` | – (pre-bundle script captures `#code=` on this route only → SPA redeems with the stored verifier → stores token + plan/interval → clear signedOut → `/feed`) |
-| `/feed`         | `FeedPage`        |                                                                              ✓                                                                              |
-| `/my-posts`     | `MyPostsPage`     |                                                                              ✓                                                                              |
-| `/recap`        | `RecapPage`       |                                                                              ✓                                                                              |
-| `/history`      | `HistoryPage`     |                                                                              ✓                                                                              |
-| `/settings`     | `SettingsPage`    |                                                                              ✓                                                                              |
-| `/billing`      | `BillingPage`     |                                                                              ✓                                                                              |
-| `/admin`        | `AdminPage`       |                     ✓ (auth + route‑level `RequireAdmin`, so `AdminPage` never mounts for a non‑admin; server‑gated; not linked in nav)                     |
-| `/privacy-data` | `PrivacyDataPage` |                                                                              ✓                                                                              |
-| `*`             | → `/feed`         |                                                                              –                                                                               |
+| Path             | Page                |                                                                           Guarded                                                                            |
+|------------------|---------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------:|
+| `/auth/start`    | `AuthStartPage`     |                               – (PKCE entry: generates verifier/challenge → `beginOAuthLogin` → Convex `/auth/linkedin?vc=…`)                                |
+| `/auth/success`  | `AuthSuccessPage`   | – (pre-bundle script captures `#code=` on this route only → SPA redeems with the stored verifier → stores token + plan/interval → clear signedOut → `/feed`) |
+| `/feed`          | `FeedPage`          |                                                                              ✓                                                                              |
+| `/my-posts`      | `MyPostsPage`       |                                                                              ✓                                                                              |
+| `/recap`         | `RecapPage`         |                                                                              ✓                                                                              |
+| `/history`       | `HistoryPage`       |                                                                              ✓                                                                              |
+| `/people`        | `PeoplePage`        |                                                                              ✓                                                                              |
+| `/rankings`      | `RankingsPage`      |                                                                              ✓                                                                              |
+| `/notifications` | `NotificationsPage` |                                                                              ✓                                                                              |
+| `/settings`      | `SettingsPage`      |                                                                              ✓                                                                              |
+| `/billing`       | `BillingPage`       |                                                                              ✓                                                                              |
+| `/admin`         | `AdminPage`         |                     ✓ (auth + route‑level `RequireAdmin`, so `AdminPage` never mounts for a non‑admin; server‑gated; not linked in nav)                     |
+| `/privacy-data`  | `PrivacyDataPage`   |                                                                              ✓                                                                              |
+| `/unsubscribed`  | `UnsubscribedPage`  |                                                – (public — the digest unsubscribe link lands here; no login)                                                 |
+| `*`              | → `/feed`           |                                                                              –                                                                               |
 
 `RequireAuth` calls `getMe`; the interception order is:
 
@@ -4464,6 +4742,36 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
   gone entirely, so a deleted target never renders as a blank row. The timestamp is a real `<time dateTime=…>` carrying
   `timeAgo` (`lib/relativeDay.ts`) with the absolute date in `title`. **No analytics event by design** — reviewing your
   own log is not a funnel step (spec §10).
+- **PeoplePage** (`/people`, R22) — the interaction graph read back as people, three tabs (`people.tabs.*`); the initial
+  tab comes from the `?tab=received|made|all` query param (the `/rankings` deep links), defaulting to `received`.
+  **Interacted with you** renders `interactions.listInteractionsByPost` in `PeopleAccordion`: one row per post (an
+  excerpt, the post's total (`people.count`), a `people.postRemoved` badge when hidden/soft-deleted, the per-actor
+  reaction/comment tally with a comment or reaction glyph (`MessageSquare` / `ThumbsUp`, aria-hidden) and `timeAgo`
+  when expanded, and a `feed.viewOnLinkedIn` link for live posts). **You interacted with** renders
+  `listPeopleIInteractedWith` as a flat list with counts and `timeAgo`; **All members** renders the `users.listMembers`
+  directory (50 per page via `usePaginatedQuery`, sorted alphabetically per loaded page with `localeCompare`, with a
+  `feed.loadMore` button while more members remain). A debounced search box (300 ms, `people.searchLabel`) switches
+  that tab to `api.search.search`'s people results once the trimmed query reaches two characters (`people.emptySearch`
+  when nothing matches); below the minimum it falls back to the paginated directory. The two personal tabs share the
+  recap's `WindowToggle` (7d / 30d, `now` latched once to `floorToHour(Date.now())`); `people.truncated` appears under
+  a tab whose 2000-row read ceiling was hit. No analytics event; copy lives under `people.*`.
+- **RankingsPage** (`/rankings`, R22) — `rankings.getSiteRankings` + `rankings.getMyRankings`. **You** shows the
+  caller's top-5 received / made lists (`RankingList` under `rankings.toYou` / `rankings.byYou`), each title a link to
+  the matching `/people?tab=…` tab; **Site** opens with the `rankings.boardCaption` line (window name from
+  `recap.window.*`) and, only when the snapshot was truncated, `rankings.partial`, then shows the
+  stored top posters and top interactors (`rankings.topPosters` / `rankings.topInteractors`) — `RankingList` gives the
+  top three a filled rank chip and highlights the caller's own row — followed by the position line ("You are #N" or
+  `rankings.noPosition`), the movement sentence (`rankings.movementUp` / `movementDown` / `movementSame`), and the
+  opt-out ghost button (`users.setLeaderboardOptOut`, labelled `rankings.optOut` / `rankings.optIn`); `people.truncated`
+  appears under the **You** block when the personal 2000-row read was truncated. Same 7d / 30d toggle. With no snapshot
+  yet the site section renders `rankings.empty`; a failed toggle toasts `rankings.updateFailed`. No analytics event;
+  copy lives under `rankings.*`.
+- **NotificationsPage** (`/notifications`, R23) — the full inbox via `usePaginatedQuery` on `notifications.listMine`
+  (20 per page, `feed.loadMore`). Newest first, unread rows highlighted, each row the shared `NotificationRow` (actor
+  name, action text, the comment excerpt when present, `timeAgoDetailed`, a `notifications.removed` badge and no link
+  when the post is gone); the `notifications.newSince` divider sits above the first unread row, and the header carries
+  **Mark all as read** (`notifications.markAllRead`). An empty inbox points back to the feed. Copy lives under
+  `notifications.*`.
 - **SettingsPage** — `getMe` + `updateProfile` + `refreshProfileFromLinkedIn` + `setCommentLanguage` +
   `setPostVisibility` (the standalone LinkedIn‑identity section was **removed** — the auto‑derived vanity is
   internal‑only now, seeding Apify; the "Refresh from LinkedIn" button remains gated on it). Industry and country are
@@ -4479,7 +4787,13 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
   model). Starter/growth instead see the shared `UpgradeAtLimit limit="visibility"` (R08) naming the next tier. Below
   it, Pro/contact also see a mirror **"What you see in your feed"** card — same two chip pickers + Save, writing
   `feedFilterIndustries`/`feedFilterCountries` via
-  `setFeedFilter` (the same fields the Feed-page `FeedFilterPanel` writes, so the two stay in sync). Last on the page,
+  `setFeedFilter` (the same fields the Feed-page `FeedFilterPanel` writes, so the two stay in sync). Above them sits the
+  **Emails** section (`EmailPreferences`, R24): the **3-day activity digest** toggle (default on) and the **Appear in
+  rankings** toggle (default on), each saving immediately through `users.setDigestEmailsEnabled` /
+  `users.setLeaderboardOptOut` and rendering the server value from `users.getEmailPreferences`; each toggle keeps its
+  own optimistic checked value that reverts on rejection and its own saving/error state, so one failing save disables
+  only its own box, plus a link to the Privacy & Data consents — the in-platform half of the digest unsubscribe. Last
+  on the page,
   for **every** tier, the **Invite a peer** section (**R19**) at the stable anchor **`id="invite"`** — this is the one
   place the invite link exists, and the recap footer and the caught-up feed state both deep-link to **
   `/settings#invite`**, which a `useLocation()` effect scrolls into view (keyed on `hash` _and_ `me`, because the
@@ -4780,13 +5094,23 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
       `api.privacy.export.getExportDownloadUrl` once ready. (3) **Delete account**: a type‑`DELETE`
       confirm `Modal` wrapping `api.privacy.deletion.requestAccountDeletion`; on success replaces the section with a
       "scheduled for {date}" info panel. Cross‑reference: §13B (backend mutations/actions these calls hit).
+- **UnsubscribedPage** (`/unsubscribed`, **public** — no login) — the landing page for the digest unsubscribe link
+  (R24). The Convex HTTP endpoints `GET`/`POST /unsubscribe/digest?token=…` on `.convex.site` verify the stateless HMAC
+  token; `POST` (the mail client's one-click) sets `users.digestEmailsEnabled = false` (audited
+  `digest_unsubscribed_email`) and redirects here with `?status=ok`, while `GET` renders a prefetch-safe confirmation
+  page whose form POSTs back. A bad token yields `status=invalid`, and `status=unavailable` when `UNSUBSCRIBE_SECRET` is
+  not set. The page reads `status`, never echoes the token, and offers **Start receiving again** (a `/settings` link —
+  re-enabling requires a login). Copy lives under `unsubscribed.*`. See [§8](#8-subscriptions--billing) for the full
+  flow
+  and [§16](#16-environment-variables) for the secret.
 
 ### Reusable components
 
 `AppShell` (authenticated shell: persistent sidebar on desktop, modal drawer on mobile) composed of:
-`Sidebar` (feed / my‑posts / **recap** / **history** in the Main group, billing / settings / **privacy** in Manage —
-all from the shared `navItems.ts`; **no admin link**), `TopBar` (search, theme toggle,
-language menu, user menu trigger), `UserMenu` (profile & settings + sign‑out via
+`Sidebar` (feed / my‑posts / **recap** / **history** / **people** / **rankings** in the Main group, billing / settings /
+**privacy** in Manage — all from the shared `navItems.ts`; **no admin link**), `TopBar` (search, theme toggle,
+language menu, user menu trigger, **notification bell** — R23: unread badge + five-row preview popover over
+`notifications.listMine`, see [§11](#11-feed--engagement)), `UserMenu` (profile & settings + sign‑out via
 `performSignOut`), `LanguageMenu` (Radix dropdown replacing the old native `<select>`),
 `PostComposer` (dark/light themes, `atLimit`, its `limitHint` a `ReactNode` so callers can pass `UpgradeAtLimit`),
 `UpgradeAtLimit` (R08 — one sentence + one link, shown at the moment a member actually hits a cap: reads `getMe`
@@ -4851,7 +5175,9 @@ policy update before reaching the app — see the `RequireAuth` interception ord
 `me.consentPromptedAt` is unset; presents **Communication & analytics preferences** — marketing and analytics toggles,
 both **OFF by default** — and a "Save & continue" button that calls
 `api.privacy.consent.completeConsentPrompt({ sessionToken, marketing, analytics })` then
-`window.location.reload()`; new users whose `acknowledgedPolicyVersion` is pre-stamped at signup but `consentPromptedAt`
+`window.location.reload()`; below those toggles two note lines explain that service/security/legal processing happens
+regardless of the choices and — R24 — that the **3-day activity digest is on by default** and can be turned off in
+Settings → Emails; new users whose `acknowledgedPolicyVersion` is pre-stamped at signup but `consentPromptedAt`
 is unset hit this prompt on first login — see the `RequireAuth`
 interception order above and §13B),
 `FirstPostPromptScreen` (first-login full-screen **skippable** onboarding step shown by `RequireAuth` when
@@ -4990,7 +5316,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5788,7 +6114,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `LINKEDIN_CLIENT_ID`             |                   ✓                    | `linkedin/oauth.ts`                                                        | OAuth client id (authorize URL + token exchange **and** the token-refresh call — no separate var).                                                                                                                                                                                                                                                                                                                                        |
 | `LINKEDIN_CLIENT_SECRET`         |                   ✓                    | `linkedin/oauth.ts`                                                        | OAuth client secret (server‑side token exchange **and** refresh — `refreshAccessToken` reuses the same env pair, nothing new was added for the refresh cron).                                                                                                                                                                                                                                                                             |
 | `LINKEDIN_REDIRECT_URI`          |                   ✓                    | `linkedin/oauth.ts`                                                        | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                                                                                                                                                                                                                                                              |
-| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing*.ts`, `notifications.ts`                               | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs. Production: `https://www.app.linkintothessi.com` with no trailing slash.                                                                                                                                                                                                                                                                                  |
+| `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing*.ts`, `billingNotices.ts`, `jobs/digest.ts`            | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs and the `/unsubscribed` redirect target. Production: `https://www.app.linkintothessi.com` with no trailing slash.                                                                                                                                                                                                                                          |
 | `STRIPE_STARTER_PRICE_ID`        |              ✓ (billing)               | `lib/stripePrices.ts`                                                      | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                                                                                                                                                                                                                                                   |
 | `STRIPE_GROWTH_PRICE_ID`         |              ✓ (billing)               | `lib/stripePrices.ts`                                                      | Monthly price id → `growth` tier.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `STRIPE_PRO_PRICE_ID`            |              ✓ (billing)               | `lib/stripePrices.ts`                                                      | Monthly price id → `pro` tier.                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -5801,7 +6127,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `APIFY_API_TOKEN`                |                ✓ (sync)                | `jobs/syncPostsApify.ts`, `jobs/refreshFeedEngagement.ts`                  | Bearer token for Apify REST. If unset, sync no‑ops.                                                                                                                                                                                                                                                                                                                                                                                       |
 | `APIFY_TASK_ID`                  |                ✓ (sync)                | `jobs/syncPostsApify.ts`, `jobs/refreshFeedEngagement.ts`                  | Apify actor (`harvestapi~linkedin-profile-posts`) — **already a real value in the `.example`, not a placeholder; no change needed.**                                                                                                                                                                                                                                                                                                      |
 | `APIFY_TASK_ID_PROFILE_SCRAPE`   |           ✓ (profile scrape)           | `jobs/scrapeProfileApify.ts`                                               | LinkedIn **profile** scraper actor (country/location/primary-locale enrichment). **Already a real value in the `.example`; no change needed.**                                                                                                                                                                                                                                                                                            |
-| `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                                                             | Resend API key for transactional email (DSR confirmations + breach notices).                                                                                                                                                                                                                                                                                                                                                              |
+| `RESEND_API_KEY`                 |        – (email no‑ops if unset)        | `lib/email.ts`                                                             | Resend API key for transactional email (DSR confirmations, breach notices, billing-lifecycle notices and the R24 activity digest).                                                                                                                                                                                                                                                                                                        |
 | `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                                                             | Bare From‑address for transactional email (e.g. `noreply@linkintothessi.com`); `sendEmail` sends it as `Link Into The SSI <address>`, and a value that already carries a display name is kept as-is.                                                                                                                                                                                                                                      |
 | `CONVEX_DEPLOYMENT`              |                ✓ (CLI)                 | Convex CLI                                                                 | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)                                                  | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`).                                                                                                                                                                                                                                     |
@@ -5809,6 +6135,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `OPENROUTER_API_KEY`             |  ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`                                                  | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                                                                                                                                                                                                                                                    |
 | `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                                                  | Optional model slug override. Provider routing (ZDR + no-data-collection pin governs selection, no price-floor suffix) is enforced in code, not via env. Blank ⇒ falls back to this valid, verified-live default (not broken — see [§11A](#11a-ai-reaction--comment-assistance) for the DeepInfra/Google zero-data-retention caveat: Google logs Gemma prompts/responses for abuse-monitoring independent of DeepInfra's ZDR commitment). |
 | `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                                                  | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                                                                                                                                                                                                                                                         |
+| `UNSUBSCRIBE_SECRET`             |       – (digest no‑ops if unset)        | `http.ts`, `jobs/digest.ts`                                                | HMAC-SHA256 key for the stateless digest unsubscribe tokens (`lib/unsubscribeToken.ts`). **Unset ⇒ the digest sweep logs and sends nothing** — no digest goes out without a working opt-out — and the public endpoint redirects to `/unsubscribed?status=unavailable`. Set it in the Convex dashboard before enabling the digest.                                                                                                         |
 
 > **Stripe component/SDK versions (plan 023, 2026-09-10).** `@convex-dev/stripe` `^0.1.6` + `stripe` `^22.2.1`
 > (lockfile resolves `22.6.1`); Node ≥18 required and met. No `apiVersion` is set on the direct `new Stripe(key)`
@@ -6170,6 +6497,14 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   send‑failure log in `convex/lib/email.ts` ([§13B](#13b-privacy--compliance)). The **same redactor feeds Sentry's
   `beforeSend`**, so both sinks share one redaction path.
 
+- **The digest unsubscribe `POST` is the only public, unauthenticated state‑changing route.** `GET`/`POST`
+  `/unsubscribe/digest?token=…` (`http.ts`) accepts a stateless HMAC-SHA256 token over `digest:<userId>`
+  (`lib/unsubscribeToken.ts`): base64url payload + signature, compared in constant time, deliberately never expiring.
+  It grants no session and no read. `POST`'s only effect is `digestEmailsEnabled = false` plus one `auditLogs` row, and
+  its response is a redirect carrying only a status code — never the token or any member data; `GET` is render-only (a
+  confirmation form, no state change) so a link prefetch cannot unsubscribe anyone. `UNSUBSCRIBE_SECRET` unset makes
+  the endpoint answer `status=unavailable` and the sweep refuse to send (see [§8](#8-subscriptions--billing)).
+
 ```mermaid
 flowchart TD
     subgraph Dev["Dev — native, no sub-processor"]
@@ -6228,6 +6563,13 @@ controls described in [§13B](#13b-privacy--compliance):
 | [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md)     | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA)                                        |
 | [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook (72-hour notification)                                     |
 | [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37)                                          |
+
+**R24 digest compliance.** The 3-day activity digest is processed under **legitimate interest** with a self-service
+right to object (Settings → Emails, or the one-click unsubscribe carried by every digest) and is disclosed in the
+public Privacy Policy and the first-login consent prompt in all three locales; the ROPA covers it as **Activity 16**,
+alongside the R22 rankings and the R23 notifications (Activities 15/16). Every digest footer now carries the
+controller's fiscal postal address (spec §11 item 1 resolved, `includePostalAddress: true`); the remaining compliance
+item is lawyer review of the policy and consent copy, tracked in `docs/compliance/GAP-ASSESSMENT.md`.
 
 See [`docs/compliance/README.md`](compliance/README.md) for the index and the consolidated human / legal to-do list
 (bracketed placeholders, lawyer sign-off, sub-processor DPA signing, DPO/rep assessment, and the Apify hard gate).
@@ -6385,6 +6727,28 @@ for the record:
 
 LinkedIn MDP/Partner access (unlock mutual‑connections + home‑feed APIs), SSI‑trend analytics dashboard.
 
+**R22 shipped** — the interaction graph (`/people`), personal and site‑wide rankings (`/rankings`), the
+`rankingSnapshots` board and its 03:30 / 03:35 UTC rebuilds (see [§11](#11-feed--engagement) and
+[§13](#13-scheduled-jobs-crons)). The 2000‑row read ceiling is still the bound; if a real read‑cost measurement ever
+shows it being hit, the counter / pair‑table upgrade path is specified in
+`docs/superpowers/specs/2026-09-14-interaction-graph-notifications-digest-design.md` §6 — add denormalized
+per‑counterparty rows (or aggregation cursors) and keep every query signature unchanged. Do not build it before the
+measurement.
+
+**R23 shipped** — the in-app inbox (`notifications` table, `convex/notifications.ts`), the TopBar bell + toast,
+`/notifications`, the billing mailer rename to `convex/billingNotices.ts`, the 180-day retention purge and the DSR
+export/erasure coverage (see [§5](#5-data-model), [§11](#11-feed--engagement) and [§13B](#13b-privacy--compliance)).
+Browser push notifications (service worker + VAPID) remain Phase 2, out of this cut (spec §1).
+
+**R24 shipped** — the 3-day activity digest (`jobs/digest.ts` + the 10:00 UTC sweep, `lib/digestEmails.ts`,
+`lib/unsubscribeToken.ts`, the `SendEmailArgs.headers` passthrough), the `users` digest preference and send stamp
+(`digestEmailsEnabled`, `lastDigestAt`), the public `GET`/`POST /unsubscribe/digest` endpoint and `/unsubscribed` page,
+the Settings → Emails section, the Privacy Policy + consent-prompt additions in en/pt/es, and the compliance-doc sweep
+(see [§5](#5-data-model), [§8](#8-subscriptions--billing), [§13](#13-scheduled-jobs-crons),
+[§14](#14-frontend--authenticated-app-app) and [§13B](#13b-privacy--compliance)). One item remains open for Henriko
+(spec §11): the lawyer review of the policy/consent copy — the CAN-SPAM postal address now ships in every digest footer
+(`includePostalAddress: true`).
+
 ---
 
 ## 20. Glossary
@@ -6416,18 +6780,20 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                                                                      | [§5 Data Model](#5-data-model) (+ ER diagram)                                                                                                                                                                                                                                                                                            |
 | Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                                                                      | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                                                                                                                                                                                                                                                               |
-| Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `notifications.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                                                                             | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                                                                                                                                                                                                                                                |
+| Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `billingNotices.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                                                                            | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                                                                                                                                                                                                                                                |
 | Transactional emails — shell, builders and language resolution (`lib/emailLayout.ts`, `lib/html.ts`, `lib/billingEmails.ts`, `privacy/emails.ts`, `feedback/emails.ts`, `lib/checkoutCopy.ts`, `app/src/hooks/useLanguageSync.ts`)                                                                              | [§8](#8-subscriptions--billing), [§12A](#12a-feedback), [§13B](#13b-privacy--compliance)                                                                                                                                                                                                                                                 |
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                                                                              | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
 | Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                                                                         | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Customer Portal configurations (`convex/lib/portalConfig.ts`, `billingNode.portalConfigurationId` / `portalSession` / `createPortalSession`, the portal block in `scripts/stripe-provision.mjs`)                                                                                                                | [§8](#8-subscriptions--billing) per-tier portal configurations + Dashboard table, [§14](#14-frontend--authenticated-app-app) BillingPage                                                                                                                                                                                                 |
 | Billing scenario runs (`scripts/billing-scenarios.mjs`)                                                                                                                                                                                                                                                         | [§8](#8-subscriptions--billing) the nine scenarios — add one whenever a billing guard, mirror field or webhook effect is added                                                                                                                                                                                                           |
-| Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `notifications.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                                                                           | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
+| Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `billingNotices.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                                                                          | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
 | Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                                                                    | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
 | Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/TrialProvider.tsx`)                                                                                                                                                                 | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                                                                                                                                                                                                                                                |
 | Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                                                                              | [§9](#9-plan-limits-system)                                                                                                                                                                                                                                                                                                              |
 | Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                                                                          | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                                                                                                                                                                                                                                                            |
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                                                                                | [§11](#11-feed--engagement) (+ flows)                                                                                                                                                                                                                                                                                                    |
+| In-app notifications (`convex/notifications.ts`, `schema.ts` `notifications`, the `interactions.increment*` write path, `NotificationBell` / `NotificationRow` / `NotificationsPage`, `privacy/retention.ts` purge, `privacy/export.ts` / `privacy/deletion.ts`)                                                | [§5](#5-data-model), [§11](#11-feed--engagement), [§13B](#13b-privacy--compliance), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                           |
+| 3-day activity digest & email preferences (`jobs/digest.ts`, `lib/digest.ts`, `lib/digestEmails.ts`, `lib/unsubscribeToken.ts`, `http.ts` `/unsubscribe/digest`, `users.digestEmailsEnabled` / `lastDigestAt`, `EmailPreferences.tsx`, `UnsubscribedPage.tsx`, `ConsentPromptScreen.tsx`)                       | [§5](#5-data-model), [§8](#8-subscriptions--billing) digest subsection, [§13](#13-scheduled-jobs-crons), [§14](#14-frontend--authenticated-app-app), [§16](#16-environment-variables) `UNSUBSCRIBE_SECRET`, [§17](#17-security-posture)                                                                                                  |
 | 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `app/src/pages/FeedPage.tsx` hide confirm, `EmptyFeed.tsx`)                                                                                                                         | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
 | AI comment drafting (`convex/ai/*`, `interactions.saveCommentDraft` / `commentOnPost`, `CommentBox`, `PostCard` "View your comment", `HistoryPage` / `RecapPage` draft rows)                                                                                                                                    | [§11A](#11a-ai-reaction--comment-assistance), [§11](#11-feed--engagement), [§5](#5-data-model), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                               |
 | Recap & History (`convex/lib/recap.ts`, `convex/lib/history.ts`, `interactions.getRecap` / `listMyInteractions`, `app/src/pages/RecapPage.tsx`, `app/src/pages/HistoryPage.tsx`)                                                                                                                                | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
@@ -6451,7 +6817,16 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 
 ---
 
-_Last updated: 2026‑09‑11. **AI drafts now count, every card can be hidden behind a confirmation, submitted
+_Last updated: 2026‑09‑14. **R22, R23 and R24 are documented end-to-end.** The interaction graph and rankings, the
+in-app inbox, and the 3-day activity digest now have their schema fields, backend surfaces, crons, routes and
+compliance entries here: `users.digestEmailsEnabled` / `lastDigestAt`, the `jobs/digest` sweep at 10:00 UTC, the
+`lib/digestEmails` builder, `List-Unsubscribe` headers, the public `/unsubscribe/digest` endpoint (GET renders a
+prefetch-safe confirmation page, POST unsubscribes) and `/unsubscribed` page, `UNSUBSCRIBE_SECRET` (unset ⇒ no digest is
+sent), and the ROPA / retention / gap-assessment updates. The CAN-SPAM postal address now ships in every digest footer (
+spec §11 item 1 resolved); the lawyer review remains open (item 2). Sections updated: §5, §8, §13, §14, §16, §17, §19,
+§21._
+
+_Prior: 2026‑09‑11. **AI drafts now count, every card can be hidden behind a confirmation, submitted
 comments are what the box reloads, React keeps its place in a footer that no longer reflows between states, and the tap
 budgets moved to 100/h.** The first
 `generateComment` on a post writes one `userInteractions` row (`kind: 'ai_draft'`, the draft text, no `authorId`) and
@@ -6704,7 +7079,7 @@ The query costs roughly **four indexed reads per cohort member** over the newest
 comment naming the precompute-nightly upgrade path if a 28-day cohort ever passes ~1500 (§12, §14). One new client
 event, `checkout_started`, marks the card-entry step so a card-gate leak reads differently from an activation leak.
 **The post-cap email (R20).** Both counters now flip the cap through one shared `flipCapIfReached`, which patches
-`interactionLimitReached`, recomputes the feed fields and schedules `notifications.sendPostCapReached` — **one flip,
+`interactionLimitReached`, recomputes the feed fields and schedules `billingNotices.sendPostCapReached` — **one flip,
 one email**, because the flip is the edge and a post can only cross it once. The action re-reads everything at send
 time (`convex/lib/postCapNotice.ts`: `shouldSendCapNotice` needs an email, `trialing`/`active`, and no pending cancel;
 `capNoticeMode` picks `upgrade` / `proContact` / `contactCustom`), and every mode sends **exactly one link** — the
@@ -6738,7 +7113,7 @@ never listed here. Locale counts, always with the method: app en/pt/es **373 key
 string leaves, after the three `billing.noTrial*` keys, the two `feed.*NoTrial` keys and `settings.inviteError`), zero
 drift under a recursive key-diff and identical `{{placeholder}}` sets per key, still no automated parity test; the
 landing dictionaries are untouched by this batch. **§16 needs no new environment variable** — the only change there is
-`notifications.ts`
+`billingNotices.ts`
 joining `APP_URL`'s "Used by" list. **Final review, six corrections, all honesty bugs.** `summarizeCohort` now takes a
 `now` and returns three **eligible denominators**, so the panel's shares stop being right-censored — a 7-day cohort no
 longer reports 0 % returned for a reason that is not about behaviour — and a base of `0` reads "–", not "0 %"; the
@@ -6824,7 +7199,7 @@ that the SSI page became a Sales Navigator feature in August 2026; the cancel an
 `finalCta.subheadline` is now "Seven days free. Real engagement from day one." (§15). **The conversion email (R14).**
 `syncUserSubscription` decides it, not a cron: when the incoming webhook moves this subscription row from `trialing`
 to `active` (`isTrialConversion`, evaluated before the row is patched and scheduled after the user doc is), it
-schedules `notifications.sendTrialConverted`, built by the new pure `trialConvertedEmail` and pointing at `/recap`
+schedules `billingNotices.sendTrialConverted`, built by the new pure `trialConvertedEmail` and pointing at `/recap`
 rather than at an upsell. It skips when the member has no email, when the status is no longer `active` at send time,
 when no live subscription row survives, or when nothing at all was recorded during the trial (§8). Locale counts,
 always with the method: app en/pt/es **347 keys with arrays counted once** (357 string leaves), landing **88** (154
@@ -6845,7 +7220,8 @@ site is honoured. `createCheckoutSession` reads every `subscriptions` row and re
 (`ALREADY_SUBSCRIBED` → the Customer Portal), makes `trial_period_days` conditional on `trialEligible(rowCount)`, and
 adds `locale` + `custom_text.submit.message` (pure `lib/checkoutCopy.ts`, three languages) plus `users.language`
 persistence. `bumpTrialInteraction` swapped `.first()` (the OLDEST row — a canceled one after a re‑subscribe) for
-`.collect()` + `pickTrialingSubscription`, and now schedules a 40‑of‑50 notice. New `convex/notifications.ts` (I/O only)
+`.collect()` + `pickTrialingSubscription`, and now schedules a 40‑of‑50 notice. New `convex/billingNotices.ts` (I/O
+only)
 sends three transactional notices built by the pure `lib/billingEmails.ts` with **localized plan names**; both trial
 mailers skip when `subscriptions.cancelAtPeriodEnd` is set, because Stripe keeps `status: 'trialing'` after a mid‑trial
 cancel. `http.ts` gained the price‑snapshot + `cancelAtPeriodEnd` passthrough, duplicate detection on

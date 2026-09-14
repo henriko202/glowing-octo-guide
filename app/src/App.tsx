@@ -13,6 +13,9 @@ import AuthSuccessPage from './pages/AuthSuccessPage'
 import MyPostsPage from './pages/MyPostsPage'
 import RecapPage from './pages/RecapPage'
 import HistoryPage from './pages/HistoryPage'
+import PeoplePage from './pages/PeoplePage'
+import RankingsPage from './pages/RankingsPage'
+import NotificationsPage from './pages/NotificationsPage'
 import AdminPage from './pages/AdminPage'
 import RequireAdmin from './components/RequireAdmin'
 import AppShell from './components/shell/AppShell'
@@ -28,6 +31,7 @@ import ConsentPromptScreen from './components/ConsentPromptScreen'
 import FirstPostPromptScreen from './components/FirstPostPromptScreen'
 import AnalyticsConsentGate from './components/AnalyticsConsentGate'
 import PrivacyDataPage from './pages/PrivacyDataPage'
+import UnsubscribedPage from './pages/UnsubscribedPage'
 import { Toaster } from './components/ui/toast'
 import { POLICY_VERSION } from '../../convex/lib/policy'
 import { LANDING_URL, isSignedOut } from './lib/session'
@@ -140,6 +144,30 @@ export default function App() {
           }
         />
         <Route
+          path="/people"
+          element={
+            <RequireAuth>
+              <PeoplePage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/rankings"
+          element={
+            <RequireAuth>
+              <RankingsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <RequireAuth>
+              <NotificationsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/settings"
           element={
             <RequireAuth>
@@ -172,6 +200,10 @@ export default function App() {
               </RequireAdmin>
             </RequireAuth>
           }
+        />
+        <Route
+          path="/unsubscribed"
+          element={<UnsubscribedPage />}
         />
         <Route
           path="*"

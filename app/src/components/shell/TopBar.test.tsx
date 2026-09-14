@@ -6,13 +6,21 @@ vi.mock('../../convex', () => ({
     users: {
       getMe: 'users.getMe',
       getTrialProgress: 'users.getTrialProgress'
+    },
+    notifications: {
+      getUnreadCount: 'notifications.getUnreadCount',
+      listMine: 'notifications.listMine',
+      getLatest: 'notifications.getLatest',
+      markAllRead: 'notifications.markAllRead'
     }
   }
 }))
 
 let mockQueryReturns: Record<string, unknown> = {}
 vi.mock('convex/react', () => ({
-  useQuery: (ref: string) => mockQueryReturns[ref]
+  useQuery: (ref: string) => mockQueryReturns[ref],
+  useMutation: () => vi.fn(async () => {}),
+  usePaginatedQuery: () => ({ results: [], status: 'Exhausted', loadMore: vi.fn() })
 }))
 
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -46,6 +54,8 @@ beforeEach(() => {
   mockOnOpenSidebar.mockClear()
   mockOnOpenSearch.mockClear()
   mockQueryReturns = {}
+  mockQueryReturns['notifications.getUnreadCount'] = 0
+  mockQueryReturns['notifications.getLatest'] = null
 })
 
 describe('TopBar', () => {

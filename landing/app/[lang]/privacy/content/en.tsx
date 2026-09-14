@@ -86,7 +86,10 @@ export default function En({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Legitimate interests (Art. 6(1)(f) GDPR).</strong> Optimising feed quality,
           preventing abuse, ensuring platform security, and maintaining aggregate, non-identifiable analytics about
-          service performance.
+          service performance. We also rely on legitimate interests to send a 3-day activity digest by email, and you
+          can object at any time from the unsubscribe link in the email or in Settings &rarr; Emails. Signed-in members
+          can also see the site-wide ranking of the most active posters and interactors, and you can opt out of
+          appearing in it at any time in Settings &rarr; Emails.
         </p>
         <p>
           <strong className="text-cream">Consent (Art. 6(1)(a) GDPR).</strong> Marketing communications and optional

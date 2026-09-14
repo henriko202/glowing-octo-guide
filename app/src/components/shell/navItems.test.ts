@@ -3,7 +3,17 @@ import { NAV_GROUPS, isActivePath } from './navItems'
 describe('navItems', () => {
   it('exposes Main and Manage groups and never includes /admin', () => {
     const paths = NAV_GROUPS.flatMap(g => g.items.map(i => i.path))
-    expect(paths).toEqual(['/feed', '/my-posts', '/recap', '/history', '/billing', '/settings', '/privacy-data'])
+    expect(paths).toEqual([
+      '/feed',
+      '/my-posts',
+      '/recap',
+      '/history',
+      '/people',
+      '/rankings',
+      '/billing',
+      '/settings',
+      '/privacy-data'
+    ])
     expect(paths).not.toContain('/admin')
   })
 })

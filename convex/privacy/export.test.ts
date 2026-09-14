@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildExportBundle } from './export'
+import { buildExportBundle, EXPORT_TABLES, exportTableConfig } from './export'
 
 const USER = {
   _id: 'u1',
@@ -132,6 +132,38 @@ describe('buildExportBundle', () => {
     expect(bundle.interactions).toEqual([])
   })
 
+  it('includes notifications received and acted on verbatim', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      notificationsReceived: [
+        { _id: 'n1', recipientId: 'u1', actorId: 'u2', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1 }
+      ],
+      notificationsActed: [
+        { _id: 'n2', recipientId: 'u2', actorId: 'u1', postId: 'p2', kind: 'comment', excerpt: 'Nice', createdAt: 2 }
+      ]
+    })
+    expect(bundle.notificationsReceived).toHaveLength(1)
+    expect(bundle.notificationsReceived[0].actorId).toBe('u2')
+    expect(bundle.notificationsActed).toHaveLength(1)
+    expect(bundle.notificationsActed[0].recipientId).toBe('u2')
+  })
+
+  it('defaults notificationsReceived and notificationsActed to empty arrays when omitted', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: []
+    })
+    expect(bundle.notificationsReceived).toEqual([])
+    expect(bundle.notificationsActed).toEqual([])
+  })
+
   it('includes per-post state (reactions + saved comment drafts) verbatim', () => {
     const bundle = buildExportBundle({
       user: USER,
@@ -154,5 +186,25 @@ describe('buildExportBundle', () => {
       audits: []
     })
     expect(bundle.userPostState).toEqual([])
+  })
+})
+
+describe('export table config', () => {
+  it('keys every export table uniquely', () => {
+    const keys = EXPORT_TABLES.map(t => t.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('picks the notification index by key, not by table name', () => {
+    expect(exportTableConfig('notificationsReceived')).toMatchObject({
+      table: 'notifications',
+      index: 'by_recipient_and_created_at',
+      field: 'recipientId'
+    })
+    expect(exportTableConfig('notificationsActed')).toMatchObject({
+      table: 'notifications',
+      index: 'by_actor',
+      field: 'actorId'
+    })
   })
 })

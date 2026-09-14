@@ -101,7 +101,7 @@ describe('bumpTrialInteractionHandler', () => {
     const t = trialCtx(20, 19) // 39 → 40
     await bumpTrialInteractionHandler(t.ctx, USER_ID, 'made', t.load(LIVE_TRIAL))
     expect(t.scheduled).toHaveLength(1)
-    expect(t.scheduled[0].fn).toBe(internal.notifications.sendTrialNearEnd)
+    expect(t.scheduled[0].fn).toBe(internal.billingNotices.sendTrialNearEnd)
     expect(t.scheduled[0].args).toEqual({ userId: USER_ID })
     // The warning branch must not pay for the index read only the charge branch needs.
     expect(t.loadCount()).toBe(0)

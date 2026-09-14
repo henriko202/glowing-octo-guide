@@ -27,6 +27,8 @@ export interface SendEmailArgs {
   html: string
   text?: string
   replyTo?: string
+  /** Custom provider headers, e.g. List-Unsubscribe. Passed through to Resend verbatim. */
+  headers?: Record<string, string>
 }
 
 export interface SendEmailResult {
@@ -54,7 +56,8 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
       subject: args.subject,
       html: args.html,
       text: args.text,
-      ...(args.replyTo ? { reply_to: args.replyTo } : {})
+      ...(args.replyTo ? { reply_to: args.replyTo } : {}),
+      ...(args.headers ? { headers: args.headers } : {})
     })
   })
 

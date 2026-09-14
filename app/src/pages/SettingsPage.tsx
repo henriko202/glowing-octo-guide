@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import UpgradeAtLimit from '@/components/UpgradeAtLimit'
+import EmailPreferences from '@/components/EmailPreferences'
 import { toast } from '@/components/ui/toast'
 import { friendlyError } from '@/lib/errors'
 import { captureEvent } from '@/lib/observability/analytics'
@@ -477,6 +478,8 @@ export default function SettingsPage() {
         </div>
         {commentLangError && <p className="text-destructive mt-2 mb-0 text-xs">{commentLangError}</p>}
       </section>
+
+      <EmailPreferences />
 
       {isPro ? (
         <section className="border-border bg-card mb-4 rounded-xl border p-5">

@@ -9,11 +9,21 @@ function createMockDb(seed: Record<string, any[]>) {
   const inserted: { table: string; doc: any }[] = []
   return {
     query: (table: string) => ({
-      withIndex: (_name: string, _fn: any) => ({
-        // Return a fresh array (like real Convex .take()), not the live table reference — the
-        // cascade iterates this result while deleting rows, which would otherwise splice mid-loop.
-        take: async (_n: number) => [...(tables[table] ?? [])]
-      })
+      withIndex: (_name: string, range: (q: any) => unknown) => {
+        const eqs: Array<{ field: string; value: unknown }> = []
+        const q: { eq: (field: string, value: unknown) => unknown } = {
+          eq: (field, value) => {
+            eqs.push({ field, value })
+            return q
+          }
+        }
+        range(q)
+        return {
+          // Return a fresh array (like real Convex .take()), not the live table reference — the
+          // cascade iterates this result while deleting rows, which would otherwise splice mid-loop.
+          take: async (_n: number) => [...(tables[table] ?? [])].filter(r => eqs.every(e => r[e.field] === e.value))
+        }
+      }
     }),
     get: async (id: string) =>
       Object.values(tables)
@@ -61,7 +71,12 @@ const SEED = {
   auditLogs: [{ _id: 'al1', targetUserId: 'u1', actorId: 'u1', action: 'x' }],
   userInteractions: [{ _id: 'ui1', userId: 'u1', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 }],
   userPostState: [{ _id: 'ups1', userId: 'u1', postId: 'p1', reactedAt: 1000 }],
-  trialCounters: [{ _id: 'tc1', userId: 'u1', made: 3, received: 2 }]
+  trialCounters: [{ _id: 'tc1', userId: 'u1', made: 3, received: 2 }],
+  notifications: [
+    { _id: 'n1', recipientId: 'u1', actorId: 'u2', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 },
+    { _id: 'n2', recipientId: 'u2', actorId: 'u1', postId: 'p9', kind: 'comment', excerpt: 'hi', createdAt: 1000 },
+    { _id: 'n3', recipientId: 'u2', actorId: 'u3', postId: 'p9', kind: 'reaction', reaction: 'PRAISE', createdAt: 1000 }
+  ]
 }
 
 describe('cascadeDeleteUser', () => {
@@ -82,7 +97,8 @@ describe('cascadeDeleteUser', () => {
       'consentRecords',
       'dataExportRequests',
       'userInteractions',
-      'trialCounters'
+      'trialCounters',
+      'notifications'
     ]) {
       expect(deletedTables).toContain(t)
     }
@@ -124,6 +140,15 @@ describe('cascadeDeleteUser', () => {
     expect(db._deleted.map(d => d.id)).not.toContain('al1')
   })
 
+  it('deletes notifications where the member is recipient and where the member is actor', async () => {
+    const db = createMockDb(SEED)
+    await cascadeDeleteUser(db, { delete: async () => {} }, 'u1')
+    const deletedIds = db._deleted.map(d => d.id)
+    expect(deletedIds).toContain('n1')
+    expect(deletedIds).toContain('n2')
+    expect(deletedIds).not.toContain('n3')
+  })
+
   it('writes a system audit entry recording the deletion', async () => {
     const db = createMockDb(SEED)
     await cascadeDeleteUser(db, { delete: async () => {} }, 'u1')
@@ -134,13 +159,13 @@ describe('cascadeDeleteUser', () => {
 })
 
 describe('deletion cascade completeness', () => {
-  it('covers every table that references a user (userId/authorId), except users/auditLogs/feedback', async () => {
+  it('covers every table that references a user (userId/authorId/recipientId/actorId), except users/auditLogs/feedback', async () => {
     const FULLY_EXEMPT = new Set(['users', 'auditLogs'])
     const ANONYMIZED_TABLES = new Set(['feedback'])
     const userRefTables = Object.keys(schema.tables).filter(name => {
       if (FULLY_EXEMPT.has(name) || ANONYMIZED_TABLES.has(name)) return false
       const fields = (schema.tables as any)[name]?._fields
-      return fields && ('userId' in fields || 'authorId' in fields)
+      return fields && ('userId' in fields || 'authorId' in fields || 'recipientId' in fields || 'actorId' in fields)
     })
 
     const db = createMockDb({ ...SEED })

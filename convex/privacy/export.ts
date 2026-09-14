@@ -27,6 +27,8 @@ export interface ExportInput {
   feedback?: AnyDoc[]
   feedbackResponses?: AnyDoc[]
   interactions?: AnyDoc[]
+  notificationsReceived?: AnyDoc[]
+  notificationsActed?: AnyDoc[]
   userPostState?: AnyDoc[]
   trialCounters?: AnyDoc[]
   exportedAt?: number
@@ -45,6 +47,8 @@ export function buildExportBundle(input: ExportInput) {
     feedbackResponses: input.feedbackResponses ?? [],
     // The user's own engagement log (reactions + comments they made on posts).
     interactions: input.interactions ?? [],
+    notificationsReceived: input.notificationsReceived ?? [],
+    notificationsActed: input.notificationsActed ?? [],
     // Per-post state: which posts they reacted to + their saved AI comment drafts.
     userPostState: input.userPostState ?? [],
     // Trial interaction counters (plan 018 — high-churn, kept off the users doc).
@@ -59,16 +63,24 @@ export function buildExportBundle(input: ExportInput) {
 // the erasure cascade's OWNED list (privacy/deletion.ts) — the export reads what erasure deletes.
 // `key` is the buildExportBundle field name (differs from the table name for the renamed ones).
 // feedbackResponses is gathered separately (keyed by feedbackId, not userId — see below).
-const EXPORT_TABLES: Array<{ key: string; table: string; index: string; field: string }> = [
+// Exported so tests can pin the index/field wiring: the two notification entries share a table name,
+// so only the unique `key` disambiguates which index a bundle field is gathered from.
+export const EXPORT_TABLES: Array<{ key: string; table: string; index: string; field: string }> = [
   { key: 'posts', table: 'posts', index: 'by_author', field: 'authorId' },
   { key: 'subscriptions', table: 'subscriptions', index: 'by_user', field: 'userId' },
   { key: 'consents', table: 'consentRecords', index: 'by_user', field: 'userId' },
   { key: 'audits', table: 'auditLogs', index: 'by_target', field: 'targetUserId' },
   { key: 'feedback', table: 'feedback', index: 'by_user', field: 'userId' },
   { key: 'interactions', table: 'userInteractions', index: 'by_user', field: 'userId' },
+  { key: 'notificationsReceived', table: 'notifications', index: 'by_recipient_and_created_at', field: 'recipientId' },
+  { key: 'notificationsActed', table: 'notifications', index: 'by_actor', field: 'actorId' },
   { key: 'userPostState', table: 'userPostState', index: 'by_user_and_post', field: 'userId' },
   { key: 'trialCounters', table: 'trialCounters', index: 'by_user', field: 'userId' }
 ]
+
+export function exportTableConfig(key: string) {
+  return EXPORT_TABLES.find(t => t.key === key)
+}
 
 const EXPORT_PAGE_SIZE = 500
 
@@ -97,10 +109,10 @@ export const getExportUser = internalQuery({
 // the action, the server owns the cursor, and rebuilding the opts object field by field drops the
 // optional pagination fields (Convex pagination guideline).
 export const gatherUserTablePage = internalQuery({
-  args: { userId: v.id('users'), table: v.string(), cursor: v.union(v.string(), v.null()), numItems: v.number() },
-  handler: async (ctx, { userId, table, cursor, numItems }) => {
-    const cfg = EXPORT_TABLES.find(t => t.table === table)
-    if (!cfg) throw new Error(`Unknown export table: ${table}`)
+  args: { userId: v.id('users'), key: v.string(), cursor: v.union(v.string(), v.null()), numItems: v.number() },
+  handler: async (ctx, { userId, key, cursor, numItems }) => {
+    const cfg = exportTableConfig(key)
+    if (!cfg) throw new Error(`Unknown export table: ${key}`)
     const db = ctx.db as unknown as PaginatedDb
     return await db
       .query(cfg.table)
@@ -165,14 +177,14 @@ export const generateExport = internalAction({
       // limit. A failed export leaves the request permanently 'failed' — a missed GDPR access right —
       // so correctness at scale matters more than the extra round-trips.
       const collected: Record<string, AnyDoc[]> = {}
-      for (const { key, table } of EXPORT_TABLES) {
+      for (const { key } of EXPORT_TABLES) {
         const rows: AnyDoc[] = []
         let cursor: string | null = null
         // Page ceiling (defensive against a non-advancing cursor): 10k pages × 500 = 5M rows.
         for (let page = 0; page < 10_000; page++) {
           const res: { page: AnyDoc[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(
             internal.privacy.export.gatherUserTablePage,
-            { userId, table, cursor, numItems: EXPORT_PAGE_SIZE }
+            { userId, key, cursor, numItems: EXPORT_PAGE_SIZE }
           )
           rows.push(...res.page)
           if (res.isDone) break
@@ -194,6 +206,8 @@ export const generateExport = internalAction({
         feedback: collected.feedback ?? [],
         feedbackResponses,
         interactions: collected.interactions ?? [],
+        notificationsReceived: collected.notificationsReceived ?? [],
+        notificationsActed: collected.notificationsActed ?? [],
         userPostState: collected.userPostState ?? [],
         trialCounters: collected.trialCounters ?? [],
         exportedAt: Date.now()

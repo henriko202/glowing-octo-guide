@@ -20,6 +20,11 @@ describe('ConsentPromptScreen', () => {
     expect((screen.getByLabelText('privacy.consent.analytics') as HTMLInputElement).checked).toBe(false)
   })
 
+  it('renders the digest note pointing at Settings > Emails', () => {
+    render(<ConsentPromptScreen />)
+    expect(screen.getByText('privacy.consentPrompt.digestNote')).toBeInTheDocument()
+  })
+
   it('records the chosen preferences on save', async () => {
     render(<ConsentPromptScreen />)
     fireEvent.click(screen.getByLabelText('privacy.consent.marketing'))

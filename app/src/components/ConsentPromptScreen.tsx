@@ -64,6 +64,7 @@ export default function ConsentPromptScreen() {
           {working ? '…' : t('privacy.consentPrompt.save')}
         </Button>
         <p className="text-muted-foreground mt-3 text-xs">{t('privacy.consentPrompt.note')}</p>
+        <p className="text-muted-foreground mt-1 text-xs">{t('privacy.consentPrompt.digestNote')}</p>
       </div>
     </div>
   )
