@@ -398,7 +398,7 @@ export function toSurvivalMetrics(snapshot: Doc<'survivalSnapshots'> | null) {
     days: snapshot.days,
     since: snapshot.since,
     generatedAt: snapshot.generatedAt,
-    cohort: snapshot.cohort,
+    cohort: { ...snapshot.cohort, onboarded: snapshot.cohort.onboarded ?? 0 },
     payingByTier: snapshot.payingByTier
   }
 }

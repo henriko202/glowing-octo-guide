@@ -14,6 +14,7 @@ import MyPostsPage from './pages/MyPostsPage'
 import RecapPage from './pages/RecapPage'
 import HistoryPage from './pages/HistoryPage'
 import AdminPage from './pages/AdminPage'
+import RequireAdmin from './components/RequireAdmin'
 import AppShell from './components/shell/AppShell'
 import ScrollToTop from './components/ScrollToTop'
 import Motd from './components/Motd'
@@ -166,7 +167,9 @@ export default function App() {
           path="/admin"
           element={
             <RequireAuth>
-              <AdminPage />
+              <RequireAdmin>
+                <AdminPage />
+              </RequireAdmin>
             </RequireAuth>
           }
         />

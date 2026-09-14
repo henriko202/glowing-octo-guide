@@ -806,13 +806,13 @@ holds the `summarizeCohort` output and the whole-table `payingByTier` counts so 
 instead of re-reading the cohort reactively ([§12](#12-admin--moderation)). No FK — the aggregates deliberately carry
 no `userId`.
 
-| Field          | Type      | Req | Meaning                                                                                    |
-|----------------|-----------|:---:|--------------------------------------------------------------------------------------------|
-| `days`         | `7 \| 28` | ✓  | The cohort window. Indexed `by_days`; the job replaces this row.                           |
-| `generatedAt`  | number    | ✓  | Rebuild timestamp (ms) — the panel's "as of" caption.                                      |
-| `since`        | number    | ✓  | Window start = `generatedAt − days × 24 h` (ms).                                           |
-| `cohort`       | object    | ✓  | `CohortSummary` from `lib/survival.summarizeCohort`: counts + eligible denominators (§12). |
-| `payingByTier` | object    | ✓  | Active members per tier across the **whole** table.                                        |
+| Field          | Type      | Req | Meaning                                                                                                                                                                                                                                                  |
+|----------------|-----------|:---:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `days`         | `7 \| 28` | ✓  | The cohort window. Indexed `by_days`; the job replaces this row.                                                                                                                                                                                         |
+| `generatedAt`  | number    | ✓  | Rebuild timestamp (ms) — the panel's "as of" caption.                                                                                                                                                                                                    |
+| `since`        | number    | ✓  | Window start = `generatedAt − days × 24 h` (ms).                                                                                                                                                                                                         |
+| `cohort`       | object    | ✓  | `CohortSummary` from `lib/survival.summarizeCohort`: counts + eligible denominators (§12). `onboarded` is optional in the schema so pre-upgrade rows keep validating; `toSurvivalMetrics` reads a missing value as `0` until the next rebuild writes it. |
+| `payingByTier` | object    | ✓  | Active members per tier across the **whole** table.                                                                                                                                                                                                      |
 
 Indexes: `by_days [days]` — the query's one-row lookup and the job's replace.
 
@@ -3548,7 +3548,8 @@ code writes it. Every admin function calls `assertAdmin(user)` after
 
 `admin.survivalMetrics({ sessionToken, days: 7 | 28 })` answers one question — _who survives the first week_ — and
 answers it **from the database only**. Every number is one an admin could re-derive by hand from `users`,
-`subscriptions` and `userInteractions`; nothing is read from PostHog, and no survival event is emitted anywhere.
+`subscriptions`, `posts` and `userInteractions`; nothing is read from PostHog, and no survival event is emitted
+anywhere.
 
 **Nightly snapshot.** The cohort maths is too heavy to recompute live: the old query re-read ~4 indexed rows per
 cohort member on every reactive invalidation, and its `.order('desc').take(1000)` walk silently capped the cohort.
@@ -3557,15 +3558,17 @@ UTC** (15 minutes after the daily post sync) and writes one row per window to `s
 ([§5](#5-data-model)); `survivalMetrics` reads that single row via `by_days` and returns `null` until the first
 rebuild has run (the tab renders **"No snapshot yet — the nightly rebuild has not run."**). Because the row carries
 `generatedAt`, the panel is **as-of the last cron**, not live — acceptable for an admin cohort report, and the tab
-prints it as an explicit **"Snapshot as of `<generatedAt>` UTC"** caption. Run the rebuild on demand from the admin UI
-if real-time cohort numbers ever matter. The query itself has no `Date.now()`, no per-user reads and no 1000 cap.
+prints it as an explicit **"Snapshot as of `<generatedAt>` UTC"** caption. Run
+`npx convex run jobs/survivalSnapshot:rebuildSurvivalSnapshots` if real-time cohort numbers ever matter. The query
+itself has no `Date.now()`, no per-user reads and no 1000 cap.
 
 **Job read budget.** Per window the action pages the whole `users` table (100/page) and filters each page by
 `createdAt >= since`, walking to `isDone`. It does **not** stop at the first row older than `since`: `createdAt` is a
 user-recorded signup value, not monotonic with the `_creationTime` page order, so a backdated signup could otherwise
 end the walk early and drop later in-window rows. For each
-cohort member it does the same **four bounded indexed reads** the old query did: the `subscriptions` rows (`by_user`,
-`.order('desc')`, `.take(5)`), the member's _oldest_ `userInteractions` row (`by_user`, `.first()` — `by_user` is
+cohort member it does the same **five bounded indexed reads** the panel needs: the `subscriptions` rows (`by_user`,
+`.order('desc')`, `.take(5)`), one probe for any authored `posts` row (`by_author`, `.first()` — the onboarding
+flag), the member's _oldest_ `userInteractions` row (`by_user`, `.first()` — `by_user` is
 ordered by `_creationTime`, so `.first()` is the earliest), and one range read for each return window. Those ranges
 need **no new index**: they bound the `_creationTime` tail Convex appends to `userInteractions.by_user`, and
 `createdAt` and `_creationTime` are written in the same mutation. The job then calls `summarizeCohort(rows, now)` with
@@ -3573,17 +3576,18 @@ its own `Date.now()` clock, so eligible denominators are measured at rebuild tim
 
 **Cohort definitions**, exactly as `summarizeCohort` (`convex/lib/survival.ts`) implements them:
 
-| Metric                            | Definition                                                                                                        |
-|-----------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `signups`                         | Members whose `createdAt` falls inside the window.                                                                |
-| `startedTrial`                    | The member has **any** `subscriptions` row.                                                                       |
-| `activated`                       | Their first interaction is less than **24 h** after `createdAt` (`ACTIVATION_WINDOW_MS`).                         |
-| `medianMinutesToFirstInteraction` | Whole minutes, over the members who have a first interaction at all; `null` when nobody does.                     |
-| `returnedDay1`                    | Any interaction in the half-open window `[createdAt + 24 h, createdAt + 48 h)`.                                   |
-| `returnedDays2to7`                | Any interaction in `[createdAt + 24 h, createdAt + 8 d)` — it **contains** day 1, it is not disjoint from it.     |
-| `trialsEnded`                     | Started a trial **and** `subscriptionStatus` is `active`, `canceled` or `past_due` (i.e. it left `trialing`).     |
-| `converted`                       | Started a trial **and** `subscriptionStatus` is `active`.                                                         |
-| `canceled`                        | `subscriptionStatus === 'canceled'`, **or** the live subscription row has `cancelAtPeriodEnd` — over all signups. |
+| Metric                            | Definition                                                                                                                                                           |
+|-----------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `signups`                         | Members whose `createdAt` falls inside the window.                                                                                                                   |
+| `startedTrial`                    | The member has **any** `subscriptions` row.                                                                                                                          |
+| `onboarded`                       | Has at least one `posts` row (soft-deleted included) **or** at least one `userInteractions` row — the first-post or first-engagement onboarding, with no time bound. |
+| `activated`                       | Their first interaction is less than **24 h** after `createdAt` (`ACTIVATION_WINDOW_MS`).                                                                            |
+| `medianMinutesToFirstInteraction` | Whole minutes, over the members who have a first interaction at all; `null` when nobody does.                                                                        |
+| `returnedDay1`                    | Any interaction in the half-open window `[createdAt + 24 h, createdAt + 48 h)`.                                                                                      |
+| `returnedDays2to7`                | Any interaction in `[createdAt + 24 h, createdAt + 8 d)` — it **contains** day 1, it is not disjoint from it.                                                        |
+| `trialsEnded`                     | Started a trial **and** `subscriptionStatus` is `active`, `canceled` or `past_due` (i.e. it left `trialing`).                                                        |
+| `converted`                       | Started a trial **and** `subscriptionStatus` is `active`.                                                                                                            |
+| `canceled`                        | `subscriptionStatus === 'canceled'`, **or** the live subscription row has `cancelAtPeriodEnd` — over all signups.                                                    |
 
 Because `returnedDays2to7` contains day 1, the panel labels it **"Returned days 1–7"** — the window is the useful
 signal (_did they come back at all after the first day_), and renaming the field would silently break comparability
@@ -3598,7 +3602,8 @@ would read **0 %** however those members behaved, and a cohort that all signed u
 board. Each windowed **count** is taken over the same closed rows as its base, so a share can never pass 100 %: a member
 who signed up an hour ago and already tapped has activated in fact, but they join the count and the base together the
 moment their 24 h window closes, never the count alone (which would print "3 of 1 · 300%"). `signups`, `startedTrial`,
-`trialsEnded`, `converted` and `canceled` need no such base, because nothing about them is pending. When a base is `0`,
+`onboarded`, `trialsEnded`, `converted` and `canceled` need no such base, because nothing about them is pending. When
+a base is `0`,
 `share()` renders **"–"**,
 never "0 %" — "not enough data yet" and "nobody did it" are opposite answers, and this panel exists to tell the founder
 whether anyone reaches value at all.
@@ -3808,7 +3813,7 @@ account‑deletion, and retention jobs run on fixed intervals from deploy time (
 | Cron name                      | Schedule            | Target                                             | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |--------------------------------|---------------------|----------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `sync LinkedIn posts`          | daily **03:00 UTC** | `jobs/syncPostsApify.syncAllPostsViaApify`         | Apify sync **iff** `apifySyncEnabled` (else no‑op). Cursor‑paged fan‑out over active subscribers (20/invocation, self‑reschedules until `isDone`; status written after every page with the running failed count). Ingests each active subscriber's latest posts (profile scrape) and inserts new rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `rebuild survival snapshots`   | daily **03:15 UTC** | `jobs/survivalSnapshot.rebuildSurvivalSnapshots`   | Rebuild the 7‑ and 28‑day admin Survival panel aggregates (`survivalSnapshots`, one row per window): pages users per window (filters each page by `createdAt >= since` and walks to `isDone` — backdated signups break `createdAt` monotonicity), repeats the panel's four bounded per‑user reads, runs `summarizeCohort` / `payingByTier`, and replaces the window's row. See [§12](#12-admin--moderation).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `rebuild survival snapshots`   | daily **03:15 UTC** | `jobs/survivalSnapshot.rebuildSurvivalSnapshots`   | Rebuild the 7‑ and 28‑day admin Survival panel aggregates (`survivalSnapshots`, one row per window): pages users per window (filters each page by `createdAt >= since` and walks to `isDone` — backdated signups break `createdAt` monotonicity), repeats the panel's five bounded per‑user reads, runs `summarizeCohort` / `payingByTier`, and replaces the window's row. See [§12](#12-admin--moderation).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `refresh feed engagement`      | every **30 min**    | `jobs/refreshFeedEngagement.refreshFeedEngagement` | Refresh `likeCount`/`commentCount` on **all feed‑eligible posts** (`inFeed=true`, `.take(500)`) via **one batched Apify run** — `targetUrls` = each post's URL (`sourceUrl` or a `/feed/update/{urn}/` reconstruction). Same `isApifyPostSyncEnabled` gate as the daily sync, so it is **dev/local‑only** (Apify dormant in prod). Counts‑only (`scrapeComments`/`scrapeReactions` off); matches results back by `shareUrn` and re‑evaluates `interactionLimitReached` from the refreshed counts (`applyEngagementCounts`), so a post that crosses its cap on external growth drops out of the feed. Items with no `engagement` object are skipped (never overwrites real counts with 0). ponytail: `run‑sync` blocks per tick — chunk `targetUrls` if a feed ever exceeds a few hundred posts.                                                                                              |
 | `process post queue`           | daily **04:00 UTC** | `jobs/processQueue.processPostQueue`               | Promote queued posts when authors regain weekly capacity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `reconcile MOTD windows`       | every **5 min**     | `motd/motd.reconcileMotdWindows`                   | Materialize MOTD schedule transitions into the `enabled` flag (enable a reached `startAt`, disable a passed `expiresAt`; bounded `.take(50)` per state; a quick-toggle disable clears `startAt`/`expiresAt` first so it is not re-enabled) so `getActiveMotd` stays wall-clock-free. See [§12B](#12b-message-of-the-day-motd).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -4242,7 +4247,7 @@ is the scroller; see AppShell), so without it a scrolled feed would carry its sc
 | `/history`      | `HistoryPage`     |                                                                              ✓                                                                              |
 | `/settings`     | `SettingsPage`    |                                                                              ✓                                                                              |
 | `/billing`      | `BillingPage`     |                                                                              ✓                                                                              |
-| `/admin`        | `AdminPage`       |                                                   ✓ (server‑gated via `checkIsAdmin`; not linked in nav)                                                    |
+| `/admin`        | `AdminPage`       |                     ✓ (auth + route‑level `RequireAdmin`, so `AdminPage` never mounts for a non‑admin; server‑gated; not linked in nav)                     |
 | `/privacy-data` | `PrivacyDataPage` |                                                                              ✓                                                                              |
 | `*`             | → `/feed`         |                                                                              –                                                                               |
 
@@ -4722,10 +4727,12 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
           gift line, the R20 `src=cap_email` event, the `?switched=` landing and the stale `?downgraded=` being ignored,
           and the trial gate — no Switch button, every plan button disabled, and a click firing nothing).
 
-- **AdminPage** — gated by `checkIsAdmin`: `<LoadingSpinner>` while it resolves, then a declarative
-  `<Navigate to="/" replace />` early return for non‑admins ([[B19]] — replaced an earlier `navigate()` call made
-  directly in the render body, which was both a React anti‑pattern and left a one‑paint fall‑through where the full
-  admin JSX rendered before the redirect took effect). This is a **UX nicety only**: `checkIsAdmin` soft‑fails to
+- **AdminPage** — `/admin` is wrapped in **`RequireAdmin`** (`components/RequireAdmin.tsx`, inside
+  `RequireAuth`): `<LoadingSpinner>` while `checkIsAdmin` resolves, then a declarative
+  `<Navigate to="/" replace />` early return for non‑admins ([[B19]]), so the admin page **never mounts** for them.
+  AdminPage
+  still reads `checkIsAdmin` itself to gate its child queries (`'skip'` for non‑admins) and keeps the same early
+  return as a fallback. This is a **UX nicety only**: `checkIsAdmin` soft‑fails to
   `false` and every `api.admin.*` function independently enforces `assertAdmin` server‑side (§12), so a stale or
   bypassed client redirect can't grant access. `/admin` is **intentionally URL‑only** (see routing table above) — a
   small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Six tabs (the `TabsList` is
@@ -4742,7 +4749,8 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
   [§12B](#12b-message-of-the-day-motd)), and **Survival** (`SurvivalTab`, **R18**).
     - **Survival** (`/admin?tab=survival`) is the funnel panel: a 7-day / 28-day toggle over one
       `admin.survivalMetrics` query ([§12](#12-admin--moderation)), then a single table of **count + "Of" + share** per
-      step — signups, started trial, activated, median minutes to first interaction, returned day 1, returned days 1–7,
+      step — signups, started trial, onboarded (post or interaction), activated, median minutes to first interaction,
+      returned day 1, returned days 1–7,
       trials ended, converted, canceled — each row header carrying its definition in a `title` tooltip — followed by
       **paying members by tier (all active members)**. Both tables carry a **"Snapshot as of `<generatedAt>` UTC"**
       caption, because the numbers come from the nightly rebuild, not a live query. An empty cohort renders **"No
@@ -4982,7 +4990,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |

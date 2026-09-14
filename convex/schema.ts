@@ -488,6 +488,7 @@ export default defineSchema({
     cohort: v.object({
       signups: v.number(),
       startedTrial: v.number(),
+      onboarded: v.optional(v.number()),
       activated: v.number(),
       medianMinutesToFirstInteraction: v.union(v.number(), v.null()),
       returnedDay1: v.number(),

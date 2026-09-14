@@ -14,6 +14,7 @@ const FIXTURE: SurvivalMetrics = {
   cohort: {
     signups: 10,
     startedTrial: 6,
+    onboarded: 7,
     activated: 4,
     medianMinutesToFirstInteraction: 12,
     returnedDay1: 3,
@@ -51,6 +52,10 @@ describe('SurvivalTab', () => {
       />
     )
     expect(screen.getByRole('row', { name: /signed up/i })).toHaveTextContent('10')
+    // Onboarded (post or interaction) divides by every signup — it is not window-censored (7 of 10).
+    const onboarded = screen.getByRole('row', { name: /onboarded/i })
+    expect(onboarded).toHaveTextContent('7')
+    expect(onboarded).toHaveTextContent('70%')
     // Activated divides by the members who have actually cleared 24 h (4 of 8), not by all 10.
     const activated = screen.getByRole('row', { name: /activated within 24 h/i })
     expect(activated).toHaveTextContent('4')
@@ -142,6 +147,9 @@ describe('SurvivalTab', () => {
     )
     const header = screen.getByRole('rowheader', { name: /activated within 24 h/i })
     expect(header.getAttribute('title')).toMatch(/first 24 h have already passed/i)
+    expect(screen.getByRole('rowheader', { name: /onboarded/i }).getAttribute('title')).toMatch(
+      /at least one post or recorded at least one interaction/i
+    )
     expect(screen.getByRole('rowheader', { name: /returned days 1–7/i }).getAttribute('title')).toMatch(
       /includes day 1/i
     )

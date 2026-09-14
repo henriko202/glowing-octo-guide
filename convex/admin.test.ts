@@ -88,13 +88,21 @@ describe('toSurvivalMetrics', () => {
     expect(toSurvivalMetrics(null)).toBeNull()
   })
 
-  it('projects the stored row unchanged', () => {
+  it('projects the stored row and defaults a legacy row without onboarded to 0', () => {
     expect(toSurvivalMetrics(snapshot)).toEqual({
       days: 28,
       since: 1_697_000_000_000,
       generatedAt: 1_700_000_000_000,
-      cohort: snapshot.cohort,
+      cohort: { ...snapshot.cohort, onboarded: 0 },
       payingByTier: snapshot.payingByTier
     })
+  })
+
+  it('keeps the onboarded count a rebuilt row carries', () => {
+    const rebuilt = {
+      ...snapshot,
+      cohort: { ...snapshot.cohort, onboarded: 3 }
+    } as unknown as Doc<'survivalSnapshots'>
+    expect(toSurvivalMetrics(rebuilt)?.cohort.onboarded).toBe(3)
   })
 })

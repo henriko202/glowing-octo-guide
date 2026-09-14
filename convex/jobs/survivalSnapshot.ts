@@ -50,6 +50,7 @@ const cohortUserValidator = v.object({
 const cohortSummaryValidator = v.object({
   signups: v.number(),
   startedTrial: v.number(),
+  onboarded: v.number(),
   activated: v.number(),
   medianMinutesToFirstInteraction: v.union(v.number(), v.null()),
   returnedDay1: v.number(),
@@ -95,8 +96,8 @@ export const getUsersPage = internalQuery({
   }
 })
 
-// Same per-user reads admin.survivalMetrics used to do inline, kept bounded exactly as before:
-// subscriptions take(5), the member's oldest userInteractions row, and one probe per return window.
+// Bounded per-user reads: subscriptions take(5), one probe for any authored post, the member's
+// oldest userInteractions row, and one probe per return window.
 export const loadCohortRows = internalQuery({
   args: { users: v.array(cohortUserValidator) },
   handler: async (ctx, { users }): Promise<CohortRow[]> => {
@@ -107,6 +108,10 @@ export const loadCohortRows = internalQuery({
           .withIndex('by_user', q => q.eq('userId', u._id))
           .order('desc')
           .take(5)
+        const post = await ctx.db
+          .query('posts')
+          .withIndex('by_author', q => q.eq('authorId', u._id))
+          .first()
         // by_user is ordered by _creationTime, so .first() is the member's OLDEST interaction.
         const first = await ctx.db
           .query('userInteractions')
@@ -123,6 +128,7 @@ export const loadCohortRows = internalQuery({
           subscriptionStatus: u.subscriptionStatus,
           startedTrial: subs.length > 0,
           cancelPending: findLiveSubscription(subs)?.cancelAtPeriodEnd === true,
+          hasPost: post !== null,
           firstInteractionAt: first?.createdAt,
           returnedDay1: await returnedIn(day1),
           returnedDays2to7: await returnedIn(days2to7)

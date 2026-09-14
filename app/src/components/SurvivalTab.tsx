@@ -16,6 +16,7 @@ export type SurvivalMetrics = {
   cohort: {
     signups: number
     startedTrial: number
+    onboarded: number
     activated: number
     medianMinutesToFirstInteraction: number | null
     returnedDay1: number
@@ -116,6 +117,14 @@ export default function SurvivalTab({ sessionToken, isAdmin }: Props) {
         'Has at least one subscription row: reached Stripe checkout and started a trial. Of: everyone who signed up in the window.',
       count: String(c.startedTrial),
       share: share(c.startedTrial, c.signups),
+      base: String(c.signups)
+    },
+    {
+      label: 'Onboarded',
+      title:
+        'Added at least one post or recorded at least one interaction (reaction, comment or AI draft), any time after signup. Of: everyone who signed up in the window.',
+      count: String(c.onboarded),
+      share: share(c.onboarded, c.signups),
       base: String(c.signups)
     },
     {

@@ -12,6 +12,7 @@ export type CohortRow = {
   subscriptionStatus: string // users.subscriptionStatus
   startedTrial: boolean // any subscriptions row exists
   cancelPending: boolean // the live subscription row has cancelAtPeriodEnd === true
+  hasPost: boolean
   firstInteractionAt?: number // earliest userInteractions row, any time
   returnedDay1: boolean // any interaction in [createdAt + 24 h, createdAt + 48 h)
   returnedDays2to7: boolean // any interaction in [createdAt + 24 h, createdAt + 8 d)
@@ -20,6 +21,7 @@ export type CohortRow = {
 export type CohortSummary = {
   signups: number
   startedTrial: number
+  onboarded: number
   activated: number // firstInteractionAt - createdAt < 24 h, over the activatedEligible rows only
   medianMinutesToFirstInteraction: number | null // over rows with a first interaction; null when none
   returnedDay1: number // over the returnedDay1Eligible rows only
@@ -80,6 +82,7 @@ export function summarizeCohort(rows: CohortRow[], now: number): CohortSummary {
   return {
     signups: rows.length,
     startedTrial: trialed.length,
+    onboarded: rows.filter(r => r.hasPost || r.firstInteractionAt !== undefined).length,
     activated: activation.filter(
       r => r.firstInteractionAt !== undefined && r.firstInteractionAt - r.createdAt < ACTIVATION_WINDOW_MS
     ).length,

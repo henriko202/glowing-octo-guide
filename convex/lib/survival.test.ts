@@ -12,6 +12,7 @@ function row(over: Partial<CohortRow> = {}): CohortRow {
     subscriptionStatus: 'none',
     startedTrial: false,
     cancelPending: false,
+    hasPost: false,
     returnedDay1: false,
     returnedDays2to7: false,
     ...over
@@ -87,10 +88,25 @@ describe('summarizeCohort', () => {
     expect(s.returnedDays2to7).toBe(2)
   })
 
+  it('counts a member as onboarded once, with a post or with an interaction', () => {
+    const s = summarizeCohort(
+      [
+        row({ hasPost: true }),
+        row({ firstInteractionAt: T0 + 60_000 }),
+        row({ hasPost: true, firstInteractionAt: T0 + 60_000 }),
+        row()
+      ],
+      AGED
+    )
+    expect(s.signups).toBe(4)
+    expect(s.onboarded).toBe(3)
+  })
+
   it('is all zeros and a null median for an empty cohort', () => {
     expect(summarizeCohort([], AGED)).toEqual({
       signups: 0,
       startedTrial: 0,
+      onboarded: 0,
       activated: 0,
       medianMinutesToFirstInteraction: null,
       returnedDay1: 0,
