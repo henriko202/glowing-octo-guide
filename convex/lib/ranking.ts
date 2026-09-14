@@ -39,16 +39,13 @@ export function digestWindow(now: number, lastDigestAt?: number): { since: numbe
   return { since, until: now }
 }
 
-export interface CountedEntry {
-  userId: string
-  count: number
-  lastAt: number
-}
-
-/** Snapshot ordering: count desc, then newest activity, then id asc; sliced to `limit`. */
-export function topEntries(map: Map<string, { count: number; lastAt: number }>, limit: number): CountedEntry[] {
+/** Snapshot ordering: count desc, then newest activity, then id asc; sliced to `limit`. Extra map fields ride along. */
+export function topEntries<T extends { count: number; lastAt: number }>(
+  map: Map<string, T>,
+  limit: number
+): Array<{ userId: string } & T> {
   return [...map.entries()]
-    .map(([userId, v]) => ({ userId, count: v.count, lastAt: v.lastAt }))
+    .map(([userId, v]) => ({ userId, ...v }))
     .sort(
       (a, b) => b.count - a.count || b.lastAt - a.lastAt || (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0)
     )

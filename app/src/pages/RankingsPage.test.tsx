@@ -61,8 +61,28 @@ const SITE = {
   window: '7d',
   generatedAt: 123,
   partial: true,
-  interactors: [{ userId: 'u3', name: 'Carla', count: 5, lastAt: 3, _id: 'u3', linkedinPublicIdentifier: undefined }],
-  posters: [{ userId: 'u4', name: 'Diego', count: 2, lastAt: 4, _id: 'u4', linkedinPublicIdentifier: undefined }],
+  interactors: [
+    {
+      userId: 'u3',
+      name: 'Carla',
+      count: 5,
+      lastAt: 3,
+      postsTouched: 2,
+      _id: 'u3',
+      linkedinPublicIdentifier: undefined
+    }
+  ],
+  posters: [
+    {
+      userId: 'u4',
+      name: 'Diego',
+      count: 2,
+      lastAt: 4,
+      reactionsReceived: 3,
+      _id: 'u4',
+      linkedinPublicIdentifier: undefined
+    }
+  ],
   me: { id: 'me', count: 3, position: 7, movement: 1, optedOut: false }
 }
 
@@ -93,6 +113,9 @@ describe('RankingsPage', () => {
     expect(screen.getByText(/You are #7/)).toBeInTheDocument()
     expect(screen.getByText(/Up 1 since yesterday/)).toBeInTheDocument()
     expect(screen.getByText('Window: Last 7 days. The board is a daily snapshot.')).toBeInTheDocument()
+    expect(screen.getByText('5 interactions · across 2 posts')).toBeInTheDocument()
+    expect(screen.getByText('2 posts · 3 reactions')).toBeInTheDocument()
+    expect(screen.getByText(/Next update/)).toBeInTheDocument()
     expect(screen.getByText('Partial data: some activity may be missing from this snapshot.')).toBeInTheDocument()
   })
 
@@ -120,6 +143,16 @@ describe('RankingsPage', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Do not show me in rankings' }))
     expect(mockSetLeaderboardOptOut).toHaveBeenCalledWith({ sessionToken: 'tok', optOut: true })
+  })
+
+  it('renders the opt-out as an outline button with an eye-off icon and trailing page padding', () => {
+    const { container } = renderPage()
+    const button = screen.getByRole('button', { name: 'Do not show me in rankings' })
+    expect(button).toHaveAttribute('data-variant', 'outline')
+    expect(button).toHaveClass('cursor-pointer')
+    expect(button.querySelector('.lucide-eye-off')).toBeInTheDocument()
+    expect(container.firstElementChild).toHaveClass('pb-6')
+    expect(container.querySelector('.gap-3')).toBeInTheDocument()
   })
 
   it('surfaces the personal truncated caption when the read ceiling was hit', () => {

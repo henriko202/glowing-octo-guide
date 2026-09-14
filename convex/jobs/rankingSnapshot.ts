@@ -18,8 +18,6 @@ const DAY = 86_400_000
 
 const WINDOW_MS: Record<'7d' | '30d', number> = { '7d': 7 * DAY, '30d': 30 * DAY }
 
-type SnapshotEntry = { userId: Id<'users'>; count: number; lastAt: number }
-
 function asInteractionRows(rows: Doc<'userInteractions'>[]): InteractionRow[] {
   return rows.map(r => ({
     _creationTime: r._creationTime,
@@ -50,17 +48,21 @@ export const rebuildRankingSnapshots = internalMutation({
     const interactorMap = tallySiteActors(relevantInteractions, since)
 
     const postRows = await ctx.db.query('posts').order('desc').take(SNAPSHOT_ROW_CEILING)
-    const posterMap = new Map<string, { count: number; lastAt: number }>()
+    const posterMap = new Map<string, { count: number; lastAt: number; reactionsReceived: number }>()
     for (const post of postRows) {
       if (post.publishedAt < since || post.hidden || post.deletedAt !== undefined) continue
-      const acc = posterMap.get(post.authorId) ?? { count: 0, lastAt: 0 }
+      const acc = posterMap.get(post.authorId) ?? { count: 0, lastAt: 0, reactionsReceived: 0 }
       acc.count += 1
+      acc.reactionsReceived += post.likeCount
       if (post.publishedAt > acc.lastAt) acc.lastAt = post.publishedAt
       posterMap.set(post.authorId, acc)
     }
 
-    const topInteractors = topEntries(interactorMap, TOP_LIST) as SnapshotEntry[]
-    const topPosters = topEntries(posterMap, TOP_LIST) as SnapshotEntry[]
+    const topInteractors = topEntries(interactorMap, TOP_LIST).map(e => ({
+      ...e,
+      userId: e.userId as Id<'users'>
+    }))
+    const topPosters = topEntries(posterMap, TOP_LIST).map(e => ({ ...e, userId: e.userId as Id<'users'> }))
     const interactorCounts = capDistribution(
       [...interactorMap.values()].map(v => v.count).sort((a, b) => b - a),
       MAX_DISTRIBUTION

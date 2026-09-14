@@ -55,4 +55,8 @@ describe('toHistoryRow', () => {
   it('returns post: null when the post row is gone', () => {
     expect(toHistoryRow(base, null, null).post).toBeNull()
   })
+  it('strips a lone surrogate from a stored comment so the row can serialize', () => {
+    const dirty = { _id: 'i3', kind: 'comment' as const, comment: `high${'\uD83D'}`, createdAt: 7 }
+    expect(toHistoryRow(dirty, post, { name: 'Ana' }).comment).toBe('high')
+  })
 })

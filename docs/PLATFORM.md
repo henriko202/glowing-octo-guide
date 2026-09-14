@@ -393,7 +393,7 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `defaultVisibilityCountries`  | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist copied onto every post this user authors from now on (`posts.visibilityCountries`, set at insert time — not retroactive). Same semantics as `defaultVisibilityIndustries` above.                                                                                                                                                                                           |
 | `feedFilterIndustries`        | string[]                                               |  –  | Pro/Contact-only. Industry-code allowlist that filters the viewer's **own** feed (`feed.getFeed` reads it off the viewer doc). Absent/empty ⇒ that dimension isn't filtered. Set via `users.setFeedFilter` (tier-gated server-side); a downgrade does **not** clear it. A "what I want to see" preference — distinct from the author-side `defaultVisibility*`. See [§11](#11-feed--engagement).                    |
 | `feedFilterCountries`         | string[]                                               |  –  | Pro/Contact-only. Country-code allowlist filtering the viewer's own feed. ANDed with `feedFilterIndustries` (each list ORs internally). Same source/semantics as `feedFilterIndustries` above.                                                                                                                                                                                                                      |
-| `leaderboardOptOut`           | boolean                                                |  –  | **R22** — set via `users.setLeaderboardOptOut`. Absent ⇒ the member appears in the site‑wide rankings. Hides only from rankings; the members directory and the mutual interaction lists are unaffected.                                                                                                                                                                                                             |
+| `leaderboardOptOut`           | boolean                                                |  –  | **R22** — set via `users.setLeaderboardOptOut`. Absent ⇒ the member appears in the site‑wide rankings. Hides only from rankings; the mutual interaction lists are unaffected.                                                                                                                                                                                                                                       |
 | `digestEmailsEnabled`         | boolean                                                |  –  | **R24** — 3-day activity-digest preference. Absent ⇒ enabled (opt-out, not opt-in). Read/written by `users.getEmailPreferences` / `users.setDigestEmailsEnabled` (Settings → Emails) and set to `false` by the one-click unsubscribe endpoint. See [§8](#8-subscriptions--billing).                                                                                                                                 |
 | `lastDigestAt`                | number                                                 |  –  | **R24** — timestamp of the member's last **successful** digest send (ms). Stamped only after `sendEmail` resolves without throwing, so a failed send retries on the next daily sweep; absent ⇒ due immediately.                                                                                                                                                                                                     |
 | `tier`                        | `'starter'\|'growth'\|'pro'\|'contact'`                |  –  | Subscription tier. **Optional** → users with no tier are absent from the `by_tier` index.                                                                                                                                                                                                                                                                                                                           |
@@ -854,7 +854,9 @@ Indexes: `by_days [days]` — the query's one-row lookup and the job's replace.
 One row per window (`7d` / `30d`) per daily generation, written by the two ranking‑snapshot crons
 (`jobs/rankingSnapshot.ts`) and read by `rankings.getSiteRankings` ([§11](#11-feed--engagement)). Only user **ids** are
 stored: the read joins `users` and drops banned, pending‑deletion and opted‑out members there. Each rebuild keeps the
-newest **4** generations per window, so the board can show movement against the previous one.
+newest **4** generations per window, so the board can show movement against the previous one. Both meta fields are
+optional: generations written before the enrichment keep validating and the read defaults them to `0`. An admin can
+force a rebuild for both windows through `admin.rebuildRankingSnapshotsNow` (Settings → Rankings board).
 
 The job is a **single bounded pass** (the spec's cursor chain was not built): it reads the newest
 `SNAPSHOT_ROW_CEILING` (**10,000**) `userInteractions` and `posts` rows, tallies in memory, writes one generation and
@@ -863,16 +865,16 @@ additionally capped at `MAX_DISTRIBUTION` (**8,000**, headroom under Convex's 8,
 tail also sets `partial`, and a position beyond the cap reads as no position because `positionOf` returns `null` for a
 count that is absent from the stored distribution.
 
-| Field                        | Type        | Req | Meaning                                                                                                                    |
-|------------------------------|-------------|:---:|----------------------------------------------------------------------------------------------------------------------------|
-| `window`                     | `7d \| 30d` | ✓  | Board window. Indexed with `generatedAt`; a rebuild appends a generation, it never replaces one.                           |
-| `generatedAt`                | number      | ✓  | Rebuild timestamp (ms) — the generation's ordering key.                                                                    |
-| `since`                      | number      | ✓  | Window start = `generatedAt − window` (ms). A member's live count for the board is read against this instant.              |
-| `topPosters`                 | object[]    | ✓  | Up to 100 `{ userId, count, lastAt }` — authors of posts published in the window (hidden and soft‑deleted posts excluded). |
-| `topInteractors`             | object[]    | ✓  | Up to 100 `{ userId, count, lastAt }` — made‑side interactions in the window (`ai_draft` and self‑interactions excluded).  |
-| `posterCountsDescending`     | number[]    | ✓  | Every poster's count, descending. Lets the read place a member outside the top 100 exactly.                                |
-| `interactorCountsDescending` | number[]    | ✓  | Every interactor's count, descending — the distribution behind the caller's exact position.                                |
-| `partial`                    | boolean     | ✓  | `true` when either scan hit `SNAPSHOT_ROW_CEILING` **or** a counts distribution was capped at `MAX_DISTRIBUTION`.          |
+| Field                        | Type        | Req | Meaning                                                                                                                                                                                                   |
+|------------------------------|-------------|:---:|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `window`                     | `7d \| 30d` | ✓  | Board window. Indexed with `generatedAt`; a rebuild appends a generation, it never replaces one.                                                                                                          |
+| `generatedAt`                | number      | ✓  | Rebuild timestamp (ms) — the generation's ordering key.                                                                                                                                                   |
+| `since`                      | number      | ✓  | Window start = `generatedAt − window` (ms). A member's live count for the board is read against this instant.                                                                                             |
+| `topPosters`                 | object[]    | ✓  | Up to 100 `{ userId, count, lastAt, reactionsReceived? }` — authors of posts published in the window (hidden and soft‑deleted posts excluded); `reactionsReceived` sums the in‑window posts' `likeCount`. |
+| `topInteractors`             | object[]    | ✓  | Up to 100 `{ userId, count, lastAt, postsTouched? }` — made‑side interactions in the window (`ai_draft` and self‑interactions excluded); `postsTouched` counts distinct posts.                            |
+| `posterCountsDescending`     | number[]    | ✓  | Every poster's count, descending. Lets the read place a member outside the top 100 exactly.                                                                                                               |
+| `interactorCountsDescending` | number[]    | ✓  | Every interactor's count, descending — the distribution behind the caller's exact position.                                                                                                               |
+| `partial`                    | boolean     | ✓  | `true` when either scan hit `SNAPSHOT_ROW_CEILING` **or** a counts distribution was capped at `MAX_DISTRIBUTION`.                                                                                         |
 
 Index: `by_window_and_generated_at [window, generatedAt]` — the newest‑first read and the generation trim (keep 4).
 
@@ -1141,6 +1143,28 @@ flowchart TD
 | `sessions.createAuthCode` / `redeemAuthCode`                                             | internalMutation / **public mutation** | PKCE login-code lifecycle. `createAuthCode` stores `{ code, userId, challenge, plan?, interval? }` with a 2‑minute TTL. `redeemAuthCode({ code, verifier })` re‑derives `SHA-256(verifier)` and compares it to the stored challenge; on match it deletes the single‑use code, inserts the session, and returns `{ sessionToken }`. Any failure throws the generic `ConvexError('Login could not be verified. Please try again.')` (a throwing mutation rolls back its writes, so a failed attempt mints nothing and cannot consume the code). Never logs `code`/`verifier`.                                                                             |
 | `sessions.createOAuthState` / `validateAndConsumeOAuthState`                             | internalMutation                       | CSRF nonce lifecycle. `createOAuthState` stores `browserNonce` (the value of the browser-bound, per‑state `oauth_nonce_<state>` cookie) and the PKCE `challenge` alongside the state, and accepts optional `plan`/`interval`/`ref`. `validateAndConsumeOAuthState` validates the stored `browserNonce`, expiry, **and** challenge shape **before** deleting — a failed attempt leaves the row for the legitimate browser until TTL cleanup, and only success consumes it — then returns `{ valid, plan?, interval?, ref?, challenge }` so the callback can forward the chosen tier **and the R19 invite code** to `upsertUser` and bind the login code. |
 | `sessions.deleteExpiredSessions` / `deleteExpiredOAuthStates` / `deleteExpiredAuthCodes` | internalMutation                       | Cron cleanup (batches of 200, self‑rescheduling when full).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+
+### Dev user impersonation (`convex/dev.ts` + `app/src/components/DevUserSwitcher.tsx`)
+
+A **dev-only** escape hatch for testing the product as any user (rankings, caps, onboarding, new features) without
+ever completing OAuth as them. It is gated by the `ALLOW_DEV_IMPERSONATION` env var — set **only** on the local/dev
+Convex deployment — and every call throws `ConvexError('Dev impersonation is disabled')` before touching the database
+when the var is absent, so the endpoints are inert in production. Same envelope discipline as
+`ALLOW_ADMIN_SHARE_ANY_POST` (§10).
+
+- `dev.listUsers` (public query) — compact, bounded (`.take(500)`) list for the switcher: `_id`, `name`, `email`,
+  `tier`, `subscriptionStatus`, `isBanned`. No tokens or other secrets cross the wire.
+- `dev.impersonate` (public mutation) — mints a fresh 15-day session row for the target `userId` (exactly what the
+  OAuth callback and the seed's `seed_<key>` sessions produce) and returns `{ sessionToken, name }`. Clients never
+  supply a `userId` for authorization anywhere else; this mutation is the single deliberate exception and only
+  exists behind the dev flag.
+- `DevUserSwitcher` (rendered from `App.tsx` next to `<Toaster />` only when `import.meta.env.DEV`) — a floating
+  "DEV · Impersonate" button on the **bottom-right, stacked above the Feedback button**, opening a panel (right-aligned,
+  opening upward) with search, current-user highlight, tier/status/ban
+  badges, and a **Back to \<original user\>** row. Selecting a user calls `dev.impersonate`, writes the token to
+  `sessionStorage('sessionToken')`, clears the `signedOut` marker and reloads — the same token swap the seed docs
+  describe, but for any account. The previous token is kept in `sessionStorage` (`devImpersonatePrevToken`) so a
+  single click returns to the real account.
 
 ### Token lifecycle: issue → refresh window → reconnect fallback
 
@@ -3452,13 +3476,9 @@ and members pending deletion are dropped from the counterpart join at read time 
 (`listPeopleIInteractedWith`, `listInteractionsByPost`, `rankings.getMyRankings` and the notifications actor join);
 an opted‑out member still appears in all of them — opt‑out covers the site boards only.
 
-**The directory (`users.listMembers`).** The `/people` "All" tab pages the `users` table in creation order (50 per
-page), drops banned members and members pending deletion, and projects only `toSearchPerson`'s safe fields (name,
-headline, picture, public identifier) — the same projection people search uses. The tab carries a debounced search
-box (300 ms, `people.searchLabel`): from **two characters** it answers from `api.search.search`'s `people`
-results instead of the paginated list, and below the minimum it falls back to the directory. The client-supplied
-`paginationOpts.numItems` is clamped to `[1, 100]` (`clampHistoryPageSize`, shared with history and the inbox) before
-`.paginate`.
+**The directory (`users.listMembers`) was removed on 2026‑09‑14.** The `/people` page is interactions only; the
+member directory and its debounced `api.search.search` box no longer exist (`listMembers` and the
+`people.tabs.all` / `people.emptyAll` / `people.search*` copy are gone).
 
 **Rankings.** `rankings.getMyRankings` aggregates the caller's own log live, top 10 each direction, with the same
 2000‑row reads and `truncated` flag (surfaced on `/rankings` under the "You" block with `people.truncated`'s copy).
@@ -3471,8 +3491,14 @@ and self), and the exact position comes from the snapshot's full `interactorCoun
 in `lib/ranking.ts`), so "you are #87" works beyond the top 100. Positions are competition ranks — equal
 counts share the best (lowest) position number (`[9,7,7,5]` → positions `1,2,2,4`) — and `movement` compares the
 position with the previous generation (positive = climbed). A `partial: true` board hit the job's 10,000‑row scan
-ceiling or the 8,000-count distribution cap and says so. Personal
-rankings are live; the site boards only move when the daily crons rebuild them ([§13](#13-scheduled-jobs-crons)).
+ceiling or the 8,000-count distribution cap and says so. The read also decorates each row with the snapshot's meta:
+`reactionsReceived` for posters (summed in‑window `likeCount`) and `postsTouched` for interactors (distinct posts),
+defaulting to `0` on generations written before the enrichment. Personal
+rankings are live; the site boards only move when the daily crons rebuild them ([§13](#13-scheduled-jobs-crons)). A
+fresh deployment has **no site board** until the first 03:30 / 03:35 UTC run; seed it immediately with
+`npx convex run jobs/rankingSnapshot:rebuildRankingSnapshots '{"window":"7d"}'` (and `"30d"` for the other window), or
+queue both windows from the admin Settings tab (`admin.rebuildRankingSnapshotsNow`). `/rankings` states the next
+03:30 UTC rebuild as a live relative line (`NextUpdate` + `rankings.nextUpdate`).
 
 **The opt‑out (`users.setLeaderboardOptOut`).** One boolean on `users`, **rankings only**: an opted‑out member
 disappears from the site boards for everyone else, while the `/people` directory and both mutual interaction lists are
@@ -3497,8 +3523,8 @@ Read paths live in `convex/notifications.ts` — the in-app inbox. That filename
 mailer until R23; the mailer is now `convex/billingNotices.ts` (rename note below).
 
 - **`listMine({ sessionToken, paginationOpts })`** — the inbox, newest first through `by_recipient_and_created_at`.
-  The client-supplied `numItems` is clamped to `[1, 100]` (`clampHistoryPageSize`, shared with history and the
-  members directory) before `.paginate`.
+  The client-supplied `numItems` is clamped to `[1, 100]` (`clampHistoryPageSize`, shared with history) before
+  `.paginate`.
   Actor and post are joined per unique row at read time; a post that is hidden, soft-deleted or gone entirely comes
   back with `removed: true` rather than dropped (the History treatment), so the row is never a blank. A banned or
   pending-deletion actor's page row drops from the inbox (the stored row itself stays, ready for an unban).
@@ -4742,25 +4768,28 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
   gone entirely, so a deleted target never renders as a blank row. The timestamp is a real `<time dateTime=…>` carrying
   `timeAgo` (`lib/relativeDay.ts`) with the absolute date in `title`. **No analytics event by design** — reviewing your
   own log is not a funnel step (spec §10).
-- **PeoplePage** (`/people`, R22) — the interaction graph read back as people, three tabs (`people.tabs.*`); the initial
-  tab comes from the `?tab=received|made|all` query param (the `/rankings` deep links), defaulting to `received`.
-  **Interacted with you** renders `interactions.listInteractionsByPost` in `PeopleAccordion`: one row per post (an
-  excerpt, the post's total (`people.count`), a `people.postRemoved` badge when hidden/soft-deleted, the per-actor
-  reaction/comment tally with a comment or reaction glyph (`MessageSquare` / `ThumbsUp`, aria-hidden) and `timeAgo`
-  when expanded, and a `feed.viewOnLinkedIn` link for live posts). **You interacted with** renders
-  `listPeopleIInteractedWith` as a flat list with counts and `timeAgo`; **All members** renders the `users.listMembers`
-  directory (50 per page via `usePaginatedQuery`, sorted alphabetically per loaded page with `localeCompare`, with a
-  `feed.loadMore` button while more members remain). A debounced search box (300 ms, `people.searchLabel`) switches
-  that tab to `api.search.search`'s people results once the trimmed query reaches two characters (`people.emptySearch`
-  when nothing matches); below the minimum it falls back to the paginated directory. The two personal tabs share the
-  recap's `WindowToggle` (7d / 30d, `now` latched once to `floorToHour(Date.now())`); `people.truncated` appears under
-  a tab whose 2000-row read ceiling was hit. No analytics event; copy lives under `people.*`.
+- **PeoplePage** (`/people`, R22) — the interaction graph read back as people, two tabs (`people.tabs.*`); the initial
+  tab comes from the `?tab=received|made` query param (the `/rankings` deep links), defaulting to `received` (an
+  unknown value falls back to it). **Interacted with you** renders `interactions.listInteractionsByPost` in
+  `PeopleAccordion`: one row per post (an excerpt, the post's total (`people.count`), a `people.postRemoved` badge
+  when hidden/soft-deleted, and, per actor, the **newest reaction's emoji** (`ReactionGlyph` over
+  `convex/lib/reactions.REACTIONS`, labelled by its `reactions.*` key) and/or a `MessageSquare` glyph when they
+  commented (aria-hidden), a **pluralized tally** (`people.tallyReactions_*` joined with `", "` to
+  `people.tallyComments_*`, a zero side omitted) and `timeAgo` when expanded, plus a `feed.viewOnLinkedIn` link for
+  live posts). **You interacted with** renders `listPeopleIInteractedWith` as a flat list with the same newest-reaction
+  emoji, pluralized tally and `timeAgo`. Both tabs share the recap's `WindowToggle` (7d / 30d, `now` latched once to
+  `floorToHour(Date.now())`); `people.truncated` appears under a tab whose 2000-row read ceiling was hit. The former
+  **All members** directory tab (`users.listMembers` + its debounced `api.search.search` box) was removed on
+  2026-09-14. No analytics event; copy lives under `people.*`.
 - **RankingsPage** (`/rankings`, R22) — `rankings.getSiteRankings` + `rankings.getMyRankings`. **You** shows the
   caller's top-5 received / made lists (`RankingList` under `rankings.toYou` / `rankings.byYou`), each title a link to
   the matching `/people?tab=…` tab; **Site** opens with the `rankings.boardCaption` line (window name from
-  `recap.window.*`) and, only when the snapshot was truncated, `rankings.partial`, then shows the
+  `recap.window.*`), then `NextUpdate`'s relative "next 03:30 UTC rebuild" line and, only when the snapshot was
+  truncated, `rankings.partial`, then shows the
   stored top posters and top interactors (`rankings.topPosters` / `rankings.topInteractors`) — `RankingList` gives the
-  top three a filled rank chip and highlights the caller's own row — followed by the position line ("You are #N" or
+  top three a gold / silver / bronze rank chip, highlights the caller's own row, and composes each row's meta by list
+  (`rankings.postsCount` · `rankings.reactionsCount` for posters, `rankings.interactionsCount` · `rankings.postsTouched`
+  for interactors; the personal lists keep `rankings.count`) — followed by the position line ("You are #N" or
   `rankings.noPosition`), the movement sentence (`rankings.movementUp` / `movementDown` / `movementSame`), and the
   opt-out ghost button (`users.setLeaderboardOptOut`, labelled `rankings.optOut` / `rankings.optIn`); `people.truncated`
   appears under the **You** block when the personal 2000-row read was truncated. Same 7d / 30d toggle. With no snapshot
@@ -5107,11 +5136,14 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
 ### Reusable components
 
 `AppShell` (authenticated shell: persistent sidebar on desktop, modal drawer on mobile) composed of:
-`Sidebar` (feed / my‑posts / **recap** / **history** / **people** / **rankings** in the Main group, billing / settings /
-**privacy** in Manage — all from the shared `navItems.ts`; **no admin link**), `TopBar` (search, theme toggle,
+`Sidebar` (feed / my‑posts / **recap** / **history** / **people** / **rankings** / **notifications** in the Main group,
+billing / settings / **privacy** in Manage — all from the shared `navItems.ts`; **no admin link**), `TopBar` (search,
+theme toggle,
 language menu, user menu trigger, **notification bell** — R23: unread badge + five-row preview popover over
 `notifications.listMine`, see [§11](#11-feed--engagement)), `UserMenu` (profile & settings + sign‑out via
-`performSignOut`), `LanguageMenu` (Radix dropdown replacing the old native `<select>`),
+`performSignOut`), `DevUserSwitcher` (dev-only floating impersonation panel — rendered from `App.tsx` only when
+`import.meta.env.DEV`; see [§7](#7-authentication--identity)), `LanguageMenu` (Radix dropdown replacing the old native
+`<select>`),
 `PostComposer` (dark/light themes, `atLimit`, its `limitHint` a `ReactNode` so callers can pass `UpgradeAtLimit`),
 `UpgradeAtLimit` (R08 — one sentence + one link, shown at the moment a member actually hits a cap: reads `getMe`
 (tier), `getTierLimits` (the next tier's real numbers) and `getSubscriptionInfo` (billing interval, mapped
@@ -5316,7 +5348,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -6131,6 +6163,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `EMAIL_FROM`                     |        – (email no‑ops if unset)        | `lib/email.ts`                                                             | Bare From‑address for transactional email (e.g. `noreply@linkintothessi.com`); `sendEmail` sends it as `Link Into The SSI <address>`, and a value that already carries a display name is kept as-is.                                                                                                                                                                                                                                      |
 | `CONVEX_DEPLOYMENT`              |                ✓ (CLI)                 | Convex CLI                                                                 | Selects the deployment for `convex dev`/`deploy`.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `ALLOW_ADMIN_SHARE_ANY_POST`     | – (**dev/testing only**, unset in prod) | `posts.ts` (`submitPost`)                                                  | When `'true'`, lets an admin bypass post‑ownership verification + posting throttles in `submitPost`. Set **only** on the local/dev deployment (`npx convex env set ALLOW_ADMIN_SHARE_ANY_POST true`).                                                                                                                                                                                                                                     |
+| `ALLOW_DEV_IMPERSONATION`        | – (**dev/testing only**, unset in prod) | `dev.ts` (`listUsers`, `impersonate`)                                      | When `'true'`, enables the dev-only user impersonation endpoints behind the app's floating **DEV · Impersonate** switcher (`DevUserSwitcher`, Vite dev only). Set **only** on the local/dev deployment (`npx convex env set ALLOW_DEV_IMPERSONATION true`). Absent ⇒ both functions throw before touching the DB.                                                                                                                         |
 | `FEEDBACK_REPLY_TO`              |              – (optional)               | `convex/feedback/feedback.ts`                                              | `Reply-To` address on feedback reply emails so users can reply to a human. Unset ⇒ no header (email still sends).                                                                                                                                                                                                                                                                                                                         |
 | `OPENROUTER_API_KEY`             |  ✓ (AI features; AI no‑ops if unset)   | `convex/ai/openrouter.ts`                                                  | OpenRouter bearer token for AI reaction prediction + comment drafting. Unset ⇒ reactions default to `LIKE`, comment drafting reports "AI unavailable".                                                                                                                                                                                                                                                                                    |
 | `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                                                  | Optional model slug override. Provider routing (ZDR + no-data-collection pin governs selection, no price-floor suffix) is enforced in code, not via env. Blank ⇒ falls back to this valid, verified-live default (not broken — see [§11A](#11a-ai-reaction--comment-assistance) for the DeepInfra/Google zero-data-retention caveat: Google logs Gemma prompts/responses for abuse-monitoring independent of DeepInfra's ZDR commitment). |
@@ -6790,6 +6823,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                                                                    | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
 | Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/TrialProvider.tsx`)                                                                                                                                                                 | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                                                                                                                                                                                                                                                |
 | Plan limits (`lib/planLimits.ts`, `seedPlanLimits.ts`, `admin.ts`)                                                                                                                                                                                                                                              | [§9](#9-plan-limits-system)                                                                                                                                                                                                                                                                                                              |
+| Dev user impersonation (`convex/dev.ts`, `app/src/components/DevUserSwitcher.tsx`, `ALLOW_DEV_IMPERSONATION`)                                                                                                                                                                                                   | [§7](#7-authentication--identity), [§14](#14-frontend--authenticated-app-app), [§16](#16-environment-variables)                                                                                                                                                                                                                          |
 | Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                                                                          | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                                                                                                                                                                                                                                                            |
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                                                                                | [§11](#11-feed--engagement) (+ flows)                                                                                                                                                                                                                                                                                                    |
 | In-app notifications (`convex/notifications.ts`, `schema.ts` `notifications`, the `interactions.increment*` write path, `NotificationBell` / `NotificationRow` / `NotificationsPage`, `privacy/retention.ts` purge, `privacy/export.ts` / `privacy/deletion.ts`)                                                | [§5](#5-data-model), [§11](#11-feed--engagement), [§13B](#13b-privacy--compliance), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                           |
@@ -6816,6 +6850,15 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑14 (later). **Dev-only user impersonation, plus a Unicode crash fix.** The new
+`ALLOW_DEV_IMPERSONATION` flag (dev deployment only) enables `convex/dev.ts` (`listUsers` / `impersonate`), driven by
+the
+Vite-dev-only `DevUserSwitcher` in `App.tsx`: a floating panel that mints a 15-day session for any account (with a
+one-click **Back to original**) so rankings, caps and new features can be tested under any user without OAuth. Also
+fixed `convex/lib/recap.ts` `excerpt()`, whose UTF‑16 `slice` could split an emoji and return a lone surrogate —
+which crashed `notifications.listMine` (and the whole app) with Convex's `Could not parse return value as json:
+unexpected end of hex escape`. Sections updated: §7, §14, §16, §21._
 
 _Last updated: 2026‑09‑14. **R22, R23 and R24 are documented end-to-end.** The interaction graph and rankings, the
 in-app inbox, and the 3-day activity digest now have their schema fields, backend surfaces, crons, routes and

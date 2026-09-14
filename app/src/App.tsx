@@ -33,6 +33,7 @@ import AnalyticsConsentGate from './components/AnalyticsConsentGate'
 import PrivacyDataPage from './pages/PrivacyDataPage'
 import UnsubscribedPage from './pages/UnsubscribedPage'
 import { Toaster } from './components/ui/toast'
+import DevUserSwitcher from './components/DevUserSwitcher'
 import { POLICY_VERSION } from '../../convex/lib/policy'
 import { LANDING_URL, isSignedOut } from './lib/session'
 
@@ -101,6 +102,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col">
       <Toaster />
+      <DevUserSwitcher />
       <ScrollToTop />
       <Routes>
         <Route

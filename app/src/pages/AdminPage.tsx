@@ -28,11 +28,13 @@ export default function AdminPage() {
   const toggleProfileScrape = useMutation(api.admin.toggleApifyProfileScrape)
   const syncAllPostsM = useMutation(api.admin.syncAllPosts)
   const syncAllProfilesM = useMutation(api.admin.syncAllProfiles)
+  const rebuildRankingsM = useMutation(api.admin.rebuildRankingSnapshotsNow)
   const [toggling, setToggling] = useState(false)
   const [togglingMaster, setTogglingMaster] = useState(false)
   const [togglingProfile, setTogglingProfile] = useState(false)
   const [syncingPosts, setSyncingPosts] = useState(false)
   const [syncingProfiles, setSyncingProfiles] = useState(false)
+  const [rebuildingRankings, setRebuildingRankings] = useState(false)
   const { flash, showFlash, clearFlash } = useFlash()
 
   if (isAdmin === undefined) {
@@ -101,6 +103,19 @@ export default function AdminPage() {
       showFlash('error', friendlyError(err, 'Could not start profile sync.'))
     } finally {
       setSyncingProfiles(false)
+    }
+  }
+
+  async function handleRebuildRankings() {
+    if (!sessionToken) return
+    setRebuildingRankings(true)
+    try {
+      await rebuildRankingsM({ sessionToken })
+      showFlash('success', 'Rankings rebuild started — running in the background.')
+    } catch (err) {
+      showFlash('error', friendlyError(err, 'Could not start the rankings rebuild.'))
+    } finally {
+      setRebuildingRankings(false)
     }
   }
 
@@ -259,6 +274,25 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+          </div>
+
+          <div className="border-border bg-card mb-4 rounded-lg border p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-foreground m-0 text-base font-semibold">Rankings board</h2>
+                <p className="text-muted-foreground mt-1 text-[13px]">
+                  Rebuilds the 7d and 30d site ranking snapshots now instead of waiting for the daily 03:30 / 03:35 UTC
+                  crons.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRebuildRankings}
+                disabled={rebuildingRankings}
+              >
+                {rebuildingRankings ? 'Starting…' : 'Rebuild rankings'}
+              </Button>
+            </div>
           </div>
         </TabsContent>
 

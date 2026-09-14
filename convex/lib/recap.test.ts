@@ -82,6 +82,14 @@ describe('excerpt', () => {
     expect(excerpt(long)).toBe('a'.repeat(140) + '…')
     expect(excerpt('short', 10)).toBe('short')
   })
+
+  it('never splits a surrogate pair (a lone surrogate breaks Convex JSON serialization)', () => {
+    // The emoji occupies UTF-16 units 139-140, so a naive slice(0, 140) would keep only its high
+    // surrogate. The dangling half is dropped instead.
+    expect(excerpt('a'.repeat(139) + '😀' + 'tail')).toBe('a'.repeat(139) + '…')
+    // Pair fully inside the window (units 138-139) is kept.
+    expect(excerpt('a'.repeat(138) + '😀' + 'tail')).toBe('a'.repeat(138) + '😀…')
+  })
 })
 
 describe('pickNearCapPost', () => {

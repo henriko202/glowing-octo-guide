@@ -178,6 +178,19 @@ export const syncUserProfile = mutation({
   }
 })
 
+// Manual ranking-board rebuild — queues one snapshot generation per window immediately, for a fresh
+// deployment (no board until the first 03:30 / 03:35 UTC cron) or an on-demand refresh without waiting.
+// Not Apify-gated: it reads only already-synced data. Returns immediately; the jobs run in the background.
+export const rebuildRankingSnapshotsNow = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+    await ctx.scheduler.runAfter(0, internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '7d' })
+    await ctx.scheduler.runAfter(0, internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '30d' })
+  }
+})
+
 // Exported for testing.
 export function validateLimitArgs(interactionsPerPost: number, postsPerWeek: number): void {
   if (interactionsPerPost < 1 || postsPerWeek < 1) {

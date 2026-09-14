@@ -252,8 +252,8 @@ export function digestWindow(now: number, lastDigestAt?: number): { since: numbe
 - `rankings.getSiteRankings(sessionToken, window)` - reads the two newest snapshot generations, joins profiles, filters
   banned and `leaderboardOptOut`, returns top 20 of each list, the member's own count, exact position and movement,
   and `partial` when the snapshot was truncated.
-- `users.listMembers(sessionToken, paginationOpts)` - directory tab; safe projection, alphabetical, banned excluded.
-  The search input on the same tab keeps using `search.search` for full-text people lookup.
+- `users.listMembers(sessionToken, paginationOpts)` - **removed 2026-09-14**: the members directory left `/people`,
+  so this query and its `search.search` box are gone (see §7.4).
 - `users.getEmailPreferences(sessionToken)` - `{ digestEmailsEnabled, leaderboardOptOut }` with absent resolved to
   defaults.
 
@@ -379,13 +379,13 @@ render time, and a "Mark all as read" action. Empty state invites the member to 
 
 ### 7.4 `/people`
 
-Three tabs.
+Two tabs — the **All members** directory was removed on 2026-09-14 (the page is interactions only).
 
 - **Interacted with you.** Window toggle (7d / 30d, the recap component). Accordion per post: post excerpt and totals
-  in the header, expanded shows avatars, names, kind icon, per-person count and relative time. Empty state per window.
-- **You interacted with.** Mirror list of people with counts and last interaction.
-- **All members.** Directory with search input and paginated member list, safe projection only (name, headline,
-  picture; never tokens or PII).
+  in the header, expanded shows avatars, names, the newest reaction's emoji and/or a comment glyph, a pluralized
+  reaction/comment tally and relative time. Empty state per window.
+- **You interacted with.** Mirror list of people with the newest reaction's emoji, a pluralized tally and last
+  interaction.
 
 ### 7.5 `/rankings`
 
@@ -397,7 +397,11 @@ show me" control that calls `users.setLeaderboardOptOut`, so the opt-out lives o
 sees themselves ranked. A short caption above the block explains the window and, when `partial`, that some activity may
 be missing from the snapshot. Movement is shown as a small delta with plain text alternatives for screen readers ("up 3
 positions"),
-never color alone. Ranking is always visible, even with a small base (decision 7).
+never color alone. Ranking is always visible, even with a small base (decision 7). Each site row's meta states the list
+it
+belongs to — posters show posts · reactions received, interactors show interactions · distinct posts touched (the
+snapshot stores the enriched counts; older generations read as 0) — and a live "next update" line under the caption
+counts down to the next 03:30 UTC rebuild.
 
 ### 7.6 Settings, email section
 
@@ -529,14 +533,14 @@ the UI delivery check this repo uses. `docs/PLATFORM.md` updated in the same cha
 
 ## 12. Traceability to the raw notes
 
-| Raw note                                                                  | Where it lands                                                                |
-|---------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| 1. List of people you interacted with                                     | R22, `/people` tab "You interacted with", `listPeopleIInteractedWith`         |
-| 2. List of people on the tool                                             | R22, `/people` tab "All members", `users.listMembers` + existing search       |
-| 3. Notifications of people who interacted with you                        | R23, `notifications` table, bell, toast, `/notifications`                     |
-| 4. Notifications of interactions among users                              | Ruled duplicate of 3 (decision 3). Not built.                                 |
-| 5. Ranking of who interacted most with you / who you interacted most with | R22, `rankings.getMyRankings`, `/rankings` "You" block, `/people` tallies     |
-| 6. Ranking of most interactions on the site                               | R22, `rankingSnapshots.interactors`, `/rankings` site block, digest section 4 |
-| 7. Ranking of most posts on the site                                      | R22, `rankingSnapshots.posters`, `/rankings` site block, digest section 4     |
-| 8. Email every 3 days with the interactions                               | R24, `jobs/digest.ts`, `lib/digestEmails.ts`                                  |
-| 9. Unsubscribe from email in the platform                                 | R24, Settings email section, `/unsubscribed`, one-click headers               |
+| Raw note                                                                  | Where it lands                                                                                       |
+|---------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| 1. List of people you interacted with                                     | R22, `/people` tab "You interacted with", `listPeopleIInteractedWith`                                |
+| 2. List of people on the tool                                             | Ruled out for `/people` on 2026-09-14 (the page is interactions only; directory removed). Not built. |
+| 3. Notifications of people who interacted with you                        | R23, `notifications` table, bell, toast, `/notifications`                                            |
+| 4. Notifications of interactions among users                              | Ruled duplicate of 3 (decision 3). Not built.                                                        |
+| 5. Ranking of who interacted most with you / who you interacted most with | R22, `rankings.getMyRankings`, `/rankings` "You" block, `/people` tallies                            |
+| 6. Ranking of most interactions on the site                               | R22, `rankingSnapshots.interactors`, `/rankings` site block, digest section 4                        |
+| 7. Ranking of most posts on the site                                      | R22, `rankingSnapshots.posters`, `/rankings` site block, digest section 4                            |
+| 8. Email every 3 days with the interactions                               | R24, `jobs/digest.ts`, `lib/digestEmails.ts`                                                         |
+| 9. Unsubscribe from email in the platform                                 | R24, Settings email section, `/unsubscribed`, one-click headers                                      |

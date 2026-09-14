@@ -10,10 +10,7 @@ import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
 import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
 import { isNearThreshold, TRIAL_INTERACTION_THRESHOLD, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { firstName, generateInviteCode } from './lib/invite'
-import { toSearchPerson } from './search'
 import { writeAuditLog, type AuditDb } from './lib/audit'
-// Reused rather than copied: the [1, 100] clamp is identical for every cursor-paginated client-facing list.
-import { clampHistoryPageSize } from './interactions'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -549,27 +546,6 @@ export const setCommentLanguage = mutation({
     const user = await requireAuth(ctx, sessionToken)
     if (!isValidCommentLanguage(commentLanguage)) throw new ConvexError('Unsupported language')
     await ctx.db.patch(user._id, { commentLanguage })
-  }
-})
-
-/**
- * R22 — members directory for /people. Safe projection only (name, headline, picture, LinkedIn identifier);
- * banned and pending-deletion members are excluded, like people search. Paginated.
- */
-export const listMembers = query({
-  args: { sessionToken: v.string(), paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { sessionToken, paginationOpts }) => {
-    await requireAuth(ctx, sessionToken)
-    // Unindexed creation order, exactly like users.getActiveSubscribers (users.ts:54). The directory is a small
-    // paginated list; the page can sort the loaded page alphabetically in the UI. The client-supplied page size is
-    // clamped like every client-facing cursor list.
-    const result = await ctx.db
-      .query('users')
-      .paginate({ ...paginationOpts, numItems: clampHistoryPageSize(paginationOpts.numItems) })
-    return {
-      ...result,
-      page: result.page.filter(u => !u.isBanned && u.deletionScheduledAt === undefined).map(toSearchPerson)
-    }
   }
 })
 

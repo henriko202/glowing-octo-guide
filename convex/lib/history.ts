@@ -2,6 +2,7 @@
 // app can import the type without pulling Convex server code.
 import type { Reaction } from './reactions'
 import { excerpt } from './recap'
+import { stripLoneSurrogates } from './safeText'
 
 export interface HistoryRow {
   id: string
@@ -41,7 +42,7 @@ export function toHistoryRow(row: InteractionDoc, post: PostDoc | null, author: 
     id: row._id,
     kind: row.kind,
     reaction: row.reaction,
-    comment: row.comment,
+    comment: row.comment === undefined ? undefined : stripLoneSurrogates(row.comment),
     createdAt: row.createdAt,
     post: post
       ? {

@@ -15,7 +15,8 @@
     "recap": "Resumen",
     "history": "Historial",
     "people": "Personas",
-    "rankings": "Ranking"
+    "rankings": "Ranking",
+    "notifications": "Notificaciones"
   },
   "shell": {
     "search": "Buscar publicaciones, personas",
@@ -544,20 +545,20 @@
   },
   "people": {
     "title": "Personas",
-    "lead": "Mira con quién interactuaste, quién interactuó contigo y todos en la plataforma.",
-    "tabs": { "received": "Interactuaron contigo", "made": "Interactuaste con", "all": "Todos los miembros" },
+    "lead": "Mira quién interactuó contigo y con quién interactuaste.",
+    "tabs": { "received": "Interactuaron contigo", "made": "Interactuaste con" },
     "emptyReceived": "Nadie interactuó con tus publicaciones en esta ventana todavía.",
     "emptyMade": "Todavía no interactuaste con nadie en esta ventana.",
-    "emptyAll": "Aún no hay miembros para mostrar.",
-    "searchLabel": "Buscar miembros",
-    "searchPlaceholder": "Buscar por nombre",
-    "emptySearch": "Ningún miembro coincide con tu búsqueda.",
     "truncated": "Mostrando solo las 2000 interacciones más recientes.",
     "accordionToggle": "Ver personas",
+    "morePeople": "+{{count}}",
     "postRemoved": "Publicación eliminada",
     "count_one": "{{count}} interacción",
     "count_other": "{{count}} interacciones",
-    "tally": "{{reactions}} reacciones, {{comments}} comentarios"
+    "tallyReactions_one": "{{count}} reacción",
+    "tallyReactions_other": "{{count}} reacciones",
+    "tallyComments_one": "{{count}} comentario",
+    "tallyComments_other": "{{count}} comentarios"
   },
   "rankings": {
     "title": "Ranking",
@@ -580,6 +581,15 @@
     "empty": "Todavía no hay actividad en esta ventana.",
     "updateFailed": "No se pudo guardar. Inténtalo de nuevo.",
     "rankLabel": "Posición {{rank}}",
+    "postsCount_one": "{{count}} publicación",
+    "postsCount_other": "{{count}} publicaciones",
+    "reactionsCount_one": "{{count}} reacción",
+    "reactionsCount_other": "{{count}} reacciones",
+    "interactionsCount_one": "{{count}} interacción",
+    "interactionsCount_other": "{{count}} interacciones",
+    "postsTouched_one": "en {{count}} publicación",
+    "postsTouched_other": "en {{count}} publicaciones",
+    "nextUpdate": "Próxima actualización {{when}}",
     "count_one": "{{count}} interacción",
     "count_other": "{{count}} interacciones"
   },

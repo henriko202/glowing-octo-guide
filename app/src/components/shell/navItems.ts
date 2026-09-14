@@ -5,6 +5,7 @@ import {
   History,
   Users,
   Trophy,
+  Bell,
   CreditCard,
   Settings,
   ShieldCheck,
@@ -23,7 +24,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/recap', labelKey: 'nav.recap', icon: BarChart3 },
       { path: '/history', labelKey: 'nav.history', icon: History },
       { path: '/people', labelKey: 'nav.people', icon: Users },
-      { path: '/rankings', labelKey: 'nav.rankings', icon: Trophy }
+      { path: '/rankings', labelKey: 'nav.rankings', icon: Trophy },
+      { path: '/notifications', labelKey: 'nav.notifications', icon: Bell }
     ]
   },
   {

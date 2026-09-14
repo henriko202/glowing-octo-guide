@@ -15,7 +15,8 @@
     "recap": "Recap",
     "history": "History",
     "people": "People",
-    "rankings": "Ranking"
+    "rankings": "Ranking",
+    "notifications": "Notifications"
   },
   "shell": {
     "search": "Search posts, people",
@@ -544,20 +545,20 @@
   },
   "people": {
     "title": "People",
-    "lead": "See who interacted with you, who you interacted with, and everyone on the platform.",
-    "tabs": { "received": "Interacted with you", "made": "You interacted with", "all": "All members" },
+    "lead": "See who interacted with you and who you interacted with.",
+    "tabs": { "received": "Interacted with you", "made": "You interacted with" },
     "emptyReceived": "No one interacted with your posts in this window yet.",
     "emptyMade": "You have not interacted with anyone in this window yet.",
-    "emptyAll": "No members to show yet.",
-    "searchLabel": "Search members",
-    "searchPlaceholder": "Search by name",
-    "emptySearch": "No members match your search.",
     "truncated": "Showing the 2000 most recent interactions only.",
     "accordionToggle": "View people",
+    "morePeople": "+{{count}}",
     "postRemoved": "Post removed",
     "count_one": "{{count}} interaction",
     "count_other": "{{count}} interactions",
-    "tally": "{{reactions}} reactions, {{comments}} comments"
+    "tallyReactions_one": "{{count}} reaction",
+    "tallyReactions_other": "{{count}} reactions",
+    "tallyComments_one": "{{count}} comment",
+    "tallyComments_other": "{{count}} comments"
   },
   "rankings": {
     "title": "Rankings",
@@ -580,6 +581,15 @@
     "empty": "No activity in this window yet.",
     "updateFailed": "Could not save. Please try again.",
     "rankLabel": "Position {{rank}}",
+    "postsCount_one": "{{count}} post",
+    "postsCount_other": "{{count}} posts",
+    "reactionsCount_one": "{{count}} reaction",
+    "reactionsCount_other": "{{count}} reactions",
+    "interactionsCount_one": "{{count}} interaction",
+    "interactionsCount_other": "{{count}} interactions",
+    "postsTouched_one": "across {{count}} post",
+    "postsTouched_other": "across {{count}} posts",
+    "nextUpdate": "Next update {{when}}",
     "count_one": "{{count}} interaction",
     "count_other": "{{count}} interactions"
   },

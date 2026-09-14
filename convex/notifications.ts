@@ -8,6 +8,7 @@ import { internal } from './_generated/api'
 import { requireAuth } from './lib/auth'
 import type { Reaction } from './lib/reactions'
 import { excerpt } from './lib/recap'
+import { stripLoneSurrogates } from './lib/safeText'
 // Reused rather than copied: the [1, 100] clamp is identical for every cursor-paginated client-facing list.
 import { clampHistoryPageSize } from './interactions'
 
@@ -57,7 +58,7 @@ function toRow(
     id: row._id as string,
     kind: row.kind,
     reaction: row.reaction,
-    excerpt: row.excerpt,
+    excerpt: row.excerpt === undefined ? undefined : stripLoneSurrogates(row.excerpt),
     createdAt: row.createdAt,
     readAt: row.readAt,
     unread: row.readAt === undefined,

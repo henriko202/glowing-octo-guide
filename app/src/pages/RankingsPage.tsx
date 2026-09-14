@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery } from 'convex/react'
+import { EyeOff } from 'lucide-react'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
 import WindowToggle from '@/components/WindowToggle'
 import RankingList from '@/components/RankingList'
+import NextUpdate from '@/components/NextUpdate'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { floorToHour } from '../../../convex/lib/recap'
@@ -38,7 +40,7 @@ export default function RankingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[720px] px-4">
+    <div className="mx-auto max-w-[720px] px-4 pb-6">
       <PageHeader
         title={t('rankings.title')}
         lead={t('rankings.lead')}
@@ -61,6 +63,7 @@ export default function RankingsPage() {
               <>
                 <RankingList
                   titleKey="rankings.toYou"
+                  variant="personal"
                   titleTo="/people?tab=received"
                   rows={mine.received.slice(0, 5).map(row => ({
                     userId: row.userId,
@@ -73,6 +76,7 @@ export default function RankingsPage() {
                 />
                 <RankingList
                   titleKey="rankings.byYou"
+                  variant="personal"
                   titleTo="/people?tab=made"
                   rows={mine.made.slice(0, 5).map(row => ({
                     userId: row.userId,
@@ -96,19 +100,22 @@ export default function RankingsPage() {
                 <p className="text-muted-foreground mt-2 mb-0 text-sm">
                   {t('rankings.boardCaption', { window: t(`recap.window.${window}`) })}
                 </p>
+                <NextUpdate />
                 {rankings.partial && <p className="text-muted-foreground mt-2 mb-0 text-sm">{t('rankings.partial')}</p>}
                 <RankingList
                   titleKey="rankings.topPosters"
+                  variant="posts"
                   rows={rankings.posters}
                   meId={me?.id}
                 />
                 <RankingList
                   titleKey="rankings.topInteractors"
+                  variant="interactors"
                   rows={rankings.interactors}
                   meId={me?.id}
                 />
                 {me !== null && (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-muted-foreground text-sm">
                       {me.position !== null
                         ? t('rankings.yourPosition', { position: me.position })
@@ -125,11 +132,13 @@ export default function RankingsPage() {
                       )}
                     </p>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
+                      className="cursor-pointer"
                       disabled={optOutSaving}
                       onClick={handleOptOut}
                     >
+                      <EyeOff aria-hidden="true" />
                       {me.optedOut ? t('rankings.optIn') : t('rankings.optOut')}
                     </Button>
                   </div>

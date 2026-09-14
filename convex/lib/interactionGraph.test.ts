@@ -29,6 +29,17 @@ describe('tallyReceivedByPerson', () => {
       { userId: 'bruno', reactions: 1, comments: 0, total: 1, lastAt: 4_000 }
     ])
   })
+
+  it('keeps the newest reaction value per counterparty and ignores comment recency', () => {
+    const rows = [
+      row({ userId: 'ana', kind: 'reaction', reaction: 'LIKE', _creationTime: 2_000 }),
+      row({ userId: 'ana', kind: 'reaction', reaction: 'EMPATHY', _creationTime: 3_000 }),
+      row({ userId: 'ana', kind: 'comment', _creationTime: 4_000 })
+    ]
+    expect(tallyReceivedByPerson(rows, FROM)).toEqual([
+      { userId: 'ana', reactions: 2, comments: 1, total: 3, lastAt: 4_000, reaction: 'EMPATHY' }
+    ])
+  })
 })
 
 describe('tallyMadeByPerson', () => {
@@ -81,9 +92,19 @@ describe('tallySiteActors', () => {
       row({ userId: 'bruno', authorId: 'me', kind: 'ai_draft' }) // draft, excluded
     ]
     const map = tallySiteActors(rows, FROM)
-    expect(map.get('ana')).toEqual({ count: 2, lastAt: 2_000 })
-    expect(map.get('bruno')).toEqual({ count: 1, lastAt: 2_000 })
+    // Every row shares the default post 'p1', so each actor touched one distinct post.
+    expect(map.get('ana')).toEqual({ count: 2, lastAt: 2_000, postsTouched: 1 })
+    expect(map.get('bruno')).toEqual({ count: 1, lastAt: 2_000, postsTouched: 1 })
     expect(map.size).toBe(2)
+  })
+
+  it('counts distinct posts touched: the same post twice is one post', () => {
+    const rows = [
+      row({ userId: 'ana', postId: 'p1', authorId: 'bruno' }),
+      row({ userId: 'ana', postId: 'p1', authorId: 'bruno', kind: 'comment' }),
+      row({ userId: 'ana', postId: 'p2', authorId: 'bruno' })
+    ]
+    expect(tallySiteActors(rows, FROM).get('ana')).toEqual({ count: 3, lastAt: 2_000, postsTouched: 2 })
   })
 })
 

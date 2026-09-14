@@ -2,6 +2,7 @@
 // computed from a caller-supplied `now` (the client floors it to the hour so the query args stay
 // stable across re-renders and Convex can share the subscription).
 import { effectiveInteractionCap, isNearInteractionLimit } from './interactionLimit'
+import { stripLoneSurrogates, truncateSafely } from './safeText'
 
 export type RecapWindow = '7d' | '30d'
 
@@ -72,8 +73,9 @@ export function excludeSelf<T extends { userId: string; authorId?: string }>(row
 }
 
 export function excerpt(content: string, max = EXCERPT_LENGTH): string {
-  const flat = content.replace(/\s+/g, ' ').trim()
-  return flat.length > max ? `${flat.slice(0, max)}…` : flat
+  const flat = stripLoneSurrogates(content.replace(/\s+/g, ' ').trim())
+  if (flat.length <= max) return flat
+  return `${truncateSafely(flat, max)}…`
 }
 
 /** The post closest to the cap (highest total inside the nudge band), or null. */

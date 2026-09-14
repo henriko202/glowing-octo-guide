@@ -1,11 +1,11 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, beforeEach } from 'vitest'
 import { getFunctionName } from 'convex/server'
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(),
-  useMutation: vi.fn(() => vi.fn())
+  useMutation: vi.fn()
 }))
 
 // Mock useSearchParams with a simple in-memory implementation.
@@ -44,18 +44,27 @@ const SURVIVAL_FIXTURE = {
   payingByTier: { starter: 0, growth: 0, pro: 0, contact: 0 }
 }
 
+const mockRebuildRankings = vi.fn()
+
 // Route each query by its function reference (robust to query count / order):
 //   checkIsAdmin → true, getSettings → undefined, all list* queries → []
 beforeEach(() => {
+  sessionStorage.clear()
   mockSearchParams.delete('tab')
   mockSetSearchParams.mockClear()
   mockNavigate.mockClear()
+  mockRebuildRankings.mockClear()
   vi.mocked(useQuery).mockImplementation((ref: unknown, ..._rest: unknown[]) => {
     const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
     if (name === 'admin:checkIsAdmin') return true as never
     if (name === 'admin:getSettings') return undefined as never
     if (name === 'admin:survivalMetrics') return SURVIVAL_FIXTURE as never
     return [] as never
+  })
+  vi.mocked(useMutation).mockImplementation((ref: unknown) => {
+    const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
+    if (name === 'admin:rebuildRankingSnapshotsNow') return mockRebuildRankings as never
+    return vi.fn() as never
   })
 })
 
@@ -85,6 +94,13 @@ describe('AdminPage tabs', () => {
     render(<AdminPage />)
     expect(screen.getByText(/apify \(master\)/i)).toBeInTheDocument()
     expect(screen.getByText(/apify profile scrape/i)).toBeInTheDocument()
+  })
+
+  it('starts a ranking-snapshot rebuild', async () => {
+    sessionStorage.setItem('sessionToken', 'tok')
+    render(<AdminPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Rebuild rankings' }))
+    await waitFor(() => expect(mockRebuildRankings).toHaveBeenCalledWith({ sessionToken: 'tok' }))
   })
 
   it('renders the Survival tab and reads ?tab=survival', () => {

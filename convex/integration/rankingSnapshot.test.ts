@@ -22,7 +22,7 @@ async function seedUser(t: T, name: string, createdAt = NOW) {
 async function seedPost(
   t: T,
   authorId: Awaited<ReturnType<typeof seedUser>>,
-  fields: { publishedAt?: number; hidden?: boolean; deletedAt?: number } = {}
+  fields: { publishedAt?: number; hidden?: boolean; deletedAt?: number; likeCount?: number } = {}
 ) {
   return await t.run(async ctx =>
     ctx.db.insert('posts', {
@@ -30,7 +30,7 @@ async function seedPost(
       authorId,
       content: 'x',
       publishedAt: fields.publishedAt ?? NOW,
-      likeCount: 0,
+      likeCount: fields.likeCount ?? 0,
       commentCount: 0,
       mediaUrls: [],
       isFeatured: false,
@@ -85,6 +85,46 @@ describe('rankingSnapshot.rebuildRankingSnapshots', () => {
     expect(rows[0].interactorCountsDescending).toEqual([2, 1])
     expect(rows[0].topPosters.map(p => p.userId)).toEqual([ana, bruno])
     expect(rows[0].topPosters.map(p => p.userId)).not.toContain(carla)
+  })
+
+  test('enriches poster entries with summed reactions received and interactor entries with distinct posts touched', async () => {
+    const t = convexTest(schema, modules)
+    const ana = await seedUser(t, 'Ana')
+    const bruno = await seedUser(t, 'Bruno')
+    const first = await seedPost(t, ana, { likeCount: 7 })
+    const second = await seedPost(t, ana, { likeCount: 2 })
+    await t.run(async ctx => {
+      // Two interactions on the same post plus one on another: count 3, distinct posts 2.
+      await ctx.db.insert('userInteractions', {
+        userId: bruno,
+        postId: first,
+        authorId: ana,
+        kind: 'reaction' as const,
+        createdAt: NOW
+      })
+      await ctx.db.insert('userInteractions', {
+        userId: bruno,
+        postId: first,
+        authorId: ana,
+        kind: 'reaction' as const,
+        createdAt: NOW
+      })
+      await ctx.db.insert('userInteractions', {
+        userId: bruno,
+        postId: second,
+        authorId: ana,
+        kind: 'comment' as const,
+        createdAt: NOW
+      })
+    })
+
+    await t.mutation(internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '7d' })
+
+    const rows = await t.run(async ctx =>
+      ctx.db.query('rankingSnapshots').withIndex('by_window_and_generated_at').collect()
+    )
+    expect(rows[0].topPosters[0]).toMatchObject({ userId: ana, count: 2, reactionsReceived: 9 })
+    expect(rows[0].topInteractors[0]).toMatchObject({ userId: bruno, count: 3, postsTouched: 2 })
   })
 
   test('second run keeps the previous generation for movement', async () => {

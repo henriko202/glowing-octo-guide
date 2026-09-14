@@ -45,6 +45,7 @@ async function seed(t: T) {
       postId: post,
       authorId: me,
       kind: 'reaction' as const,
+      reaction: 'LIKE' as const,
       createdAt: NOW - DAY
     })
   )
@@ -73,7 +74,7 @@ describe('interactions people queries', () => {
       now: NOW
     })
     expect(result.posts).toHaveLength(1)
-    expect(result.posts[0].actors[0]).toMatchObject({ name: 'Ana', total: 1 })
+    expect(result.posts[0].actors[0]).toMatchObject({ name: 'Ana', total: 1, reaction: 'LIKE' })
   })
 
   test('banned counterparts disappear from the made list and the by-post actors', async () => {

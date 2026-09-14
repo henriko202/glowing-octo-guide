@@ -53,6 +53,14 @@ describe('topEntries', () => {
     ])
     expect(topEntries(map, 2).map(e => e.userId)).toEqual(['a', 'b'])
   })
+
+  it('preserves extra per-actor fields through the sort and slice', () => {
+    const map = new Map([
+      ['b', { count: 1, lastAt: 100, reactionsReceived: 0 }],
+      ['a', { count: 3, lastAt: 200, reactionsReceived: 9 }]
+    ])
+    expect(topEntries(map, 1)).toEqual([{ userId: 'a', count: 3, lastAt: 200, reactionsReceived: 9 }])
+  })
 })
 
 describe('capDistribution', () => {

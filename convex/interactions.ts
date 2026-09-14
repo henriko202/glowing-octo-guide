@@ -29,6 +29,7 @@ import {
   windowBounds
 } from './lib/recap'
 import { tallyMadeByPerson, tallyReceivedByPost, type CounterpartyTally } from './lib/interactionGraph'
+import { stripLoneSurrogates } from './lib/safeText'
 import { toSearchPerson } from './search'
 
 /** The slice of the member's row the milestone reads — narrow so a test can build one inline. */
@@ -168,7 +169,7 @@ export const getCommentDraft = query({
       .query('userPostState')
       .withIndex('by_user_and_post', q => q.eq('userId', user._id).eq('postId', postId))
       .unique()
-    return state?.commentDraft ?? null
+    return state?.commentDraft === undefined ? null : stripLoneSurrogates(state.commentDraft)
   }
 })
 
@@ -185,23 +186,26 @@ export async function saveCommentDraftHandler(
   postId: Id<'posts'>,
   draft: string
 ): Promise<void> {
+  // A lone surrogate would break every read of this row (Convex return serialization) — sanitize here,
+  // the one door this text comes through.
+  const safeDraft = stripLoneSurrogates(draft)
   const state = await ctx.db
     .query('userPostState')
     .withIndex('by_user_and_post', q => q.eq('userId', userId).eq('postId', postId))
     .unique()
   if (state?.aiDraftedAt !== undefined) {
-    await ctx.db.patch(state._id, { commentDraft: draft })
+    await ctx.db.patch(state._id, { commentDraft: safeDraft })
     return
   }
   const now = Date.now()
-  if (state) await ctx.db.patch(state._id, { commentDraft: draft, aiDraftedAt: now })
-  else await ctx.db.insert('userPostState', { userId, postId, commentDraft: draft, aiDraftedAt: now })
+  if (state) await ctx.db.patch(state._id, { commentDraft: safeDraft, aiDraftedAt: now })
+  else await ctx.db.insert('userPostState', { userId, postId, commentDraft: safeDraft, aiDraftedAt: now })
   // No authorId: a draft is not engagement "received" by the post's author.
   await ctx.db.insert('userInteractions', {
     userId,
     postId,
     kind: 'ai_draft',
-    comment: draft,
+    comment: safeDraft,
     createdAt: now
   })
   await bumpTrialInteraction(ctx, userId, 'made')
@@ -258,6 +262,9 @@ export const incrementCommentCount = internalMutation({
     // featurePost's `if (post.isFeatured) return`). getEngageablePost gates the happy path; this
     // closes the race window.
     if (post.interactionLimitReached) return
+    // A lone surrogate would break every read of this row (Convex return serialization) — the log, the
+    // draft and the notification excerpt all store the sanitized text.
+    const safeComment = stripLoneSurrogates(comment)
     const now = Date.now()
     const newCommentCount = post.commentCount + 1
     await ctx.db.patch(postId, { commentCount: newCommentCount })
@@ -268,7 +275,7 @@ export const incrementCommentCount = internalMutation({
       postId,
       authorId: post.authorId,
       kind: 'comment',
-      comment,
+      comment: safeComment,
       createdAt: now
     })
 
@@ -279,7 +286,7 @@ export const incrementCommentCount = internalMutation({
         actorId,
         postId,
         kind: 'comment',
-        excerpt: excerpt(comment),
+        excerpt: excerpt(safeComment),
         createdAt: now
       })
     }
@@ -291,8 +298,8 @@ export const incrementCommentCount = internalMutation({
       .query('userPostState')
       .withIndex('by_user_and_post', q => q.eq('userId', actorId).eq('postId', postId))
       .unique()
-    if (state) await ctx.db.patch(state._id, { commentedAt: now, commentDraft: comment })
-    else await ctx.db.insert('userPostState', { userId: actorId, postId, commentedAt: now, commentDraft: comment })
+    if (state) await ctx.db.patch(state._id, { commentedAt: now, commentDraft: safeComment })
+    else await ctx.db.insert('userPostState', { userId: actorId, postId, commentedAt: now, commentDraft: safeComment })
 
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
@@ -629,7 +636,8 @@ export const listPeopleIInteractedWith = query({
         userId: r.userId as string,
         authorId: r.authorId as string | undefined,
         postId: r.postId as string,
-        kind: r.kind
+        kind: r.kind,
+        reaction: r.reaction
       })),
       since
     )
@@ -659,7 +667,8 @@ export const listInteractionsByPost = query({
         userId: r.userId as string,
         authorId: r.authorId as string | undefined,
         postId: r.postId as string,
-        kind: r.kind
+        kind: r.kind,
+        reaction: r.reaction
       })),
       since
     )

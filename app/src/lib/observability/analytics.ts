@@ -25,6 +25,7 @@ export function initPostHog(): void {
     api_host: (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ?? 'https://eu.i.posthog.com',
     opt_out_capturing_by_default: true, // no capture and no cookies until analytics consent is granted
     disable_session_recording: true, // no session replay
+    capture_performance: false, // performance autocapture is not shipped; its observer logged console errors
     capture_pageview: true,
     autocapture: true,
     defaults: '2026-05-30'

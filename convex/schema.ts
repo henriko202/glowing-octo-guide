@@ -537,8 +537,23 @@ export default defineSchema({
     window: v.union(v.literal('7d'), v.literal('30d')),
     generatedAt: v.number(),
     since: v.number(),
-    topPosters: v.array(v.object({ userId: v.id('users'), count: v.number(), lastAt: v.number() })),
-    topInteractors: v.array(v.object({ userId: v.id('users'), count: v.number(), lastAt: v.number() })),
+    // reactionsReceived / postsTouched are optional so generations written before the enrichment keep validating.
+    topPosters: v.array(
+      v.object({
+        userId: v.id('users'),
+        count: v.number(),
+        lastAt: v.number(),
+        reactionsReceived: v.optional(v.number())
+      })
+    ),
+    topInteractors: v.array(
+      v.object({
+        userId: v.id('users'),
+        count: v.number(),
+        lastAt: v.number(),
+        postsTouched: v.optional(v.number())
+      })
+    ),
     posterCountsDescending: v.array(v.number()),
     interactorCountsDescending: v.array(v.number()),
     // True when a scan ceiling was hit: the board is a truncated view, never a wrong one.

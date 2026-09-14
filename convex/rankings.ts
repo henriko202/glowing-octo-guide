@@ -19,7 +19,8 @@ function toRows(rows: Doc<'userInteractions'>[]): InteractionRow[] {
     userId: r.userId as string,
     authorId: r.authorId as string | undefined,
     postId: r.postId as string,
-    kind: r.kind
+    kind: r.kind,
+    reaction: r.reaction
   }))
 }
 
@@ -79,7 +80,16 @@ export const getSiteRankings = query({
     }
     const previous = pickPreviousGeneration([...generations].slice(1), latest.generatedAt - 1)
 
-    async function decorate(list: Doc<'rankingSnapshots'>['topInteractors']) {
+    // Old generations carry neither enrichment field; the read defaults them to 0 so the UI always has a number.
+    async function decorate(
+      list: ReadonlyArray<{
+        userId: Id<'users'>
+        count: number
+        lastAt: number
+        reactionsReceived?: number
+        postsTouched?: number
+      }>
+    ) {
       const ids = list.map(e => e.userId)
       const users = await Promise.all(ids.map(id => ctx.db.get(id)))
       const map = new Map(
@@ -91,7 +101,16 @@ export const getSiteRankings = query({
       return list.flatMap(entry => {
         const owner = map.get(entry.userId as string)
         if (!owner || owner.leaderboardOptOut === true) return []
-        return [{ ...toSearchPerson(owner), userId: owner._id as string, count: entry.count, lastAt: entry.lastAt }]
+        return [
+          {
+            ...toSearchPerson(owner),
+            userId: owner._id as string,
+            count: entry.count,
+            lastAt: entry.lastAt,
+            reactionsReceived: entry.reactionsReceived ?? 0,
+            postsTouched: entry.postsTouched ?? 0
+          }
+        ]
       })
     }
 

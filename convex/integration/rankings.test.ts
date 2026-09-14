@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { api, internal } from '../_generated/api'
 import type { TestConvex } from 'convex-test'
 import schema from '../schema'
@@ -59,7 +59,9 @@ describe('rankings', () => {
     await seed(t)
     await t.mutation(internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '7d' })
     const before = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
-    expect(before.interactors[0]).toMatchObject({ name: 'Ana', count: 1 })
+    // Ana reacted to "Me"'s one-post, one-reaction window: the read carries the enriched per-row fields.
+    expect(before.interactors[0]).toMatchObject({ name: 'Ana', count: 1, postsTouched: 1 })
+    expect(before.posters[0]).toMatchObject({ name: 'Me', count: 1, reactionsReceived: 1 })
     // "Me" authored the post but made no interactions: zero count, no position.
     expect(before.me).toMatchObject({ count: 0, position: null, movement: null, optedOut: false })
   })
@@ -131,26 +133,29 @@ describe('rankings', () => {
     const audits = await t.run(async ctx => ctx.db.query('auditLogs').collect())
     expect(audits.some(a => a.action === 'leaderboard_opt_out_changed')).toBe(true)
   })
-})
 
-describe('users.listMembers', () => {
-  test('lists members with the safe projection and excludes banned', async () => {
+  test('rebuildRankingSnapshotsNow rejects a non-admin', async () => {
     const t = convexTest(schema, modules)
     await seed(t)
-    await t.run(async ctx => {
-      await ctx.db.insert('users', {
-        linkedinId: 'x',
-        name: 'Banned',
-        subscriptionStatus: 'none',
-        createdAt: NOW,
-        isBanned: true
-      })
-    })
-    const result = await t.query(api.users.listMembers, {
-      sessionToken: 'tok',
-      paginationOpts: { numItems: 10, cursor: null }
-    })
-    // Creation order ascending: "Me" was seeded before "Ana"; the banned member is filtered out.
-    expect(result.page.map(u => u.name)).toEqual(['Me', 'Ana'])
+    await expect(t.mutation(api.admin.rebuildRankingSnapshotsNow, { sessionToken: 'tok' })).rejects.toThrow(/admin/i)
+  })
+
+  test('rebuildRankingSnapshotsNow schedules a rebuild for both windows', async () => {
+    const t = convexTest(schema, modules)
+    const { me } = await seed(t)
+    await t.run(async ctx => ctx.db.patch(me, { isAdmin: true }))
+    // Fake timers keep runAfter(0) jobs pending so the scheduled rows can be inspected before they run.
+    vi.useFakeTimers()
+    try {
+      await t.mutation(api.admin.rebuildRankingSnapshotsNow, { sessionToken: 'tok' })
+      const jobs = await t.run(async ctx => ctx.db.system.query('_scheduled_functions').collect())
+      expect(jobs.map(j => j.name)).toEqual([
+        'jobs/rankingSnapshot:rebuildRankingSnapshots',
+        'jobs/rankingSnapshot:rebuildRankingSnapshots'
+      ])
+      expect(jobs.map(j => j.args[0])).toEqual(expect.arrayContaining([{ window: '7d' }, { window: '30d' }]))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

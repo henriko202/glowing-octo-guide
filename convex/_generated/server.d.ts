@@ -31,6 +31,7 @@ type Env = {
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
   readonly ALLOW_ADMIN_SHARE_ANY_POST: string | undefined;
+  readonly ALLOW_DEV_IMPERSONATION: string | undefined;
   readonly APIFY_API_TOKEN: string | undefined;
   readonly APIFY_TASK_ID: string | undefined;
   readonly APIFY_TASK_ID_PROFILE_SCRAPE: string | undefined;
