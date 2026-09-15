@@ -26,8 +26,11 @@ export interface DigestInput {
   topMade: DigestEntry[]
   siteTopPosters: DigestEntry[]
   siteTopInteractors: DigestEntry[]
+  siteTotalInteractions: number
+  siteActiveMembers: number
   myPosition: number | null
   movement: number | null
+  featureNote?: string
   peopleUrl: string
   rankingsUrl: string
   unsubscribeUrl: string
@@ -54,6 +57,7 @@ interface DigestCopy {
   topReceivedLabel: string
   topMadeLabel: string
   siteLabel: string
+  siteSummary: string
   topPostersLabel: string
   topInteractorsLabel: string
   position: string
@@ -84,6 +88,7 @@ const COPY: Record<EmailLang, DigestCopy> = {
     topReceivedLabel: 'People who interacted most with your posts',
     topMadeLabel: 'People you interacted with most',
     siteLabel: 'Site highlights · last 7 days',
+    siteSummary: '{total} interactions between {members} members in the last 7 days.',
     topPostersLabel: 'Top posters',
     topInteractorsLabel: 'Top interactors',
     position: 'You are #{n} in the site ranking.',
@@ -112,6 +117,7 @@ const COPY: Record<EmailLang, DigestCopy> = {
     topReceivedLabel: 'Quem mais interagiu com suas publicações',
     topMadeLabel: 'Com quem você mais interagiu',
     siteLabel: 'Destaques do site · últimos 7 dias',
+    siteSummary: '{total} interações entre {members} membros nos últimos 7 dias.',
     topPostersLabel: 'Mais publicações',
     topInteractorsLabel: 'Mais interações',
     position: 'Você está em #{n} no ranking do site.',
@@ -140,6 +146,7 @@ const COPY: Record<EmailLang, DigestCopy> = {
     topReceivedLabel: 'Quienes más interactuaron con tus publicaciones',
     topMadeLabel: 'Con quienes más interactuaste',
     siteLabel: 'Destacados del sitio · últimos 7 días',
+    siteSummary: '{total} interacciones entre {members} miembros en los últimos 7 días.',
     topPostersLabel: 'Más publicaciones',
     topInteractorsLabel: 'Más interacciones',
     position: 'Estás en el puesto #{n} del ranking del sitio.',
@@ -160,6 +167,20 @@ const COPY: Record<EmailLang, DigestCopy> = {
 
 function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (token, key: string) => values[key] ?? token)
+}
+
+// RCD — temporary announcement line. The gate date is part of the copy contract: the job passes
+// `digestFeatureNote(now, locale)`, and after this instant the builder receives undefined.
+export const DIGEST_FEATURE_NOTE_UNTIL = Date.UTC(2026, 9, 28)
+
+const FEATURE_NOTES: Record<EmailLang, string> = {
+  en: 'New: see who reacted to each of your posts at linkintothessi.com/people',
+  pt: 'Novo: veja quem reagiu a cada um dos seus posts em linkintothessi.com/people',
+  es: 'Nuevo: mira quién reaccionó a cada una de tus publicaciones en linkintothessi.com/people'
+}
+
+export function digestFeatureNote(now: number, locale: EmailLang): string | undefined {
+  return now < DIGEST_FEATURE_NOTE_UNTIL ? FEATURE_NOTES[locale] : undefined
 }
 
 function plural(n: number, [one, many]: [string, string]): string {
@@ -198,7 +219,18 @@ export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent
     ? emailLabel(escapeHtml(c.topReceivedLabel)) + listHtml(input.topReceived)
     : ''
   const madeBlock = input.topMade.length ? emailLabel(escapeHtml(c.topMadeLabel)) + listHtml(input.topMade) : ''
-  const siteBlock =
+  const siteSummary =
+    input.siteActiveMembers >= 3
+      ? emailParagraph(
+          escapeHtml(
+            fill(c.siteSummary, {
+              total: String(input.siteTotalInteractions),
+              members: String(input.siteActiveMembers)
+            })
+          )
+        )
+      : ''
+  const siteLists =
     input.siteTopPosters.length || input.siteTopInteractors.length
       ? emailLabel(escapeHtml(c.siteLabel)) +
         (input.siteTopPosters.length
@@ -208,6 +240,7 @@ export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent
           ? emailLabel(escapeHtml(c.topInteractorsLabel)) + listHtml(input.siteTopInteractors)
           : '')
       : ''
+  const siteBlock = siteSummary + siteLists
   const standing = emailParagraph(escapeHtml(position)) + (movement ? emailParagraph(escapeHtml(movement)) : '')
   const ctas =
     emailButton({ href: input.peopleUrl, label: c.peopleCta }) +
@@ -215,6 +248,7 @@ export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent
   // Trusted URLs are emitted verbatim, matching emailButton's contract: entity-escaping a query string's '&'
   // would change the link.
   const footer =
+    (input.featureNote ? `${escapeHtml(input.featureNote)}<br>` : '') +
     `<a href="${input.unsubscribeUrl}">${escapeHtml(c.unsubscribe)}</a> · ` +
     `<a href="${input.settingsUrl}">${escapeHtml(c.settings)}</a><br>` +
     escapeHtml(fill(c.support, { email: input.supportEmail })) +
@@ -253,6 +287,15 @@ export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent
     text.push('', c.topMadeLabel)
     for (const e of input.topMade.slice(0, TOP_LIMIT)) text.push(`${e.name} · ${e.count}`)
   }
+  if (input.siteActiveMembers >= 3) {
+    text.push(
+      '',
+      fill(c.siteSummary, {
+        total: String(input.siteTotalInteractions),
+        members: String(input.siteActiveMembers)
+      })
+    )
+  }
   if (input.siteTopPosters.length || input.siteTopInteractors.length) {
     text.push('', c.siteLabel)
     if (input.siteTopPosters.length) {
@@ -267,6 +310,7 @@ export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent
   text.push('', position)
   if (movement) text.push(movement)
   text.push('', `${c.peopleCta}: ${input.peopleUrl}`, `${c.rankingsCta}: ${input.rankingsUrl}`)
+  if (input.featureNote) text.push('', input.featureNote)
   text.push('', `${c.unsubscribe}: ${input.unsubscribeUrl}`, `${c.settings}: ${input.settingsUrl}`)
   text.push(fill(c.support, { email: input.supportEmail }))
   if (input.includePostalAddress) text.push(`${c.postal} ${POSTAL_ADDRESS}`)

@@ -62,6 +62,68 @@ describe('trialNearEndEmail', () => {
   })
 })
 
+describe('trialNearEndEmail (trial graph)', () => {
+  const base = {
+    made: 47,
+    received: 14,
+    remaining: 3,
+    planName: 'Growth',
+    priceLabel: '$150 / year',
+    billingUrl: BILLING_URL
+  }
+  const graph = { peopleMade: 9, peopleReceived: 7, receivedReactions: 14, receivedComments: 0 }
+
+  it('states the made graph and the received reactions, in every language', () => {
+    const m = {
+      en: trialNearEndEmail('en', { ...base, ...graph }),
+      pt: trialNearEndEmail('pt', { ...base, ...graph }),
+      es: trialNearEndEmail('es', { ...base, ...graph })
+    }
+    expect(m.en.text).toContain('47 interactions with 9 people, 14 reactions on your posts.')
+    expect(m.pt.text).toContain('47 interações com 9 pessoas, 14 reações nas suas publicações.')
+    expect(m.es.text).toContain('47 interacciones con 9 personas, 14 reacciones en tus publicaciones.')
+  })
+
+  it('states the position and the gap to the next place when present, in every language', () => {
+    const args = { ...base, ...graph, position: 8, gapToNext: 2 }
+    expect(trialNearEndEmail('en', args).text).toContain('You are #8 on the weekly board.')
+    expect(trialNearEndEmail('en', args).text).toContain('2 interactions from #7.')
+    expect(trialNearEndEmail('pt', args).text).toContain('Você está em #8 no ranking semanal.')
+    expect(trialNearEndEmail('pt', args).text).toContain('A 2 interações do #7.')
+    expect(trialNearEndEmail('es', args).text).toContain('Estás en el puesto #8 del ranking semanal.')
+    expect(trialNearEndEmail('es', args).text).toContain('A 2 interacciones del #7.')
+  })
+
+  it('singularizes the gap and handles a comments-only received side', () => {
+    const m = trialNearEndEmail('en', {
+      ...base,
+      made: 1,
+      peopleMade: 1,
+      receivedReactions: 0,
+      receivedComments: 3,
+      position: 2,
+      gapToNext: 1
+    })
+    expect(m.text).toContain('1 interaction with 1 person, 3 comments on your posts.')
+    expect(m.text).toContain('1 interaction from #1.')
+  })
+
+  it('omits the graph, the position and the gap when the summary has nothing to say', () => {
+    const m = trialNearEndEmail('en', base)
+    expect(m.text).not.toContain('interactions with')
+    expect(m.text).not.toContain('weekly board')
+    expect(m.text).not.toContain('reactions on your posts')
+    expect(m.text).not.toContain('from #')
+  })
+
+  it('keeps the remaining-interaction and plan-start facts alongside the graph', () => {
+    const m = trialNearEndEmail('en', { ...base, ...graph, position: 8, gapToNext: 2 })
+    expect(m.text).toContain('starts after 3 more interactions')
+    expect(m.text).toContain('Cancel before then')
+    expect(m.text).not.toMatch(/end(s)? at trial|no longer|stop(s)? working/i)
+  })
+})
+
 describe('trialEndingEmail', () => {
   const args = { endsOn: '13 September 2026', planName: 'Growth', priceLabel: '$150 / year', billingUrl: BILLING_URL }
   it('states the date, the amount and the cancel path in every language', () => {
@@ -143,7 +205,13 @@ describe('billing emails stay transactional', () => {
           remaining: 1,
           planName: 'Growth',
           priceLabel: 'x',
-          billingUrl: BILLING_URL
+          billingUrl: BILLING_URL,
+          peopleMade: 1,
+          peopleReceived: 1,
+          receivedReactions: 1,
+          receivedComments: 1,
+          position: 8,
+          gapToNext: 2
         })
       ),
       ...LOCALES.map(l =>

@@ -49,7 +49,8 @@ export interface AccordionPost {
 }
 
 export default function PeopleAccordion({ posts }: { posts: AccordionPost[] }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const exactTime = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'short', timeStyle: 'short' })
   const [open, setOpen] = useState<Record<string, boolean>>({})
   return (
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -123,7 +124,7 @@ export default function PeopleAccordion({ posts }: { posts: AccordionPost[] }) {
             {expanded && (
               <ul
                 id={`post-actors-${post.postId}`}
-                className="border-border m-0 flex list-none flex-col gap-1 border-t p-3"
+                className="border-border m-0 flex max-h-[340px] list-none flex-col gap-1 overflow-auto overscroll-contain border-t p-3"
               >
                 {post.actors.map(actor => (
                   <li
@@ -143,7 +144,13 @@ export default function PeopleAccordion({ posts }: { posts: AccordionPost[] }) {
                       />
                     )}
                     <span className="text-foreground flex-1 truncate">{actor.name}</span>
-                    <span className="text-muted-foreground shrink-0 text-xs">{timeAgo(actor.lastAt, t)}</span>
+                    <span
+                      className="text-muted-foreground shrink-0 text-xs"
+                      title={exactTime.format(actor.lastAt)}
+                      aria-label={exactTime.format(actor.lastAt)}
+                    >
+                      {timeAgo(actor.lastAt, t)}
+                    </span>
                   </li>
                 ))}
                 {!post.removed && (

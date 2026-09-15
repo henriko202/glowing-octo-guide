@@ -16,12 +16,14 @@ const MARK_ALL_BATCH = 100
 
 interface NotificationRow {
   id: string
-  kind: 'reaction' | 'comment'
+  kind: 'reaction' | 'comment' | 'record'
   reaction?: Reaction
   excerpt?: string
+  total?: number
   createdAt: number
   readAt?: number
   unread: boolean
+  actorId: string
   actorName: string
   actorHeadline?: string
   actorPictureUrl?: string
@@ -59,9 +61,11 @@ function toRow(
     kind: row.kind,
     reaction: row.reaction,
     excerpt: row.excerpt === undefined ? undefined : stripLoneSurrogates(row.excerpt),
+    total: row.total,
     createdAt: row.createdAt,
     readAt: row.readAt,
     unread: row.readAt === undefined,
+    actorId: row.actorId as string,
     actorName: actor?.name ?? '',
     actorHeadline: actor?.headline,
     actorPictureUrl: actor?.profilePictureUrl,
@@ -125,8 +129,10 @@ export const getLatest = query({
       const post = await ctx.db.get(row.postId)
       return {
         _id: row._id as string,
+        actorId: row.actorId as string,
         actorName: actor.name,
         kind: row.kind,
+        total: row.total,
         postUrn: post?.linkedinPostUrn ?? '',
         postSourceUrl: post?.sourceUrl,
         removed: post === null || post.deletedAt !== undefined || post.hidden

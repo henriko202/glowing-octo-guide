@@ -10,6 +10,7 @@ describe('navItems', () => {
       '/history',
       '/people',
       '/rankings',
+      '/notifications',
       '/billing',
       '/settings',
       '/privacy-data'

@@ -5,6 +5,15 @@
 const DAY = 86_400_000
 const DIGEST_SPAN = 3 * DAY
 
+/** Competition ranking over a descending counts array: [9,7,7,5] -> [1,2,2,4]. */
+export function rankPositions(countsDescending: number[]): number[] {
+  return countsDescending.map((count, i) => {
+    let better = 0
+    for (let j = 0; j < i; j += 1) if (countsDescending[j] > count) better += 1
+    return better + 1
+  })
+}
+
 /** Exact 1-based position for a count via binary search; null when the count is zero or absent. */
 export function positionOf(count: number, countsDescending: number[]): number | null {
   if (count <= 0) return null

@@ -46,6 +46,24 @@ const SURVIVAL_FIXTURE = {
 
 const mockRebuildRankings = vi.fn()
 
+// One received_no_reply row for the Attention card. `now`-relative values are irrelevant here —
+// the card only renders the fields it is given.
+const CHURN_FIXTURE = [
+  {
+    userId: 'u1',
+    name: 'Nadia',
+    headline: 'Founder',
+    profilePictureUrl: undefined,
+    made7d: 0,
+    made30d: 0,
+    received7d: 3,
+    lastInteractionAt: null,
+    lastPostAt: null,
+    reasons: ['received_no_reply'],
+    hook: '3 reactions on your post, no reply'
+  }
+]
+
 // Route each query by its function reference (robust to query count / order):
 //   checkIsAdmin → true, getSettings → undefined, all list* queries → []
 beforeEach(() => {
@@ -59,6 +77,7 @@ beforeEach(() => {
     if (name === 'admin:checkIsAdmin') return true as never
     if (name === 'admin:getSettings') return undefined as never
     if (name === 'admin:survivalMetrics') return SURVIVAL_FIXTURE as never
+    if (name === 'admin:getChurnRisk') return [] as never
     return [] as never
   })
   vi.mocked(useMutation).mockImplementation((ref: unknown) => {
@@ -109,6 +128,27 @@ describe('AdminPage tabs', () => {
     expect(screen.getByRole('tab', { name: /survival/i })).toBeInTheDocument()
     expect(screen.getByText(/paying by tier/i)).toBeInTheDocument()
     expect(screen.queryByText(/apify post sync/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('AdminPage attention card', () => {
+  it('shows the empty state when nobody needs attention', () => {
+    render(<AdminPage />)
+    expect(screen.getByText('No one needs attention right now.')).toBeInTheDocument()
+  })
+
+  it('renders a flagged member with their reason badge and hook', () => {
+    vi.mocked(useQuery).mockImplementation((ref: unknown, ..._rest: unknown[]) => {
+      const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
+      if (name === 'admin:checkIsAdmin') return true as never
+      if (name === 'admin:getSettings') return undefined as never
+      if (name === 'admin:getChurnRisk') return CHURN_FIXTURE as never
+      return [] as never
+    })
+    render(<AdminPage />)
+    expect(screen.getByText('Nadia')).toBeInTheDocument()
+    expect(screen.getByText('Needs a reply')).toBeInTheDocument()
+    expect(screen.getByText('3 reactions on your post, no reply')).toBeInTheDocument()
   })
 })
 

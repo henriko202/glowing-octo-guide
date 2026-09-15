@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
 import BanUserDialog from './BanUserDialog'
 
@@ -55,6 +55,25 @@ describe('BanUserDialog', () => {
         onCancel={onCancel}
       />
     )
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a backdrop click, while Cancel still cancels', async () => {
+    const onCancel = vi.fn()
+    render(
+      <BanUserDialog
+        userName="Priya Nayar"
+        pending={false}
+        onConfirm={() => {}}
+        onCancel={onCancel}
+      />
+    )
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    fireEvent.pointerDown(document.body)
+    expect(onCancel).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
     expect(onCancel).toHaveBeenCalledTimes(1)
   })

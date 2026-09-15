@@ -61,7 +61,8 @@ const MADE = {
       reactions: 0,
       comments: 1,
       total: 1,
-      lastAt: Date.now()
+      lastAt: Date.now(),
+      postsCount: 2
     }
   ]
 }
@@ -130,11 +131,45 @@ describe('PeoplePage', () => {
     expect(screen.getByText('No one interacted with your posts in this window yet.')).toBeInTheDocument()
   })
 
-  it('shows the made list with the interaction count as the row metric', () => {
+  it('offers the graph starter with the made count and a feed link when received is empty and made < 3', () => {
+    mockQueryReturns['interactions.listInteractionsByPost'] = {
+      window: '7d',
+      since: 0,
+      total: 0,
+      truncated: false,
+      posts: []
+    }
+    mockQueryReturns['interactions.listPeopleIInteractedWith'] = { ...MADE, total: 0, people: [] }
+    renderPage()
+    expect(screen.getByText('No one interacted with your posts in this window yet.')).toBeInTheDocument()
+    expect(screen.getByText('Your graph starts with 3 interactions - 0 of 3')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to feed' })).toHaveAttribute('href', '/feed')
+    expect(queryCalls).toContainEqual([
+      'interactions.listPeopleIInteractedWith',
+      { sessionToken: 'tok', window: '7d', now: expect.any(Number) }
+    ])
+  })
+
+  it('keeps the plain received empty text once the member made 3 interactions', () => {
+    mockQueryReturns['interactions.listInteractionsByPost'] = {
+      window: '7d',
+      since: 0,
+      total: 0,
+      truncated: false,
+      posts: []
+    }
+    mockQueryReturns['interactions.listPeopleIInteractedWith'] = { ...MADE, total: 3, people: [] }
+    renderPage()
+    expect(screen.getByText('No one interacted with your posts in this window yet.')).toBeInTheDocument()
+    expect(screen.queryByText(/Your graph starts with 3 interactions/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Go to feed' })).not.toBeInTheDocument()
+  })
+
+  it('shows the made list with the interaction count and the authored post count as the row metric', () => {
     renderPage()
     fireEvent.click(screen.getByRole('tab', { name: 'You interacted with' }))
     expect(screen.getByText('Bruno')).toBeInTheDocument()
-    expect(screen.getByText('1 interaction')).toBeInTheDocument()
+    expect(screen.getByText('1 interaction · 2 posts')).toBeInTheDocument()
   })
 
   it('shows the truncated caption when a read hit the row ceiling', () => {

@@ -11,7 +11,8 @@ vi.mock('../convex', () => ({
     users: { getMe: 'users.getMe', getTrialProgress: 'users.getTrialProgress' },
     posts: { getMyPosts: 'posts.getMyPosts', submitPost: 'posts.submitPost' },
     feed: { getFeed: 'feed.getFeed', getCaughtUp: 'feed.getCaughtUp' },
-    interactions: { reactToPost: 'interactions.reactToPost', hidePost: 'interactions.hidePost' }
+    interactions: { reactToPost: 'interactions.reactToPost', hidePost: 'interactions.hidePost' },
+    rankings: { getWeeklyTop: 'rankings.getWeeklyTop' }
   }
 }))
 
@@ -45,8 +46,11 @@ vi.mock('@tanstack/react-virtual', () => ({
 }))
 
 vi.mock('../components/PostCard', () => ({
-  default: ({ post, onHide }: { post: { _id: string }; onHide?: () => void }) => (
-    <article data-testid={`post-${post._id}`}>
+  default: ({ post, onHide, authorMedal }: { post: { _id: string }; onHide?: () => void; authorMedal?: number }) => (
+    <article
+      data-testid={`post-${post._id}`}
+      data-medal={authorMedal}
+    >
       <button
         type="button"
         onClick={onHide}
@@ -241,5 +245,26 @@ describe('FeedPage hide confirmation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide post' }))
     await waitFor(() => expect(mockHidePost).toHaveBeenCalledWith({ sessionToken: 'tok', postId: 'p2' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+})
+
+describe('FeedPage weekly top medals', () => {
+  it('passes the medal to the card of a top-three poster and none to the rest', () => {
+    mockPaginated = {
+      results: [
+        { _id: 'p1', authorId: 'u1' },
+        { _id: 'p2', authorId: 'u2' }
+      ],
+      status: 'Exhausted',
+      loadMore: vi.fn()
+    }
+    mockQueryReturns['rankings.getWeeklyTop'] = {
+      generatedAt: 1,
+      posters: [{ userId: 'u1', position: 2 }],
+      interactors: []
+    }
+    renderPage()
+    expect(screen.getByTestId('post-p1')).toHaveAttribute('data-medal', '2')
+    expect(screen.getByTestId('post-p2')).not.toHaveAttribute('data-medal')
   })
 })

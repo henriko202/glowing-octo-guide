@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { validateLimitArgs, assertNotSelfBan, effectiveContactLimits, toSurvivalMetrics } from './admin'
+import {
+  validateLimitArgs,
+  assertNotSelfBan,
+  effectiveContactLimits,
+  toSurvivalMetrics,
+  deriveChurnReasons,
+  buildChurnHook,
+  relativeDay,
+  type ChurnSignals
+} from './admin'
 import type { Doc } from './_generated/dataModel'
+
+const DAY = 86_400_000
 
 describe('validateLimitArgs', () => {
   it('passes with valid positive values', () => {
@@ -104,5 +115,64 @@ describe('toSurvivalMetrics', () => {
       cohort: { ...snapshot.cohort, onboarded: 3 }
     } as unknown as Doc<'survivalSnapshots'>
     expect(toSurvivalMetrics(rebuilt)?.cohort.onboarded).toBe(3)
+  })
+})
+
+// admin.getChurnRisk's reason/hook rules, as pure functions.
+describe('deriveChurnReasons', () => {
+  const base: ChurnSignals = { made7d: 0, made30d: 0, received7d: 0, active: false, lastInteractionAt: null }
+
+  it('flags received_no_reply when attention came in but none went out', () => {
+    expect(deriveChurnReasons({ ...base, received7d: 2 })).toEqual(['received_no_reply'])
+  })
+
+  it('flags silent_7d only while the member is still logging in', () => {
+    expect(deriveChurnReasons({ ...base, active: true })).toEqual(['silent_7d'])
+    expect(deriveChurnReasons({ ...base, active: false })).toEqual([])
+  })
+
+  it('flags cooling when the 7d pace is under a quarter of the 30d pace', () => {
+    expect(deriveChurnReasons({ ...base, made30d: 8, made7d: 1 })).toEqual(['cooling'])
+    expect(deriveChurnReasons({ ...base, made30d: 8, made7d: 2 })).toEqual([])
+  })
+
+  it('stacks silent_7d and cooling for an active member with only old activity', () => {
+    expect(deriveChurnReasons({ ...base, active: true, made30d: 8 })).toEqual(['silent_7d', 'cooling'])
+  })
+})
+
+describe('buildChurnHook', () => {
+  const base: ChurnSignals = { made7d: 0, made30d: 0, received7d: 0, active: false, lastInteractionAt: null }
+
+  it('prefers the received-no-reply line and pluralizes', () => {
+    expect(buildChurnHook({ ...base, received7d: 1 }, 0)).toBe('1 interaction on your post, no reply')
+    expect(buildChurnHook({ ...base, received7d: 3 }, 0)).toBe('3 interactions on your post, no reply')
+  })
+
+  it('reports how long a silent member has been quiet', () => {
+    const now = 100 * DAY
+    expect(buildChurnHook({ ...base, active: true, lastInteractionAt: now - 9 * DAY }, now)).toBe(
+      'no interactions since 9 days ago'
+    )
+    expect(buildChurnHook({ ...base, active: true }, now)).toBe('no interactions yet')
+  })
+
+  it('reports the week-over-30d drop for a cooling member', () => {
+    expect(buildChurnHook({ ...base, made30d: 8, made7d: 1 }, 0)).toBe(
+      '1 interaction this week, down from 8 in 30 days'
+    )
+    expect(buildChurnHook({ ...base, made30d: 8, made7d: 0 }, 0)).toBe(
+      '0 interactions this week, down from 8 in 30 days'
+    )
+  })
+})
+
+describe('relativeDay', () => {
+  const now = 100 * DAY
+
+  it('names today, yesterday, and older day counts', () => {
+    expect(relativeDay(now, now)).toBe('today')
+    expect(relativeDay(now - DAY, now)).toBe('yesterday')
+    expect(relativeDay(now - 45 * DAY, now)).toBe('45 days ago')
   })
 })

@@ -63,6 +63,7 @@ export const sendTrialNearEnd = internalAction({
 
     const locale = resolveBillingLocale(c.language, c.primaryLocale)
     const combined = c.made + c.received
+    const graph = await ctx.runQuery(internal.rankings.getTrialGraphSummary, { userId })
     const m = trialNearEndEmail(locale, {
       made: c.made,
       received: c.received,
@@ -73,7 +74,13 @@ export const sendTrialNearEnd = internalAction({
         currency: sub.priceCurrency,
         interval: sub.priceInterval
       }),
-      billingUrl: billingUrl()
+      billingUrl: billingUrl(),
+      peopleMade: graph?.peopleMade,
+      peopleReceived: graph?.peopleReceived,
+      receivedReactions: graph?.receivedReactions,
+      receivedComments: graph?.receivedComments,
+      position: graph?.position,
+      gapToNext: graph?.gapToNext
     })
     await deliver('trial_near_end', c.email, m)
   }

@@ -9,10 +9,12 @@ import LinkedInEmbed from './LinkedInEmbed'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { medalRing } from '@/lib/medalRing'
 
 export type PostWithAuthor = {
   _id: Id<'posts'>
   linkedinPostUrn: string
+  authorId?: Id<'users'>
   content: string
   publishedAt: number
   likeCount: number
@@ -90,6 +92,7 @@ export default function PostCard({
   onGated,
   reacting,
   onHide,
+  authorMedal,
   now: feedNow
 }: {
   post: PostWithAuthor
@@ -100,6 +103,8 @@ export default function PostCard({
   reacting?: boolean
   /** backlog/R21 — "Hide now" on a post the viewer already handled. */
   onHide?: () => void
+  /** RCD — medal for the newest 7d board's top-3 poster who authored this card. */
+  authorMedal?: 1 | 2 | 3
   now?: number
 }) {
   const { t } = useTranslation()
@@ -127,11 +132,18 @@ export default function PostCard({
 
         {post.author && (
           <div className="flex items-center gap-2.5">
-            <Avatar
-              name={post.author.name}
-              src={post.author.profilePictureUrl}
-              size="md"
-            />
+            <span
+              role={authorMedal ? 'img' : undefined}
+              aria-label={authorMedal ? t('rankings.topThreeTitle', { position: authorMedal }) : undefined}
+              className="inline-flex"
+            >
+              <Avatar
+                name={post.author.name}
+                src={post.author.profilePictureUrl}
+                size="md"
+                className={medalRing(authorMedal)}
+              />
+            </span>
             <div>
               <p className="text-foreground m-0 text-sm font-semibold">{post.author.name}</p>
               {(post.author.headline ?? post.author.industry) && (

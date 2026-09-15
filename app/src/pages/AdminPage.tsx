@@ -12,9 +12,37 @@ import { Flash, useFlash } from '../components/useFlash'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Button } from '../components/ui/button'
+import { Avatar } from '../components/ui/avatar'
+import { Badge } from '../components/ui/badge'
 import { friendlyError } from '@/lib/errors'
 
 type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd' | 'survival'
+
+// Churn reasons returned by admin.getChurnRisk. English hardcoded copy, per admin-page convention.
+type ChurnReason = 'received_no_reply' | 'silent_7d' | 'cooling'
+
+const CHURN_REASON_LABEL: Record<ChurnReason, string> = {
+  received_no_reply: 'Needs a reply',
+  silent_7d: 'Silent 7 days',
+  cooling: 'Cooling off'
+}
+
+const CHURN_REASON_VARIANT: Record<ChurnReason, 'warning' | 'destructive' | 'outline'> = {
+  received_no_reply: 'warning',
+  silent_7d: 'destructive',
+  cooling: 'outline'
+}
+
+// The list is a glance, not a queue — the full result set stays server-side.
+const ATTENTION_LIMIT = 20
+
+function recencyLabel(ts: number | null): string {
+  if (ts === null) return 'none yet'
+  const days = Math.floor((Date.now() - ts) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days} days ago`
+}
 
 export default function AdminPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -23,6 +51,7 @@ export default function AdminPage() {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const isAdmin = useQuery(api.admin.checkIsAdmin, { sessionToken })
   const settings = useQuery(api.admin.getSettings, sessionToken && isAdmin ? { sessionToken } : 'skip')
+  const churnRisk = useQuery(api.admin.getChurnRisk, sessionToken && isAdmin ? { sessionToken } : 'skip')
   const toggleSync = useMutation(api.admin.toggleApifySync)
   const toggleMaster = useMutation(api.admin.toggleApifyEnabled)
   const toggleProfileScrape = useMutation(api.admin.toggleApifyProfileScrape)
@@ -132,6 +161,56 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-[640px] p-8 font-sans">
       <PageHeader title="Admin Panel" />
+
+      <div className="border-border bg-card mb-4 rounded-lg border p-5">
+        <h2 className="text-foreground m-0 text-base font-semibold">Attention</h2>
+        <p className="text-muted-foreground mt-1 text-[13px]">
+          Members flagged from the interaction graph — a nudge may bring them back.
+        </p>
+        {churnRisk === undefined ? (
+          <p className="text-muted-foreground mt-3 text-[13px]">Loading…</p>
+        ) : churnRisk.length === 0 ? (
+          <p className="text-muted-foreground mt-3 text-[13px]">No one needs attention right now.</p>
+        ) : (
+          <>
+            <ul className="m-0 mt-3 flex list-none flex-col gap-3 p-0">
+              {churnRisk.slice(0, ATTENTION_LIMIT).map(row => (
+                <li
+                  key={row.userId}
+                  className="flex items-start gap-3"
+                >
+                  <Avatar
+                    name={row.name}
+                    src={row.profilePictureUrl}
+                    size="sm"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-foreground text-sm font-medium">{row.name}</span>
+                      {row.reasons.map(reason => (
+                        <Badge
+                          key={reason}
+                          variant={CHURN_REASON_VARIANT[reason]}
+                        >
+                          {CHURN_REASON_LABEL[reason]}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-foreground mt-0.5 text-[13px]">{row.hook}</p>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      Last interaction: {recencyLabel(row.lastInteractionAt)} · Last post:{' '}
+                      {recencyLabel(row.lastPostAt)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {churnRisk.length > ATTENTION_LIMIT && (
+              <p className="text-muted-foreground mt-2 text-xs">+{churnRisk.length - ATTENTION_LIMIT} more</p>
+            )}
+          </>
+        )}
+      </div>
 
       <Tabs
         value={tab}

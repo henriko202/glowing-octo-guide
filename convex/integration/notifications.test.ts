@@ -84,6 +84,32 @@ describe('notifications queries', () => {
     })
   })
 
+  test('listMine and getLatest carry actorId and total for a record row', async () => {
+    const t = convexTest(schema, modules)
+    const { me, post } = await seed(t)
+    await t.run(async ctx =>
+      ctx.db.insert('notifications', {
+        recipientId: me,
+        actorId: me,
+        postId: post,
+        kind: 'record' as const,
+        total: 5,
+        createdAt: NOW + 1000
+      })
+    )
+    const page = await t.query(api.notifications.listMine, {
+      sessionToken: 'tok',
+      paginationOpts: { numItems: 10, cursor: null }
+    })
+    const record = page.page.find(row => row.kind === 'record')
+    expect(record).toMatchObject({ actorId: me, total: 5 })
+    expect(await t.query(api.notifications.getLatest, { sessionToken: 'tok' })).toMatchObject({
+      actorId: me,
+      kind: 'record',
+      total: 5
+    })
+  })
+
   test('getLatest skips a newest notification whose actor is banned', async () => {
     const t = convexTest(schema, modules)
     const { me, post } = await seed(t)

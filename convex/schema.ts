@@ -490,14 +490,17 @@ export default defineSchema({
   // R23 — one row per reaction or comment a member received on their post, written in the same transaction as the
   // interaction and the counter bump (interactions.incrementLikeCount / incrementCommentCount), so the three never
   // drift. Self-interactions never write a row. `readAt` absent ⇒ unread. Banned recipients are filtered at read
-  // time (keep the log complete). `by_created_at` serves the 180-day retention purge.
+  // time (keep the log complete). `by_created_at` serves the 180-day retention purge. RCD — `kind` widened with
+  // 'record' for the author's own post crossing a new all-time interaction best (`lib/recordPost.ts`), carrying the
+  // new `total`; a record row is self-addressed (actorId = recipientId = the author).
   notifications: defineTable({
     recipientId: v.id('users'),
     actorId: v.id('users'),
     postId: v.id('posts'),
-    kind: v.union(v.literal('reaction'), v.literal('comment')),
+    kind: v.union(v.literal('reaction'), v.literal('comment'), v.literal('record')),
     reaction: v.optional(reactionValidator),
     excerpt: v.optional(v.string()),
+    total: v.optional(v.number()),
     createdAt: v.number(),
     readAt: v.optional(v.number())
   })
@@ -505,6 +508,16 @@ export default defineSchema({
     .index('by_recipient_and_read_at', ['recipientId', 'readAt'])
     .index('by_actor', ['actorId'])
     .index('by_created_at', ['createdAt']),
+
+  // RCD — one row per (author, post) that ever crossed the record floor (5 combined interactions). `total` is the
+  // highest count already announced; `notifiedAt` is when it was announced, which enforces the 7-day cooldown
+  // (`lib/recordPost.isNewRecord`). Upserted in the same transaction as the counter bump that set the record.
+  userRecords: defineTable({
+    userId: v.id('users'),
+    postId: v.id('posts'),
+    total: v.number(),
+    notifiedAt: v.number()
+  }).index('by_user', ['userId']),
 
   // Nightly admin cohort snapshots (survival panel). One row per window; the query reads one row
   // instead of re-reading the whole cohort reactively. See jobs/survivalSnapshot.ts.

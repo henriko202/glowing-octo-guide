@@ -72,6 +72,7 @@ const SEED = {
   userInteractions: [{ _id: 'ui1', userId: 'u1', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 }],
   userPostState: [{ _id: 'ups1', userId: 'u1', postId: 'p1', reactedAt: 1000 }],
   trialCounters: [{ _id: 'tc1', userId: 'u1', made: 3, received: 2 }],
+  userRecords: [{ _id: 'ur1', userId: 'u1', postId: 'p1', total: 5, notifiedAt: 1000 }],
   notifications: [
     { _id: 'n1', recipientId: 'u1', actorId: 'u2', postId: 'p1', kind: 'reaction', reaction: 'LIKE', createdAt: 1000 },
     { _id: 'n2', recipientId: 'u2', actorId: 'u1', postId: 'p9', kind: 'comment', excerpt: 'hi', createdAt: 1000 },
@@ -98,6 +99,7 @@ describe('cascadeDeleteUser', () => {
       'dataExportRequests',
       'userInteractions',
       'trialCounters',
+      'userRecords',
       'notifications'
     ]) {
       expect(deletedTables).toContain(t)

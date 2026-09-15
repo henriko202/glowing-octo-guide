@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { capDistribution, digestWindow, movement, pickPreviousGeneration, positionOf, topEntries } from './ranking'
+import {
+  capDistribution,
+  digestWindow,
+  movement,
+  pickPreviousGeneration,
+  positionOf,
+  rankPositions,
+  topEntries
+} from './ranking'
+
+describe('rankPositions', () => {
+  it('uses competition ranking: 1,2,2,4', () => {
+    expect(rankPositions([9, 7, 7, 5])).toEqual([1, 2, 2, 4])
+  })
+
+  it('returns an empty array for no counts', () => {
+    expect(rankPositions([])).toEqual([])
+  })
+})
 
 describe('positionOf', () => {
   it('finds the first index of a count in a descending array', () => {

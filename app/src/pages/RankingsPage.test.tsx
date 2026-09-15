@@ -22,7 +22,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import RankingsPage from './RankingsPage'
 
-function person(userId: string, name: string, total: number) {
+function person(userId: string, name: string, total: number, postsCount = 2) {
   return {
     userId,
     name,
@@ -31,7 +31,8 @@ function person(userId: string, name: string, total: number) {
     reactions: total,
     comments: 0,
     total,
-    lastAt: 1
+    lastAt: 1,
+    postsCount
   }
 }
 
@@ -68,6 +69,7 @@ const SITE = {
       count: 5,
       lastAt: 3,
       postsTouched: 2,
+      position: 1,
       _id: 'u3',
       linkedinPublicIdentifier: undefined
     }
@@ -79,6 +81,7 @@ const SITE = {
       count: 2,
       lastAt: 4,
       reactionsReceived: 3,
+      position: 1,
       _id: 'u4',
       linkedinPublicIdentifier: undefined
     }
@@ -115,6 +118,7 @@ describe('RankingsPage', () => {
     expect(screen.getByText('Window: Last 7 days. The board is a daily snapshot.')).toBeInTheDocument()
     expect(screen.getByText('5 interactions · across 2 posts')).toBeInTheDocument()
     expect(screen.getByText('2 posts · 3 reactions')).toBeInTheDocument()
+    expect(screen.getAllByText('5 interactions · 2 posts')).toHaveLength(2)
     expect(screen.getByText(/Next update/)).toBeInTheDocument()
     expect(screen.getByText('Partial data: some activity may be missing from this snapshot.')).toBeInTheDocument()
   })
@@ -149,7 +153,7 @@ describe('RankingsPage', () => {
     const { container } = renderPage()
     const button = screen.getByRole('button', { name: 'Do not show me in rankings' })
     expect(button).toHaveAttribute('data-variant', 'outline')
-    expect(button).toHaveClass('cursor-pointer')
+    expect(button).toHaveClass('cursor-pointer', 'w-full', 'sm:w-auto')
     expect(button.querySelector('.lucide-eye-off')).toBeInTheDocument()
     expect(container.firstElementChild).toHaveClass('pb-6')
     expect(container.querySelector('.gap-3')).toBeInTheDocument()
@@ -159,5 +163,18 @@ describe('RankingsPage', () => {
     mockQueryReturns['rankings.getMyRankings'] = { ...MINE, truncated: true }
     renderPage()
     expect(screen.getByText('Showing the 2000 most recent interactions only.')).toBeInTheDocument()
+  })
+
+  it('shows the fresh-member line and a feed link at count 0 while keeping the board rendered', () => {
+    mockQueryReturns['rankings.getSiteRankings'] = {
+      ...SITE,
+      me: { id: 'me', count: 0, position: null, movement: null, optedOut: false }
+    }
+    renderPage()
+    expect(screen.getByText('One interaction puts you on this board.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to feed' })).toHaveAttribute('href', '/feed')
+    expect(screen.queryByText(/No position in this window yet/)).not.toBeInTheDocument()
+    expect(screen.getByText('Carla')).toBeInTheDocument()
+    expect(screen.getByText('Diego')).toBeInTheDocument()
   })
 })

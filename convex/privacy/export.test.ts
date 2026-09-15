@@ -187,6 +187,30 @@ describe('buildExportBundle', () => {
     })
     expect(bundle.userPostState).toEqual([])
   })
+
+  it('includes record-post milestones verbatim', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: [],
+      userRecords: [{ _id: 'ur1', userId: 'u1', postId: 'p1', total: 7, notifiedAt: 1000 }]
+    })
+    expect(bundle.userRecords).toHaveLength(1)
+    expect(bundle.userRecords[0].total).toBe(7)
+  })
+
+  it('defaults userRecords to an empty array when omitted', () => {
+    const bundle = buildExportBundle({
+      user: USER,
+      posts: [],
+      subscriptions: [],
+      consents: [],
+      audits: []
+    })
+    expect(bundle.userRecords).toEqual([])
+  })
 })
 
 describe('export table config', () => {

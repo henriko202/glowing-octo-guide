@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { NAV_GROUPS, isActivePath } from './navItems'
 import UserMenu from './UserMenu'
 import BrandMark from '../BrandMark'
+import FeedbackButton from '../FeedbackButton'
 import TrialProgressCard from './TrialProgressCard'
 import { useTrialProgress } from '../../hooks/useTrialProgress'
 
@@ -70,7 +71,8 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </nav>
 
-      <div className="border-sidebar-border border-t p-3">
+      <div className="border-sidebar-border flex flex-col gap-1 border-t p-3">
+        <FeedbackButton placement="sidebar" />
         <UserMenu />
       </div>
     </div>

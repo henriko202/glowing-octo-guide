@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import PeopleAccordion from './PeopleAccordion'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: Record<string, unknown>) => `${key}${opts ? JSON.stringify(opts) : ''}`
+    t: (key: string, opts?: Record<string, unknown>) => `${key}${opts ? JSON.stringify(opts) : ''}`,
+    i18n: { language: 'pt-BR' }
   })
 }))
 vi.mock('@/components/LinkedInEmbed', () => ({ buildPostUrl: (urn: string) => `https://ln/${urn}` }))
@@ -116,5 +117,23 @@ describe('PeopleAccordion', () => {
     expect(container.querySelectorAll('.lucide-message-square')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
     expect(container.querySelectorAll('.lucide-message-square')).toHaveLength(2)
+  })
+
+  it('titles and labels the relative time with the exact localized date and time', () => {
+    render(<PeopleAccordion posts={[post]} />)
+    fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
+    const anaRow = screen.getByText('Ana').closest('li')!
+    const time = within(anaRow).getByText(/^myPosts\./)
+    const expected = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(1)
+    expect(time).toHaveAttribute('title', expected)
+    expect(time).toHaveAttribute('aria-label', expected)
+  })
+
+  it('caps the expanded actor panel with internal scrolling and keeps the LinkedIn link inside it', () => {
+    render(<PeopleAccordion posts={[post]} />)
+    fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
+    const panel = document.getElementById('post-actors-p1')
+    expect(panel).toHaveClass('max-h-[340px]', 'overflow-auto', 'overscroll-contain')
+    expect(panel).toContainElement(screen.getByRole('link', { name: 'feed.viewOnLinkedIn' }))
   })
 })

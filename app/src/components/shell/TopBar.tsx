@@ -55,8 +55,9 @@ export default function TopBar({
           className="size-4"
           aria-hidden="true"
         />
-        <span className="truncate">{t('shell.search')}</span>
-        <kbd className="border-border flex h-5 flex-row gap-1 rounded border px-1.5 leading-none">
+        <span className="truncate sm:hidden">{t('shell.searchShort')}</span>
+        <span className="hidden truncate sm:inline">{t('shell.search')}</span>
+        <kbd className="border-border hidden h-5 flex-row gap-1 rounded border px-1.5 leading-none sm:flex">
           <span className={IS_MAC ? 'pt-1' : 'self-center'}>{MOD_KEY}</span>
           <span className="flex self-center pt-0.5">K</span>
         </kbd>

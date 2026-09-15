@@ -41,7 +41,7 @@ function Tile({
   const delta = counts.total - previous.total
   const signed = new Intl.NumberFormat(i18n.language, { signDisplay: 'exceptZero' }).format(delta)
   return (
-    <div className="bg-card rounded-xl border p-5">
+    <div className="border-border bg-card rounded-xl border p-5 shadow-xs">
       <p className="text-muted-foreground m-0 text-sm">{label}</p>
       <p className="text-foreground m-0 mt-1 font-display text-4xl font-semibold tabular-nums">{counts.total}</p>
       <p className="text-muted-foreground m-0 mt-2 text-xs">
@@ -114,7 +114,7 @@ export default function RecapPage() {
       </PageHeader>
 
       {recapError ? (
-        <div className="bg-card rounded-xl border p-8 text-center">
+        <div className="border-border bg-card rounded-xl border p-8 text-center shadow-xs">
           <h2 className="text-foreground m-0 text-lg font-semibold">{t('errorBoundary.title')}</h2>
           <p className="text-muted-foreground mt-2 mb-0 text-sm">{t('errorBoundary.body')}</p>
         </div>
@@ -131,13 +131,13 @@ export default function RecapPage() {
       ) : (
         <>
           {isTrialing && progress && (
-            <div className="bg-card mb-6 rounded-xl border p-4">
+            <div className="border-border bg-card mb-6 rounded-xl border p-4 shadow-xs">
               <TrialMeter progress={progress} />
             </div>
           )}
 
           {empty ? (
-            <div className="bg-card rounded-xl border p-8 text-center">
+            <div className="border-border bg-card rounded-xl border p-8 text-center shadow-xs">
               <h2 className="text-foreground m-0 text-lg font-semibold">{t('recap.emptyTitle', { days })}</h2>
               <p className="text-muted-foreground mt-2 mb-4 text-sm">{t('recap.emptyBody')}</p>
               <Button asChild>
@@ -168,7 +168,7 @@ export default function RecapPage() {
 
               {recap.nearCapPost && (
                 <section className="mt-6">
-                  <div className="bg-card rounded-xl border p-4">
+                  <div className="border-border bg-card rounded-xl border p-4 shadow-xs">
                     <p className="text-muted-foreground m-0 line-clamp-2 text-sm italic">{recap.nearCapPost.excerpt}</p>
                     <UpgradeAtLimit
                       limit="interactionCap"
@@ -198,7 +198,7 @@ export default function RecapPage() {
                 {recap.posts.length === 0 ? (
                   <p className="text-muted-foreground m-0 text-sm">{t('recap.noPosts')}</p>
                 ) : (
-                  <ul className="divide-border m-0 list-none divide-y p-0">
+                  <ul className="m-0 flex list-none flex-col gap-3 p-0">
                     {recap.posts.map(p => {
                       const total = p.likeCount + p.commentCount
                       // backlog/R17 A1 — a bought post's cap is bigger than the plan's; "50 of 25"
@@ -214,7 +214,7 @@ export default function RecapPage() {
                       return (
                         <li
                           key={p.id}
-                          className="py-3"
+                          className="border-border bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-xs"
                         >
                           <div className="flex flex-wrap items-center gap-2">
                             <a
@@ -237,7 +237,7 @@ export default function RecapPage() {
                           </div>
                           <p
                             id={labelId}
-                            className="text-muted-foreground mt-1 mb-1 text-xs tabular-nums"
+                            className="text-muted-foreground m-0 text-xs tabular-nums"
                           >
                             {label}
                           </p>
@@ -247,7 +247,7 @@ export default function RecapPage() {
                             aria-valuemin={0}
                             aria-valuemax={rowCap}
                             aria-valuenow={Math.min(total, rowCap)}
-                            className="bg-muted h-1.5 w-full overflow-hidden rounded-full"
+                            className="bg-muted h-2 w-full overflow-hidden rounded-full"
                           >
                             <div
                               className="bg-primary h-full rounded-full"
@@ -265,7 +265,7 @@ export default function RecapPage() {
 
           {/* F7 — honesty line + History link belong to both the empty and non-empty states, so
               they sit after the empty/non-empty branch instead of inside only one of them. */}
-          <footer className="text-muted-foreground mt-8 space-y-2 text-xs">
+          <footer className="text-muted-foreground mt-8 flex flex-col gap-2 text-xs">
             <p className="m-0">{t('recap.honest')}</p>
             <p className="m-0">
               {t('recap.salesNav')}{' '}

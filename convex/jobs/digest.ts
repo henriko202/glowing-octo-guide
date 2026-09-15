@@ -10,7 +10,7 @@ import type { ActionCtx } from '../_generated/server'
 import type { Doc, Id } from '../_generated/dataModel'
 import { internal } from '../_generated/api'
 import { sendEmail } from '../lib/email'
-import { digestEmail, type DigestInput } from '../lib/digestEmails'
+import { digestEmail, digestFeatureNote, type DigestInput } from '../lib/digestEmails'
 import { isDigestDue } from '../lib/digest'
 import { digestWindow, movement, pickPreviousGeneration, positionOf } from '../lib/ranking'
 import { signUnsubscribeToken } from '../lib/unsubscribeToken'
@@ -107,6 +107,13 @@ export const getDigestData = internalQuery({
     const prevCount = previous ? findCount(previous.topInteractors) : 0
     const currentPosition = latest && countNow > 0 ? positionOf(countNow, latest.interactorCountsDescending) : null
     const prevPosition = previous && prevCount > 0 ? positionOf(prevCount, previous.interactorCountsDescending) : null
+    // Reaching the next position means tying the member above, so the gap is their count minus the live count.
+    const gapToNext =
+      latest && currentPosition !== null && currentPosition > 1
+        ? latest.interactorCountsDescending[currentPosition - 2] - countNow
+        : null
+    const siteTotalInteractions = latest ? latest.interactorCountsDescending.reduce((sum, count) => sum + count, 0) : 0
+    const siteActiveMembers = latest ? latest.interactorCountsDescending.length : 0
     const topReceived = received.slice(0, 3).map(t => ({ userId: t.userId as Id<'users'>, count: t.total }))
     const topMade = made.slice(0, 3).map(t => ({ userId: t.userId as Id<'users'>, count: t.total }))
     const siteTopPosters = latest ? latest.topPosters.slice(0, 3).map(e => ({ userId: e.userId, count: e.count })) : []
@@ -141,7 +148,10 @@ export const getDigestData = internalQuery({
       topMade: shown(topMade, false),
       siteTopPosters: shown(siteTopPosters, true),
       siteTopInteractors: shown(siteTopInteractors, true),
+      siteTotalInteractions,
+      siteActiveMembers,
       myPosition: currentPosition,
+      gapToNext,
       movement: movement(prevPosition, currentPosition)
     }
   }
@@ -213,6 +223,7 @@ async function settleDigest(
   })
   const nameOf = (id: string) => names.find(n => n.id === id)?.name ?? ''
   const token = await signUnsubscribeToken(user._id as string, ctxArgs.secret)
+  const locale = resolveBillingLocale(user.language, user.primaryLocale)
   const input: DigestInput = {
     name: user.name,
     since: data.since,
@@ -224,8 +235,11 @@ async function settleDigest(
     topMade: data.topMade.map(e => ({ name: nameOf(e.userId), count: e.count })),
     siteTopPosters: data.siteTopPosters.map(e => ({ name: nameOf(e.userId), count: e.count })),
     siteTopInteractors: data.siteTopInteractors.map(e => ({ name: nameOf(e.userId), count: e.count })),
+    siteTotalInteractions: data.siteTotalInteractions,
+    siteActiveMembers: data.siteActiveMembers,
     myPosition: data.myPosition,
     movement: data.movement,
+    featureNote: digestFeatureNote(ctxArgs.now, locale),
     peopleUrl: `${ctxArgs.appUrl}/people`,
     rankingsUrl: `${ctxArgs.appUrl}/rankings`,
     unsubscribeUrl: `${ctxArgs.siteUrl.replace(/\/$/, '')}/unsubscribe/digest?token=${token}`,
@@ -233,7 +247,7 @@ async function settleDigest(
     supportEmail: SUPPORT_EMAIL,
     includePostalAddress: true
   }
-  const message = digestEmail(resolveBillingLocale(user.language, user.primaryLocale), input)
+  const message = digestEmail(locale, input)
   const result = await sendEmail({
     to: user.email!,
     subject: message.subject,

@@ -47,6 +47,7 @@ const OWNED: Array<{ table: string; index: string; field: string }> = [
   { table: 'userInteractions', index: 'by_user', field: 'userId' },
   { table: 'userPostState', index: 'by_user_and_post', field: 'userId' },
   { table: 'trialCounters', index: 'by_user', field: 'userId' },
+  { table: 'userRecords', index: 'by_user', field: 'userId' },
   { table: 'notifications', index: 'by_recipient_and_created_at', field: 'recipientId' },
   { table: 'notifications', index: 'by_actor', field: 'actorId' }
 ]

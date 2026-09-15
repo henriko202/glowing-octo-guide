@@ -27,12 +27,34 @@ describe('RankingList', () => {
     expect(screen.getByText('Ana').closest('li')).toHaveClass(
       'rounded-lg',
       'border',
-      'border-border',
+      'border-amber-500',
       'bg-card',
       'px-3',
       'py-2'
     )
     expect(screen.getByText('Me').closest('li')).toHaveClass('ring-1', 'ring-primary/40')
+  })
+
+  it('composes the personal variant as interactions · authored posts', () => {
+    render(
+      <RankingList
+        titleKey="rankings.toYou"
+        variant="personal"
+        rows={[{ userId: 'u1', name: 'Ana', count: 9, lastAt: 1, postsCount: 3 }]}
+      />
+    )
+    expect(screen.getByText('rankings.count{"count":9} · rankings.postsCount{"count":3}')).toBeInTheDocument()
+  })
+
+  it('defaults a missing authored post count to zero on personal rows', () => {
+    render(
+      <RankingList
+        titleKey="rankings.toYou"
+        variant="personal"
+        rows={[{ userId: 'u1', name: 'Ana', count: 9, lastAt: 1 }]}
+      />
+    )
+    expect(screen.getByText('rankings.count{"count":9} · rankings.postsCount{"count":0}')).toBeInTheDocument()
   })
 
   it('composes the posts variant as posts · reactions received', () => {
@@ -88,5 +110,103 @@ describe('RankingList', () => {
     expect(chip(2)).toHaveClass('bg-zinc-300', 'text-zinc-900', 'ring-1', 'ring-black/5')
     expect(chip(3)).toHaveClass('bg-amber-700', 'text-amber-50', 'ring-1', 'ring-black/5')
     expect(chip(4)).not.toHaveClass('bg-amber-400', 'bg-zinc-300', 'bg-amber-700', 'ring-1')
+  })
+
+  it('tints ranks 1-3 card borders with the medal colors and leaves rank 4 neutral', () => {
+    render(
+      <RankingList
+        titleKey="rankings.topInteractors"
+        variant="interactors"
+        rows={[
+          { userId: 'u1', name: 'Gold', count: 9, lastAt: 1 },
+          { userId: 'u2', name: 'Silver', count: 8, lastAt: 2 },
+          { userId: 'u3', name: 'Bronze', count: 7, lastAt: 3 },
+          { userId: 'u4', name: 'Plain', count: 6, lastAt: 4 }
+        ]}
+      />
+    )
+    expect(screen.getByText('Gold').closest('li')).toHaveClass('border-amber-500')
+    expect(screen.getByText('Silver').closest('li')).toHaveClass('border-zinc-400')
+    expect(screen.getByText('Bronze').closest('li')).toHaveClass('border-amber-700')
+    expect(screen.getByText('Plain').closest('li')).toHaveClass('border-border')
+    expect(screen.getByText('Plain').closest('li')).not.toHaveClass(
+      'border-amber-500',
+      'border-zinc-400',
+      'border-amber-700'
+    )
+  })
+
+  function rankedRows(count: number, mePosition: number) {
+    return Array.from({ length: count }, (_, i) => ({
+      userId: i + 1 === mePosition ? 'me' : `u${i + 1}`,
+      name: `Person ${i + 1}`,
+      count: count - i,
+      lastAt: 1,
+      position: i + 1
+    }))
+  }
+
+  it('renders the full list without a separator when the member is inside the top 10', () => {
+    const { container } = render(
+      <RankingList
+        titleKey="rankings.topInteractors"
+        variant="interactors"
+        rows={rankedRows(20, 5)}
+        meId="me"
+      />
+    )
+    expect(container.querySelectorAll('li')).toHaveLength(20)
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
+  })
+
+  it('windows to the member plus two either side once they are beyond the buffer', () => {
+    const { container } = render(
+      <RankingList
+        titleKey="rankings.topInteractors"
+        variant="interactors"
+        rows={rankedRows(20, 15)}
+        meId="me"
+      />
+    )
+    expect(container.querySelectorAll('li')).toHaveLength(16)
+    expect(screen.getByText('Person 15').closest('li')).toHaveClass('ring-primary/40', 'ring-1')
+    expect(screen.getByText('Person 10')).toBeInTheDocument()
+    expect(screen.queryByText('Person 11')).not.toBeInTheDocument()
+    expect(screen.queryByText('Person 12')).not.toBeInTheDocument()
+    expect(screen.getByText('Person 13')).toBeInTheDocument()
+    expect(screen.getByText('Person 17')).toBeInTheDocument()
+    expect(screen.queryByText('Person 18')).not.toBeInTheDocument()
+    expect(screen.getByText('…')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('shows the top rows without a separator when the member is beyond the returned list', () => {
+    const { container } = render(
+      <RankingList
+        titleKey="rankings.topInteractors"
+        variant="interactors"
+        rows={rankedRows(20, 99)}
+        meId="me"
+      />
+    )
+    expect(container.querySelectorAll('li')).toHaveLength(20)
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
+  })
+
+  it('renders the server position for ties so tied rows share the same number', () => {
+    render(
+      <RankingList
+        titleKey="rankings.topInteractors"
+        variant="interactors"
+        rows={[
+          { userId: 'u1', name: 'First', count: 9, lastAt: 1, position: 1 },
+          { userId: 'u2', name: 'Tie A', count: 7, lastAt: 2, position: 2 },
+          { userId: 'u3', name: 'Tie B', count: 7, lastAt: 3, position: 2 },
+          { userId: 'u4', name: 'Fourth', count: 5, lastAt: 4, position: 4 }
+        ]}
+      />
+    )
+    expect(screen.getAllByLabelText('rankings.rankLabel{"rank":2}')).toHaveLength(2)
+    expect(screen.getByLabelText('rankings.rankLabel{"rank":4}')).toHaveTextContent('4')
+    expect(screen.queryByLabelText('rankings.rankLabel{"rank":3}')).not.toBeInTheDocument()
   })
 })

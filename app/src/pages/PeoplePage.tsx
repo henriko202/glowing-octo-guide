@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
 import WindowToggle from '@/components/WindowToggle'
 import PeopleAccordion, { ReactionGlyph } from '@/components/PeopleAccordion'
 import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { timeAgo } from '@/lib/relativeDay'
 import { floorToHour } from '../../../convex/lib/recap'
 import type { Reaction } from '../../../convex/lib/reactions'
@@ -22,6 +23,7 @@ interface PersonRowData {
   reaction?: Reaction
   total: number
   lastAt?: number
+  postsCount?: number
 }
 
 function PersonRow({ person }: { person: PersonRowData }) {
@@ -38,7 +40,9 @@ function PersonRow({ person }: { person: PersonRowData }) {
         {person.headline && <span className="text-muted-foreground block truncate text-xs">{person.headline}</span>}
       </span>
       {person.reaction && <ReactionGlyph reaction={person.reaction} />}
-      <span className="text-muted-foreground shrink-0 text-xs">{t('people.count', { count: person.total })}</span>
+      <span className="text-muted-foreground shrink-0 text-xs">
+        {t('people.count', { count: person.total })} · {t('people.postsCount', { count: person.postsCount ?? 0 })}
+      </span>
       {person.lastAt !== undefined && (
         <span className="text-muted-foreground shrink-0 text-xs">{timeAgo(person.lastAt, t)}</span>
       )}
@@ -60,13 +64,14 @@ export default function PeoplePage() {
   const [now] = useState(() => floorToHour(Date.now()))
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
 
-  const made = useQuery(
-    api.interactions.listPeopleIInteractedWith,
-    tab === 'made' && sessionToken ? { sessionToken, window, now } : 'skip'
-  )
   const byPost = useQuery(
     api.interactions.listInteractionsByPost,
     tab === 'received' && sessionToken ? { sessionToken, window, now } : 'skip'
+  )
+  const receivedEmpty = byPost !== undefined && byPost.posts.length === 0
+  const made = useQuery(
+    api.interactions.listPeopleIInteractedWith,
+    sessionToken && (tab === 'made' || receivedEmpty) ? { sessionToken, window, now } : 'skip'
   )
 
   return (
@@ -107,7 +112,19 @@ export default function PeoplePage() {
             {byPost === undefined ? (
               <p className="text-muted-foreground text-sm">…</p>
             ) : byPost.posts.length === 0 ? (
-              <p className="text-muted-foreground text-sm">{t('people.emptyReceived')}</p>
+              <>
+                <p className="text-muted-foreground text-sm">{t('people.emptyReceived')}</p>
+                {made !== undefined && made.total < 3 && (
+                  <div className="mt-3 flex flex-col items-start gap-3">
+                    <p className="text-muted-foreground m-0 text-sm">
+                      {t('people.graphStarter', { made: made.total })}
+                    </p>
+                    <Button asChild>
+                      <Link to="/feed">{t('people.goToFeed')}</Link>
+                    </Button>
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 <PeopleAccordion posts={byPost.posts} />

@@ -177,4 +177,15 @@ describe('NotificationBell', () => {
     rerender(<NotificationBell />)
     expect(toastSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('toasts the record copy with the total for a new record notification', () => {
+    mockQueryReturns['notifications.getUnreadCount'] = 0
+    mockQueryReturns['notifications.listMine'] = { page: [], status: 'CanLoadMore', loadMore: vi.fn() }
+    mockQueryReturns['notifications.getLatest'] = { _id: 'n1', actorName: 'Ana', kind: 'comment' }
+    const { rerender } = render(<NotificationBell />)
+    expect(toastSpy).not.toHaveBeenCalled()
+    mockQueryReturns['notifications.getLatest'] = { _id: 'n2', actorName: 'Ana', kind: 'record', total: 6 }
+    rerender(<NotificationBell />)
+    expect(toastSpy).toHaveBeenCalledWith('notifications.toastRecord{"count":6}')
+  })
 })

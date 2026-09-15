@@ -77,6 +77,48 @@ describe('interactions people queries', () => {
     expect(result.posts[0].actors[0]).toMatchObject({ name: 'Ana', total: 1, reaction: 'LIKE' })
   })
 
+  test('the made list carries each visible authored post count for the window', async () => {
+    const t = convexTest(schema, modules)
+    const { me, ana } = await seed(t)
+    const anaPost = await t.run(async ctx => {
+      const at = (urn: string, publishedAt: number, extra: Record<string, unknown> = {}) =>
+        ctx.db.insert('posts', {
+          linkedinPostUrn: urn,
+          authorId: ana,
+          content: 'ana',
+          publishedAt,
+          likeCount: 0,
+          commentCount: 0,
+          mediaUrls: [],
+          isFeatured: false,
+          visibilityIndustries: [],
+          visibilityCountries: [],
+          hidden: false,
+          ...extra
+        })
+      await at('urn:ana-visible', NOW - DAY)
+      await at('urn:ana-hidden', NOW - 2 * DAY, { hidden: true })
+      await at('urn:ana-deleted', NOW - 3 * DAY, { deletedAt: NOW })
+      await at('urn:ana-old', NOW - 8 * DAY)
+      return at('urn:ana-touched', NOW - DAY)
+    })
+    await t.run(async ctx =>
+      ctx.db.insert('userInteractions', {
+        userId: me,
+        postId: anaPost,
+        authorId: ana,
+        kind: 'reaction' as const,
+        createdAt: NOW - DAY
+      })
+    )
+    const result = await t.query(api.interactions.listPeopleIInteractedWith, {
+      sessionToken: 'tok',
+      window: '7d',
+      now: NOW
+    })
+    expect(result.people[0]).toMatchObject({ name: 'Ana', total: 1, postsCount: 2 })
+  })
+
   test('banned counterparts disappear from the made list and the by-post actors', async () => {
     const t = convexTest(schema, modules)
     const { me, ana } = await seed(t)

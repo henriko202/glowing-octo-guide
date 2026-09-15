@@ -42,9 +42,11 @@ export default function NotificationBell() {
     if (latest === null || seenId.current === latest._id) return
     seenId.current = latest._id
     const message =
-      latest.kind === 'comment'
-        ? t('notifications.toastComment', { name: latest.actorName })
-        : t('notifications.toastReaction', { name: latest.actorName })
+      latest.kind === 'record'
+        ? t('notifications.toastRecord', { count: latest.total ?? 0 })
+        : latest.kind === 'comment'
+          ? t('notifications.toastComment', { name: latest.actorName })
+          : t('notifications.toastReaction', { name: latest.actorName })
     if (latest.postUrn && latest.removed !== true) {
       const { postUrn, postSourceUrl } = latest
       toast(message, {

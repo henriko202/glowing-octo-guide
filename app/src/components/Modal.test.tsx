@@ -1,6 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
 import Modal from './Modal'
+import { DialogClose } from '@/components/ui/dialog'
 
 describe('Modal', () => {
   it('renders its children inside a dialog', () => {
@@ -47,5 +48,23 @@ describe('Modal', () => {
     )
     fireEvent.click(screen.getByText('Body'))
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('ignores a backdrop click, while a close control still closes', async () => {
+    const onClose = vi.fn()
+    render(
+      <Modal onClose={onClose}>
+        <DialogClose asChild>
+          <button type="button">Close</button>
+        </DialogClose>
+      </Modal>
+    )
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    fireEvent.pointerDown(document.body)
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

@@ -54,6 +54,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: 'Feed' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'My Posts' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Billing' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/notifications')
   })
   it('marks the current route with aria-current', () => {
     renderAt('/billing')

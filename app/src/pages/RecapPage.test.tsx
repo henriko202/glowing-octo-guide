@@ -141,8 +141,13 @@ describe('RecapPage', () => {
   it('shows the near-cap upgrade ask with both numbers and the per-post bar', () => {
     renderPage()
     expect(screen.getByText(/20 of 25 interactions\. On Growth it keeps collecting to 50/)).toBeInTheDocument()
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '20')
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow', '20')
+    expect(bar.firstElementChild).toHaveStyle({ width: '80%' })
     expect(screen.getByText('1 of 1 posts in the last 7 days')).toBeInTheDocument()
+    const card = screen.getByRole('link', { name: 'Hello world' }).closest('li')
+    expect(card).toHaveClass('rounded-xl', 'border', 'border-border', 'bg-card', 'p-4', 'shadow-xs')
+    expect(card?.parentElement).toHaveClass('flex', 'flex-col', 'gap-3')
   })
 
   it('renders the truncated notice with the reworded copy and the row ceiling (F3, F8)', () => {

@@ -61,6 +61,9 @@ describe('HistoryPage', () => {
     expect(screen.getAllByText('Post removed')).toHaveLength(2)
     expect(screen.getAllByRole('link', { name: /View on LinkedIn/ })).toHaveLength(2)
     expect(screen.getByText('2 days ago')).toBeInTheDocument()
+    const card = screen.getByText('by Ana').closest('li')
+    expect(card).toHaveClass('rounded-xl', 'border', 'border-border', 'bg-card', 'p-4', 'shadow-xs')
+    expect(card?.parentElement).toHaveClass('flex', 'flex-col', 'gap-3')
   })
 
   it('loads more while the cursor is open', () => {

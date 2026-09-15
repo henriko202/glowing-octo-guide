@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import { EyeOff } from 'lucide-react'
 import { api } from '../convex'
@@ -71,7 +72,8 @@ export default function RankingsPage() {
                     headline: row.headline,
                     profilePictureUrl: row.profilePictureUrl,
                     count: row.total,
-                    lastAt: row.lastAt
+                    lastAt: row.lastAt,
+                    postsCount: row.postsCount
                   }))}
                 />
                 <RankingList
@@ -84,7 +86,8 @@ export default function RankingsPage() {
                     headline: row.headline,
                     profilePictureUrl: row.profilePictureUrl,
                     count: row.total,
-                    lastAt: row.lastAt
+                    lastAt: row.lastAt,
+                    postsCount: row.postsCount
                   }))}
                 />
                 {mine.truncated && <p className="text-muted-foreground mt-2 text-sm">{t('people.truncated')}</p>}
@@ -114,8 +117,19 @@ export default function RankingsPage() {
                   rows={rankings.interactors}
                   meId={me?.id}
                 />
-                {me !== null && (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  {me === null || me.count === 0 ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p className="text-muted-foreground m-0 text-sm">{t('rankings.emptyFresh')}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <Link to="/feed">{t('people.goToFeed')}</Link>
+                      </Button>
+                    </div>
+                  ) : (
                     <p className="text-muted-foreground text-sm">
                       {me.position !== null
                         ? t('rankings.yourPosition', { position: me.position })
@@ -131,18 +145,20 @@ export default function RankingsPage() {
                         </>
                       )}
                     </p>
+                  )}
+                  {me !== null && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="cursor-pointer"
+                      className="w-full cursor-pointer sm:w-auto"
                       disabled={optOutSaving}
                       onClick={handleOptOut}
                     >
                       <EyeOff aria-hidden="true" />
                       {me.optedOut ? t('rankings.optIn') : t('rankings.optOut')}
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </>
             )}
           </section>

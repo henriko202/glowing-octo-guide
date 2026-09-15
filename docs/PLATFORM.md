@@ -814,22 +814,43 @@ row; a repeat reaction can't either (the dedupe returns before any write). `read
 private to its recipient — every read path authenticates through `requireAuth`, so a banned member cannot read theirs
 at all, while the rows themselves stay in place ([§11](#11-feed--engagement)). `by_created_at` serves the 180‑day
 retention purge; the DSR export and the erasure cascade cover both the recipient and the actor side
-([§13B](#13b-privacy--compliance)).
+([§13B](#13b-privacy--compliance)). RCD widened `kind` with **`'record'`**: one self‑addressed row
+(`recipientId = actorId =` the author) when the author's own post sets a new all‑time interaction best, carrying the
+new `total` ([§11](#11-feed--engagement)).
 
-| Field         | Type                      | Req | Meaning                                                                |
-|---------------|---------------------------|:---:|------------------------------------------------------------------------|
-| `recipientId` | `id('users')`             | ✓  | The post's author — who receives the notification.                     |
-| `actorId`     | `id('users')`             | ✓  | Who reacted or commented.                                              |
-| `postId`      | `id('posts')`             | ✓  | The engaged post.                                                      |
-| `kind`        | `'reaction' \| 'comment'` | ✓  | Which interaction this row records.                                    |
-| `reaction`    | enum                      |  –  | Reaction value (set when `kind === 'reaction'`).                       |
-| `excerpt`     | string                    |  –  | Comment text, flattened and capped at 140 chars (`lib/recap.excerpt`). |
-| `createdAt`   | number                    | ✓  | When the interaction happened (ms); the inbox's ordering key.          |
-| `readAt`      | number                    |  –  | Set by `markRead` / `markAllRead`; absent ⇒ unread.                    |
+| Field         | Type                                  | Req | Meaning                                                                |
+|---------------|---------------------------------------|:---:|------------------------------------------------------------------------|
+| `recipientId` | `id('users')`                         | ✓  | The post's author — who receives the notification.                     |
+| `actorId`     | `id('users')`                         | ✓  | Who reacted or commented (the author themself on a `record` row).      |
+| `postId`      | `id('posts')`                         | ✓  | The engaged post.                                                      |
+| `kind`        | `'reaction' \| 'comment' \| 'record'` | ✓  | Which event this row records.                                          |
+| `reaction`    | enum                                  |  –  | Reaction value (set when `kind === 'reaction'`).                       |
+| `excerpt`     | string                                |  –  | Comment text, flattened and capped at 140 chars (`lib/recap.excerpt`). |
+| `total`       | number                                |  –  | The new interaction total (set when `kind === 'record'`).              |
+| `createdAt`   | number                                | ✓  | When the interaction happened (ms); the inbox's ordering key.          |
+| `readAt`      | number                                |  –  | Set by `markRead` / `markAllRead`; absent ⇒ unread.                    |
 
 Indexes: `by_recipient_and_created_at [recipientId, createdAt]` — the inbox page (newest first);
 `by_recipient_and_read_at [recipientId, readAt]` — the unread count and the mark‑all drain; `by_actor [actorId]` —
 erasure when the member is the actor; `by_created_at [createdAt]` — the retention purge.
+
+#### `userRecords` — per‑post interaction bests (RCD)
+
+One row per (author, post) that ever crossed the record floor (**5** combined interactions, `lib/recordPost.ts`).
+`total` is the highest count seen so far — it tracks growth even during the cooldown — and `notifiedAt` is when the
+last record notification was sent, which enforces the **7‑day** re‑notify cooldown. Upserted in the same transaction
+as the counter bump that set the best (`interactions.maybeNotifyRecord`); **never written below the floor**. A row is
+the author's own data (there is no counterparty), so the erasure cascade drains it by `by_user` and the DSR export
+includes it ([§13B](#13b-privacy--compliance)).
+
+| Field        | Type          | Req | Meaning                                                     |
+|--------------|---------------|:---:|-------------------------------------------------------------|
+| `userId`     | `id('users')` | ✓  | The post's author — the record holder.                      |
+| `postId`     | `id('posts')` | ✓  | The post whose best this row tracks.                        |
+| `total`      | number        | ✓  | Highest combined interaction count seen for that post.      |
+| `notifiedAt` | number        | ✓  | When the last record notification for the post was written. |
+
+Index: `by_user [userId]` — the author's records, read on every counter bump for that author's posts.
 
 #### `survivalSnapshots` — nightly admin survival-panel aggregates
 
@@ -1514,7 +1535,12 @@ Two trial-end paths exist, and they must never both warn about the same event:
 
 - **50 interactions** — `endTrialEarly` sets `trial_end: 'now'`, so Stripe emits **no** `trial_will_end`. Ours is the
   only warning, and it fires earlier, at **40 of 50** (`TRIAL_WARNING_THRESHOLD`, 80% of the threshold), scheduled from
-  `bumpTrialInteraction` through the same `crossesThreshold` helper — so it fires exactly once per member.
+  `bumpTrialInteraction` through the same `crossesThreshold` helper — so it fires exactly once per member. **RCD:** the
+  email also carries the member's real graph — `rankings.getTrialGraphSummary` (bounded 2000 rows per side, all‑time)
+  returns distinct people made/received and received reactions/comments, plus their live 7d board position and the gap
+  to the next place, which `trialNearEndEmail` renders as factual sentences ("47 interactions with 9 people, 14
+  reactions on your posts."). The remaining‑interaction line and the plan start stay; nothing claims features stop at
+  trial end.
 - **The elapsed-days side** (7 days, or 14 for an invited member — **R19**, see "Checkout (subscribe) flow") — Stripe
   emits `customer.subscription.trial_will_end` three days ahead; `http.ts` schedules
   `internal.billingNotices.sendTrialEnding`. Stripe's own built-in trial-ending email stays **OFF** in the Dashboard
@@ -2605,7 +2631,10 @@ measured against the generation closest to `lastDigestAt`, so it means "since yo
 The member's board-window count is read live (the same way `getSiteRankings` does), so a member outside the snapshot's
 top 100 still gets an exact position. All four top lists drop banned and pending-deletion members at read time; the two
 site lists additionally drop `leaderboardOptOut` members, mirroring `getSiteRankings` — the two personal mutual lists
-keep opted-out people (opt-out is rankings-only). Position and movement are unaffected by the filter.
+keep opted-out people (opt-out is rankings-only). Position and movement are unaffected by the filter. **RCD:** the same
+read returns `gapToNext` (the count above minus the live count, `null` at position 1 / unranked) and the site social
+proof — `siteTotalInteractions` (the sum of the snapshot's full `interactorCountsDescending`) and
+`siteActiveMembers` (its length).
 
 **Content order (`lib/digestEmails.ts`, spec §8).** 1) personal numbers — reactions/comments received and made; 2) who
 interacted most with your posts (top 3); 3) who you interacted most with (top 3); 4) site-wide top posters and top
@@ -2613,7 +2642,12 @@ interactors for the stated 7-day window (top 3 each); 5) position and movement; 
 `/rankings`, then the footer with the unsubscribe link, the Settings link and the support address. The subject carries
 the precise personal number (e.g. "3 reactions and 1 comment on your posts"). The builder renders through the shared
 `emailLayout` shell and formats the window start with `Intl.DateTimeFormat` (`INTL_TAG`) in en/pt/es. The copy is an
-activity summary: no promotional verbs, no urgency, no exclamation marks.
+activity summary: no promotional verbs, no urgency, no exclamation marks. **RCD:** above the site tops, when at least
+**3 members** were active in the snapshot window, one factual sentence states the totals ("112 interactions between 14
+members in the last 7 days.") — suppressed below the floor so a tiny base never reads as a crowd. A temporary factual
+announcement line may appear in the footer above the unsubscribe links: `jobs/digest.ts` passes
+`digestFeatureNote(now, locale)` only while `now < Date.UTC(2026, 9, 28)` ("New: see who reacted to each of your posts
+at linkintothessi.com/people"), plain text with no CTA styling.
 
 **Skip-on-empty.** `settleDigest` returns before building the email when `made + received === 0` — the digest reports
 activity, so a member with none gets silence, not an empty summary. `lastDigestAt` is stamped **only** after
@@ -3463,7 +3497,8 @@ The interaction log read back as **people**, not counts. Two public queries in `
 so a window's args are stable across renders:
 
 - **`listPeopleIInteractedWith({ window, now })`** — "made": `by_user` rows grouped by the post's author
-  (`tallyMadeByPerson`).
+  (`tallyMadeByPerson`). Each person also carries `postsCount`: their visible (not hidden, not soft-deleted) posts
+  published inside the window, read per author through `by_author_and_publishedAt` and capped at 200 posts.
 - **`listInteractionsByPost({ window, now })`** — "received", grouped by post with the actors nested
   (`tallyReceivedByPost`); a hidden or soft‑deleted post comes back with `removed: true` rather than dropped. This is
   the shape `/people`'s received tab renders.
@@ -3481,11 +3516,15 @@ member directory and its debounced `api.search.search` box no longer exist (`lis
 `people.tabs.all` / `people.emptyAll` / `people.search*` copy are gone).
 
 **Rankings.** `rankings.getMyRankings` aggregates the caller's own log live, top 10 each direction, with the same
-2000‑row reads and `truncated` flag (surfaced on `/rankings` under the "You" block with `people.truncated`'s copy).
+2000‑row reads and `truncated` flag (surfaced on `/rankings` under the "You" block with `people.truncated`'s copy),
+and each person carries `postsCount` (their visible posts in the window, capped at 200 per person like the made list).
 `rankings.getSiteRankings` reads the newest stored `rankingSnapshots` generation
 and, for movement, the newest one before it; it joins every stored id to its user and drops banned, pending‑deletion
 and opted‑out members **at read time** — the snapshot stores ids, never names, so a ban or an opt‑out lands without a
-rebuild. Each board serves at most **20** rows after that filtering (the snapshot keeps the top 100). The caller's own
+rebuild. Each board serves at most **20** rows after that filtering (the snapshot keeps the top 100), and every
+decorated row carries its **`position`** — the competition rank (`rankPositions` in `lib/ranking.ts`) recomputed over
+the post-filter visible list, so a dropped banned/opted-out member leaves no gap and tied counts share the same
+number. The caller's own
 block is computed live: their count for the snapshot's window comes from their `by_user` rows (excluding `ai_draft`
 and self), and the exact position comes from the snapshot's full `interactorCountsDescending` distribution (`positionOf`
 in `lib/ranking.ts`), so "you are #87" works beyond the top 100. Positions are competition ranks — equal
@@ -3493,7 +3532,12 @@ counts share the best (lowest) position number (`[9,7,7,5]` → positions `1,2,2
 position with the previous generation (positive = climbed). A `partial: true` board hit the job's 10,000‑row scan
 ceiling or the 8,000-count distribution cap and says so. The read also decorates each row with the snapshot's meta:
 `reactionsReceived` for posters (summed in‑window `likeCount`) and `postsTouched` for interactors (distinct posts),
-defaulting to `0` on generations written before the enrichment. Personal
+defaulting to `0` on generations written before the enrichment. **RCD:** `me` also carries **`gapToNext`** — the count
+above minus the member's live count (`null` at position 1 or unranked) — so the UI can say "2 interactions from #7";
+reaching that count ties the member above. `rankings.getWeeklyTop` is the medal read: the newest 7d generation's top
+three posters and interactors, filtered exactly like `getSiteRankings` (banned / pending-deletion / opted-out drop
+**before** positions are assigned), returned as `{ userId, position: 1 | 2 | 3 }` with empty arrays when no snapshot
+exists. Personal
 rankings are live; the site boards only move when the daily crons rebuild them ([§13](#13-scheduled-jobs-crons)). A
 fresh deployment has **no site board** until the first 03:30 / 03:35 UTC run; seed it immediately with
 `npx convex run jobs/rankingSnapshot:rebuildRankingSnapshots '{"window":"7d"}'` (and `"30d"` for the other window), or
@@ -3517,7 +3561,11 @@ and the `userInteractions` insert — `incrementCommentCount` / `incrementLikeCo
 right after the log row, so the inbox, the counters and the log can never disagree. The write is skipped when the actor
 is the post's author (self-interactions never notify), and a repeat reaction can never notify either (the `reactedAt`
 dedupe returns before any write). A comment row carries the flattened 140-char excerpt (`lib/recap.excerpt`); a
-reaction row carries the reaction value.
+reaction row carries the reaction value. **RCD — record notifications.** The same transaction also runs
+`interactions.maybeNotifyRecord`: when the author's own post beats its stored best in `userRecords`, passes the **5**
+floor and the **7-day** cooldown (`lib/recordPost.isNewRecord`), it writes a self-addressed
+`kind: 'record'` row carrying the new `total` and patches the record. Inside the cooldown the best keeps tracking but
+no row is written; below the floor nothing is written at all ([§5](#5-data-model)).
 
 Read paths live in `convex/notifications.ts` — the in-app inbox. That filename belonged to the transactional billing
 mailer until R23; the mailer is now `convex/billingNotices.ts` (rename note below).
@@ -3531,7 +3579,10 @@ mailer until R23; the mailer is now `convex/billingNotices.ts` (rename note belo
 - **`getUnreadCount({ sessionToken })`** — a bounded `.take(100)` over `by_recipient_and_read_at`; the bell renders
   "9+" past nine.
 - **`getLatest({ sessionToken })`** — the newest row only (actor name, kind, post URN/URL and `removed`), the client's
-  toast seed; the post link lets the toast open the post on click.
+  toast seed; the post link lets the toast open the post on click. **RCD:** `listMine` and `getLatest` both carry
+  `actorId` and `total`, so a `record` row renders its own sentence (`notifications.record` / `toastRecord`, no actor
+  name). Notification rows carry **no medal ring**; the weekly top-3 ring lives only on the feed's `PostCard` author
+  (`rankings.getWeeklyTop` + `rankings.topThreeTitle`).
 - **`markRead({ sessionToken, ids })`** — idempotent, and ownership-checked: ids pass `normalizeId` first, and a row
   that is not the caller's own (or is already read) is a no-op, so a foreign id can never mark another member's inbox.
 - **`markAllRead({ sessionToken })`** — marks one **100-row** batch of the caller's unread rows and, when the batch
@@ -3767,7 +3818,9 @@ non-functional top-bar search placeholder.
 - Reuses the `cmdk` wrapper in `app/src/components/ui/command.tsx` (`CommandDialog` + `Command` root). `AppShell` owns
   the open state and a global ⌘K/Ctrl-K keydown listener (`preventDefault` so it doesn't collide with browser find); the
   `TopBar` search button opens it via `onOpenSearch`. The top-bar shortcut hint is OS-aware — `getModifierKey`
-  (`TopBar.tsx`, from `navigator.platform`) shows **⌘** on macOS/iOS and **Ctrl** elsewhere.
+  (`TopBar.tsx`, from `navigator.platform`) shows **⌘** on macOS/iOS and **Ctrl** elsewhere — and only renders from the
+  `sm` breakpoint up; below it the button shows the compact `shell.searchShort` label ("Search"/"Pesquisar"/"Buscar")
+  and no modifier hint, since a phone has no Ctrl key.
 - Input is debounced ~180ms; the Convex query runs reactively via `useQuery(..., 'skip')` and only fires at ≥2 chars.
   Idle (no query) shows **Quick actions** (nav items + toggle theme + sign out); typing shows **People** / **Posts**
   groups, or a localized "No results". `shouldFilter={false}` — results are already filtered server-side, so cmdk's
@@ -3794,29 +3847,30 @@ code writes it. Every admin function calls `assertAdmin(user)` after
 
 ### Admin functions (`convex/admin.ts`)
 
-| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                                                                                                                                |
-|--------------------------------------------------------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                                                                                                                                  |
-| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                                                                                                                                             |
-| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                                                                                                                                            |
-| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                                                                                                                              |
-| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                                                                                                                                    |
-| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule the `jobs/syncPostsApify.syncAllPostsViaApify` fan‑out for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                                                                                       |
-| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                                                                                                                            |
-| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                                                                                                                                |
-| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                                                                                                                       |
-| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                                                                                                                                |
-| `survivalMetrics(days: 7\|28)`                                           | query    | **R18** — the Survival panel's only data source: reads the window's nightly `survivalSnapshots` row (rebuilt 03:15 UTC by `jobs/survivalSnapshot.rebuildSurvivalSnapshots`) and returns `{ days, since, generatedAt, cohort, payingByTier }`. `null` until the first rebuild. Cohort maths lives in `lib/survival.ts`. |
-| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                                                                                                                               |
-| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                                                                                                                                                                    |
-| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                                                                                                                                     |
-| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                                                                                                                                       |
-| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Self‑heals (backlog/B27): inserts the row from `buildTierDefaultRow` first if the tier was never seeded, instead of throwing. Backend‑only (no UI).                                                                                                    |
-| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                                                                                                                                            |
-| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                                                                                                                                    |
-| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                                                                                                                                            |
-| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                                                                                                                                  |
-| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                                                                                                                               |
+| Function                                                                 | Kind     | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|--------------------------------------------------------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `checkIsAdmin`                                                           | query    | `true/false` (soft‑fails to `false`) — drives the client route guard.                                                                                                                                                                                                                                                                                                                                                                     |
+| `getSettings`                                                            | query    | App settings (3 Apify flags + post‑sync & profile‑scrape last‑run status).                                                                                                                                                                                                                                                                                                                                                                |
+| `toggleApifySync(enabled)`                                               | mutation | Master switch for the Apify post‑sync cron.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `toggleApifyEnabled(enabled)`                                            | mutation | Master Apify kill-switch.                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `toggleApifyProfileScrape(enabled)`                                      | mutation | Toggle the LinkedIn profile scrape.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `syncAllPosts`                                                           | mutation | **Manual trigger** → schedule the `jobs/syncPostsApify.syncAllPostsViaApify` fan‑out for all active subscribers. Throws if post sync is disabled. See [Manual Apify sync triggers](#manual-apify-sync-triggers).                                                                                                                                                                                                                          |
+| `syncUserPosts(userId)`                                                  | mutation | **Manual trigger** → schedule a post sync for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                                                                                                                                                                                                                                               |
+| `syncAllProfiles`                                                        | mutation | **Manual trigger** → schedule a profile scrape for all users with a LinkedIn URL. Throws if profile scrape is disabled.                                                                                                                                                                                                                                                                                                                   |
+| `syncUserProfile(userId)`                                                | mutation | **Manual trigger** → schedule a profile scrape for one user. Throws if disabled or the user has no LinkedIn URL.                                                                                                                                                                                                                                                                                                                          |
+| `listUsers`                                                              | query    | Up to 1000 users (newest first), **without** tokens/Stripe IDs; includes the public `linkedinPublicIdentifier` slug so the Users tab can gate the per‑row sync actions.                                                                                                                                                                                                                                                                   |
+| `survivalMetrics(days: 7\|28)`                                           | query    | **R18** — the Survival panel's only data source: reads the window's nightly `survivalSnapshots` row (rebuilt 03:15 UTC by `jobs/survivalSnapshot.rebuildSurvivalSnapshots`) and returns `{ days, since, generatedAt, cohort, payingByTier }`. `null` until the first rebuild. Cohort maths lives in `lib/survival.ts`.                                                                                                                    |
+| `getChurnRisk`                                                           | query    | On-demand attention list (no snapshot table, so always fresh): scans up to 1000 non-banned, non-deleting members with 4 bounded indexed reads each and returns those to nudge — `received_no_reply` (received7d > 0, made7d = 0), `silent_7d` (no made/received while `lastLoginAt` is within 7d) or `cooling` (made7d < made30d / 4) — sorted by severity, with one concrete `hook` line each. Rendered by the admin **Attention** card. |
+| `setUserTier(userId, tier)`                                              | mutation | Change tier (any of the 4) from the Users tab; promoting to `contact` auto‑seeds a per‑user `planLimits` override from contact defaults.                                                                                                                                                                                                                                                                                                  |
+| `setUserSubscriptionStatus(userId, status)`                              | mutation | Admin override of `subscriptionStatus` (any of the 5) from the Users tab. Manual override; a later Stripe webhook can overwrite it.                                                                                                                                                                                                                                                                                                       |
+| `listContactUsersWithLimits`                                             | query    | Every contact‑tier user (`by_tier`) with **effective** limits (override ?? contact default) + `hasOverride`. Powers the read‑only Plan Limits tab.                                                                                                                                                                                                                                                                                        |
+| `listPlanLimits`                                                         | query    | All `planLimits` rows, enriched with `userName` for overrides. Also prefills the Users‑tab contact‑limits modal.                                                                                                                                                                                                                                                                                                                          |
+| `updateTierDefault(tier, …)`                                             | mutation | Edit a tier's **default** row (filters out per‑user overrides). Self‑heals (backlog/B27): inserts the row from `buildTierDefaultRow` first if the tier was never seeded, instead of throwing. Backend‑only (no UI).                                                                                                                                                                                                                       |
+| `setContactUserLimit(userId, …)`                                         | mutation | Upsert a contact per‑user override (validates ≥ 1; target must be contact tier). Edited from the Users tab.                                                                                                                                                                                                                                                                                                                               |
+| `removeContactUserLimit(userId)`                                         | mutation | Delete a contact override (revert to tier default).                                                                                                                                                                                                                                                                                                                                                                                       |
+| `banUser(userId, reason?)`                                               | mutation | Set ban fields. **Cannot self‑ban** (`assertNotSelfBan`) — guarantees ≥ 1 admin remains; banning _other_ admins is allowed.                                                                                                                                                                                                                                                                                                               |
+| `unbanUser(userId)`                                                      | mutation | Clear all ban fields.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `getSettingsInternal` / `updateSyncStatus` / `updateProfileScrapeStatus` | internal | Used by the Apify jobs — read flags; record post‑sync / profile‑scrape last‑run + error.                                                                                                                                                                                                                                                                                                                                                  |
 
 `validateLimitArgs` enforces `interactionsPerPost ≥ 1` and `postsPerWeek ≥ 1`. `effectiveContactLimits`
 (pure, unit‑tested) resolves a contact user's display limits as `override ?? contact default ?? hardcoded`.
@@ -3987,7 +4041,10 @@ Each feedback item can receive **multiple admin replies** stored as a thread in 
   boolean arg to `respondToFeedback`).
 
 **Frontend** (`app/src/components/`): `FeedbackButton` + `FeedbackModal` (user, i18n en/pt/es); `FeedbackTab` +
-`RespondFeedbackModal` (admin, English). Respond is disabled when the submitter has no email on file.
+`RespondFeedbackModal` (admin, English). Respond is disabled when the submitter has no email on file. `FeedbackButton`
+has two placements: the floating bottom-right pill from `lg` up, and a sidebar row rendered above `UserMenu`
+(`placement="sidebar"`, `lg:hidden`) so below `lg` the action lives in the mobile drawer instead of floating over the
+feed.
 
 **Privacy:** `feedback` rows are **anonymized, not deleted**, on account erasure (`cascadeDeleteUser` clears `userId`;
 content retained). `feedbackResponses` rows are retained attached to the anonymized feedback after account deletion.
@@ -3996,7 +4053,7 @@ feedback items).
 
 ```mermaid
 flowchart TD
-    U[User clicks floating Feedback button] --> M[FeedbackModal: pick category + message ≤4000]
+    U[User taps Feedback: floating pill from lg up, sidebar row in the mobile drawer] --> M[FeedbackModal: pick category + message ≤4000]
 M -->|submitFeedback|V{Valid & under 10/hour?}
 V -->|no|E[Error shown in modal]
 V -->|yes|DB[(feedback row · status=new)]
@@ -4051,8 +4108,8 @@ patch, so an explicit off is not re-enabled by the next reconcile tick.
   dangerous URL protocols stripped).
 - `Motd` — subscribes to `getActiveMotd`, resolves the body for the active language (`bodies[lang] ?? bodies.en`),
   renders the banner or (when `important`) the blocking `Modal`
-  (`dismissOnBackdrop={false}`, `dismissOnEscape={false}`, OK button). Mounted in `RequireAuth`
-  above `AppShell`. New i18n keys: `motd.dismiss`, `motd.ok` (en/pt/es).
+  (`dismissOnEscape={false}`, OK button; backdrop clicks never dismiss — see the Modal conventions below). Mounted in
+  `RequireAuth` above `AppShell`. New i18n keys: `motd.dismiss`, `motd.ok` (en/pt/es).
 - `MotdTab` — admin authoring (list + create/edit form with per-locale textareas, important/enabled toggles, optional
   `datetime-local` start/expiry, live `MarkdownView` preview). Added as the **MOTD** tab in `AdminPage` (admin chrome is
   English-only, like the other admin tabs).
@@ -4441,6 +4498,9 @@ a calm working surface, in light (default) and dark.
   wrap on desktop, and allow long labels to wrap. Card-gate pricing remains below the actions inside the dialog.
   When the built-in close icon is visible, `DialogContent` reserves space on the right of its header so titles and
   descriptions wrap clear of the icon. Dialogs without that icon retain the full header width.
+- **Modal dismissal:** backdrop clicks are inert app-wide — `Modal` and the shared `DialogContent` both
+  `preventDefault` Radix's `onInteractOutside`, so only the close icon (`DialogClose`), a cancel/OK action, or Escape
+  (unless a caller opts out) dismisses a dialog. Clicks inside the panel never reach the backdrop.
 
 ---
 
@@ -4642,7 +4702,9 @@ sync with the compliance docs and live support inbox.
   launch state, and the status gate stands as built). `getTrialProgress` itself is only queried
   while the feed is empty (`posts.length === 0`), not on every feed load. Then a list of
   `PostCard`s, each rendering the post as a **LinkedIn embed** (Option B — see `PostCard` below; raw post text is not
-  shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card. Uses `useCardGate()`
+  shown); reactions via `reactToPost` (hard‑coded `LIKE`); inline `CommentBox` toggled per card. **RCD:** the page also
+  subscribes to `rankings.getWeeklyTop` and hands each card an `authorMedal` when its author is one of the week's top‑3
+  posters, which rings the avatar (`PostCard`) under the `rankings.topThreeTitle` label. Uses `useCardGate()`
   and passes the resulting `gated` boolean to every `<PostCard>`. The
   `react()` call is wrapped in try/catch: a `PAYMENT_REQUIRED` error surfaces an inline gate hint (previously the call
   failed silently). A gated member with a hidden own post sees a **`CardGateBanner`** above the composer
@@ -4737,31 +4799,38 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
       recent N rather than silently under-reporting.
     - `nearCapPost` → the post's excerpt plus `UpgradeAtLimit limit="interactionCap" nearCap={{ total, cap }}`. **One**
       post, one ask ([§9](#9-plan-limits-system)).
-    - Plan usage — `PlanUsagePills` beside the heading, then one row per post: the excerpt links to LinkedIn
-      (`buildPostUrl`), `feed.featured` and `myPosts.interactionCapBadge` badges where they apply, and a
+    - Plan usage — `PlanUsagePills` beside the heading, then one card per post (`rounded-xl border border-border bg-card
+      p-4 shadow-xs`, listed with `gap-3`): the excerpt links to LinkedIn (`buildPostUrl`), `feed.featured` and
+      `myPosts.interactionCapBadge` badges where they apply, and a
       `role="progressbar"` bar whose `aria-labelledby` points at the visible "N of M interactions" line
       (`aria-valuemin`/`max`/`now`), so the bar is a labelled control rather than decoration. A capped post renders
       100%.
-    - The empty state (nothing made, nothing received, no posts in the window) is one card and one button back to
-      `/feed` — no zeros dressed up as a dashboard.
-    - A footer on **both** branches (empty and not): `recap.honest` ("These are the interactions recorded here. We don't
-      read or predict your SSI."), `recap.salesNav` — the **only SSI link left anywhere in the app**, and it is
-      conditional ("Have Sales Navigator? Your SSI is still at" → `linkedin.com/sales/ssi`) because LinkedIn moved the
-      SSI
-      page behind Sales Navigator in August 2026 — and a link to `/history`.
-    - **The invite line (R19)**, last in the footer and **only when `recap.received.current.total > 0`**:
-      `recap.inviteLine` ("People are finding you. Invite a peer who needs that too: they start with a
-      {{days}}-day trial", `days` = the `INVITED_TRIAL_PERIOD_DAYS` constant) plus a link to **`/settings#invite`**,
-      where
-      the code actually lives. The condition is the point — the ask is made from
-      strength, in the one moment the member has just seen proof it works, and a member whose posts got nothing this
-      window is never asked to recruit.
-        - Fires `recap_viewed { window, nearCap }` once per **loaded window**, latched on a `useRef` holding the last
-          reported `recap.window` (StrictMode-safe, and a 7d↔30d toggle reports each side once).
+        - The empty state (nothing made, nothing received, no posts in the window) is one card and one button back to
+          `/feed` — no zeros dressed up as a dashboard.
+        - A footer on **both** branches (empty and not): `recap.honest` ("These are the interactions recorded here. We
+          don't
+          read or predict your SSI."), `recap.salesNav` — the **only SSI link left anywhere in the app**, and it is
+          conditional ("Have Sales Navigator? Your SSI is still at" → `linkedin.com/sales/ssi`) because LinkedIn moved
+          the
+          SSI
+          page behind Sales Navigator in August 2026 — and a link to `/history`.
+        - **The invite line (R19)**, last in the footer and **only when `recap.received.current.total > 0`**:
+          `recap.inviteLine` ("People are finding you. Invite a peer who needs that too: they start with a
+          {{days}}-day trial", `days` = the `INVITED_TRIAL_PERIOD_DAYS` constant) plus a link to **`/settings#invite`**,
+          where
+          the code actually lives. The condition is the point — the ask is made from
+          strength, in the one moment the member has just seen proof it works, and a member whose posts got nothing this
+          window is never asked to recruit.
+            - Fires `recap_viewed { window, nearCap }` once per **loaded window**, latched on a `useRef` holding the
+              last
+              reported `recap.window` (StrictMode-safe, and a 7d↔30d toggle reports each side once).
 - **HistoryPage** (`/history`, R16) — every recorded interaction, newest first, via `usePaginatedQuery` on
   `interactions.listMyInteractions` with **20 per page** and a `feed.loadMore` button. The `WindowToggle` here offers
   **7d / 30d / all** (default 30d); `all` passes `since: 0` and the other two reuse `windowBounds` over the same
-  hour-floored `now`. Each row shows the reaction **emoji `aria-hidden` next to its text label** so assistive tech reads
+  hour-floored `now`. Each entry is a card (`rounded-xl border border-border bg-card p-4 shadow-xs`, listed with
+  `gap-3`)
+  whose kind chip (`Badge`) shows the reaction **emoji `aria-hidden` next to its text label** (a `MessageSquare` /
+  `Sparkles` glyph for comments / AI drafts, same pattern) so assistive tech reads
   the word and never the glyph; a comment is shown **verbatim**, clamped to `line-clamp-6` with a Show more/less toggle
   once it passes 280 characters or 6 lines. Below it: the post excerpt, `history.by`, a `feed.viewOnLinkedIn` link, and
   a `history.removed` badge when the post was soft-deleted or hidden — the **same badge alone** when the post row is
@@ -4775,11 +4844,18 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
   when hidden/soft-deleted, and, per actor, the **newest reaction's emoji** (`ReactionGlyph` over
   `convex/lib/reactions.REACTIONS`, labelled by its `reactions.*` key) and/or a `MessageSquare` glyph when they
   commented (aria-hidden), a **pluralized tally** (`people.tallyReactions_*` joined with `", "` to
-  `people.tallyComments_*`, a zero side omitted) and `timeAgo` when expanded, plus a `feed.viewOnLinkedIn` link for
-  live posts). **You interacted with** renders `listPeopleIInteractedWith` as a flat list with the same newest-reaction
-  emoji, pluralized tally and `timeAgo`. Both tabs share the recap's `WindowToggle` (7d / 30d, `now` latched once to
-  `floorToHour(Date.now())`); `people.truncated` appears under a tab whose 2000-row read ceiling was hit. The former
-  **All members** directory tab (`users.listMembers` + its debounced `api.search.search` box) was removed on
+  `people.tallyComments_*`, a zero side omitted) and `timeAgo` when expanded; the exact localized date-time
+  (`Intl.DateTimeFormat` on the active language) rides along in the element's `title`/`aria-label` and the expanded
+  panel is capped at `max-h-[340px]` with internal scroll (`overflow-auto overscroll-contain`), keeping the
+  `feed.viewOnLinkedIn` link at its end for live posts). **You interacted with** renders `listPeopleIInteractedWith` as
+  a flat list with the same newest-reaction
+  emoji, pluralized tally and `timeAgo`, and each row's metric is `people.count` · `people.postsCount` (the person's
+  visible authored posts in the window). Both tabs share the recap's `WindowToggle` (7d / 30d, `now` latched once to
+  `floorToHour(Date.now())`); `people.truncated` appears under a tab whose 2000-row read ceiling was hit. **RCD open
+  loop:** while the received tab is empty the page also reads `listPeopleIInteractedWith` and, below 3 made
+  interactions, adds `people.graphStarter` plus a `people.goToFeed` button; at 3+ the plain `people.emptyReceived`
+  text stands alone. The former **All members** directory tab (`users.listMembers` + its debounced `api.search.search`
+  box) was removed on
   2026-09-14. No analytics event; copy lives under `people.*`.
 - **RankingsPage** (`/rankings`, R22) — `rankings.getSiteRankings` + `rankings.getMyRankings`. **You** shows the
   caller's top-5 received / made lists (`RankingList` under `rankings.toYou` / `rankings.byYou`), each title a link to
@@ -4787,19 +4863,27 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
   `recap.window.*`), then `NextUpdate`'s relative "next 03:30 UTC rebuild" line and, only when the snapshot was
   truncated, `rankings.partial`, then shows the
   stored top posters and top interactors (`rankings.topPosters` / `rankings.topInteractors`) — `RankingList` gives the
-  top three a gold / silver / bronze rank chip, highlights the caller's own row, and composes each row's meta by list
-  (`rankings.postsCount` · `rankings.reactionsCount` for posters, `rankings.interactionsCount` · `rankings.postsTouched`
-  for interactors; the personal lists keep `rankings.count`) — followed by the position line ("You are #N" or
+  top three a gold / silver / bronze rank chip and card border (positions come from the server row, not the array
+  index), highlights the caller's own row, and composes each row's meta by list (`rankings.postsCount` ·
+  `rankings.reactionsCount` for posters, `rankings.interactionsCount` · `rankings.postsTouched`
+  for interactors; personal rows show `rankings.count` · `rankings.postsCount`). Site lists always render positions
+  1-10; when the member is below #12 the list inserts a "…" separator and then their row plus two above and two below,
+  and when their position is beyond the returned top 20 the top list stays as-is with the position line carrying the
+  rank. This is followed by the position line ("You are #N" or
   `rankings.noPosition`), the movement sentence (`rankings.movementUp` / `movementDown` / `movementSame`), and the
-  opt-out ghost button (`users.setLeaderboardOptOut`, labelled `rankings.optOut` / `rankings.optIn`); `people.truncated`
-  appears under the **You** block when the personal 2000-row read was truncated. Same 7d / 30d toggle. With no snapshot
+  opt-out ghost button (`users.setLeaderboardOptOut`, labelled `rankings.optOut` / `rankings.optIn`); **RCD open loop:**
+  at `me.count === 0` (or no `me` row) the line becomes `rankings.emptyFresh` plus a `people.goToFeed` button to
+  `/feed`, while the boards stay rendered. `people.truncated` appears under the **You** block when the personal
+  2000-row read was truncated. Same 7d / 30d toggle. With no snapshot
   yet the site section renders `rankings.empty`; a failed toggle toasts `rankings.updateFailed`. No analytics event;
   copy lives under `rankings.*`.
 - **NotificationsPage** (`/notifications`, R23) — the full inbox via `usePaginatedQuery` on `notifications.listMine`
-  (20 per page, `feed.loadMore`). Newest first, unread rows highlighted, each row the shared `NotificationRow` (actor
+  (20 per page, `feed.loadMore`). Newest first, each shared `NotificationRow` (actor
   name, action text, the comment excerpt when present, `timeAgoDetailed`, a `notifications.removed` badge and no link
-  when the post is gone); the `notifications.newSince` divider sits above the first unread row, and the header carries
-  **Mark all as read** (`notifications.markAllRead`). An empty inbox points back to the feed. Copy lives under
+  when the post is gone) rendered as its own card surface from the list (`rounded-xl border border-border bg-card p-4`,
+  listed with `gap-3`); the `notifications.newSince` heading separates the read and new-since groups, the new-since rows
+  take a `border-l-2 border-l-primary` marker, and the header carries **Mark all as read**
+  (`notifications.markAllRead`). An empty inbox points back to the feed. Copy lives under
   `notifications.*`.
 - **SettingsPage** — `getMe` + `updateProfile` + `refreshProfileFromLinkedIn` + `setCommentLanguage` +
   `setPostVisibility` (the standalone LinkedIn‑identity section was **removed** — the auto‑derived vanity is
@@ -5348,7 +5432,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -6826,7 +6910,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Dev user impersonation (`convex/dev.ts`, `app/src/components/DevUserSwitcher.tsx`, `ALLOW_DEV_IMPERSONATION`)                                                                                                                                                                                                   | [§7](#7-authentication--identity), [§14](#14-frontend--authenticated-app-app), [§16](#16-environment-variables)                                                                                                                                                                                                                          |
 | Posts/sync/queue (`posts.ts`, `jobs/*`, `linkedin/parse*`, `crons.ts`)                                                                                                                                                                                                                                          | [§10](#10-posts--content-pipeline) (+ flows), [§13](#13-scheduled-jobs-crons)                                                                                                                                                                                                                                                            |
 | Feed/interactions/rate limits (`feed.ts`, `interactions.ts`, `lib/rateLimit.ts`)                                                                                                                                                                                                                                | [§11](#11-feed--engagement) (+ flows)                                                                                                                                                                                                                                                                                                    |
-| In-app notifications (`convex/notifications.ts`, `schema.ts` `notifications`, the `interactions.increment*` write path, `NotificationBell` / `NotificationRow` / `NotificationsPage`, `privacy/retention.ts` purge, `privacy/export.ts` / `privacy/deletion.ts`)                                                | [§5](#5-data-model), [§11](#11-feed--engagement), [§13B](#13b-privacy--compliance), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                           |
+| In-app notifications (`convex/notifications.ts`, `schema.ts` `notifications` / `userRecords`, `lib/recordPost.ts`, the `interactions.increment*` write path, `NotificationBell` / `NotificationRow` / `NotificationsPage`, `privacy/retention.ts` purge, `privacy/export.ts` / `privacy/deletion.ts`)           | [§5](#5-data-model), [§11](#11-feed--engagement), [§13B](#13b-privacy--compliance), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                           |
 | 3-day activity digest & email preferences (`jobs/digest.ts`, `lib/digest.ts`, `lib/digestEmails.ts`, `lib/unsubscribeToken.ts`, `http.ts` `/unsubscribe/digest`, `users.digestEmailsEnabled` / `lastDigestAt`, `EmailPreferences.tsx`, `UnsubscribedPage.tsx`, `ConsentPromptScreen.tsx`)                       | [§5](#5-data-model), [§8](#8-subscriptions--billing) digest subsection, [§13](#13-scheduled-jobs-crons), [§14](#14-frontend--authenticated-app-app), [§16](#16-environment-variables) `UNSUBSCRIBE_SECRET`, [§17](#17-security-posture)                                                                                                  |
 | 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `app/src/pages/FeedPage.tsx` hide confirm, `EmptyFeed.tsx`)                                                                                                                         | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
 | AI comment drafting (`convex/ai/*`, `interactions.saveCommentDraft` / `commentOnPost`, `CommentBox`, `PostCard` "View your comment", `HistoryPage` / `RecapPage` draft rows)                                                                                                                                    | [§11A](#11a-ai-reaction--comment-assistance), [§11](#11-feed--engagement), [§5](#5-data-model), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                               |
@@ -6850,6 +6934,16 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑14 (RCD backend + email). **The trial near-end email now states the member's real graph, the
+digest carries exact site totals and a temporary footer note, and posts celebrate new interaction records.** New
+`rankings.getTrialGraphSummary` (all‑time distinct people, received counts, live 7d position + gap) feeds
+`trialNearEndEmail`; `getSiteRankings.me.gapToNext` and `digest.getDigestData.gapToNext` expose the reach to the next
+place; `rankings.getWeeklyTop` serves top‑3 medals after the read‑time ban/opt‑out filters; the digest adds
+`siteTotalInteractions` / `siteActiveMembers` with the ≥3‑member floor and `digestFeatureNote(now, locale)` (until
+2026‑10‑28); and the new `userRecords` table plus `lib/recordPost.ts` write self‑addressed `kind: 'record'`
+notifications (floor 5, strict best, 7‑day cooldown) from `interactions.maybeNotifyRecord`, with DSR export/erasure
+coverage. Sections updated: §5, §8, §11, §21._
 
 _Last updated: 2026‑09‑14 (later). **Dev-only user impersonation, plus a Unicode crash fix.** The new
 `ALLOW_DEV_IMPERSONATION` flag (dev deployment only) enables `convex/dev.ts` (`listUsers` / `impersonate`), driven by

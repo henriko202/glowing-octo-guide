@@ -12,7 +12,8 @@ vi.mock('../../convex', () => ({
       listMine: 'notifications.listMine',
       getLatest: 'notifications.getLatest',
       markAllRead: 'notifications.markAllRead'
-    }
+    },
+    rankings: { getWeeklyTop: 'rankings.getWeeklyTop' }
   }
 }))
 

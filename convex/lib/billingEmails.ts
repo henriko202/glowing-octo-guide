@@ -69,6 +69,111 @@ interface NearEndArgs {
   planName: string
   priceLabel: string
   billingUrl: string
+  peopleMade?: number
+  peopleReceived?: number
+  receivedReactions?: number
+  receivedComments?: number
+  position?: number | null
+  gapToNext?: number | null
+}
+
+interface GraphCopy {
+  madeWith: string
+  reactions: string
+  comments: string
+  position: string
+  gap: string
+  conjunction: string
+  interactionWords: [one: string, many: string]
+  peopleWords: [one: string, many: string]
+  reactionWords: [one: string, many: string]
+  commentWords: [one: string, many: string]
+}
+
+const NEAR_END_GRAPH: Record<BillingLocale, GraphCopy> = {
+  en: {
+    madeWith: '{n} {word} with {people} {peopleWord}',
+    reactions: '{n} {word} on your posts',
+    comments: '{n} {word} on your posts',
+    position: 'You are #{n} on the weekly board.',
+    gap: '{n} {word} from #{position}.',
+    conjunction: ' and ',
+    interactionWords: ['interaction', 'interactions'],
+    peopleWords: ['person', 'people'],
+    reactionWords: ['reaction', 'reactions'],
+    commentWords: ['comment', 'comments']
+  },
+  pt: {
+    madeWith: '{n} {word} com {people} {peopleWord}',
+    reactions: '{n} {word} nas suas publicações',
+    comments: '{n} {word} nas suas publicações',
+    position: 'Você está em #{n} no ranking semanal.',
+    gap: 'A {n} {word} do #{position}.',
+    conjunction: ' e ',
+    interactionWords: ['interação', 'interações'],
+    peopleWords: ['pessoa', 'pessoas'],
+    reactionWords: ['reação', 'reações'],
+    commentWords: ['comentário', 'comentários']
+  },
+  es: {
+    madeWith: '{n} {word} con {people} {peopleWord}',
+    reactions: '{n} {word} en tus publicaciones',
+    comments: '{n} {word} en tus publicaciones',
+    position: 'Estás en el puesto #{n} del ranking semanal.',
+    gap: 'A {n} {word} del #{position}.',
+    conjunction: ' y ',
+    interactionWords: ['interacción', 'interacciones'],
+    peopleWords: ['persona', 'personas'],
+    reactionWords: ['reacción', 'reacciones'],
+    commentWords: ['comentario', 'comentarios']
+  }
+}
+
+function nearEndWord(n: number, [one, many]: [string, string]): string {
+  return n === 1 ? one : many
+}
+
+function nearEndGraph(locale: BillingLocale, a: NearEndArgs): string {
+  const copy = NEAR_END_GRAPH[locale]
+  const parts: string[] = []
+  if (a.made !== undefined && a.made > 0 && a.peopleMade !== undefined && a.peopleMade > 0) {
+    parts.push(
+      copy.madeWith
+        .replace('{n}', String(a.made))
+        .replace('{word}', nearEndWord(a.made, copy.interactionWords))
+        .replace('{people}', String(a.peopleMade))
+        .replace('{peopleWord}', nearEndWord(a.peopleMade, copy.peopleWords))
+    )
+  }
+  const reactions = a.receivedReactions ?? 0
+  const comments = a.receivedComments ?? 0
+  if (reactions > 0 || comments > 0) {
+    const received: string[] = []
+    if (reactions > 0) {
+      received.push(
+        copy.reactions.replace('{n}', String(reactions)).replace('{word}', nearEndWord(reactions, copy.reactionWords))
+      )
+    }
+    if (comments > 0) {
+      received.push(
+        copy.comments.replace('{n}', String(comments)).replace('{word}', nearEndWord(comments, copy.commentWords))
+      )
+    }
+    parts.push(received.join(copy.conjunction))
+  }
+  const sentences: string[] = []
+  if (parts.length) sentences.push(`${parts.join(', ')}.`)
+  const position = a.position ?? null
+  if (position !== null) sentences.push(copy.position.replace('{n}', String(position)))
+  if (a.gapToNext !== undefined && a.gapToNext !== null && position !== null) {
+    sentences.push(
+      copy.gap
+        .replace('{n}', String(a.gapToNext))
+        .replace('{word}', nearEndWord(a.gapToNext, copy.interactionWords))
+        .replace('{position}', String(position - 1))
+    )
+  }
+  return sentences.join(' ')
 }
 
 export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailContent {
@@ -117,9 +222,10 @@ export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailC
     }
   }
   const c = copy[locale]
+  const graph = nearEndGraph(locale, a)
   return {
     subject: c.subject,
-    text: `${c.lead}\n\n${c.term}\n\n${c.cancel} ${a.billingUrl}`,
+    text: [c.lead, graph, c.term, `${c.cancel} ${a.billingUrl}`].filter(Boolean).join('\n\n'),
     html: renderEmailLayout({
       lang: locale,
       preheader: c.lead,
@@ -130,6 +236,7 @@ export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailC
           ...(a.priceLabel ? [{ label: c.priceLabel, value: a.priceLabel }] : [])
         ]) +
         emailParagraph(c.lead) +
+        (graph ? emailParagraph(escapeHtml(graph)) : '') +
         emailParagraph(c.term) +
         emailParagraph(c.cancel) +
         emailButton({ href: a.billingUrl, label: c.cta })

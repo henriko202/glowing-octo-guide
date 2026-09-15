@@ -150,7 +150,10 @@ describe('jobs.digest.getDigestData', () => {
     expect(data.siteTopPosters.map(e => e.userId)).toEqual([ana, me, bruno])
     expect(data.siteTopInteractors.map(e => e.userId)).toEqual([ana, me, bruno])
     expect(data.myPosition).toBe(2)
+    expect(data.gapToNext).toBe(2)
     expect(data.movement).toBe(1)
+    expect(data.siteTotalInteractions).toBe(11)
+    expect(data.siteActiveMembers).toBe(4)
   })
 
   test('drops banned and opted-out members from the site tops but keeps opted-out personal tallies', async () => {

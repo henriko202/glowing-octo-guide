@@ -67,6 +67,7 @@ import type * as lib_ranking from "../lib/ranking.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_reactions from "../lib/reactions.js";
 import type * as lib_recap from "../lib/recap.js";
+import type * as lib_recordPost from "../lib/recordPost.js";
 import type * as lib_safeText from "../lib/safeText.js";
 import type * as lib_scrubError from "../lib/scrubError.js";
 import type * as lib_stripePrices from "../lib/stripePrices.js";
@@ -166,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/reactions": typeof lib_reactions;
   "lib/recap": typeof lib_recap;
+  "lib/recordPost": typeof lib_recordPost;
   "lib/safeText": typeof lib_safeText;
   "lib/scrubError": typeof lib_scrubError;
   "lib/stripePrices": typeof lib_stripePrices;

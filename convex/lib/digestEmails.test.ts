@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { digestEmail, type DigestInput } from './digestEmails'
+import { digestEmail, digestFeatureNote, DIGEST_FEATURE_NOTE_UNTIL, type DigestInput } from './digestEmails'
 import type { EmailLang } from './emailLayout'
 
 const LOCALES: EmailLang[] = ['en', 'pt', 'es']
@@ -15,6 +15,8 @@ const input: DigestInput = {
   topMade: [{ name: 'Carla', count: 6 }],
   siteTopPosters: [{ name: 'Diego', count: 9 }],
   siteTopInteractors: [{ name: 'Elis', count: 12 }],
+  siteTotalInteractions: 112,
+  siteActiveMembers: 14,
   myPosition: 8,
   movement: 3,
   peopleUrl: 'https://app.example/people',
@@ -114,5 +116,67 @@ describe('digestEmail', () => {
     const m = digestEmail('en', { ...input, topReceived: [{ name: '<b>Eve</b> & Co', count: 4 }] })
     expect(m.html).toContain('&lt;b&gt;Eve&lt;/b&gt; &amp; Co')
     expect(m.html).not.toContain('<b>Eve</b>')
+  })
+
+  it('states the site-wide totals above the site tops when at least 3 members are active', () => {
+    const m = {
+      en: digestEmail('en', input),
+      pt: digestEmail('pt', input),
+      es: digestEmail('es', input)
+    }
+    expect(m.en.text).toContain('112 interactions between 14 members in the last 7 days.')
+    expect(m.pt.text).toContain('112 interações entre 14 membros nos últimos 7 dias.')
+    expect(m.es.text).toContain('112 interacciones entre 14 miembros en los últimos 7 días.')
+    // Above the site tops, not just anywhere: the sentence precedes the label in both bodies.
+    for (const locale of LOCALES) {
+      const text = digestEmail(locale, input).text
+      expect(text.indexOf(locale === 'en' ? 'between 14 members' : 'entre 14')).toBeLessThan(
+        text.indexOf(
+          locale === 'en' ? 'Site highlights' : locale === 'pt' ? 'Destaques do site' : 'Destacados del sitio'
+        )
+      )
+    }
+  })
+
+  it('suppresses the site-wide sentence below 3 active members', () => {
+    for (const l of LOCALES) {
+      const m = digestEmail(l, { ...input, siteActiveMembers: 2 })
+      expect(m.text).not.toContain('112')
+      expect(m.html).not.toContain('112')
+    }
+  })
+
+  it('renders the feature note in the footer above the unsubscribe link when present', () => {
+    const note = digestFeatureNote(DIGEST_FEATURE_NOTE_UNTIL - 1, 'en')!
+    const m = digestEmail('en', { ...input, featureNote: note })
+    expect(m.text).toContain(note)
+    expect(m.html).toContain(note)
+    expect(m.text.indexOf(note)).toBeLessThan(m.text.indexOf(input.unsubscribeUrl))
+    expect(m.html.indexOf(note)).toBeLessThan(m.html.indexOf(input.unsubscribeUrl))
+  })
+
+  it('omits the feature note when absent', () => {
+    const m = digestEmail('en', input)
+    expect(m.text).not.toContain('linkintothessi.com/people')
+    expect(m.html).not.toContain('linkintothessi.com/people')
+  })
+})
+
+describe('digestFeatureNote', () => {
+  it('returns the localized note before the gate instant and nothing at or after it', () => {
+    expect(digestFeatureNote(DIGEST_FEATURE_NOTE_UNTIL - 1, 'en')).toContain('linkintothessi.com/people')
+    expect(digestFeatureNote(DIGEST_FEATURE_NOTE_UNTIL - 1, 'pt')).toContain('linkintothessi.com/people')
+    expect(digestFeatureNote(DIGEST_FEATURE_NOTE_UNTIL - 1, 'es')).toContain('linkintothessi.com/people')
+    expect(digestFeatureNote(DIGEST_FEATURE_NOTE_UNTIL, 'en')).toBeUndefined()
+    expect(digestFeatureNote(DIGEST_FEATURE_NOTE_UNTIL + 1, 'en')).toBeUndefined()
+  })
+
+  it('keeps the announcement factual: no exclamation and no CTA button copy', () => {
+    for (const l of LOCALES) {
+      const note = digestFeatureNote(0, l)!
+      expect(note).not.toContain('!')
+      expect(note.toLowerCase()).not.toContain('click here')
+      expect(note.toLowerCase()).not.toContain('sign up')
+    }
   })
 })

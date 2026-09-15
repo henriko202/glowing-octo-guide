@@ -210,6 +210,28 @@ describe('PostCard', () => {
     expect(onReact).toHaveBeenCalledOnce()
     expect(onGated).not.toHaveBeenCalled()
   })
+
+  it('rings and labels the author avatar for a top-three medal, and neither without one', () => {
+    const { container, rerender } = render(
+      <PostCard
+        post={mockPost}
+        authorMedal={1}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
+    expect(screen.getByRole('img', { name: 'Top 1 this week' })).toBeInTheDocument()
+    expect(container.querySelector('.ring-amber-400')).toBeInTheDocument()
+    rerender(
+      <PostCard
+        post={mockPost}
+        onComment={() => {}}
+        onReact={() => {}}
+      />
+    )
+    expect(screen.queryByRole('img', { name: /Top .* this week/ })).not.toBeInTheDocument()
+    expect(container.querySelector('.ring-2')).not.toBeInTheDocument()
+  })
 })
 
 // backlog/R21 — a post the viewer already handled shows what they did, keeps only the action they

@@ -44,6 +44,8 @@ export default function FeedPage() {
     { initialNumItems: FEED_PAGE_SIZE }
   )
   const feedPosts = results as unknown as PostWithAuthor[]
+  const weeklyTop = useQuery(api.rankings.getWeeklyTop, sessionToken ? { sessionToken } : 'skip')
+  const posterMedals = new Map(weeklyTop?.posters.map(entry => [entry.userId, entry.position] as const) ?? [])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -269,6 +271,7 @@ export default function FeedPage() {
                   <PostCard
                     post={post}
                     now={now}
+                    authorMedal={post.authorId ? posterMedals.get(post.authorId) : undefined}
                     onComment={id => handleToggleComment(id)}
                     onReact={async (id, reactionType) => {
                       setReactError(null)

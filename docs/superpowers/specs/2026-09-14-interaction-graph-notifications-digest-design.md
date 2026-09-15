@@ -172,6 +172,12 @@ outside the top 100 via binary search, so the page can say "you are #87" instead
 the loop open for the majority. The last 4 generations per window are kept (movement + a 3-day lookback for the
 digest); older rows are deleted on insert.
 
+**RCD widen (2026-09-14).** `notifications.kind` gains `'record'` and an optional `total`; the new `userRecords`
+table (`{ userId, postId, total, notifiedAt }`, indexed `by_user`) is the per-post best that drives the record
+notification — floor 5, strictly beating the stored best, 7-day re-notify cooldown (`lib/recordPost.ts`). The UI reads
+it back: `listMine`/`getLatest` carry `actorId` (all rows) and `total` (record rows), `NotificationRow` renders
+`notifications.record` (no actor name) and the bell's toast `notifications.toastRecord`.
+
 ### 4.4 No change to `userInteractions`
 
 All windows are `_creationTime` ranges over the existing `by_user` / `by_author` indexes, exactly like `getRecap`
@@ -287,6 +293,16 @@ No scheduler, no extra read: the reactive client subscription is the realtime ch
 are filtered at read time so the log stays complete. Repeat reactions never insert because `incrementLikeCount` already
 returns before any write when `state?.reactedAt` is set.
 
+**RCD additions (2026-09-14).** `rankings.getTrialGraphSummary` (internal) and `rankings.getWeeklyTop` (public, top‑3
+medals) join the read surface; `getSiteRankings.me` and `digest.getDigestData` gain `gapToNext`, the digest also carries
+`siteTotalInteractions` / `siteActiveMembers`; and the write path above additionally calls
+`interactions.maybeNotifyRecord` (same transaction) for the self-addressed `'record'` notification. The UI consumes the
+medal read where content is: `FeedPage`/`PostCard` ring a top‑3 poster's author avatar and `NotificationBell` /
+`NotificationsPage` ring a top‑3 interactor's actor avatar, all under `rankings.topThreeTitle`. Open-loop empty states
+close the zero side: `/people`'s empty received tab adds `people.graphStarter` (made count) and a `people.goToFeed`
+button until 3 interactions, and `/rankings` swaps `rankings.noPosition` for `rankings.emptyFresh` + the same button at
+count 0, board still visible.
+
 ### 5.6 `convex/jobs/rankingSnapshot.ts`
 
 Daily crons at 03:30 UTC (7d) and 03:35 UTC (30d), after the 03:15 survival snapshot; each window rebuilds in its own
@@ -390,9 +406,14 @@ Two tabs — the **All members** directory was removed on 2026-09-14 (the page i
 ### 7.5 `/rankings`
 
 Window toggle at the top. "You" block: two cards (who interacted most with you, who you interacted most with), top 5
-each, deep links to the matching `/people` tab. "Site ranking" block: two lists (most posts, most interactions), top
+each, deep links to the matching `/people` tab; each row also states the person's visible authored post count in the
+window. "Site ranking" block: two lists (most posts, most interactions), top
 20, the member's own row highlighted when present, an "you are #87" line when outside the top 20, medal treatment only
-for the top 3, and exact counts everywhere. The member's own row (or the "you are #87" line) carries a quiet "don't
+for the top 3, and exact counts everywhere. Site lists render positions 1-10 always; when the member is beyond #12 the
+board inserts an ellipsis separator and then their row plus two above and two below, and when their position is beyond
+the returned top 20 the top list stays as-is with the position line carrying the rank (the snapshot stores identities
+only for the top 100 and the read serves 20). Server rows carry their competition position, so ties share a number.
+The member's own row (or the "you are #87" line) carries a quiet "don't
 show me" control that calls `users.setLeaderboardOptOut`, so the opt-out lives one click from the place the member
 sees themselves ranked. A short caption above the block explains the window and, when `partial`, that some activity may
 be missing from the snapshot. Movement is shown as a small delta with plain text alternatives for screen readers ("up 3
@@ -443,6 +464,11 @@ genuinely means "since your last digest", not "since yesterday". When the member
 still comes from `positionOf`, and movement is omitted when either side is unavailable. Copy follows
 `lib/billingEmails.ts` standards: no urgency, no promotional verbs, sentence case, localized dates via the existing
 `INTL_TAG` map.
+
+**RCD additions (2026-09-14).** When the snapshot counts at least 3 active members, one exact site sentence ("112
+interactions between 14 members in the last 7 days.") renders above the site tops; and while `now <
+Date.UTC(2026, 9, 28)` a plain factual footer line above the unsubscribe links announces the post-reaction page
+(`digestFeatureNote(now, locale)`).
 
 ## 9. Compliance and lifecycle
 

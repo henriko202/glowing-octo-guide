@@ -100,6 +100,21 @@ describe('NotificationsPage', () => {
     expect(heading.compareDocumentPosition(unreadRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('wraps rows in card surfaces and marks the new-since group', () => {
+    mockPaginated[LIST] = {
+      results: [makeRow({ actorName: 'Ana' }), makeRow({ id: 'n2', unread: true, actorName: 'Bruno' })],
+      status: 'Exhausted',
+      loadMore: vi.fn()
+    }
+    renderPage()
+    const readList = screen.getByText('Ana reacted to your post').closest('ul')
+    const unreadList = screen.getByText('Bruno reacted to your post').closest('ul')
+    expect(readList).toHaveClass('flex', 'flex-col', 'gap-3')
+    expect(readList).toHaveClass('[&>li]:rounded-xl', '[&>li]:border-border', '[&>li]:bg-card', '[&>li]:p-4')
+    expect(readList).not.toHaveClass('[&>li]:border-l-2')
+    expect(unreadList).toHaveClass('[&>li]:border-l-2', '[&>li]:border-l-primary')
+  })
+
   it('marks all as read with the session token', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))

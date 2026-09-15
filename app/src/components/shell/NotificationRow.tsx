@@ -6,9 +6,11 @@ import { cn } from '@/lib/utils'
 
 export interface NotificationRowData {
   id: string
-  kind: 'reaction' | 'comment'
+  kind: 'reaction' | 'comment' | 'record'
   excerpt?: string
+  total?: number
   unread: boolean
+  actorId?: string
   actorName: string
   actorPictureUrl?: string
   postExcerpt: string
@@ -38,9 +40,11 @@ export default function NotificationRow({
       />
       <span className="min-w-0 flex-1">
         <span className={cn('block text-sm', row.unread ? 'text-foreground font-medium' : 'text-muted-foreground')}>
-          {row.kind === 'comment'
-            ? t('notifications.commented', { name: row.actorName })
-            : t('notifications.reacted', { name: row.actorName })}
+          {row.kind === 'record'
+            ? t('notifications.record', { count: row.total ?? 0 })
+            : row.kind === 'comment'
+              ? t('notifications.commented', { name: row.actorName })
+              : t('notifications.reacted', { name: row.actorName })}
           {row.unread && (
             <span
               data-testid="notification-unread-dot"

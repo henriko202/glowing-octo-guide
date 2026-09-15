@@ -430,6 +430,162 @@ export const survivalMetrics = query({
   }
 })
 
+// ─── Churn risk / attention list ─────────────────────────────────────────────
+// On-demand instead of a nightly snapshot: an admin query is always fresh and adds no storage.
+// One bounded `.take(1000)` over users (the same admin ceiling listUsers uses), then four indexed
+// reads per member. Banned and pending-deletion accounts are skipped — they are not "members who
+// need attention" — while admins are included and treated like anyone else.
+const CHURN_USER_CAP = 1000
+// Newest-first row ceiling per side per member. A heavy member is capped, never unbounded.
+const CHURN_ROW_CAP = 200
+const CHURN_DAY_MS = 86_400_000
+
+export type ChurnReason = 'received_no_reply' | 'silent_7d' | 'cooling'
+
+export interface ChurnSignals {
+  made7d: number
+  made30d: number
+  received7d: number
+  // Active = logged in during the last 7 days (`users.lastLoginAt`). Only `silent_7d` needs it:
+  // a member who stopped showing up is a different (dormancy) problem than one who shows up and
+  // does nothing.
+  active: boolean
+  lastInteractionAt: number | null
+}
+
+/** Reason codes for the Attention card (the UI maps them to English labels); a member can carry more than one. */
+export function deriveChurnReasons({ made7d, made30d, received7d, active }: ChurnSignals): ChurnReason[] {
+  const reasons: ChurnReason[] = []
+  // Received attention but gave none back — the most actionable nudge.
+  if (received7d > 0 && made7d === 0) reasons.push('received_no_reply')
+  // Still logging in, but neither gave nor received anything this week.
+  if (made7d === 0 && received7d === 0 && active) reasons.push('silent_7d')
+  // This week's own pace is well below a quarter of the 30-day pace.
+  if (made30d > 0 && made7d < made30d / 4) reasons.push('cooling')
+  return reasons
+}
+
+export function relativeDay(ts: number, now: number): string {
+  const days = Math.floor((now - ts) / CHURN_DAY_MS)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days} days ago`
+}
+
+/** One concrete line per member, strongest signal first, built only from the computed facts. */
+export function buildChurnHook(signals: ChurnSignals, now: number): string {
+  const { made7d, made30d, received7d, lastInteractionAt } = signals
+  if (received7d > 0 && made7d === 0) {
+    return `${received7d} ${received7d === 1 ? 'interaction' : 'interactions'} on your post, no reply`
+  }
+  if (made7d === 0 && received7d === 0 && signals.active) {
+    return lastInteractionAt === null
+      ? 'no interactions yet'
+      : `no interactions since ${relativeDay(lastInteractionAt, now)}`
+  }
+  return `${made7d} ${made7d === 1 ? 'interaction' : 'interactions'} this week, down from ${made30d} in 30 days`
+}
+
+const CHURN_SEVERITY: Record<ChurnReason, number> = { received_no_reply: 0, silent_7d: 1, cooling: 2 }
+
+export function churnSeverity(reasons: ChurnReason[]): number {
+  return reasons.reduce((min, reason) => Math.min(min, CHURN_SEVERITY[reason]), Number.POSITIVE_INFINITY)
+}
+
+// The Attention card's data source. Returns only members with at least one reason, sorted by
+// severity (received_no_reply → silent_7d → cooling), then by oldest last interaction so the
+// quietest member of a tier surfaces first. `null` for "never".
+export const getChurnRisk = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const admin = await requireAuth(ctx, sessionToken)
+    assertAdmin(admin)
+
+    const now = Date.now()
+    const since7 = now - 7 * CHURN_DAY_MS
+    const since30 = now - 30 * CHURN_DAY_MS
+
+    const users = await ctx.db.query('users').order('desc').take(CHURN_USER_CAP)
+
+    const rows = await Promise.all(
+      users
+        .filter(u => !u.isBanned && u.deletionScheduledAt === undefined)
+        .map(async user => {
+          // One read covers both windows: the 30d range newest-first, then count its 7d subset in
+          // memory instead of a second index read. `ai_draft` rows are not engagement the member
+          // initiated (the draft was never posted), so both counts and `lastInteractionAt` drop them.
+          const madeRows = await ctx.db
+            .query('userInteractions')
+            .withIndex('by_user', q => q.eq('userId', user._id).gte('_creationTime', since30))
+            .order('desc')
+            .take(CHURN_ROW_CAP)
+          const made = madeRows.filter(r => r.kind !== 'ai_draft')
+          const made7d = made.filter(r => r._creationTime >= since7).length
+          const made30d = made.length
+
+          const receivedRows = await ctx.db
+            .query('userInteractions')
+            .withIndex('by_author', q => q.eq('authorId', user._id).gte('_creationTime', since7))
+            .order('desc')
+            .take(CHURN_ROW_CAP)
+          // `by_author` includes the author's own rows; received never counts self.
+          const received7d = receivedRows.filter(r => r.userId !== user._id).length
+
+          // Newest own engagement of any age. The filter keeps a draft-only member from reading as
+          // active; the index range is this member's history, so the scan is bounded by their rows.
+          const lastInteraction = await ctx.db
+            .query('userInteractions')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .order('desc')
+            .filter(q => q.neq(q.field('kind'), 'ai_draft'))
+            .first()
+
+          const lastPost = await ctx.db
+            .query('posts')
+            .withIndex('by_author_and_publishedAt', q => q.eq('authorId', user._id))
+            .order('desc')
+            .filter(q => q.and(q.eq(q.field('hidden'), false), q.eq(q.field('deletedAt'), undefined)))
+            .first()
+
+          const signals: ChurnSignals = {
+            made7d,
+            made30d,
+            received7d,
+            active: user.lastLoginAt !== undefined && user.lastLoginAt >= since7,
+            lastInteractionAt: lastInteraction?.createdAt ?? null
+          }
+          const reasons = deriveChurnReasons(signals)
+          if (reasons.length === 0) return null
+
+          return {
+            userId: user._id,
+            name: user.name,
+            headline: user.headline,
+            profilePictureUrl: user.profilePictureUrl,
+            made7d,
+            made30d,
+            received7d,
+            lastInteractionAt: signals.lastInteractionAt,
+            lastPostAt: lastPost?.publishedAt ?? null,
+            reasons,
+            hook: buildChurnHook(signals, now),
+            severity: churnSeverity(reasons)
+          }
+        })
+    )
+
+    return rows
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      .sort(
+        (a, b) =>
+          a.severity - b.severity ||
+          (a.lastInteractionAt ?? 0) - (b.lastInteractionAt ?? 0) ||
+          a.userId.localeCompare(b.userId)
+      )
+      .map(({ severity: _severity, ...row }) => row)
+  }
+})
+
 // Sets a user's tier. Can be used to promote to 'contact' or change between any tiers.
 // When promoting to 'contact', automatically seeds a planLimits override entry using
 // the contact tier's current default values — so the user is fully covered in one step.

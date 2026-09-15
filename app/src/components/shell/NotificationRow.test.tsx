@@ -102,4 +102,30 @@ describe('NotificationRow', () => {
     fireEvent.click(screen.getByRole('link', { name: /Ana reacted/ }))
     expect(onOpen).toHaveBeenCalledWith('n1')
   })
+
+  it('renders the record copy with the total and no actor name', () => {
+    render(
+      <ul>
+        <NotificationRow
+          row={makeRow({ kind: 'record', total: 5, actorName: 'Ana' })}
+          timeLabel="just now"
+        />
+      </ul>
+    )
+    expect(screen.getByText('New record: your post reached 5 interactions, your best so far.')).toBeInTheDocument()
+    expect(screen.queryByText(/Ana reacted/)).not.toBeInTheDocument()
+    expect(screen.getByText('just now')).toBeInTheDocument()
+  })
+
+  it('falls back to zero interactions on a record row without a total', () => {
+    render(
+      <ul>
+        <NotificationRow
+          row={makeRow({ kind: 'record' })}
+          timeLabel="just now"
+        />
+      </ul>
+    )
+    expect(screen.getByText('New record: your post reached 0 interactions, your best so far.')).toBeInTheDocument()
+  })
 })

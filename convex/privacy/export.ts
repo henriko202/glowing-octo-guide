@@ -31,6 +31,7 @@ export interface ExportInput {
   notificationsActed?: AnyDoc[]
   userPostState?: AnyDoc[]
   trialCounters?: AnyDoc[]
+  userRecords?: AnyDoc[]
   exportedAt?: number
 }
 
@@ -53,6 +54,8 @@ export function buildExportBundle(input: ExportInput) {
     userPostState: input.userPostState ?? [],
     // Trial interaction counters (plan 018 — high-churn, kept off the users doc).
     trialCounters: input.trialCounters ?? [],
+    // Record-post milestones: the author's own bests and when they were announced (RCD).
+    userRecords: input.userRecords ?? [],
     // The user is entitled to data ABOUT them, not the internal admin trail — keep the
     // action + when, drop other actors' identifiers and internal fields.
     auditLog: input.audits.map(a => ({ action: a.action, createdAt: a.createdAt, metadata: a.metadata }))
@@ -75,7 +78,8 @@ export const EXPORT_TABLES: Array<{ key: string; table: string; index: string; f
   { key: 'notificationsReceived', table: 'notifications', index: 'by_recipient_and_created_at', field: 'recipientId' },
   { key: 'notificationsActed', table: 'notifications', index: 'by_actor', field: 'actorId' },
   { key: 'userPostState', table: 'userPostState', index: 'by_user_and_post', field: 'userId' },
-  { key: 'trialCounters', table: 'trialCounters', index: 'by_user', field: 'userId' }
+  { key: 'trialCounters', table: 'trialCounters', index: 'by_user', field: 'userId' },
+  { key: 'userRecords', table: 'userRecords', index: 'by_user', field: 'userId' }
 ]
 
 export function exportTableConfig(key: string) {
@@ -210,6 +214,7 @@ export const generateExport = internalAction({
         notificationsActed: collected.notificationsActed ?? [],
         userPostState: collected.userPostState ?? [],
         trialCounters: collected.trialCounters ?? [],
+        userRecords: collected.userRecords ?? [],
         exportedAt: Date.now()
       })
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })

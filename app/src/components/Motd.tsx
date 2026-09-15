@@ -45,7 +45,6 @@ export default function Motd() {
     return (
       <Modal
         onClose={dismiss}
-        dismissOnBackdrop={false}
         dismissOnEscape={false}
         panelClassName="sm:max-w-lg"
       >

@@ -29,6 +29,7 @@ import {
   windowBounds
 } from './lib/recap'
 import { tallyMadeByPerson, tallyReceivedByPost, type CounterpartyTally } from './lib/interactionGraph'
+import { isNewRecord } from './lib/recordPost'
 import { stripLoneSurrogates } from './lib/safeText'
 import { toSearchPerson } from './search'
 
@@ -251,6 +252,49 @@ async function flipCapIfReached(
   await ctx.scheduler.runAfter(0, internal.billingNotices.sendPostCapReached, { postId: post._id })
 }
 
+/**
+ * RCD — the author's own post crossed a new all-time interaction best. Self-addressed (no actor): the
+ * notification celebrates the post, not another member. The rule (floor, strict beat, 7-day cooldown)
+ * is pure (`lib/recordPost.isNewRecord`); this function only reads the stored best and upserts it.
+ */
+async function maybeNotifyRecord(
+  ctx: MutationCtx,
+  post: Doc<'posts'>,
+  likeCount: number,
+  commentCount: number
+): Promise<void> {
+  const total = likeCount + commentCount
+  const records = await ctx.db
+    .query('userRecords')
+    .withIndex('by_user', q => q.eq('userId', post.authorId))
+    .take(500)
+  const existing = records.find(r => r.postId === post._id)
+  // The record is the author's best across OTHER posts; `existing` only keeps this post's own total current.
+  const bestOther = records.reduce((best, r) => (r.postId === post._id ? best : Math.max(best, r.total)), 0)
+  const lastNotifiedAt = records.reduce((last, r) => Math.max(last, r.notifiedAt), 0)
+  const now = Date.now()
+  if (!isNewRecord(total, bestOther, now, lastNotifiedAt > 0 ? lastNotifiedAt : undefined)) {
+    // Not a cross-post record (or inside the author's 7-day notification cooldown): keep the total
+    // current so the next comparison sees it, but stay silent. Rows only exist from the floor up.
+    if (existing) {
+      if (existing.total !== total) await ctx.db.patch(existing._id, { total })
+    } else if (total >= 5) {
+      await ctx.db.insert('userRecords', { userId: post.authorId, postId: post._id, total, notifiedAt: 0 })
+    }
+    return
+  }
+  await ctx.db.insert('notifications', {
+    recipientId: post.authorId,
+    actorId: post.authorId,
+    postId: post._id,
+    kind: 'record',
+    total,
+    createdAt: now
+  })
+  if (existing) await ctx.db.patch(existing._id, { total, notifiedAt: now })
+  else await ctx.db.insert('userRecords', { userId: post.authorId, postId: post._id, total, notifiedAt: now })
+}
+
 // Internal mutation to increment comment count
 export const incrementCommentCount = internalMutation({
   args: { postId: v.id('posts'), actorId: v.id('users'), comment: v.string() },
@@ -303,6 +347,9 @@ export const incrementCommentCount = internalMutation({
 
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
+
+    // RCD — the author's own post may just have set a new interaction best.
+    await maybeNotifyRecord(ctx, post, post.likeCount, newCommentCount)
 
     // Check if combined interactions have reached the author's limit
     await flipCapIfReached(ctx, post, post.likeCount, newCommentCount)
@@ -358,6 +405,9 @@ export const incrementLikeCount = internalMutation({
 
     await bumpTrialInteraction(ctx, actorId, 'made')
     if (post.authorId !== actorId) await bumpTrialInteraction(ctx, post.authorId, 'received')
+
+    // RCD — the author's own post may just have set a new interaction best.
+    await maybeNotifyRecord(ctx, post, newLikeCount, post.commentCount)
 
     // Check if combined interactions have reached the author's limit
     await flipCapIfReached(ctx, post, newLikeCount, post.commentCount)
@@ -602,11 +652,25 @@ export const listMyInteractions = query({
 // `now` is client-floored to the hour (same contract as getRecap). Reads are newest-first with the 2000-row ceiling
 // per side per window; `truncated` tells the page. Tallies are pure (lib/interactionGraph).
 
+/** Posts read per author when counting their window posts; the 200 cap bounds the read. */
+const POSTS_COUNT_CAP = 200
+
+/** The author's visible posts published since `since`, respecting the POSTS_COUNT_CAP bound. */
+async function countVisiblePostsSince(ctx: QueryCtx, authorId: Id<'users'>, since: number): Promise<number> {
+  const posts = await ctx.db
+    .query('posts')
+    .withIndex('by_author_and_publishedAt', q => q.eq('authorId', authorId).gte('publishedAt', since))
+    .order('desc')
+    .take(POSTS_COUNT_CAP)
+  return posts.filter(p => p.hidden !== true && p.deletedAt === undefined).length
+}
+
 /** One `get` per unique user id, projected with the same safe profile fields as people search. */
 async function projectPeople<T extends { userId: string }>(
   ctx: QueryCtx,
-  tallies: T[]
-): Promise<Array<T & ReturnType<typeof toSearchPerson>>> {
+  tallies: T[],
+  since: number
+): Promise<Array<T & ReturnType<typeof toSearchPerson> & { postsCount: number }>> {
   const ids = [...new Set(tallies.map(t => t.userId))]
   const users = await Promise.all(ids.map(id => ctx.db.get(id as Id<'users'>)))
   const map = new Map(
@@ -614,10 +678,12 @@ async function projectPeople<T extends { userId: string }>(
       .filter((u): u is Doc<'users'> => u !== null && !u.isBanned && u.deletionScheduledAt === undefined)
       .map(u => [u._id as string, u])
   )
-  return tallies.flatMap(t => {
+  const visible = tallies.flatMap(t => {
     const user = map.get(t.userId)
-    return user ? [{ ...t, ...toSearchPerson(user) }] : []
+    return user ? [{ tally: t, user }] : []
   })
+  const postsCounts = await Promise.all(visible.map(({ user }) => countVisiblePostsSince(ctx, user._id, since)))
+  return visible.map(({ tally, user }, i) => ({ ...tally, ...toSearchPerson(user), postsCount: postsCounts[i] }))
 }
 
 export const listPeopleIInteractedWith = query({
@@ -645,7 +711,7 @@ export const listPeopleIInteractedWith = query({
       window,
       since,
       total: tallies.reduce((sum, t) => sum + t.total, 0),
-      people: await projectPeople(ctx, tallies),
+      people: await projectPeople(ctx, tallies, since),
       truncated: rows.length >= RECAP_ROW_CEILING
     }
   }
