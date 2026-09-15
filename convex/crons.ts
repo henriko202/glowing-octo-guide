@@ -1,8 +1,8 @@
 // convex/crons.ts
 // THIS IS THE ONLY FILE Convex reads for scheduled jobs.
 // Cron definitions in other files are silently ignored.
-import { cronJobs } from 'convex/server'
-import { internal } from './_generated/api.js'
+import {cronJobs} from 'convex/server'
+import {internal} from './_generated/api.js'
 
 const crons = cronJobs()
 
@@ -12,12 +12,12 @@ const crons = cronJobs()
 // crons.cron pins a wall-clock time; crons.interval would drift relative to deploy time.
 crons.cron('sync LinkedIn posts', '0 3 * * *', internal.jobs.syncPostsApify.syncAllPostsViaApify, {})
 
-// Refresh like/comment counts on ALL feed-eligible posts every 30 minutes via one batched Apify run.
+// Refresh like/comment counts on ALL feed-eligible posts every 60 minutes via one batched Apify run.
 // Dev/local only: the job self-gates on isApifyPostSyncEnabled, so prod (Apify dormant) is untouched.
 // crons.interval is fine here — unlike the daily syncs there is no cross-cron ordering to preserve.
 crons.interval(
   'refresh feed engagement',
-  { minutes: 30 },
+  { minutes: 60 },
   internal.jobs.refreshFeedEngagement.refreshFeedEngagement,
   {}
 )
