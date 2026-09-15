@@ -1,8 +1,8 @@
-import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { env, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { ConvexError, v } from 'convex/values'
 import { paginationOptsValidator } from 'convex/server'
 import { components, internal } from './_generated/api'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth, resolveSession } from './lib/auth'
 import { isValidCountry, isValidIndustry } from './lib/profileOptions'
 import { isValidCommentLanguage } from './lib/languages'
@@ -11,6 +11,9 @@ import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
 import { isNearThreshold, TRIAL_INTERACTION_THRESHOLD, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { firstName, generateInviteCode } from './lib/invite'
 import { writeAuditLog, type AuditDb } from './lib/audit'
+import { disableDigest, type DigestOptOutDb } from './lib/digestOptOut'
+import { verifyUnsubscribeToken } from './lib/unsubscribeToken'
+import { POLICY_VERSION } from './lib/policy'
 
 // Internal: returns full user record including tokens (NEVER expose to client)
 export const getWithTokens = internalQuery({
@@ -594,6 +597,49 @@ export const setDigestEmailsEnabled = mutation({
       targetUserId: user._id,
       metadata: JSON.stringify({ enabled })
     })
+  }
+})
+
+/**
+ * R24 — the app unsubscribe page's mutation. Session-less: the emailed link carries a stateless HMAC token and the
+ * only effect is on the token's own user. `digest` turns off the 3-day digest (audited `digest_unsubscribed_app`);
+ * `all` also withdraws marketing consent (`unsubscribe_all_email` audit) as an append-only `consentRecords` row.
+ * Idempotent — a repeat changes nothing until the digest is re-enabled or marketing is re-granted. A failed token
+ * check and an unknown user deliberately return the same `invalid`, so neither is distinguishable from the outside.
+ */
+export const unsubscribeByToken = mutation({
+  args: { token: v.string(), scope: v.union(v.literal('digest'), v.literal('all')) },
+  handler: async (ctx, { token, scope }) => {
+    const secret = env.UNSUBSCRIBE_SECRET
+    if (!secret) return { status: 'unavailable' as const }
+    const userId = await verifyUnsubscribeToken(token, secret)
+    if (!userId) return { status: 'invalid' as const }
+    const user = await ctx.db.get(userId as Id<'users'>)
+    if (!user) return { status: 'invalid' as const }
+    await disableDigest(
+      ctx.db as unknown as DigestOptOutDb,
+      user._id,
+      scope === 'all' ? 'unsubscribe_all_email' : 'digest_unsubscribed_app'
+    )
+    if (scope === 'all') {
+      // Append-only: withdraw only when the latest marketing row is a grant (or none exists). A second call after a
+      // withdrawal is a no-op; a call after the member re-granted marketing records a fresh withdrawal.
+      const latest = await ctx.db
+        .query('consentRecords')
+        .withIndex('by_user_and_purpose_and_created_at', q => q.eq('userId', user._id).eq('purpose', 'marketing'))
+        .order('desc')
+        .first()
+      if (!latest || latest.granted) {
+        await ctx.db.insert('consentRecords', {
+          userId: user._id,
+          purpose: 'marketing',
+          granted: false,
+          policyVersion: POLICY_VERSION,
+          createdAt: Date.now()
+        })
+      }
+    }
+    return { status: 'ok' as const }
   }
 })
 

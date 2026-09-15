@@ -16,7 +16,8 @@ export default function EmailPreferences() {
   const setDigestEmailsEnabled = useMutation(api.users.setDigestEmailsEnabled)
   const setLeaderboardOptOut = useMutation(api.users.setLeaderboardOptOut)
   // Optimistic checked values: the box follows the click during the roundtrip instead of snapping back to the
-  // server value; null means "use the server value", which is also the revert state after a rejection.
+  // server value; null means "use the server value". The override is cleared once the save settles (success or
+  // rejection), so it can never pin a stale value and mask a later server-side change.
   const [digestOptimistic, setDigestOptimistic] = useState<boolean | null>(null)
   const [rankingsOptimistic, setRankingsOptimistic] = useState<boolean | null>(null)
   const [digestSaving, setDigestSaving] = useState(false)
@@ -34,9 +35,9 @@ export default function EmailPreferences() {
     try {
       await setDigestEmailsEnabled({ sessionToken, enabled })
     } catch {
-      setDigestOptimistic(null)
       setDigestError(t('settings.emails.saveFailed'))
     } finally {
+      setDigestOptimistic(null)
       setDigestSaving(false)
     }
   }
@@ -49,9 +50,9 @@ export default function EmailPreferences() {
     try {
       await setLeaderboardOptOut({ sessionToken, optOut: !visible })
     } catch {
-      setRankingsOptimistic(null)
       setRankingsError(t('settings.emails.saveFailed'))
     } finally {
+      setRankingsOptimistic(null)
       setRankingsSaving(false)
     }
   }

@@ -90,7 +90,7 @@ beforeEach(() => {
       starter: { interactionsPerPost: 25, postsPerWeek: 5, featuredPerMonth: 0 },
       growth: { interactionsPerPost: 50, postsPerWeek: 7, featuredPerMonth: 1 },
       pro: { interactionsPerPost: 200, postsPerWeek: 14, featuredPerMonth: 3 },
-      contact: { interactionsPerPost: 200, postsPerWeek: 14, featuredPerMonth: 9999 }
+      contact: { interactionsPerPost: 200, postsPerWeek: 14, featuredPerMonth: 5 }
     }
   }
 })
@@ -170,7 +170,14 @@ describe('MyPostsPage', () => {
     expect(screen.getByText(/0 of 3 featured this month/i)).toBeInTheDocument()
   })
 
-  it('shows "unlimited" instead of the raw 9999 sentinel for a contact-tier cap', () => {
+  it('shows the finite contact default cap in the featured usage pill', () => {
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 2, featuredPerMonth: 5 }
+    renderPage()
+    expect(screen.getByText(/2 of 5 featured this month/i)).toBeInTheDocument()
+    expect(screen.queryByText(/unlimited/i)).not.toBeInTheDocument()
+  })
+
+  it('still shows "unlimited" instead of the raw 9999 sentinel for an explicit admin override', () => {
     mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 2, featuredPerMonth: 9999 }
     renderPage()
     expect(screen.getByText(/2 featured this month.*unlimited/i)).toBeInTheDocument()
@@ -429,6 +436,8 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     const capped = { ...unfeatured, interactionLimitReached: true }
 
     mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'contact', subscriptionStatus: 'active' }
+    // 9999 is an explicit admin-granted override now that contact's tier default is a finite 5 —
+    // this sub-case is about the unlimited guard, not the default.
     mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 0, featuredPerMonth: 9999 }
     mockQueryReturns['posts.getMyPosts'] = [capped]
     const contact = renderPage()
@@ -451,6 +460,32 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     mockQueryReturns['posts.getMyPosts'] = [capped]
     renderPage()
     expect(screen.queryByRole('button', { name: /feature for/i })).not.toBeInTheDocument()
+  })
+
+  // The old guard hid the add-on for contact via isUnlimitedFeatured. Contact's finite 5 default no
+  // longer trips that, but the server still refuses the purchase (featuredPurchaseBlocker keys
+  // NOTHING_TO_BUY on the 0 cap bonus), so the UI must keep hiding the control at the cap.
+  it('hides the $5 control for a finite contact cap, whose tier has nothing to buy', () => {
+    mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'contact', subscriptionStatus: 'active' }
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 5, featuredPerMonth: 5 }
+    mockQueryReturns['posts.getMyPosts'] = [unfeatured]
+    renderPage()
+    expect(screen.getByText(/5 of 5 featured this month/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /feature for US\$5/i })).not.toBeInTheDocument()
+    // No cap bonus to sell, so even the plain Feature button stays disabled at the monthly cap.
+    expect(screen.getByRole('button', { name: /^feature$/i })).toBeDisabled()
+  })
+
+  it('does not order-bump the $5 purchase for a finite contact cap', async () => {
+    mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'contact', subscriptionStatus: 'active' }
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 5, featuredPerMonth: 5 }
+    renderPage()
+    fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
+      target: { value: 'https://www.linkedin.com/posts/henri_activity-7000000000000000000-abcd' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: /add post/i }))
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringMatching(/feature it below/i)))
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/US\$5 below/i))
   })
 
   // F6/F8 — the plain Feature button still exists once a card-gated member can't buy the $5 slot

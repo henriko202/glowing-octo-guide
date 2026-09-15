@@ -1,10 +1,11 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test'
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { internal } from '../_generated/api'
 import type { TestConvex } from 'convex-test'
 import type { Id } from '../_generated/dataModel'
 import schema from '../schema'
+import { sendEmail } from '../lib/email'
 
 // Existing digest tests rely on the real provider behavior (unconfigured → skipped, no stamp). Only the two
 // addressed below are intercepted: one address throws like a Resend non-OK, the other reports a successful send.
@@ -25,6 +26,28 @@ type T = TestConvex<typeof schema>
 
 const NOW = Date.now()
 const DAY = 86_400_000
+
+// Hermetic env: an ambient RESEND_API_KEY/EMAIL_FROM would turn the "provider unconfigured" cases into real
+// sends, and an ambient UNSUBSCRIBE_SECRET/CONVEX_SITE_URL would flip the sweep's early-return. Every test
+// starts from all four unset; the tests that need a value set it explicitly, and the original ambient values
+// are restored afterwards (undefined == was not set).
+const AMBIENT_ENV_KEYS = ['RESEND_API_KEY', 'EMAIL_FROM', 'UNSUBSCRIBE_SECRET', 'CONVEX_SITE_URL', 'APP_URL']
+const savedEnv: Record<string, string | undefined> = {}
+
+beforeEach(() => {
+  for (const key of AMBIENT_ENV_KEYS) {
+    savedEnv[key] = process.env[key]
+    delete process.env[key]
+  }
+  vi.mocked(sendEmail).mockClear()
+})
+
+afterEach(() => {
+  for (const key of AMBIENT_ENV_KEYS) {
+    if (savedEnv[key] === undefined) delete process.env[key]
+    else process.env[key] = savedEnv[key]
+  }
+})
 
 async function seedUser(
   t: T,
@@ -322,5 +345,34 @@ describe('jobs.digest.sendDueDigests', () => {
     const [failedUser, okUser] = await t.run(async ctx => [await ctx.db.get(failing), await ctx.db.get(ok)])
     expect(failedUser?.lastDigestAt).toBeUndefined()
     expect(okUser?.lastDigestAt).toBeDefined()
+  })
+
+  test('points the footer at the app and the one-click header at the Convex site', async () => {
+    const t = convexTest(schema, modules)
+    const me = await seedUser(t, 'li-url', 'URL', { email: 'ok@example.com' })
+    const actor = await seedUser(t, 'li-url-actor', 'Actor')
+    await seedInteraction(t, actor, me, await seedPost(t, me), 'comment')
+
+    process.env.UNSUBSCRIBE_SECRET = 'test-secret'
+    process.env.CONVEX_SITE_URL = 'https://test.convex.site'
+    process.env.APP_URL = 'https://app.example'
+    try {
+      await t.action(internal.jobs.digest.sendDueDigests, {})
+    } finally {
+      delete process.env.UNSUBSCRIBE_SECRET
+      delete process.env.CONVEX_SITE_URL
+      delete process.env.APP_URL
+    }
+
+    const call = vi.mocked(sendEmail).mock.calls.find(([args]) => args.to === 'ok@example.com')
+    expect(call).toBeDefined()
+    const [args] = call!
+    expect(args.html).toContain('https://app.example/unsubscribe?token=')
+    expect(args.text).toContain('https://app.example/unsubscribe?token=')
+    expect(args.html).not.toContain('test.convex.site')
+    expect(args.headers?.['List-Unsubscribe']).toMatch(
+      /^<https:\/\/test\.convex\.site\/unsubscribe\/digest\?token=[^>]+>$/
+    )
+    expect(args.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
   })
 })

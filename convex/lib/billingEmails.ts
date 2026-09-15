@@ -177,6 +177,8 @@ function nearEndGraph(locale: BillingLocale, a: NearEndArgs): string {
 }
 
 export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailContent {
+  const total = a.made + a.received
+  const interactionWord = total === 1 ? 'interaction' : 'interactions'
   const copy: Record<
     BillingLocale,
     {
@@ -191,30 +193,30 @@ export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailC
     }
   > = {
     en: {
-      subject: `${a.made + a.received} interactions so far on ${APP}`,
-      heading: `${a.made + a.received} interactions so far`,
-      lead: `You have ${a.made} interactions made and ${a.received} received — ${a.made + a.received} in total.`,
-      term: `Your ${a.planName} plan (${a.priceLabel}) starts after ${a.remaining} more interactions, or on the last day of your trial, whichever comes first.`,
+      subject: `${total} ${interactionWord} so far on ${APP}`,
+      heading: `${total} ${interactionWord} so far`,
+      lead: `You have ${a.made} ${a.made === 1 ? 'interaction' : 'interactions'} made and ${a.received} received — ${total} in total.`,
+      term: `Your ${a.planName} plan (${a.priceLabel}) starts after ${a.remaining} more ${a.remaining === 1 ? 'interaction' : 'interactions'}, or on the last day of your trial, whichever comes first.`,
       cancel: `Cancel before then and you pay nothing:`,
       planLabel: 'Plan',
       priceLabel: 'Price',
       cta: 'Manage billing'
     },
     pt: {
-      subject: `${a.made + a.received} interações até agora no ${APP}`,
-      heading: `${a.made + a.received} interações até agora`,
-      lead: `Você tem ${a.made} interações feitas e ${a.received} recebidas — ${a.made + a.received} no total.`,
-      term: `Seu plano ${a.planName} (${a.priceLabel}) começa depois de mais ${a.remaining} interações, ou no último dia do seu teste, o que vier primeiro.`,
+      subject: `${total} ${total === 1 ? 'interação' : 'interações'} até agora no ${APP}`,
+      heading: `${total} ${total === 1 ? 'interação' : 'interações'} até agora`,
+      lead: `Você tem ${a.made} ${a.made === 1 ? 'interação feita' : 'interações feitas'} e ${a.received} ${a.received === 1 ? 'recebida' : 'recebidas'} — ${total} no total.`,
+      term: `Seu plano ${a.planName} (${a.priceLabel}) começa depois de mais ${a.remaining} ${a.remaining === 1 ? 'interação' : 'interações'}, ou no último dia do seu teste, o que vier primeiro.`,
       cancel: `Cancele antes disso e você não paga nada:`,
       planLabel: 'Plano',
       priceLabel: 'Preço',
       cta: 'Gerenciar assinatura'
     },
     es: {
-      subject: `${a.made + a.received} interacciones hasta ahora en ${APP}`,
-      heading: `${a.made + a.received} interacciones hasta ahora`,
-      lead: `Tienes ${a.made} interacciones hechas y ${a.received} recibidas: ${a.made + a.received} en total.`,
-      term: `Tu plan ${a.planName} (${a.priceLabel}) comienza después de ${a.remaining} interacciones más, o el último día de tu prueba, lo que ocurra primero.`,
+      subject: `${total} ${total === 1 ? 'interacción' : 'interacciones'} hasta ahora en ${APP}`,
+      heading: `${total} ${total === 1 ? 'interacción' : 'interacciones'} hasta ahora`,
+      lead: `Tienes ${a.made} ${a.made === 1 ? 'interacción hecha' : 'interacciones hechas'} y ${a.received} ${a.received === 1 ? 'recibida' : 'recibidas'}: ${total} en total.`,
+      term: `Tu plan ${a.planName} (${a.priceLabel}) comienza después de ${a.remaining} ${a.remaining === 1 ? 'interacción' : 'interacciones'} más, o el último día de tu prueba, lo que ocurra primero.`,
       cancel: `Cancela antes y no pagas nada:`,
       planLabel: 'Plan',
       priceLabel: 'Precio',
@@ -383,7 +385,7 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
   > = {
     en: {
       subject: `Your ${a.planName} plan started today`,
-      lead: `During your trial you made ${a.made} interactions and your posts received ${a.received}.`,
+      lead: `During your trial you made ${a.made} ${a.made === 1 ? 'interaction' : 'interactions'} and your posts received ${a.received}.`,
       term: `Your ${a.planName} plan (${a.priceLabel}) is now active.`,
       link: 'See your recap:',
       planLabel: 'Plan',
@@ -401,7 +403,7 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
     },
     es: {
       subject: `Tu plan ${a.planName} comenzó hoy`,
-      lead: `Durante tu prueba hiciste ${a.made} interacciones y tus publicaciones recibieron ${a.received}.`,
+      lead: `Durante tu prueba hiciste ${a.made} ${a.made === 1 ? 'interacción' : 'interacciones'} y tus publicaciones recibieron ${a.received}.`,
       term: `Tu plan ${a.planName} (${a.priceLabel}) ya está activo.`,
       link: 'Mira tu resumen:',
       planLabel: 'Plan',
@@ -446,6 +448,9 @@ export interface CapReachedArgs {
   upgradeUrl?: string
   myPostsUrl: string
   supportEmail: string
+  /** The author's live 7d board position and reach to the next place, from rankings.getGraphSummary (RCD follow-up). */
+  position?: number | null
+  gapToNext?: number | null
 }
 
 /**
@@ -465,6 +470,8 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
       contactCustom: string
       seePlans: string
       openMyPosts: string
+      board: string
+      boardGap: string
     }
   > = {
     en: {
@@ -478,7 +485,9 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
       proContact: `Need a higher cap? Write to ${a.supportEmail}.`,
       contactCustom: `Your plan has a custom cap. Write to ${a.supportEmail} to adjust it.`,
       seePlans: 'See plans',
-      openMyPosts: 'Open My Posts'
+      openMyPosts: 'Open My Posts',
+      board: 'You are #{position} on the weekly board.',
+      boardGap: 'You are #{position} on the weekly board, {n} {word} from #{next}.'
     },
     pt: {
       subject: `Sua publicação chegou a ${a.total} interações e saiu do feed`,
@@ -488,7 +497,9 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
       proContact: `Precisa de um limite maior? Escreva para ${a.supportEmail}.`,
       contactCustom: `Seu plano tem um limite personalizado. Escreva para ${a.supportEmail} para ajustá-lo.`,
       seePlans: 'Ver planos',
-      openMyPosts: 'Abrir Minhas publicações'
+      openMyPosts: 'Abrir Minhas publicações',
+      board: 'Você está em #{position} no ranking semanal.',
+      boardGap: 'Você está em #{position} no ranking semanal, a {n} {word} do #{next}.'
     },
     es: {
       subject: `Tu publicación llegó a ${a.total} interacciones y salió del feed`,
@@ -498,10 +509,22 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
       proContact: `¿Necesitas un límite mayor? Escribe a ${a.supportEmail}.`,
       contactCustom: `Tu plan tiene un límite personalizado. Escribe a ${a.supportEmail} para ajustarlo.`,
       seePlans: 'Ver planes',
-      openMyPosts: 'Abrir Mis publicaciones'
+      openMyPosts: 'Abrir Mis publicaciones',
+      board: 'Estás en el puesto #{position} del ranking semanal.',
+      boardGap: 'Estás en el puesto #{position} del ranking semanal, a {n} {word} del #{next}.'
     }
   }
   const c = copy[locale]
+  const board =
+    a.position === null || a.position === undefined
+      ? ''
+      : a.gapToNext !== undefined && a.gapToNext !== null
+        ? c.boardGap
+            .replace('{position}', String(a.position))
+            .replace('{n}', String(a.gapToNext))
+            .replace('{word}', nearEndWord(a.gapToNext, NEAR_END_GRAPH[locale].interactionWords))
+            .replace('{next}', String(a.position - 1))
+        : c.board.replace('{position}', String(a.position))
   const closing =
     a.mode === 'upgrade' ? `${c.upgrade} ${a.upgradeUrl}` : a.mode === 'proContact' ? c.proContact : c.contactCustom
   // One link per email. In upgrade mode the checkout link is the one the member can act on, so the
@@ -510,6 +533,7 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
   const content =
     emailQuote(`“${a.excerpt}”`) +
     emailParagraph(c.body) +
+    (board ? emailParagraph(escapeHtml(board)) : '') +
     (a.mode === 'upgrade'
       ? emailParagraph(c.upgrade) + (a.upgradeUrl ? emailButton({ href: a.upgradeUrl, label: c.seePlans }) : '')
       : emailParagraph(c.stays) +
@@ -517,7 +541,7 @@ export function postCapReachedEmail(locale: BillingLocale, a: CapReachedArgs): E
         emailNote(escapeHtml(closing)))
   return {
     subject: c.subject,
-    text: `“${a.excerpt}”\n\n${c.body}\n\n${stays}${closing}`,
+    text: `“${a.excerpt}”\n\n${c.body}\n\n${board ? `${board}\n\n` : ''}${stays}${closing}`,
     html: renderEmailLayout({ lang: locale, preheader: c.body, heading: c.subject, contentHtml: content })
   }
 }

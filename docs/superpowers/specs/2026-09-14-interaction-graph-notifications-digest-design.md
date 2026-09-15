@@ -293,7 +293,7 @@ No scheduler, no extra read: the reactive client subscription is the realtime ch
 are filtered at read time so the log stays complete. Repeat reactions never insert because `incrementLikeCount` already
 returns before any write when `state?.reactedAt` is set.
 
-**RCD additions (2026-09-14).** `rankings.getTrialGraphSummary` (internal) and `rankings.getWeeklyTop` (public, top‑3
+**RCD additions (2026-09-14).** `rankings.getGraphSummary` (internal) and `rankings.getWeeklyTop` (public, top‑3
 medals) join the read surface; `getSiteRankings.me` and `digest.getDigestData` gain `gapToNext`, the digest also carries
 `siteTotalInteractions` / `siteActiveMembers`; and the write path above additionally calls
 `interactions.maybeNotifyRecord` (same transaction) for the self-addressed `'record'` notification. The UI consumes the
@@ -302,6 +302,13 @@ medal read where content is: `FeedPage`/`PostCard` ring a top‑3 poster's autho
 close the zero side: `/people`'s empty received tab adds `people.graphStarter` (made count) and a `people.goToFeed`
 button until 3 interactions, and `/rankings` swaps `rankings.noPosition` for `rankings.emptyFresh` + the same button at
 count 0, board still visible.
+
+**RCD follow-ups (2026-09-14).** `getGraphSummary` was renamed from `getTrialGraphSummary` and now also backs the
+public session-resolved `rankings.getMyGraphSummary`; the cancel interstitial renders its numbers as one factual loss
+line, built only from the parts that exist and never claiming deletion. `getSiteRankings` adds `activeMembers` (the
+newest snapshot's board size, 0 without one) and `/rankings` shows an invite nudge below ten active members, with the
+joined count when `users.getInviteSummary` has one. The post-cap email states the author's live position and gap when
+they are ranked.
 
 ### 5.6 `convex/jobs/rankingSnapshot.ts`
 
@@ -409,10 +416,11 @@ Window toggle at the top. "You" block: two cards (who interacted most with you, 
 each, deep links to the matching `/people` tab; each row also states the person's visible authored post count in the
 window. "Site ranking" block: two lists (most posts, most interactions), top
 20, the member's own row highlighted when present, an "you are #87" line when outside the top 20, medal treatment only
-for the top 3, and exact counts everywhere. Site lists render positions 1-10 always; when the member is beyond #12 the
-board inserts an ellipsis separator and then their row plus two above and two below, and when their position is beyond
-the returned top 20 the top list stays as-is with the position line carrying the rank (the snapshot stores identities
-only for the top 100 and the read serves 20). Server rows carry their competition position, so ties share a number.
+for the top 3, and exact counts everywhere. Site lists render positions 1-10 always; when the member's position in the
+stored identities is beyond #12 the read attaches a five-row neighbor slice (their row plus two either side) and the
+board inserts an ellipsis separator before it, while beyond the stored top 300 there is no slice and the position line
+carries the rank (the snapshot stores identities for the top 300, distributions for everyone, and a live count above
+every stored count reads as position 1). Server rows carry their competition position, so ties share a number.
 The member's own row (or the "you are #87" line) carries a quiet "don't
 show me" control that calls `users.setLeaderboardOptOut`, so the opt-out lives one click from the place the member
 sees themselves ranked. A short caption above the block explains the window and, when `partial`, that some activity may
@@ -435,6 +443,10 @@ immediately, shows its own saving/error state, and reflects the server value on 
 Confirmation page for the email link. No login required. Reads `status` from the query string and offers "Start
 receiving again", which requires login and routes to Settings. Invalid or expired tokens render a neutral message with
 a support link and never echo the token.
+
+**Rework (2026-09-15):** the human link is now a 302 from `GET /unsubscribe/digest` to the app's public `/unsubscribe`
+page (`UnsubscribePage` + `users.unsubscribeByToken`, digest-only and all-emails scopes — all additionally withdraws
+marketing consent), Convex keeps only the RFC 8058 `POST`, and the server-rendered confirmation HTML is deleted.
 
 ### 7.8 Navigation
 

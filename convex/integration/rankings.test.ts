@@ -54,7 +54,7 @@ describe('rankings', () => {
     expect(result.made).toEqual([])
   })
 
-  test('getSiteRankings joins the snapshot and reports the member position', ;async () => {
+  test('getSiteRankings joins the snapshot and reports the member position', async () => {
     const t = convexTest(schema, modules)
     await seed(t)
     await t.mutation(internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '7d' })
@@ -65,6 +65,16 @@ describe('rankings', () => {
     expect(before.posters[0]).toMatchObject({ name: 'Me', count: 1, reactionsReceived: 1, position: 1 })
     // "Me" authored the post but made no interactions: zero count, no position.
     expect(before.me).toMatchObject({ count: 0, position: null, movement: null, optedOut: false })
+  })
+
+  test('getSiteRankings reports activeMembers from the newest snapshot board, 0 with no snapshot', async () => {
+    const t = convexTest(schema, modules)
+    await seed(t)
+    const empty = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
+    expect(empty.activeMembers).toBe(0)
+    await t.mutation(internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '7d' })
+    const board = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
+    expect(board.activeMembers).toBe(1)
   })
 
   test('the member count is read live so a position exists beyond the stored top list', async () => {
@@ -105,6 +115,215 @@ describe('rankings', () => {
     await t.mutation(internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '7d' })
     const result = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
     expect(result.me).toMatchObject({ count: 1, position: 2 })
+  })
+
+  test('a live count above every stored count takes position 1', async () => {
+    const t = convexTest(schema, modules)
+    const { me, ana } = await seed(t)
+    const anaPost = await t.run(async ctx =>
+      ctx.db.insert('posts', {
+        linkedinPostUrn: 'urn:overtake',
+        authorId: ana,
+        content: 'x',
+        publishedAt: NOW,
+        likeCount: 0,
+        commentCount: 0,
+        mediaUrls: [],
+        isFeatured: false,
+        visibilityIndustries: [],
+        visibilityCountries: [],
+        hidden: false
+      })
+    )
+    await t.run(async ctx => {
+      // Two live interactions against a stored max of 1: the old binary search returned null here.
+      await ctx.db.insert('userInteractions', {
+        userId: me,
+        postId: anaPost,
+        authorId: ana,
+        kind: 'reaction' as const,
+        createdAt: NOW
+      })
+      await ctx.db.insert('userInteractions', {
+        userId: me,
+        postId: anaPost,
+        authorId: ana,
+        kind: 'comment' as const,
+        createdAt: NOW
+      })
+      await ctx.db.insert('rankingSnapshots', {
+        window: '7d',
+        generatedAt: NOW,
+        since: NOW - 7 * DAY,
+        topPosters: [],
+        topInteractors: [{ userId: ana, count: 1, lastAt: NOW }],
+        posterCountsDescending: [],
+        interactorCountsDescending: [1],
+        partial: false
+      })
+    })
+    const result = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
+    expect(result.me).toMatchObject({ count: 2, position: 1, gapToNext: null })
+  })
+
+  test('getSiteRankings windows the interactor board around the member when they are beyond the buffer', async () => {
+    const t = convexTest(schema, modules)
+    const { me, ana } = await seed(t)
+    const peers = await t.run(async ctx => {
+      const ids = []
+      for (let i = 0; i < 19; i += 1) {
+        ids.push(
+          await ctx.db.insert('users', {
+            linkedinId: `peer-${i}`,
+            name: `Peer ${i}`,
+            subscriptionStatus: 'none',
+            createdAt: NOW
+          })
+        )
+      }
+      return ids
+    })
+    await t.run(async ctx => {
+      const anaPost = await ctx.db.insert('posts', {
+        linkedinPostUrn: 'urn:window',
+        authorId: ana,
+        content: 'x',
+        publishedAt: NOW,
+        likeCount: 0,
+        commentCount: 0,
+        mediaUrls: [],
+        isFeatured: false,
+        visibilityIndustries: [],
+        visibilityCountries: [],
+        hidden: false
+      })
+      // The member's live count matches their stored count, so positions in the board and the distribution agree.
+      for (let i = 0; i < 6; i += 1) {
+        await ctx.db.insert('userInteractions', {
+          userId: me,
+          postId: anaPost,
+          authorId: ana,
+          kind: 'reaction' as const,
+          createdAt: NOW
+        })
+      }
+      const interactorIds = [...peers]
+      interactorIds.splice(14, 0, me)
+      await ctx.db.insert('rankingSnapshots', {
+        window: '7d',
+        generatedAt: NOW,
+        since: NOW - 7 * DAY,
+        topPosters: [],
+        topInteractors: interactorIds.map((userId, i) => ({ userId, count: 20 - i, lastAt: NOW })),
+        posterCountsDescending: [],
+        interactorCountsDescending: interactorIds.map((_, i) => 20 - i),
+        partial: false
+      })
+    })
+    const result = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
+    expect(result.interactors).toHaveLength(20)
+    expect(result.interactors.find(r => r.name === 'Me')?.position).toBe(15)
+    expect(result.interactorNeighbors.map(r => r.position)).toEqual([13, 14, 15, 16, 17])
+    expect(result.interactorNeighbors[2].name).toBe('Me')
+    expect(result.posterNeighbors).toEqual([])
+    expect(result.me?.position).toBe(15)
+  })
+
+  test('getSiteRankings sends no neighbor window when the member is inside the first rows', async () => {
+    const t = convexTest(schema, modules)
+    const { me } = await seed(t)
+    const peers = await t.run(async ctx => {
+      const ids = []
+      for (let i = 0; i < 19; i += 1) {
+        ids.push(
+          await ctx.db.insert('users', {
+            linkedinId: `near-${i}`,
+            name: `Near ${i}`,
+            subscriptionStatus: 'none',
+            createdAt: NOW
+          })
+        )
+      }
+      return ids
+    })
+    await t.run(async ctx => {
+      const interactorIds = [peers[0], me, ...peers.slice(1)]
+      await ctx.db.insert('rankingSnapshots', {
+        window: '7d',
+        generatedAt: NOW,
+        since: NOW - 7 * DAY,
+        topPosters: [],
+        topInteractors: interactorIds.map((userId, i) => ({ userId, count: 20 - i, lastAt: NOW })),
+        posterCountsDescending: [],
+        interactorCountsDescending: interactorIds.map((_, i) => 20 - i),
+        partial: false
+      })
+    })
+    const result = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
+    expect(result.interactorNeighbors).toEqual([])
+  })
+
+  test('getSiteRankings reports the member live posts count and its poster position', async () => {
+    const t = convexTest(schema, modules)
+    const { me, ana } = await seed(t)
+    await t.run(async ctx => {
+      for (let i = 0; i < 3; i += 1) {
+        await ctx.db.insert('posts', {
+          linkedinPostUrn: `urn:my-post-${i}`,
+          authorId: me,
+          content: 'x',
+          publishedAt: NOW - i,
+          likeCount: 0,
+          commentCount: 0,
+          mediaUrls: [],
+          isFeatured: false,
+          visibilityIndustries: [],
+          visibilityCountries: [],
+          hidden: false
+        })
+      }
+      await ctx.db.insert('rankingSnapshots', {
+        window: '7d',
+        generatedAt: NOW,
+        since: NOW - 7 * DAY,
+        topPosters: [
+          { userId: ana, count: 6, lastAt: NOW },
+          { userId: me, count: 4, lastAt: NOW }
+        ],
+        topInteractors: [],
+        posterCountsDescending: [6, 4, 1],
+        interactorCountsDescending: [],
+        partial: false
+      })
+    })
+    const result = await t.query(api.rankings.getSiteRankings, { sessionToken: 'tok', window: '7d' })
+    // The seed authored one post plus the three seeded here: the live read counts all four visible posts.
+    expect(result.me).toMatchObject({ postsCount: 4, postsPosition: 2 })
+    expect(result.posters[1]).toMatchObject({ name: 'Me', count: 4, position: 2 })
+  })
+
+  test('a counterpart post count is capped at 500, not 200', async () => {
+    const t = convexTest(schema, modules)
+    const { ana } = await seed(t)
+    await t.run(async ctx => {
+      for (let i = 0; i < 501; i += 1) {
+        await ctx.db.insert('posts', {
+          linkedinPostUrn: `urn:cap-${i}`,
+          authorId: ana,
+          content: 'x',
+          publishedAt: NOW - i,
+          likeCount: 0,
+          commentCount: 0,
+          mediaUrls: [],
+          isFeatured: false,
+          visibilityIndustries: [],
+          visibilityCountries: [],
+          hidden: false
+        })
+      }
+    })
+    const result = await t.query(api.rankings.getMyRankings, { sessionToken: 'tok', window: '7d', now: NOW })
+    expect(result.received[0]).toMatchObject({ name: 'Ana', postsCount: 500 })
   })
 
   test('getSiteRankings assigns competition positions over the filtered list', async () => {
@@ -241,7 +460,7 @@ describe('rankings', () => {
     expect(result.me).toMatchObject({ count: 0, position: null, gapToNext: null })
   })
 
-  test('getTrialGraphSummary returns the all-time graph and the live position with the gap', async () => {
+  test('getGraphSummary returns the all-time graph and the live position with the gap', async () => {
     const t = convexTest(schema, modules)
     const { me, ana } = await seed(t)
     const myPost = await t.run(async ctx => (await ctx.db.query('posts').first())!)
@@ -333,7 +552,7 @@ describe('rankings', () => {
         partial: false
       })
     })
-    const summary = await t.query(internal.rankings.getTrialGraphSummary, { userId: me })
+    const summary = await t.query(internal.rankings.getGraphSummary, { userId: me })
     expect(summary).toMatchObject({
       peopleMade: 2,
       peopleReceived: 2,
@@ -342,6 +561,28 @@ describe('rankings', () => {
       position: 2,
       gapToNext: 1
     })
+    // The public session-resolved read is the same computation, for the cancel interstitial.
+    const mine = await t.query(api.rankings.getMyGraphSummary, { sessionToken: 'tok' })
+    expect(mine).toEqual(summary)
+  })
+
+  test('getMyGraphSummary is zeroed at rest and refuses a bad session', async () => {
+    const t = convexTest(schema, modules)
+    await seed(t)
+    const quiet = await t.run(async ctx =>
+      ctx.db.insert('users', { linkedinId: 'quiet', name: 'Quiet', subscriptionStatus: 'none', createdAt: NOW })
+    )
+    await t.run(async ctx => ctx.db.insert('sessions', { token: 'quiet-tok', userId: quiet, expiresAt: NOW + DAY }))
+    const zero = await t.query(api.rankings.getMyGraphSummary, { sessionToken: 'quiet-tok' })
+    expect(zero).toEqual({
+      peopleMade: 0,
+      peopleReceived: 0,
+      receivedReactions: 0,
+      receivedComments: 0,
+      position: null,
+      gapToNext: null
+    })
+    await expect(t.query(api.rankings.getMyGraphSummary, { sessionToken: 'nope' })).rejects.toThrow('Unauthorized')
   })
 
   test('getWeeklyTop returns positions 1..3 after dropping banned and opted-out members', async () => {

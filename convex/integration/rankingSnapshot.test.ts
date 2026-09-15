@@ -87,6 +87,35 @@ describe('rankingSnapshot.rebuildRankingSnapshots', () => {
     expect(rows[0].topPosters.map(p => p.userId)).not.toContain(carla)
   })
 
+  test('stores identities for the top 300 while the distribution covers everyone', async () => {
+    const t = convexTest(schema, modules)
+    const ana = await seedUser(t, 'Ana')
+    const post = await seedPost(t, ana)
+    await t.run(async ctx => {
+      for (let i = 0; i < 301; i += 1) {
+        const userId = await ctx.db.insert('users', {
+          linkedinId: `member-${i}`,
+          name: `Member ${i}`,
+          subscriptionStatus: 'none',
+          createdAt: NOW
+        })
+        await ctx.db.insert('userInteractions', {
+          userId,
+          postId: post,
+          authorId: ana,
+          kind: 'reaction' as const,
+          createdAt: NOW
+        })
+      }
+    })
+
+    await t.mutation(internal.jobs.rankingSnapshot.rebuildRankingSnapshots, { window: '7d' })
+
+    const rows = await t.run(async ctx => ctx.db.query('rankingSnapshots').collect())
+    expect(rows[0].topInteractors).toHaveLength(300)
+    expect(rows[0].interactorCountsDescending).toHaveLength(301)
+  })
+
   test('enriches poster entries with summed reactions received and interactor entries with distinct posts touched', async () => {
     const t = convexTest(schema, modules)
     const ana = await seedUser(t, 'Ana')

@@ -47,6 +47,7 @@ const TOP_LIMIT = 3
 
 interface DigestCopy {
   subject: string
+  subjectEmpty: string
   heading: string
   greeting: string
   personalLabel: string
@@ -65,6 +66,7 @@ interface DigestCopy {
   movementUp: string
   movementDown: string
   movementSame: string
+  positionWords: [one: string, many: string]
   peopleCta: string
   rankingsCta: string
   unsubscribe: string
@@ -78,6 +80,7 @@ interface DigestCopy {
 const COPY: Record<EmailLang, DigestCopy> = {
   en: {
     subject: '{reactions} {reactionWord} and {comments} {commentWord} on your posts',
+    subjectEmpty: 'Activity summary',
     heading: 'Your activity digest',
     greeting: 'Hi {name},',
     personalLabel: 'Your numbers since {date}',
@@ -93,9 +96,10 @@ const COPY: Record<EmailLang, DigestCopy> = {
     topInteractorsLabel: 'Top interactors',
     position: 'You are #{n} in the site ranking.',
     notRanked: 'You are not ranked in the site board.',
-    movementUp: 'You are up {n} positions since your last digest.',
-    movementDown: 'You are down {n} positions since your last digest.',
+    movementUp: 'You are up {n} {word} since your last digest.',
+    movementDown: 'You are down {n} {word} since your last digest.',
     movementSame: 'You are in the same position since your last digest.',
+    positionWords: ['position', 'positions'],
     peopleCta: 'See people',
     rankingsCta: 'See rankings',
     unsubscribe: 'Unsubscribe from digests',
@@ -106,7 +110,8 @@ const COPY: Record<EmailLang, DigestCopy> = {
     commentWords: ['comment', 'comments']
   },
   pt: {
-    subject: '{reactions} {reactionWord} e {comments} {commentWord} nos seus posts',
+    subject: '{reactions} {reactionWord} e {comments} {commentWord} nas suas publicações',
+    subjectEmpty: 'Resumo de atividades',
     heading: 'Seu resumo de atividade',
     greeting: 'Olá, {name},',
     personalLabel: 'Seus números desde {date}',
@@ -122,9 +127,10 @@ const COPY: Record<EmailLang, DigestCopy> = {
     topInteractorsLabel: 'Mais interações',
     position: 'Você está em #{n} no ranking do site.',
     notRanked: 'Você não está no ranking do site.',
-    movementUp: 'Você subiu {n} posições desde o seu último resumo.',
-    movementDown: 'Você desceu {n} posições desde o seu último resumo.',
+    movementUp: 'Você subiu {n} {word} desde o seu último resumo.',
+    movementDown: 'Você desceu {n} {word} desde o seu último resumo.',
     movementSame: 'Você está na mesma posição desde o seu último resumo.',
+    positionWords: ['posição', 'posições'],
     peopleCta: 'Ver pessoas',
     rankingsCta: 'Ver rankings',
     unsubscribe: 'Cancelar o resumo por e-mail',
@@ -136,6 +142,7 @@ const COPY: Record<EmailLang, DigestCopy> = {
   },
   es: {
     subject: '{reactions} {reactionWord} y {comments} {commentWord} en tus publicaciones',
+    subjectEmpty: 'Resumen de actividades',
     heading: 'Tu resumen de actividad',
     greeting: 'Hola, {name},',
     personalLabel: 'Tus números desde {date}',
@@ -151,9 +158,10 @@ const COPY: Record<EmailLang, DigestCopy> = {
     topInteractorsLabel: 'Más interacciones',
     position: 'Estás en el puesto #{n} del ranking del sitio.',
     notRanked: 'No estás en el ranking del sitio.',
-    movementUp: 'Subiste {n} posiciones desde tu último resumen.',
-    movementDown: 'Bajaste {n} posiciones desde tu último resumen.',
+    movementUp: 'Subiste {n} {word} desde tu último resumen.',
+    movementDown: 'Bajaste {n} {word} desde tu último resumen.',
     movementSame: 'Estás en la misma posición desde tu último resumen.',
+    positionWords: ['puesto', 'puestos'],
     peopleCta: 'Ver personas',
     rankingsCta: 'Ver rankings',
     unsubscribe: 'Cancelar el resumen por correo',
@@ -175,7 +183,7 @@ export const DIGEST_FEATURE_NOTE_UNTIL = Date.UTC(2026, 9, 28)
 
 const FEATURE_NOTES: Record<EmailLang, string> = {
   en: 'New: see who reacted to each of your posts at linkintothessi.com/people',
-  pt: 'Novo: veja quem reagiu a cada um dos seus posts em linkintothessi.com/people',
+  pt: 'Novo: veja quem reagiu a cada uma das suas publicações em linkintothessi.com/people',
   es: 'Nuevo: mira quién reaccionó a cada una de tus publicaciones en linkintothessi.com/people'
 }
 
@@ -189,7 +197,10 @@ function plural(n: number, [one, many]: [string, string]): string {
 
 function movementLine(c: DigestCopy, n: number): string {
   if (n === 0) return c.movementSame
-  return fill(n > 0 ? c.movementUp : c.movementDown, { n: String(Math.abs(n)) })
+  return fill(n > 0 ? c.movementUp : c.movementDown, {
+    n: String(Math.abs(n)),
+    word: plural(Math.abs(n), c.positionWords)
+  })
 }
 
 function formatSince(locale: EmailLang, since: number): string {
@@ -199,12 +210,15 @@ function formatSince(locale: EmailLang, since: number): string {
 export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent {
   const c = COPY[locale]
   const sinceLabel = formatSince(locale, input.since)
-  const subject = fill(c.subject, {
-    reactions: String(input.receivedReactions),
-    reactionWord: plural(input.receivedReactions, c.reactionWords),
-    comments: String(input.receivedComments),
-    commentWord: plural(input.receivedComments, c.commentWords)
-  })
+  const hasReceivedActivity = input.receivedReactions + input.receivedComments > 0
+  const subject = hasReceivedActivity
+    ? fill(c.subject, {
+        reactions: String(input.receivedReactions),
+        reactionWord: plural(input.receivedReactions, c.reactionWords),
+        comments: String(input.receivedComments),
+        commentWord: plural(input.receivedComments, c.commentWords)
+      })
+    : c.subjectEmpty
   const position = input.myPosition === null ? c.notRanked : fill(c.position, { n: String(input.myPosition) })
   const movement = input.myPosition !== null && input.movement !== null ? movementLine(c, input.movement) : ''
 

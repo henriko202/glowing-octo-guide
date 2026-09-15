@@ -8,6 +8,7 @@ vi.mock('../convex', () => ({
   api: {
     interactions: { getRecap: 'interactions.getRecap' },
     posts: { getMyPosts: 'posts.getMyPosts' },
+    rankings: { getMyGraphSummary: 'rankings.getMyGraphSummary' },
     billingNode: { createCancelFlowSession: 'billingNode.createCancelFlowSession' },
     feedback: { feedback: { submitFeedback: 'feedback.feedback.submitFeedback' } }
   }
@@ -160,6 +161,48 @@ describe('CancelInterstitial', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keep my plan' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(mockCancelFlow).not.toHaveBeenCalled()
+  })
+
+  it('states the graph access the member loses, from the live summary', () => {
+    mockQueryReturns['rankings.getMyGraphSummary'] = {
+      peopleMade: 9,
+      peopleReceived: 7,
+      receivedReactions: 14,
+      receivedComments: 0,
+      position: 8,
+      gapToNext: 2
+    }
+    renderIt()
+    expect(
+      screen.getByText('You lose access to 9 people, 14 reactions on your posts, and your #8 spot on the weekly board.')
+    ).toBeInTheDocument()
+  })
+
+  it('composes only the parts that exist', () => {
+    mockQueryReturns['rankings.getMyGraphSummary'] = {
+      peopleMade: 1,
+      peopleReceived: 0,
+      receivedReactions: 0,
+      receivedComments: 0,
+      position: 4,
+      gapToNext: null
+    }
+    renderIt()
+    expect(screen.getByText('You lose access to 1 person and your #4 spot on the weekly board.')).toBeInTheDocument()
+    expect(screen.queryByText(/reactions? on your posts/)).not.toBeInTheDocument()
+  })
+
+  it('renders no loss line at all when the summary is zero', () => {
+    mockQueryReturns['rankings.getMyGraphSummary'] = {
+      peopleMade: 0,
+      peopleReceived: 0,
+      receivedReactions: 0,
+      receivedComments: 0,
+      position: null,
+      gapToNext: null
+    }
+    renderIt()
+    expect(screen.queryByText(/lose access to/)).not.toBeInTheDocument()
   })
 })
 

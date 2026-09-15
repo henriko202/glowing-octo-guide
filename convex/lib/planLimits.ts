@@ -10,16 +10,17 @@
 //   const limits = await ctx.runQuery(internal.lib.planLimitsQuery.getPlanLimits, { userId, tier })
 
 import type { MutationCtx, QueryCtx } from '../_generated/server'
-import { UNLIMITED_FEATURED_SENTINEL } from './postLimit'
 import type { Id } from '../_generated/dataModel'
 
 export type PlanLimits = { interactionsPerPost: number; postsPerWeek: number; featuredPerMonth: number }
 
 export type Tier = 'starter' | 'growth' | 'pro' | 'contact'
 
-// Featured-post monthly caps (backlog/B07). contact's cap is UNLIMITED_FEATURED_SENTINEL (9999,
-// lib/postLimit.ts), a Custom/enterprise sentinel (effectively unlimited) — real enterprise deals
-// use the existing per-user planLimits override row (see the contact branch of getPlanLimitsHelper below).
+// Featured-post monthly caps (backlog/B07). contact defaults to 5 — a finite cap like every other
+// tier. UNLIMITED_FEATURED_SENTINEL (9999, lib/postLimit.ts) now remains only for explicit overrides:
+// a per-user planLimits row (or a direct DB edit of a tier-default row) can still carry the sentinel
+// to grant one enterprise account effectively-unlimited featured posts — see the contact branch of
+// getPlanLimitsHelper below and migrations/normalizeContactFeaturedLimit.ts.
 //
 // Single source of truth (backlog/B27): exported so migrations/seedPlanLimits.ts and
 // admin.ts's updateTierDefault self-heal both build their inserted rows from this same
@@ -29,13 +30,15 @@ export const DEFAULTS: Record<Tier, PlanLimits> = {
   starter: { interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
   growth: { interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
-  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: UNLIMITED_FEATURED_SENTINEL }
+  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 5 }
 }
 
 // backlog/R17 — the interaction-cap bonus a bought featured post carries, keyed by the author's
 // tier at fulfilment (Henriko, 2026-09-07: a fixed table, not a multiplier). Kept next to
 // DEFAULTS so planLimits.test.ts can prove plan + bonus never passes the next tier's cap.
-// Contact has unlimited featured posts, so there is nothing to sell.
+// Contact is an admin-negotiated Custom tier, not a step on the purchasable ladder, so the $5
+// add-on is not sold there — the 0 is what featuredPurchaseBlocker's NOTHING_TO_BUY keys on,
+// independent of contact's featured quota (which is a finite 5, not the old sentinel).
 export const FEATURED_CAP_BONUS: Record<Tier, number> = { starter: 25, growth: 50, pro: 100, contact: 0 }
 
 export type PlanLimitsDefaultRow = { tier: Tier } & PlanLimits

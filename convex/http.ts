@@ -14,7 +14,6 @@ import { isFeaturedPostCheckout } from './lib/featuredPurchase'
 import { readCookie } from './lib/cookies'
 import { isPkceChallenge } from './lib/pkce'
 import { verifyUnsubscribeToken } from './lib/unsubscribeToken'
-import { pickUnsubscribeLocale, unsubscribePageHtml } from './lib/unsubscribePage'
 
 const http = httpRouter()
 
@@ -191,24 +190,17 @@ http.route({
 })
 
 // R24 — one-click unsubscribe for the 3-day digest. Stateless signed token, works without a session, idempotent.
-// POST is the acting path (the RFC 8058 List-Unsubscribe-Post target) and redirects to /unsubscribed. GET only
-// confirms: mail scanners and chat unfurlers prefetch links, so a GET verifies the token and renders a POST form
-// without touching the preference.
+// POST is the acting path (the RFC 8058 List-Unsubscribe-Post target) and redirects to /unsubscribe on the app.
+// GET changes nothing: mail scanners and chat unfurlers prefetch links, so a GET just forwards the token to the
+// app's public confirmation page, which calls users.unsubscribeByToken — invalid/unavailable tokens are handled
+// there, so this redirect never has to know whether the token is good.
 http.route({
   path: '/unsubscribe/digest',
   method: 'GET',
   handler: httpAction(async (_ctx, req) => {
     const token = new URL(req.url).searchParams.get('token') ?? ''
     const appUrl = env.APP_URL ?? 'http://localhost:5173'
-    const secret = env.UNSUBSCRIBE_SECRET
-    if (!secret) return redirect(`${appUrl}/unsubscribed?status=unavailable`)
-    const userId = await verifyUnsubscribeToken(token, secret)
-    if (!userId) return redirect(`${appUrl}/unsubscribed?status=invalid`)
-    const locale = pickUnsubscribeLocale(req.headers.get('accept-language'))
-    return new Response(unsubscribePageHtml(locale, { token, appUrl }), {
-      status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8', ...NO_STORE }
-    })
+    return redirect(`${appUrl}/unsubscribe?token=${encodeURIComponent(token)}`)
   })
 })
 
@@ -224,11 +216,11 @@ http.route({
 async function handleUnsubscribe(ctx: ActionCtx, token: string): Promise<Response> {
   const appUrl = env.APP_URL ?? 'http://localhost:5173'
   const secret = env.UNSUBSCRIBE_SECRET
-  if (!secret) return redirect(`${appUrl}/unsubscribed?status=unavailable`)
+  if (!secret) return redirect(`${appUrl}/unsubscribe?status=unavailable`)
   const userId = await verifyUnsubscribeToken(token, secret)
-  if (!userId) return redirect(`${appUrl}/unsubscribed?status=invalid`)
+  if (!userId) return redirect(`${appUrl}/unsubscribe?status=invalid`)
   await ctx.runMutation(internal.jobs.digest.disableDigestByUserId, { userId: userId as Id<'users'> })
-  return redirect(`${appUrl}/unsubscribed?status=ok`)
+  return redirect(`${appUrl}/unsubscribe?status=ok`)
 }
 
 // ─── Stripe Webhooks (via @convex-dev/stripe component) ─────────────────────

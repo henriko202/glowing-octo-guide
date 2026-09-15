@@ -33,6 +33,7 @@ vi.mock('../convex', () => ({
       undoScheduledDowngrade: 'billingNode.undoScheduledDowngrade'
     },
     interactions: { getRecap: 'interactions.getRecap' },
+    rankings: { getMyGraphSummary: 'rankings.getMyGraphSummary' },
     feedback: { feedback: { submitFeedback: 'feedback.feedback.submitFeedback' } },
     // CardGateBanner's useOwnPostState (reused for the R07 "post is live" line) reads this.
     // getTierLimits also lives here (backlog/R17 — the featured-post add-on line's numbers).
@@ -84,7 +85,7 @@ const TIER_LIMITS = {
   starter: { interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
   growth: { interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
-  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 9999 }
+  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 5 }
 }
 
 // Echo the key plus its interpolation so assertions can see both — except plan names, which
@@ -471,6 +472,15 @@ describe('duplicate notice', () => {
   })
 })
 
+describe('subscription info card surface', () => {
+  it('renders the subscription block with the card treatment', () => {
+    setUser({ subscriptionStatus: 'active' })
+    renderPage()
+    const block = screen.getByText('billing.subscriptionInfo').closest('div')
+    expect(block).toHaveClass('rounded-xl', 'border', 'border-border', 'bg-card', 'p-4', 'shadow-xs')
+  })
+})
+
 describe('checkout-return celebration (R07)', () => {
   it('opens the celebration once when returning from checkout with the status already flipped', () => {
     renderBilling({ search: '?success=true', me: { subscriptionStatus: 'trialing', tier: 'growth' } })
@@ -840,11 +850,21 @@ describe('BillingPage — featured post add-on (backlog/R17)', () => {
     )
   })
 
-  it('hides it for an unlimited tier and for a member without a card', () => {
+  it('hides it for contact (nothing to buy), for an explicit unlimited override and for a member without a card', () => {
     setUser({ subscriptionStatus: 'active', tier: 'contact' })
     const contact = renderPage()
     expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
     contact.unmount()
+
+    // 9999 is an explicit admin-granted override now that contact's tier default is a finite 5.
+    mockQueryReturns['posts.getTierLimits'] = {
+      ...TIER_LIMITS,
+      contact: { ...TIER_LIMITS.contact, featuredPerMonth: 9999 }
+    }
+    const unlimited = renderPage()
+    expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
+    unlimited.unmount()
+
     setUser({ subscriptionStatus: 'none', tier: 'growth' })
     renderPage()
     expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()

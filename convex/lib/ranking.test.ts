@@ -25,9 +25,21 @@ describe('positionOf', () => {
     expect(positionOf(9, [9, 7])).toBe(1)
   })
 
+  it('takes position 1 when the live count beats every stored count or the array is empty', () => {
+    expect(positionOf(10, [9, 7, 7, 5])).toBe(1)
+    expect(positionOf(1, [])).toBe(1)
+  })
+
+  it('keeps competition ranks for an exact max, a tie and a present count below the max', () => {
+    expect(positionOf(9, [9, 7, 7, 5])).toBe(1)
+    expect(positionOf(7, [9, 7, 7, 5])).toBe(2)
+    expect(positionOf(5, [9, 7, 7, 5])).toBe(4)
+  })
+
   it('returns null for zero or an absent count', () => {
     expect(positionOf(0, [9, 7])).toBeNull()
     expect(positionOf(4, [9, 7])).toBeNull()
+    expect(positionOf(6, [9, 7, 7, 5])).toBeNull()
   })
 })
 

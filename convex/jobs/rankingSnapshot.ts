@@ -12,7 +12,9 @@ export const SNAPSHOT_ROW_CEILING = 10_000
 // Convex hard-caps arrays at 8,192 elements; one count per distinct active member can pass that. 8,000 leaves
 // headroom, and the dropped tail only ever costs an exact position for the lowest-activity members.
 export const MAX_DISTRIBUTION = 8_000
-const TOP_LIST = 100
+// Identities for the top 300 per board; the counts distributions below still cover every active member, so a
+// position outside the stored list stays exact. 300 gives the read enough identities to show windowed neighbors.
+const TOP_LIST = 300
 const KEEP_GENERATIONS = 4
 const DAY = 86_400_000
 

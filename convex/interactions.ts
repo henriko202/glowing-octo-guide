@@ -6,6 +6,7 @@ import { paginationOptsValidator, paginationResultValidator } from 'convex/serve
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireAuth, requireAuthAction } from './lib/auth'
+import { countVisiblePostsSince } from './lib/postCounts'
 import { assertCanEngage } from './lib/access'
 import { assertPostEngageable } from './feed'
 import { getPlanLimitsHelper, nextTier } from './lib/planLimits'
@@ -651,19 +652,6 @@ export const listMyInteractions = query({
 // ── Interaction graph (R22) ──────────────────────────────────────────────────────────────────────
 // `now` is client-floored to the hour (same contract as getRecap). Reads are newest-first with the 2000-row ceiling
 // per side per window; `truncated` tells the page. Tallies are pure (lib/interactionGraph).
-
-/** Posts read per author when counting their window posts; the 200 cap bounds the read. */
-const POSTS_COUNT_CAP = 200
-
-/** The author's visible posts published since `since`, respecting the POSTS_COUNT_CAP bound. */
-async function countVisiblePostsSince(ctx: QueryCtx, authorId: Id<'users'>, since: number): Promise<number> {
-  const posts = await ctx.db
-    .query('posts')
-    .withIndex('by_author_and_publishedAt', q => q.eq('authorId', authorId).gte('publishedAt', since))
-    .order('desc')
-    .take(POSTS_COUNT_CAP)
-  return posts.filter(p => p.hidden !== true && p.deletedAt === undefined).length
-}
 
 /** One `get` per unique user id, projected with the same safe profile fields as people search. */
 async function projectPeople<T extends { userId: string }>(

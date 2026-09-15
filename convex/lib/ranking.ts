@@ -14,9 +14,14 @@ export function rankPositions(countsDescending: number[]): number[] {
   })
 }
 
-/** Exact 1-based position for a count via binary search; null when the count is zero or absent. */
+/**
+ * Exact 1-based competition position for a count via binary search; null when the count is zero or absent.
+ * A live count above every stored count takes position 1: between rebuilds the member can overtake the stored
+ * leader, and beating every stored count is at least first place.
+ */
 export function positionOf(count: number, countsDescending: number[]): number | null {
   if (count <= 0) return null
+  if (countsDescending.length === 0 || count > countsDescending[0]) return 1
   let lo = 0
   let hi = countsDescending.length
   while (lo < hi) {

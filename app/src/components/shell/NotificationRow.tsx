@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { ExternalLink } from 'lucide-react'
 import { buildPostUrl } from '@/components/LinkedInEmbed'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -62,7 +63,18 @@ export default function NotificationRow({
             {t('notifications.removed')}
           </Badge>
         )}
-        <span className="text-muted-foreground block text-xs">{timeLabel}</span>
+        <span className="text-muted-foreground flex items-center gap-2 text-xs">
+          <span>{timeLabel}</span>
+          {!row.removed && (
+            <span className="text-primary ml-auto inline-flex items-center gap-1">
+              <ExternalLink
+                aria-hidden="true"
+                className="size-3.5 shrink-0"
+              />
+              {t('feed.viewOnLinkedIn')}
+            </span>
+          )}
+        </span>
       </span>
     </span>
   )

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { ExternalLink } from 'lucide-react'
 import { api } from '../convex'
 import { useQueryOnce } from '@/lib/useQueryOnce'
 import { PageHeader } from '@/components/PageHeader'
@@ -235,11 +236,20 @@ export default function RecapPage() {
                               </Badge>
                             )}
                           </div>
-                          <p
-                            id={labelId}
-                            className="text-muted-foreground m-0 text-xs tabular-nums"
-                          >
-                            {label}
+                          <p className="text-muted-foreground m-0 flex flex-wrap items-center gap-2 text-xs tabular-nums">
+                            <span id={labelId}>{label}</span>
+                            <a
+                              href={buildPostUrl(p.linkedinPostUrn, p.sourceUrl)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary ml-auto inline-flex items-center gap-1 text-xs"
+                            >
+                              <ExternalLink
+                                aria-hidden="true"
+                                className="size-3.5 shrink-0"
+                              />
+                              {t('feed.viewOnLinkedIn')}
+                            </a>
                           </p>
                           <div
                             role="progressbar"

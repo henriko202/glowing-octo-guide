@@ -6,7 +6,7 @@ vi.mock('../convex', () => ({
       getMyRankings: 'rankings.getMyRankings',
       getSiteRankings: 'rankings.getSiteRankings'
     },
-    users: { setLeaderboardOptOut: 'users.setLeaderboardOptOut' }
+    users: { setLeaderboardOptOut: 'users.setLeaderboardOptOut', getInviteSummary: 'users.getInviteSummary' }
   }
 }))
 
@@ -17,7 +17,7 @@ vi.mock('convex/react', () => ({
   useMutation: () => mockSetLeaderboardOptOut
 }))
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import RankingsPage from './RankingsPage'
@@ -62,6 +62,7 @@ const SITE = {
   window: '7d',
   generatedAt: 123,
   partial: true,
+  activeMembers: 4,
   interactors: [
     {
       userId: 'u3',
@@ -74,6 +75,7 @@ const SITE = {
       linkedinPublicIdentifier: undefined
     }
   ],
+  interactorNeighbors: [],
   posters: [
     {
       userId: 'u4',
@@ -86,7 +88,8 @@ const SITE = {
       linkedinPublicIdentifier: undefined
     }
   ],
-  me: { id: 'me', count: 3, position: 7, movement: 1, optedOut: false }
+  posterNeighbors: [],
+  me: { id: 'me', count: 3, position: 7, postsCount: 2, postsPosition: 9, movement: 1, optedOut: false }
 }
 
 function renderPage() {
@@ -102,7 +105,8 @@ beforeEach(() => {
   mockSetLeaderboardOptOut.mockClear()
   mockQueryReturns = {
     'rankings.getMyRankings': MINE,
-    'rankings.getSiteRankings': SITE
+    'rankings.getSiteRankings': SITE,
+    'users.getInviteSummary': { inviteCode: 'code', joined: 0 }
   }
 })
 
@@ -114,13 +118,13 @@ describe('RankingsPage', () => {
     expect(screen.getByText('Diego')).toBeInTheDocument()
     expect(screen.getByText('Carla')).toBeInTheDocument()
     expect(screen.getByText(/You are #7/)).toBeInTheDocument()
-    expect(screen.getByText(/Up 1 since yesterday/)).toBeInTheDocument()
-    expect(screen.getByText('Window: Last 7 days. The board is a daily snapshot.')).toBeInTheDocument()
+    expect(screen.getByText(/Up 1 position since yesterday/)).toBeInTheDocument()
+    expect(screen.getByText('Window: Last 7 days. The board updates once a day.')).toBeInTheDocument()
     expect(screen.getByText('5 interactions · across 2 posts')).toBeInTheDocument()
     expect(screen.getByText('2 posts · 3 reactions')).toBeInTheDocument()
     expect(screen.getAllByText('5 interactions · 2 posts')).toHaveLength(2)
     expect(screen.getByText(/Next update/)).toBeInTheDocument()
-    expect(screen.getByText('Partial data: some activity may be missing from this snapshot.')).toBeInTheDocument()
+    expect(screen.getByText('Partial data: some activity may be missing.')).toBeInTheDocument()
   })
 
   it('shows only the top 5 of each personal list and links both titles to the matching /people tab', () => {
@@ -136,11 +140,36 @@ describe('RankingsPage', () => {
     expect(screen.getByRole('link', { name: 'You interacted with' })).toHaveAttribute('href', '/people?tab=made')
   })
 
+  it('windows each list from its own member position and takes posters from postsPosition', () => {
+    const slice = (prefix: string) =>
+      Array.from({ length: 5 }, (_, i) => ({
+        userId: `${prefix}-${i}`,
+        name: `${prefix} ${i}`,
+        count: 5 - i,
+        lastAt: i,
+        position: 13 + i
+      }))
+    mockQueryReturns['rankings.getSiteRankings'] = {
+      ...SITE,
+      interactorNeighbors: slice('Interactor'),
+      posterNeighbors: slice('Poster'),
+      // Interactors window from me.position; posters must use postsPosition, not the same position.
+      me: { id: 'me', count: 3, position: 14, postsCount: 2, postsPosition: 3, movement: 1, optedOut: false }
+    }
+    renderPage()
+    const interactors = screen.getByText('Most interactions').closest('section')!
+    const posters = screen.getByText('Most posts').closest('section')!
+    expect(within(interactors).getByText('…')).toBeInTheDocument()
+    expect(within(interactors).getByText('Interactor 2')).toBeInTheDocument()
+    expect(within(posters).queryByText('…')).not.toBeInTheDocument()
+    expect(within(posters).queryByText('Poster 2')).not.toBeInTheDocument()
+  })
+
   it('renders the partial line only when the snapshot was truncated', () => {
     mockQueryReturns['rankings.getSiteRankings'] = { ...SITE, partial: false }
     renderPage()
-    expect(screen.getByText('Window: Last 7 days. The board is a daily snapshot.')).toBeInTheDocument()
-    expect(screen.queryByText('Partial data: some activity may be missing from this snapshot.')).not.toBeInTheDocument()
+    expect(screen.getByText('Window: Last 7 days. The board updates once a day.')).toBeInTheDocument()
+    expect(screen.queryByText('Partial data: some activity may be missing.')).not.toBeInTheDocument()
   })
 
   it('opts the member out with the inverted current value', () => {
@@ -176,5 +205,32 @@ describe('RankingsPage', () => {
     expect(screen.queryByText(/No position in this window yet/)).not.toBeInTheDocument()
     expect(screen.getByText('Carla')).toBeInTheDocument()
     expect(screen.getByText('Diego')).toBeInTheDocument()
+  })
+
+  it('invites a peer below ten active members, linking to the invite settings', () => {
+    renderPage()
+    const nudge = screen.getByText('The board gets better with more people. Invite someone to join the ranking.')
+    expect(nudge).toBeInTheDocument()
+    const cta = screen.getByRole('link', { name: 'Invite a peer' })
+    expect(cta).toHaveAttribute('href', '/settings#invite')
+    expect(nudge.compareDocumentPosition(cta)).toBeTruthy()
+    // Below the site block and above the position row.
+    expect(nudge.closest('div')).toHaveClass('rounded-xl', 'border-border', 'bg-card', 'p-4')
+    expect(
+      nudge.compareDocumentPosition(screen.getByText(/You are #7/)) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it('hides the invite nudge once the board has ten active members', () => {
+    mockQueryReturns['rankings.getSiteRankings'] = { ...SITE, activeMembers: 10 }
+    renderPage()
+    expect(screen.queryByText(/The board gets better with more people/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Invite a peer' })).not.toBeInTheDocument()
+  })
+
+  it('shows how many members joined through the caller when there are any', () => {
+    mockQueryReturns['users.getInviteSummary'] = { inviteCode: 'code', joined: 3 }
+    renderPage()
+    expect(screen.getByText('3 people joined through you')).toBeInTheDocument()
   })
 })

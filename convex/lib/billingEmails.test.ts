@@ -116,6 +116,17 @@ describe('trialNearEndEmail (trial graph)', () => {
     expect(m.text).not.toContain('from #')
   })
 
+  it('singularizes the near-end counts in every language', () => {
+    for (const l of LOCALES) {
+      const m = trialNearEndEmail(l, { ...base, made: 1, received: 1, remaining: 1 })
+      expect(m.text).not.toContain('1 interações')
+      expect(m.text).not.toContain('1 interacciones')
+    }
+    const en = trialNearEndEmail('en', { ...base, made: 1, received: 1, remaining: 1 })
+    expect(en.text).toContain('1 interaction made')
+    expect(en.text).toContain('after 1 more interaction,')
+  })
+
   it('keeps the remaining-interaction and plan-start facts alongside the graph', () => {
     const m = trialNearEndEmail('en', { ...base, ...graph, position: 8, gapToNext: 2 })
     expect(m.text).toContain('starts after 3 more interactions')
@@ -373,5 +384,32 @@ describe('postCapReachedEmail (R20)', () => {
     }
     expect(postCapReachedEmail('en', { ...base, mode: 'contactCustom' }).text).toContain('custom cap')
     expect(postCapReachedEmail('en', { ...base, mode: 'proContact' }).text).toContain('higher cap')
+  })
+
+  it('states the author’s board position and gap after the cap line, in every locale', () => {
+    const args = { ...base, mode: 'proContact' as const, position: 8, gapToNext: 2 }
+    expect(postCapReachedEmail('en', args).text).toContain('You are #8 on the weekly board, 2 interactions from #7.')
+    expect(postCapReachedEmail('pt', args).text).toContain('Você está em #8 no ranking semanal, a 2 interações do #7.')
+    expect(postCapReachedEmail('es', args).text).toContain(
+      'Estás en el puesto #8 del ranking semanal, a 2 interacciones del #7.'
+    )
+    const m = postCapReachedEmail('en', args)
+    expect(m.text.indexOf('left the feed')).toBeLessThan(m.text.indexOf('weekly board'))
+    expect(m.html).toContain('weekly board')
+  })
+
+  it('drops the gap clause when there is no gap and the sentence entirely when unranked', () => {
+    const ranked = postCapReachedEmail('en', { ...base, mode: 'proContact', position: 8, gapToNext: null })
+    expect(ranked.text).toContain('You are #8 on the weekly board.')
+    expect(ranked.text).not.toContain('from #7')
+    const unranked = postCapReachedEmail('en', { ...base, mode: 'proContact', position: null, gapToNext: null })
+    expect(unranked.text).not.toContain('weekly board')
+    expect(unranked.html).not.toContain('weekly board')
+    expect(postCapReachedEmail('en', { ...base, mode: 'proContact' }).text).not.toContain('weekly board')
+  })
+
+  it('singularizes the gap to the next place', () => {
+    const m = postCapReachedEmail('en', { ...base, mode: 'proContact', position: 7, gapToNext: 1 })
+    expect(m.text).toContain('You are #7 on the weekly board, 1 interaction from #6.')
   })
 })

@@ -17,7 +17,7 @@ const TIER_LIMITS = {
   starter: { interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
   growth: { interactionsPerPost: 50, postsPerWeek: 7, featuredPerMonth: 1 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
-  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 9999 }
+  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 5 }
 }
 
 let mockMe: { tier: string; subscriptionStatus?: string; trialEligible?: boolean } = {
@@ -75,9 +75,11 @@ describe('UpgradeAtLimit', () => {
     expect(screen.getByRole('link')).toHaveAttribute('href', 'mailto:contact@linkintothessi.com')
   })
 
-  it('gives a contact-tier member the custom-limit line and never prints the 9999 sentinel', () => {
+  it('gives a contact-tier member the custom-limit line, never a checkout link or raw cap', () => {
     mockMe = { tier: 'contact', subscriptionStatus: 'active' }
     renderComponent('featured')
+    expect(screen.getByText(/custom limit/i)).toBeInTheDocument()
+    expect(screen.getByRole('link')).toHaveAttribute('href', 'mailto:contact@linkintothessi.com')
     expect(screen.queryByText(/9999/)).not.toBeInTheDocument()
   })
 

@@ -229,10 +229,11 @@ export default function BillingPage() {
   const canTrial = me?.trialEligible !== false
 
   // backlog/R17 — the featured-post add-on line under the plan grid: same eligibility as the
-  // purchase itself (lib/access.canEngage), nothing to sell to an unlimited tier. A canceled member
-  // is excluded on top of canEngage (A2): assertCanEngage lets them buy server-side — they're still
-  // inside their paid window — but a $5 feature for a post that leaves the feed once that window
-  // ends is a bad sale, so the UI says no even where the server would allow it.
+  // purchase itself (lib/access.canEngage), nothing to sell to an unlimited tier, and nothing to
+  // sell to a tier with no cap bonus (contact — featuredPurchaseBlocker says NOTHING_TO_BUY).
+  // A canceled member is excluded on top of canEngage (A2): assertCanEngage lets them buy
+  // server-side — they're still inside their paid window — but a $5 feature for a post that leaves
+  // the feed once that window ends is a bad sale, so the UI says no even where the server would allow it.
   const addonTier: Tier = me?.tier ?? 'starter'
   const addonLimits = tierLimits?.[addonTier]
   const showAddon =
@@ -240,6 +241,7 @@ export default function BillingPage() {
     canEngage(me.subscriptionStatus) &&
     me.subscriptionStatus !== 'canceled' &&
     addonLimits !== undefined &&
+    FEATURED_CAP_BONUS[addonTier] > 0 &&
     !isUnlimitedFeatured(addonLimits.featuredPerMonth)
   const starterLimits = tierLimits?.starter ?? DEFAULTS.starter
 
@@ -464,7 +466,7 @@ export default function BillingPage() {
       {/* Billing Info Card — shown to every card holder, so a trialing or past_due member can
           reach the Customer Portal (and cancel) at all. */}
       {subscriptionInfo && hasCard && (
-        <div className="border-border bg-muted mb-6 rounded-xl border p-5">
+        <div className="border-border bg-card mb-6 rounded-xl border p-4 shadow-xs">
           <h2 className="text-foreground mt-0 mb-3 text-base font-bold">{t('billing.subscriptionInfo')}</h2>
           <div className="grid grid-cols-2 gap-3">
             <div>

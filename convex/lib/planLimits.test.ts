@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildTierDefaultRow, DEFAULTS, FEATURED_CAP_BONUS, nextTier } from './planLimits'
+import { isUnlimitedFeatured } from './postLimit'
 
 const TIERS = ['starter', 'growth', 'pro', 'contact'] as const
 
@@ -24,6 +25,20 @@ describe('buildTierDefaultRow', () => {
     for (const tier of TIERS) {
       expect('userId' in buildTierDefaultRow(tier)).toBe(false)
     }
+  })
+})
+
+describe('DEFAULTS.contact featured cap', () => {
+  it('defaults to the finite 5, below the unlimited sentinel, so a default contact member is capped', () => {
+    expect(DEFAULTS.contact.featuredPerMonth).toBe(5)
+    expect(isUnlimitedFeatured(DEFAULTS.contact.featuredPerMonth)).toBe(false)
+  })
+
+  it('leaves the sentinel reachable only as an explicit override, never via the tier default', () => {
+    for (const tier of TIERS) {
+      expect(isUnlimitedFeatured(buildTierDefaultRow(tier).featuredPerMonth)).toBe(false)
+    }
+    expect(isUnlimitedFeatured(9999)).toBe(true)
   })
 })
 

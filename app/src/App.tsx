@@ -31,9 +31,10 @@ import ConsentPromptScreen from './components/ConsentPromptScreen'
 import FirstPostPromptScreen from './components/FirstPostPromptScreen'
 import AnalyticsConsentGate from './components/AnalyticsConsentGate'
 import PrivacyDataPage from './pages/PrivacyDataPage'
-import UnsubscribedPage from './pages/UnsubscribedPage'
+import UnsubscribePage from './pages/UnsubscribePage'
 import { Toaster } from './components/ui/toast'
 import DevUserSwitcher from './components/DevUserSwitcher'
+import DevEmailTools from './components/DevEmailTools'
 import { POLICY_VERSION } from '../../convex/lib/policy'
 import { LANDING_URL, isSignedOut } from './lib/session'
 
@@ -103,6 +104,7 @@ export default function App() {
     <div className="flex min-h-screen flex-col">
       <Toaster />
       <DevUserSwitcher />
+      <DevEmailTools />
       <ScrollToTop />
       <Routes>
         <Route
@@ -204,8 +206,8 @@ export default function App() {
           }
         />
         <Route
-          path="/unsubscribed"
-          element={<UnsubscribedPage />}
+          path="/unsubscribe"
+          element={<UnsubscribePage />}
         />
         <Route
           path="*"

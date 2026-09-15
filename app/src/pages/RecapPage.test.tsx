@@ -55,6 +55,7 @@ const RECAP = {
     {
       id: 'p1',
       linkedinPostUrn: 'urn:li:share:1',
+      sourceUrl: 'https://www.linkedin.com/posts/ana_hello-world',
       excerpt: 'Hello world',
       likeCount: 18,
       commentCount: 2,
@@ -148,6 +149,10 @@ describe('RecapPage', () => {
     const card = screen.getByRole('link', { name: 'Hello world' }).closest('li')
     expect(card).toHaveClass('rounded-xl', 'border', 'border-border', 'bg-card', 'p-4', 'shadow-xs')
     expect(card?.parentElement).toHaveClass('flex', 'flex-col', 'gap-3')
+    expect(screen.getByRole('link', { name: /View on LinkedIn/ })).toHaveAttribute(
+      'href',
+      'https://www.linkedin.com/posts/ana_hello-world'
+    )
   })
 
   it('renders the truncated notice with the reworded copy and the row ceiling (F3, F8)', () => {

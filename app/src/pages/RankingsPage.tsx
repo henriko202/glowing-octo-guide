@@ -24,6 +24,7 @@ export default function RankingsPage() {
 
   const rankings = useQuery(api.rankings.getSiteRankings, sessionToken ? { sessionToken, window } : 'skip')
   const mine = useQuery(api.rankings.getMyRankings, sessionToken ? { sessionToken, window, now } : 'skip')
+  const invite = useQuery(api.users.getInviteSummary, sessionToken ? { sessionToken } : 'skip')
   const setLeaderboardOptOut = useMutation(api.users.setLeaderboardOptOut)
   const me = rankings?.me ?? null
   const [optOutSaving, setOptOutSaving] = useState(false)
@@ -109,14 +110,37 @@ export default function RankingsPage() {
                   titleKey="rankings.topPosters"
                   variant="posts"
                   rows={rankings.posters}
+                  neighbors={rankings.posterNeighbors}
+                  mePosition={me?.postsPosition}
                   meId={me?.id}
                 />
                 <RankingList
                   titleKey="rankings.topInteractors"
                   variant="interactors"
                   rows={rankings.interactors}
+                  neighbors={rankings.interactorNeighbors}
+                  mePosition={me?.position}
                   meId={me?.id}
                 />
+                {/* RCD follow-up — below ten active members the board is still thin, so invite instead of dead-ending. */}
+                {rankings.activeMembers < 10 && (
+                  <div className="border-border bg-card mt-4 rounded-xl border p-4">
+                    <p className="text-foreground m-0 text-sm">{t('rankings.inviteNudge')}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      asChild
+                    >
+                      <Link to="/settings#invite">{t('rankings.inviteCta')}</Link>
+                    </Button>
+                    {invite && invite.joined > 0 && (
+                      <p className="text-muted-foreground mt-2 mb-0 text-sm">
+                        {t('rankings.inviteJoined', { count: invite.joined })}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   {me === null || me.count === 0 ? (
                     <div className="flex flex-wrap items-center gap-3">

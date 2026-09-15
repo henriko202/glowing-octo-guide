@@ -35,19 +35,25 @@ function rankBorderClass(rank: number): string {
   return 'border-border'
 }
 
-/** Positions 1-10 always render; beyond #12 the list windows to the member plus two rows either side. */
+/** Positions 1-10 always render; beyond #12 the server supplies the member plus two rows either side. */
 const TOP_VISIBLE = 10
 const WINDOW_BUFFER = 2
 
 export default function RankingList({
   titleKey,
   rows,
+  neighbors = [],
+  mePosition,
   variant,
   meId,
   titleTo
 }: {
   titleKey: string
   rows: RankingRow[]
+  /** The server's windowed rows (member ±2); empty when the member is in the first rows or unranked. */
+  neighbors?: RankingRow[]
+  /** The member's server position in this list; only a value beyond the buffer windows the list. */
+  mePosition?: number | null
   variant: RankingVariant
   meId?: string
   titleTo?: string
@@ -68,18 +74,9 @@ export default function RankingList({
   // `position` comes from the server for site rows (competition rank over the filtered list). Personal
   // rows are just their display order, so the array index is the rank fallback.
   const positioned = rows.map((row, index) => ({ row, position: row.position ?? index + 1 }))
-  const mePosition = meId ? positioned.find(entry => entry.row.userId === meId)?.position : undefined
-  const windowed =
-    mePosition !== undefined &&
-    mePosition > TOP_VISIBLE + WINDOW_BUFFER &&
-    positioned.length > TOP_VISIBLE + WINDOW_BUFFER
-  const topRows = windowed ? positioned.filter(entry => entry.position <= TOP_VISIBLE) : positioned
-  const aroundRows =
-    windowed && mePosition !== undefined
-      ? positioned.filter(
-          entry => entry.position >= mePosition - WINDOW_BUFFER && entry.position <= mePosition + WINDOW_BUFFER
-        )
-      : []
+  const neighborEntries = neighbors.map((row, index) => ({ row, position: row.position ?? index + 1 }))
+  const windowed = neighborEntries.length > 0 && (mePosition == null || mePosition > TOP_VISIBLE + WINDOW_BUFFER)
+  const topRows = windowed ? positioned.slice(0, TOP_VISIBLE) : positioned
 
   function renderRow(entry: { row: RankingRow; position: number }) {
     const { row, position } = entry
@@ -132,7 +129,7 @@ export default function RankingList({
             …
           </li>
         )}
-        {aroundRows.map(renderRow)}
+        {windowed && neighborEntries.map(renderRow)}
       </ol>
     </section>
   )

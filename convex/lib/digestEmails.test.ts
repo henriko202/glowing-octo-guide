@@ -21,7 +21,7 @@ const input: DigestInput = {
   movement: 3,
   peopleUrl: 'https://app.example/people',
   rankingsUrl: 'https://app.example/rankings',
-  unsubscribeUrl: 'https://site.convex.site/unsubscribe/digest?token=t',
+  unsubscribeUrl: 'https://app.example/unsubscribe?token=t',
   settingsUrl: 'https://app.example/settings',
   supportEmail: 'support@example.com',
   includePostalAddress: false
@@ -33,6 +33,14 @@ describe('digestEmail', () => {
       const subject = digestEmail(l, input).subject
       expect(subject).toContain('3')
       expect(subject).toContain('1')
+    }
+  })
+
+  it('falls back to the plain summary subject when nothing was received', () => {
+    const expected = { en: 'Activity summary', pt: 'Resumo de atividades', es: 'Resumen de actividades' } as const
+    for (const l of LOCALES) {
+      const m = digestEmail(l, { ...input, receivedReactions: 0, receivedComments: 0 })
+      expect(m.subject).toBe(expected[l])
     }
   })
 
@@ -87,6 +95,12 @@ describe('digestEmail', () => {
     expect(digestEmail('en', { ...input, movement: 3 }).text).toContain('up 3 positions')
     expect(digestEmail('en', { ...input, movement: -2 }).text).toContain('down 2 positions')
     expect(digestEmail('en', { ...input, movement: 0 }).text).toContain('same position')
+  })
+
+  it('singularizes a one-place move in every locale', () => {
+    expect(digestEmail('en', { ...input, movement: 1 }).text).toContain('up 1 position since')
+    expect(digestEmail('pt', { ...input, movement: 1 }).text).toContain('subiu 1 posição desde')
+    expect(digestEmail('es', { ...input, movement: 1 }).text).toContain('Subiste 1 puesto desde')
   })
 
   it('omits the movement line when movement is null', () => {

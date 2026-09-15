@@ -73,6 +73,53 @@ describe('notifications queries', () => {
     expect(page.page).toEqual([])
   })
 
+  test('getUnreadCount does not count an unread row whose actor is banned', async () => {
+    const t = convexTest(schema, modules)
+    const { me, post } = await seed(t)
+    const banned = await t.run(async ctx =>
+      ctx.db.insert('users', {
+        linkedinId: 'banned',
+        name: 'Banned',
+        subscriptionStatus: 'none',
+        createdAt: NOW,
+        isBanned: true
+      })
+    )
+    await t.run(async ctx => {
+      const rows = await ctx.db.query('notifications').collect()
+      await ctx.db.patch(rows[0]._id, { createdAt: NOW })
+      await ctx.db.insert('notifications', {
+        recipientId: me,
+        actorId: banned,
+        postId: post,
+        kind: 'reaction' as const,
+        createdAt: NOW + 1000
+      })
+    })
+    // Only Ana's older comment is visible, so the banned actor's newer row cannot light the badge.
+    expect(await t.query(api.notifications.getUnreadCount, { sessionToken: 'tok' })).toBe(1)
+  })
+
+  test('getUnreadCount caps the 9+ badge at 10 even with more visible unread rows', async () => {
+    const t = convexTest(schema, modules)
+    const { me } = await seed(t)
+    await t.run(async ctx => {
+      const post = await ctx.db.query('posts').first()
+      if (!post) throw new Error('seed post missing')
+      for (let i = 0; i < 11; i += 1) {
+        await ctx.db.insert('notifications', {
+          recipientId: me,
+          actorId: me,
+          postId: post._id,
+          kind: 'reaction' as const,
+          createdAt: NOW + i
+        })
+      }
+    })
+    // 12 visible unread rows exist (Ana's seed row plus 11 here); the badge number stops at 10.
+    expect(await t.query(api.notifications.getUnreadCount, { sessionToken: 'tok' })).toBe(10)
+  })
+
   test('getLatest returns the actor name and post link for the toast', async () => {
     const t = convexTest(schema, modules)
     await seed(t)
@@ -87,8 +134,12 @@ describe('notifications queries', () => {
   test('listMine and getLatest carry actorId and total for a record row', async () => {
     const t = convexTest(schema, modules)
     const { me, post } = await seed(t)
-    await t.run(async ctx =>
-      ctx.db.insert('notifications', {
+    await t.run(async ctx => {
+      // Pin the seeded comment to NOW so the record row below is unambiguously the newest, no matter how long
+      // after module load this test runs (the seed writes its notification with the real Date.now()).
+      const rows = await ctx.db.query('notifications').collect()
+      await ctx.db.patch(rows[0]._id, { createdAt: NOW })
+      await ctx.db.insert('notifications', {
         recipientId: me,
         actorId: me,
         postId: post,
@@ -96,7 +147,7 @@ describe('notifications queries', () => {
         total: 5,
         createdAt: NOW + 1000
       })
-    )
+    })
     const page = await t.query(api.notifications.listMine, {
       sessionToken: 'tok',
       paginationOpts: { numItems: 10, cursor: null }

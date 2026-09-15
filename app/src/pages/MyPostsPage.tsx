@@ -136,12 +136,16 @@ export default function MyPostsPage() {
   // The cap a bought post gets: plan cap + this tier's bonus. Undefined until the limits load.
   const newCap = planCap === undefined ? undefined : effectiveInteractionCap(planCap, FEATURED_CAP_BONUS[tier])
   const featuredUnlimited = featuredUsage != null && isUnlimitedFeatured(featuredUsage.featuredPerMonth)
+  // The $5 add-on's blocker keys on the tier's cap bonus: a tier with none (contact) has
+  // NOTHING_TO_BUY server-side. Contact's featured cap is now a finite 5, so the old
+  // isUnlimitedFeatured-only guard no longer covers it on its own.
+  const canBuyAddon = FEATURED_CAP_BONUS[tier] > 0
   const atLimit = usage != null && usage.postsThisWeek >= usage.postsPerWeek
   const featuredAtCap = featuredUsage != null && featuredUsage.usedCount >= featuredUsage.featuredPerMonth
-  // Hidden for a bought post, an unlimited tier, anyone the card gate would stop at the purchase,
-  // a canceled member (backlog/R17 A2): assertCanEngage lets them buy server-side — they're
-  // still inside their paid window — but a $5 feature for a post that leaves the feed once that
-  // window ends is a bad sale. The server stays permissive; the UI is what actually says no.
+  // Hidden for a bought post, an unlimited tier, a tier with no cap bonus (contact), anyone the card
+  // gate would stop at the purchase, a canceled member (backlog/R17 A2): assertCanEngage lets them buy
+  // server-side — they're still inside their paid window — but a $5 feature for a post that leaves the
+  // feed once that window ends is a bad sale. The server stays permissive; the UI is what actually says no.
   // Also hidden while the post is itself hidden (F1): a hidden post's inFeed stays false even once
   // bought (convex/lib/featuredPurchase.ts), so the $5 promise can't hold until the member unhides.
   // canBuy is recomputed per render, so unhiding re-enables the control on its own.
@@ -153,6 +157,7 @@ export default function MyPostsPage() {
     // which is the only window where a second Checkout Session is possible.
     confirmingPostId !== post._id &&
     !featuredUnlimited &&
+    canBuyAddon &&
     !gated &&
     me?.subscriptionStatus !== 'canceled' &&
     newCap !== undefined
@@ -189,8 +194,9 @@ export default function MyPostsPage() {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl })
     // backlog/R17 order bump: one line, no second action — the new card below carries the control.
-    // Members who cannot buy (card-gated, unlimited tier, canceled — F2) get the plain "feature it" line.
-    const bump = featuredAtCap && !gated && !featuredUnlimited && me?.subscriptionStatus !== 'canceled'
+    // Members who cannot buy (card-gated, unlimited tier, no-bonus contact, canceled — F2) get the
+    // plain "feature it" line.
+    const bump = featuredAtCap && !gated && !featuredUnlimited && canBuyAddon && me?.subscriptionStatus !== 'canceled'
     toast(
       t(bump ? 'myPosts.postAddedBuy' : 'myPosts.postAddedFeature', {
         price: usdLabel(i18n.language, FEATURED_POST_PRICE)

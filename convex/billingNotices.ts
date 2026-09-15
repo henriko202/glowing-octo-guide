@@ -63,7 +63,7 @@ export const sendTrialNearEnd = internalAction({
 
     const locale = resolveBillingLocale(c.language, c.primaryLocale)
     const combined = c.made + c.received
-    const graph = await ctx.runQuery(internal.rankings.getTrialGraphSummary, { userId })
+    const graph = await ctx.runQuery(internal.rankings.getGraphSummary, { userId })
     const m = trialNearEndEmail(locale, {
       made: c.made,
       received: c.received,
@@ -201,6 +201,9 @@ export const sendPostCapReached = internalAction({
     const mode = capNoticeMode(tier, limits.interactionsPerPost, nextLimits?.interactionsPerPost)
     const locale = resolveBillingLocale(c.language, c.primaryLocale)
     const appUrl = env.APP_URL ?? 'http://localhost:5173'
+    // RCD follow-up — the author's live board standing, so the cap notice also says where the post's
+    // author actually sits. Missing snapshot ⇒ nulls and the builder drops the sentence.
+    const graph = await ctx.runQuery(internal.rankings.getGraphSummary, { userId: post.authorId })
 
     const m = postCapReachedEmail(locale, {
       excerpt: excerpt(post.content),
@@ -216,7 +219,9 @@ export const sendPostCapReached = internalAction({
         ? `${appUrl}/billing?plan=${next}&interval=${billingIntervalParam(live?.priceInterval)}&src=cap_email`
         : undefined,
       myPostsUrl: `${appUrl}/my-posts`,
-      supportEmail: SUPPORT_EMAIL
+      supportEmail: SUPPORT_EMAIL,
+      position: graph?.position,
+      gapToNext: graph?.gapToNext
     })
     await deliver('post_cap_reached', to, m)
   }

@@ -10,18 +10,24 @@ import type { ActionCtx } from '../_generated/server'
 import type { Doc, Id } from '../_generated/dataModel'
 import { internal } from '../_generated/api'
 import { sendEmail } from '../lib/email'
+import type { EmailContent } from '../lib/email'
 import { digestEmail, digestFeatureNote, type DigestInput } from '../lib/digestEmails'
 import { isDigestDue } from '../lib/digest'
 import { digestWindow, movement, pickPreviousGeneration, positionOf } from '../lib/ranking'
 import { signUnsubscribeToken } from '../lib/unsubscribeToken'
 import { resolveBillingLocale } from '../lib/checkoutCopy'
-import { writeAuditLog, type AuditDb } from '../lib/audit'
+import { disableDigest, type DigestOptOutDb } from '../lib/digestOptOut'
 import { SUPPORT_EMAIL } from '../lib/support'
 import { tallyMadeByPerson, tallyReceivedByPerson, type InteractionRow } from '../lib/interactionGraph'
 import { RECAP_ROW_CEILING } from '../lib/recap'
 import { scrubError } from '../lib/scrubError'
+import { settledInBatches } from '../lib/concurrency'
 
 const PAGE_SIZE = 50
+// Resend throttles per second, so keep the fan-out small: 5 members in flight (each up to three dependent
+// sub-requests) stays well under the provider limit while draining a 50-member page in ~10 waves instead of
+// 50 serial round-trips.
+const DIGEST_SEND_CONCURRENCY = 5
 const DIGEST_WINDOW = '7d' as const // site board window used in the email; the personal numbers use the 3-day window
 
 export const getUsersPage = internalQuery({
@@ -38,15 +44,7 @@ export const getUserForSend = internalQuery({
 export const disableDigestByUserId = internalMutation({
   args: { userId: v.id('users') },
   handler: async (ctx, { userId }) => {
-    const user = await ctx.db.get(userId)
-    if (!user || user.digestEmailsEnabled === false) return
-    await ctx.db.patch(userId, { digestEmailsEnabled: false })
-    await writeAuditLog(ctx.db as unknown as AuditDb, {
-      actor: 'user',
-      actorId: userId,
-      action: 'digest_unsubscribed_email',
-      targetUserId: userId
-    })
+    await disableDigest(ctx.db as unknown as DigestOptOutDb, userId, 'digest_unsubscribed_email')
   }
 })
 
@@ -182,37 +180,47 @@ export const sendDueDigests = internalAction({
       paginationOpts: { numItems: PAGE_SIZE, cursor: cursor ?? null }
     })
     const due = page.page.filter(user => isDigestDue(user, now))
-    for (const user of due) {
-      // One bad recipient (provider error, corrupt row) must not abort the sweep: the cursor continuation below
-      // still has to run, or the same failed page restarts the next day and starves every later member.
+    // Bounded fan-out (the jobs/syncPostsApify settledInBatches pattern): settledInBatches never rejects, and the
+    // per-user try/catch still isolates a bad recipient (provider error, corrupt row) so it cannot abort the sweep —
+    // the cursor continuation below has to run, or the same failed page restarts the next day and starves every
+    // later member.
+    await settledInBatches(due, DIGEST_SEND_CONCURRENCY, async user => {
       try {
         await settleDigest(ctx, user, { now, secret, appUrl, siteUrl })
       } catch (error) {
         console.error('[digest] send failed', scrubError({ userId: user._id, error }))
       }
-    }
+    })
     if (!page.isDone) {
       await ctx.scheduler.runAfter(0, internal.jobs.digest.sendDueDigests, { cursor: page.continueCursor })
     }
   }
 })
 
-async function settleDigest(
+/** The composed digest plus what the caller needs to decide whether to send it. */
+export interface DigestComposition {
+  message: EmailContent
+  total: number
+  headers: { 'List-Unsubscribe': string; 'List-Unsubscribe-Post': string }
+}
+
+/**
+ * Builds one member's digest email — window data, display names, app/site URLs, signed unsubscribe token and the
+ * rendered message. Shared by the daily sweep and the dev-only test tool (`convex/dev.ts`), so a manual send
+ * exercises the exact production composition. The empty-digest policy stays with the caller: the sweep skips at
+ * `total === 0`, while the dev tool sends anyway so the fallback subject (`subjectEmpty`) can be exercised.
+ */
+export async function composeDigest(
   ctx: ActionCtx,
   user: Doc<'users'>,
   ctxArgs: { now: number; secret: string; appUrl: string; siteUrl: string }
-): Promise<void> {
-  // The sweep filtered a page read earlier; an unsubscribe (or ban, or deletion request) can land while this
-  // member waits in the send loop. Re-read now and let isDigestDue decide: opt-out wins over the queued send.
-  const fresh = await ctx.runQuery(internal.jobs.digest.getUserForSend, { userId: user._id })
-  if (!fresh || !isDigestDue(fresh, ctxArgs.now)) return
+): Promise<DigestComposition> {
   const data = await ctx.runQuery(internal.jobs.digest.getDigestData, {
     userId: user._id,
     lastDigestAt: user.lastDigestAt,
     now: ctxArgs.now
   })
   const total = data.made.reactions + data.made.comments + data.received.reactions + data.received.comments
-  if (total === 0) return // empty digest is spam; skip until there is something to report
   const names = await ctx.runQuery(internal.jobs.digest.getDisplayNames, {
     userIds: [
       ...data.topReceived.map(e => e.userId),
@@ -224,6 +232,10 @@ async function settleDigest(
   const nameOf = (id: string) => names.find(n => n.id === id)?.name ?? ''
   const token = await signUnsubscribeToken(user._id as string, ctxArgs.secret)
   const locale = resolveBillingLocale(user.language, user.primaryLocale)
+  // The footer link is the human path and lives on the app (a localized page); the RFC 8058 one-click target must
+  // stay on Convex because a mail client POSTs to it and the SPA cannot receive a POST.
+  const unsubscribeUrl = `${ctxArgs.appUrl}/unsubscribe?token=${token}`
+  const oneClickUrl = `${ctxArgs.siteUrl.replace(/\/$/, '')}/unsubscribe/digest?token=${token}`
   const input: DigestInput = {
     name: user.name,
     since: data.since,
@@ -242,21 +254,38 @@ async function settleDigest(
     featureNote: digestFeatureNote(ctxArgs.now, locale),
     peopleUrl: `${ctxArgs.appUrl}/people`,
     rankingsUrl: `${ctxArgs.appUrl}/rankings`,
-    unsubscribeUrl: `${ctxArgs.siteUrl.replace(/\/$/, '')}/unsubscribe/digest?token=${token}`,
+    unsubscribeUrl,
     settingsUrl: `${ctxArgs.appUrl}/settings`,
     supportEmail: SUPPORT_EMAIL,
     includePostalAddress: true
   }
-  const message = digestEmail(locale, input)
+  return {
+    message: digestEmail(locale, input),
+    total,
+    headers: {
+      'List-Unsubscribe': `<${oneClickUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+    }
+  }
+}
+
+async function settleDigest(
+  ctx: ActionCtx,
+  user: Doc<'users'>,
+  ctxArgs: { now: number; secret: string; appUrl: string; siteUrl: string }
+): Promise<void> {
+  // The sweep filtered a page read earlier; an unsubscribe (or ban, or deletion request) can land while this
+  // member waits in the send loop. Re-read now and let isDigestDue decide: opt-out wins over the queued send.
+  const fresh = await ctx.runQuery(internal.jobs.digest.getUserForSend, { userId: user._id })
+  if (!fresh || !isDigestDue(fresh, ctxArgs.now)) return
+  const { message, total, headers } = await composeDigest(ctx, fresh, ctxArgs)
+  if (total === 0) return // empty digest is spam; skip until there is something to report
   const result = await sendEmail({
-    to: user.email!,
+    to: fresh.email!,
     subject: message.subject,
     html: message.html,
     text: message.text,
-    headers: {
-      'List-Unsubscribe': `<${input.unsubscribeUrl}>`,
-      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
-    }
+    headers
   })
-  if (result.sent) await ctx.runMutation(internal.jobs.digest.markDigestSent, { userId: user._id })
+  if (result.sent) await ctx.runMutation(internal.jobs.digest.markDigestSent, { userId: fresh._id })
 }

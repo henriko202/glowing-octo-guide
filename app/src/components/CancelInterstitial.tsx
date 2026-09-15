@@ -52,7 +52,7 @@ export default function CancelInterstitial({
   starterInteractions: number
   starterPosts: number
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const [now] = useState(() => floorToHour(Date.now()))
   // One-shot by design: the dialog only renders the numbers while it is open, so a live 4k-row recap
@@ -64,6 +64,8 @@ export default function CancelInterstitial({
   const posts = useQuery(api.posts.getMyPosts, open && sessionToken ? { sessionToken } : 'skip') as
     | OwnPost[]
     | undefined
+  // RCD follow-up — the caller's own graph, for the one truthful loss line below the end-date copy.
+  const graph = useQuery(api.rankings.getMyGraphSummary, open && sessionToken ? { sessionToken } : 'skip')
   const createCancelFlow = useAction(api.billingNode.createCancelFlowSession)
   const submitFeedback = useMutation(api.feedback.feedback.submitFeedback)
   const [message, setMessage] = useState('')
@@ -86,6 +88,21 @@ export default function CancelInterstitial({
   // getMyPosts already excludes soft-deleted posts; hidden + capped mirror computeFeedFields
   // (convex/lib/feedRank.ts) — keep in sync.
   const liveCount = posts?.filter(p => !p.hidden && !p.interactionLimitReached).length
+
+  const lossParts: string[] = []
+  if (graph) {
+    if (graph.peopleMade > 0) lossParts.push(t('billing.cancelLoss.people', { count: graph.peopleMade }))
+    if (graph.receivedReactions > 0) {
+      lossParts.push(t('billing.cancelLoss.reactions', { count: graph.receivedReactions }))
+    }
+    if (graph.position !== null) lossParts.push(t('billing.cancelLoss.position', { position: graph.position }))
+  }
+  const loss =
+    lossParts.length > 0
+      ? t('billing.cancelLoss.sentence', {
+          parts: new Intl.ListFormat(i18n.language, { style: 'long', type: 'conjunction' }).format(lossParts)
+        })
+      : null
 
   let body: ReactNode
   if (isTrialing) {
@@ -157,6 +174,7 @@ export default function CancelInterstitial({
         <DialogHeader>
           <DialogTitle>{t('billing.cancel.title')}</DialogTitle>
           <DialogDescription>{body}</DialogDescription>
+          {loss && <p className="text-muted-foreground m-0 text-sm">{loss}</p>}
         </DialogHeader>
 
         {/* Hidden during a trial: a trial runs on the plan it started on (product rule, 2026-09-09),

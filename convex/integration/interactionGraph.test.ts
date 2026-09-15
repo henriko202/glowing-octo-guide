@@ -119,6 +119,54 @@ describe('interactions people queries', () => {
     expect(result.people[0]).toMatchObject({ name: 'Ana', total: 1, postsCount: 2 })
   })
 
+  test('the made list post count is capped at 500, not 200', async () => {
+    const t = convexTest(schema, modules)
+    const { me, ana } = await seed(t)
+    await t.run(async ctx => {
+      const touched = await ctx.db.insert('posts', {
+        linkedinPostUrn: 'urn:touched',
+        authorId: ana,
+        content: 'ana',
+        publishedAt: NOW,
+        likeCount: 0,
+        commentCount: 0,
+        mediaUrls: [],
+        isFeatured: false,
+        visibilityIndustries: [],
+        visibilityCountries: [],
+        hidden: false
+      })
+      await ctx.db.insert('userInteractions', {
+        userId: me,
+        postId: touched,
+        authorId: ana,
+        kind: 'reaction' as const,
+        createdAt: NOW
+      })
+      for (let i = 0; i < 501; i += 1) {
+        await ctx.db.insert('posts', {
+          linkedinPostUrn: `urn:made-cap-${i}`,
+          authorId: ana,
+          content: 'ana',
+          publishedAt: NOW - i,
+          likeCount: 0,
+          commentCount: 0,
+          mediaUrls: [],
+          isFeatured: false,
+          visibilityIndustries: [],
+          visibilityCountries: [],
+          hidden: false
+        })
+      }
+    })
+    const result = await t.query(api.interactions.listPeopleIInteractedWith, {
+      sessionToken: 'tok',
+      window: '7d',
+      now: NOW
+    })
+    expect(result.people[0]).toMatchObject({ name: 'Ana', total: 1, postsCount: 500 })
+  })
+
   test('banned counterparts disappear from the made list and the by-post actors', async () => {
     const t = convexTest(schema, modules)
     const { me, ana } = await seed(t)

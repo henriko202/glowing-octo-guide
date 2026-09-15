@@ -159,15 +159,19 @@ describe('RankingList', () => {
     expect(screen.queryByText('…')).not.toBeInTheDocument()
   })
 
-  it('windows to the member plus two either side once they are beyond the buffer', () => {
+  it('renders the first 10 rows, a separator and the server neighbor slice', () => {
+    const rows = rankedRows(20, 15)
     const { container } = render(
       <RankingList
         titleKey="rankings.topInteractors"
         variant="interactors"
-        rows={rankedRows(20, 15)}
+        rows={rows}
+        neighbors={rows.slice(12, 17)}
+        mePosition={15}
         meId="me"
       />
     )
+    // 10 top rows + the separator + the five neighbor rows; the separator is not a rank row.
     expect(container.querySelectorAll('li')).toHaveLength(16)
     expect(screen.getByText('Person 15').closest('li')).toHaveClass('ring-primary/40', 'ring-1')
     expect(screen.getByText('Person 10')).toBeInTheDocument()
@@ -177,14 +181,18 @@ describe('RankingList', () => {
     expect(screen.getByText('Person 17')).toBeInTheDocument()
     expect(screen.queryByText('Person 18')).not.toBeInTheDocument()
     expect(screen.getByText('…')).toHaveAttribute('aria-hidden', 'true')
+    // Neighbor rows keep their server positions, so the rank numbers jump across the gap.
+    expect(screen.getByLabelText('rankings.rankLabel{"rank":13}')).toHaveTextContent('13')
+    expect(screen.getByLabelText('rankings.rankLabel{"rank":17}')).toHaveTextContent('17')
   })
 
-  it('shows the top rows without a separator when the member is beyond the returned list', () => {
+  it('shows the top rows without a separator when the server sends no neighbors', () => {
     const { container } = render(
       <RankingList
         titleKey="rankings.topInteractors"
         variant="interactors"
         rows={rankedRows(20, 99)}
+        mePosition={99}
         meId="me"
       />
     )

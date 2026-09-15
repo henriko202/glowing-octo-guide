@@ -13,6 +13,8 @@ import { stripLoneSurrogates } from './lib/safeText'
 import { clampHistoryPageSize } from './interactions'
 
 const MARK_ALL_BATCH = 100
+// The bell renders "9+" past nine, so the exact number never needs to exceed the cap.
+const UNREAD_BADGE_CAP = 10
 
 interface NotificationRow {
   id: string
@@ -33,14 +35,14 @@ interface NotificationRow {
   removed: boolean
 }
 
+function isVisibleActor(actor: Doc<'users'> | null): actor is Doc<'users'> {
+  return actor !== null && !actor.isBanned && actor.deletionScheduledAt === undefined
+}
+
 async function resolveActors(ctx: Parameters<typeof requireAuth>[0], ids: Id<'users'>[]) {
   const unique = [...new Set(ids.map(id => id as string))]
   const users = await Promise.all(unique.map(id => ctx.db.get(id as Id<'users'>)))
-  return new Map(
-    users
-      .filter((u): u is Doc<'users'> => u !== null && !u.isBanned && u.deletionScheduledAt === undefined)
-      .map(u => [u._id as string, u])
-  )
+  return new Map(users.filter(isVisibleActor).map(u => [u._id as string, u]))
 }
 
 async function resolvePosts(ctx: Parameters<typeof requireAuth>[0], ids: Id<'posts'>[]) {
@@ -100,6 +102,12 @@ export const listMine = query({
   }
 })
 
+/**
+ * Counts only VISIBLE unread rows — the same actor predicate as listMine (actor exists, not banned, not pending
+ * deletion) — so a row hidden from the inbox can never light the badge. The result is capped at 10 because the
+ * bell renders "9+" past nine. The scan is bounded to one mark-all batch, actor reads are cached per id (one
+ * actor commonly owns many rows), and the loop stops as soon as the cap is reached.
+ */
 export const getUnreadCount = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
@@ -108,7 +116,20 @@ export const getUnreadCount = query({
       .query('notifications')
       .withIndex('by_recipient_and_read_at', q => q.eq('recipientId', user._id).eq('readAt', undefined))
       .take(MARK_ALL_BATCH)
-    return rows.length
+    const cache = new Map<string, boolean>()
+    let count = 0
+    for (const row of rows) {
+      const actorId = row.actorId as string
+      let visible = cache.get(actorId)
+      if (visible === undefined) {
+        visible = isVisibleActor(await ctx.db.get(row.actorId))
+        cache.set(actorId, visible)
+      }
+      if (!visible) continue
+      count += 1
+      if (count === UNREAD_BADGE_CAP) break
+    }
+    return count
   }
 })
 

@@ -31,7 +31,11 @@ function Row({ row }: { row: HistoryRow }) {
   const aiDraft = row.kind === 'ai_draft'
   const long = (row.kind === 'comment' || aiDraft) && !!row.comment && isLong(row.comment)
   const when = new Date(row.createdAt)
-  const label = reaction ? t(reaction.labelKey) : aiDraft ? t('history.aiDrafted') : t('history.commented')
+  const label = reaction
+    ? t('history.youReactedWith', { reaction: t(reaction.labelKey) })
+    : aiDraft
+      ? t('history.youDrafted')
+      : t('history.youCommented')
   return (
     <li className="border-border bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">

@@ -53,9 +53,10 @@ beforeEach(() => {
 })
 
 describe('HistoryPage', () => {
-  it('renders reactions by label, comments verbatim, author, removed badges and post links', () => {
+  it('renders first-person action labels, comments verbatim, author, removed badges and post links', () => {
     renderPage()
-    expect(screen.getByText('Celebrate')).toBeInTheDocument()
+    expect(screen.getByText('You reacted with Celebrate')).toBeInTheDocument()
+    expect(screen.getByText('You commented')).toBeInTheDocument()
     expect(screen.getByText(/Great point/)).toBeInTheDocument()
     expect(screen.getByText('by Ana')).toBeInTheDocument()
     expect(screen.getAllByText('Post removed')).toHaveLength(2)
@@ -73,7 +74,7 @@ describe('HistoryPage', () => {
     expect(mockPaginated.loadMore).toHaveBeenCalledWith(20)
   })
 
-  it('renders an AI draft row with its label and the draft text', () => {
+  it('renders an AI draft row with its first-person label and the draft text', () => {
     mockPaginated = {
       results: [
         {
@@ -88,7 +89,7 @@ describe('HistoryPage', () => {
       loadMore: vi.fn()
     }
     renderPage()
-    expect(screen.getByText('AI comment drafted')).toBeInTheDocument()
+    expect(screen.getByText('You used an AI draft')).toBeInTheDocument()
     expect(screen.getByText('A drafted comment.')).toBeInTheDocument()
   })
 

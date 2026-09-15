@@ -23,12 +23,16 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }
 
 import EmailPreferences from './EmailPreferences'
 
-function renderComponent() {
-  return render(
+function renderUi() {
+  return (
     <MemoryRouter>
       <EmailPreferences />
     </MemoryRouter>
   )
+}
+
+function renderComponent() {
+  return render(renderUi())
 }
 
 describe('EmailPreferences', () => {
@@ -105,5 +109,21 @@ describe('EmailPreferences', () => {
     expect(digest).toBeDisabled()
     resolveSave()
     await waitFor(() => expect(digest).not.toBeDisabled())
+  })
+
+  it('clears the optimistic override once a successful save settles, so a later server value renders', async () => {
+    const { rerender } = renderComponent()
+    const digest = screen.getByLabelText('settings.emails.digest') as HTMLInputElement
+    fireEvent.click(digest)
+    expect(digest.checked).toBe(false)
+    await waitFor(() => expect(digest).not.toBeDisabled())
+    // The server acknowledged the save...
+    prefsVal = { digestEmailsEnabled: false, leaderboardOptOut: false }
+    rerender(renderUi())
+    expect((screen.getByLabelText('settings.emails.digest') as HTMLInputElement).checked).toBe(false)
+    // ...then a change from elsewhere re-enables it; a pinned optimistic false would mask this.
+    prefsVal = { digestEmailsEnabled: true, leaderboardOptOut: false }
+    rerender(renderUi())
+    expect((screen.getByLabelText('settings.emails.digest') as HTMLInputElement).checked).toBe(true)
   })
 })

@@ -23,7 +23,7 @@ const tierLimits = {
   starter: { interactionsPerPost: 25, postsPerWeek: 1, featuredPerMonth: 0 },
   growth: { interactionsPerPost: 50, postsPerWeek: 2, featuredPerMonth: 1 },
   pro: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 3 },
-  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 9999 }
+  contact: { interactionsPerPost: 200, postsPerWeek: 5, featuredPerMonth: 5 }
 }
 
 vi.mock('convex/react', () => ({

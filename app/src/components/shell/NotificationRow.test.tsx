@@ -45,6 +45,29 @@ describe('NotificationRow', () => {
     expect(screen.getByText('Ana reacted to your post').closest('li')).not.toHaveClass('bg-muted/60')
   })
 
+  it('shows the View on LinkedIn affordance on live rows and never on removed rows', () => {
+    const { rerender } = render(
+      <ul>
+        <NotificationRow
+          row={makeRow()}
+          timeLabel="just now"
+        />
+      </ul>
+    )
+    const link = screen.getByRole('link', { name: /Ana reacted/ })
+    expect(link).toHaveTextContent('View on LinkedIn ↗')
+    expect(link.querySelector('svg')).toBeInTheDocument()
+    rerender(
+      <ul>
+        <NotificationRow
+          row={makeRow({ removed: true })}
+          timeLabel="just now"
+        />
+      </ul>
+    )
+    expect(screen.queryByText('View on LinkedIn ↗')).not.toBeInTheDocument()
+  })
+
   it('renders the unread dot only for unread rows', () => {
     const { rerender } = render(
       <ul>
@@ -112,7 +135,7 @@ describe('NotificationRow', () => {
         />
       </ul>
     )
-    expect(screen.getByText('New record: your post reached 5 interactions, your best so far.')).toBeInTheDocument()
+    expect(screen.getByText('Your post set a new record with 5 interactions.')).toBeInTheDocument()
     expect(screen.queryByText(/Ana reacted/)).not.toBeInTheDocument()
     expect(screen.getByText('just now')).toBeInTheDocument()
   })
@@ -126,6 +149,6 @@ describe('NotificationRow', () => {
         />
       </ul>
     )
-    expect(screen.getByText('New record: your post reached 0 interactions, your best so far.')).toBeInTheDocument()
+    expect(screen.getByText('Your post set a new record with 0 interactions.')).toBeInTheDocument()
   })
 })
