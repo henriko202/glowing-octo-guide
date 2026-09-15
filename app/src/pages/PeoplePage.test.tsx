@@ -21,6 +21,7 @@ vi.mock('convex/react', () => ({
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import PeoplePage from './PeoplePage'
 
 const POST = {
@@ -67,11 +68,14 @@ const MADE = {
   ]
 }
 
+// The Tooltip primitive needs a provider (mounted in main.tsx in the app).
 function renderPage(initialEntries: string[] = ['/']) {
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <PeoplePage />
-    </MemoryRouter>
+    <TooltipProvider>
+      <MemoryRouter initialEntries={initialEntries}>
+        <PeoplePage />
+      </MemoryRouter>
+    </TooltipProvider>
   )
 }
 
@@ -117,6 +121,25 @@ describe('PeoplePage', () => {
     expect(screen.getByText('Ana')).toBeInTheDocument()
     expect(screen.getByLabelText('Like')).toHaveTextContent('👍')
     expect(screen.queryByText('2 reactions, 0 comments')).not.toBeInTheDocument()
+  })
+
+  it('holds the card height with skeleton cards while the received query loads', () => {
+    mockQueryReturns = {}
+    const { container } = renderPage()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+    const skeletons = container.querySelectorAll('.animate-pulse')
+    expect(skeletons).toHaveLength(2)
+    skeletons.forEach(card => expect(card).toHaveClass('h-24'))
+  })
+
+  it('holds the row height with skeleton rows while the made query loads', () => {
+    mockQueryReturns = {}
+    const { container } = renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: 'You interacted with' }))
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+    const skeletons = container.querySelectorAll('.animate-pulse')
+    expect(skeletons).toHaveLength(3)
+    skeletons.forEach(row => expect(row).toHaveClass('h-14'))
   })
 
   it('renders the empty state when no one interacted in the window', () => {
@@ -170,6 +193,14 @@ describe('PeoplePage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'You interacted with' }))
     expect(screen.getByText('Bruno')).toBeInTheDocument()
     expect(screen.getByText('1 interaction · 2 posts')).toBeInTheDocument()
+  })
+
+  it('renders every made row as a card in the gapped list', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: 'You interacted with' }))
+    const row = screen.getByText('Bruno').closest('li')
+    expect(row).toHaveClass('rounded-xl', 'border', 'border-border', 'bg-card', 'px-3', 'py-2', 'shadow-xs')
+    expect(row?.parentElement).toHaveClass('flex', 'flex-col', 'gap-2')
   })
 
   it('shows the truncated caption when a read hit the row ceiling', () => {

@@ -3,7 +3,7 @@ import { useAction, useQuery } from 'convex/react'
 import { X } from 'lucide-react'
 import { api } from '../convex'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/ui/input' // Dev-only email test tools. Rendered from App.tsx behind import.meta.env.DEV; the backend
 
 // Dev-only email test tools. Rendered from App.tsx behind import.meta.env.DEV; the backend
 // additionally refuses every call unless ALLOW_DEV_IMPERSONATION=true on the deployment.
@@ -62,10 +62,10 @@ function EmailToolsPanel({ memberEmail, onClose }: { memberEmail: string | undef
 
   return (
     <div className="bg-background fixed right-5 bottom-[11.5rem] z-50 flex max-h-[70vh] w-80 flex-col overflow-hidden rounded-xl border shadow-xl">
-      <div className="flex items-center justify-between border-b px-3 py-2">
-        <div>
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="min-w-0">
           <p className="text-sm font-semibold">DEV · Emails</p>
-          <p className="text-muted-foreground text-xs">To: {memberEmail ?? 'no email on file'}</p>
+          <p className="text-muted-foreground truncate text-xs">To: {memberEmail ?? 'no email on file'}</p>
         </div>
         <Button
           variant="ghost"
@@ -137,7 +137,7 @@ export default function DevEmailTools() {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="fixed right-5 bottom-36 z-50 rounded-full bg-amber-400 px-3 py-2 text-xs font-bold text-black shadow-lg hover:bg-amber-300"
+        className="fixed right-5 bottom-28 z-50 rounded-full bg-amber-400 px-3 py-2 text-xs font-bold text-black shadow-lg hover:bg-amber-300"
       >
         DEV · Emails
       </button>

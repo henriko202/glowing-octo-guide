@@ -29,7 +29,7 @@ interface PersonRowData {
 function PersonRow({ person }: { person: PersonRowData }) {
   const { t } = useTranslation()
   return (
-    <li className="flex items-center gap-3 py-2">
+    <li className="border-border bg-card flex items-center gap-3 rounded-xl border px-3 py-2 shadow-xs">
       <Avatar
         name={person.name}
         src={person.profilePictureUrl}
@@ -110,7 +110,15 @@ export default function PeoplePage() {
         {tab === 'received' && (
           <>
             {byPost === undefined ? (
-              <p className="text-muted-foreground text-sm">…</p>
+              <div
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+                className="flex flex-col gap-2"
+              >
+                <div className="bg-muted h-24 animate-pulse rounded-xl" />
+                <div className="bg-muted h-24 animate-pulse rounded-xl" />
+              </div>
             ) : byPost.posts.length === 0 ? (
               <>
                 <p className="text-muted-foreground text-sm">{t('people.emptyReceived')}</p>
@@ -136,12 +144,21 @@ export default function PeoplePage() {
         {tab === 'made' && (
           <>
             {made === undefined ? (
-              <p className="text-muted-foreground text-sm">…</p>
+              <div
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+                className="flex flex-col gap-2"
+              >
+                <div className="bg-muted h-14 animate-pulse rounded-xl" />
+                <div className="bg-muted h-14 animate-pulse rounded-xl" />
+                <div className="bg-muted h-14 animate-pulse rounded-xl" />
+              </div>
             ) : made.people.length === 0 ? (
               <p className="text-muted-foreground text-sm">{t('people.emptyMade')}</p>
             ) : (
               <>
-                <ul className="m-0 flex list-none flex-col p-0">
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
                   {made.people.map(entry => (
                     <PersonRow
                       key={entry.userId}

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp, MessageSquare, ThumbsUp } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { buildPostUrl } from '@/components/LinkedInEmbed'
 import { timeAgo } from '@/lib/relativeDay'
 import { type Reaction, REACTIONS } from '../../../convex/lib/reactions'
@@ -144,13 +145,18 @@ export default function PeopleAccordion({ posts }: { posts: AccordionPost[] }) {
                       />
                     )}
                     <span className="text-foreground flex-1 truncate">{actor.name}</span>
-                    <span
-                      className="text-muted-foreground shrink-0 text-xs"
-                      title={exactTime.format(actor.lastAt)}
-                      aria-label={exactTime.format(actor.lastAt)}
-                    >
-                      {timeAgo(actor.lastAt, t)}
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className="text-muted-foreground shrink-0 text-xs"
+                          tabIndex={0}
+                          aria-label={exactTime.format(actor.lastAt)}
+                        >
+                          {timeAgo(actor.lastAt, t)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>{exactTime.format(actor.lastAt)}</TooltipContent>
+                    </Tooltip>
                   </li>
                 ))}
                 {!post.removed && (

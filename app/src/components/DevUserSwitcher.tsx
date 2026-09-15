@@ -162,7 +162,7 @@ export default function DevUserSwitcher() {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="fixed right-5 bottom-20 z-50 rounded-full bg-amber-400 px-3 py-2 text-xs font-bold text-black shadow-lg hover:bg-amber-300"
+        className="fixed right-5 bottom-18 z-50 rounded-full bg-amber-400 px-3 py-2 text-xs font-bold text-black shadow-lg hover:bg-amber-300"
       >
         DEV · Impersonate
       </button>

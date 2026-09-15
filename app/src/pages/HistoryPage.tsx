@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import WindowToggle, { type ToggleWindow } from '@/components/WindowToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { buildPostUrl } from '@/components/LinkedInEmbed'
 import { timeAgo } from '@/lib/relativeDay'
 import { cn } from '@/lib/utils'
@@ -24,47 +25,97 @@ function isLong(comment: string): boolean {
   return comment.length > LONG_CHARS || comment.split('\n').length > LONG_LINES
 }
 
-function Row({ row }: { row: HistoryRow }) {
-  const { t, i18n } = useTranslation()
-  const [expanded, setExpanded] = useState(false)
-  const reaction = row.kind === 'reaction' ? REACTIONS.find(r => r.value === row.reaction) : undefined
-  const aiDraft = row.kind === 'ai_draft'
-  const long = (row.kind === 'comment' || aiDraft) && !!row.comment && isLong(row.comment)
-  const when = new Date(row.createdAt)
+type HistoryAction = Pick<HistoryRow, 'id' | 'kind' | 'reaction' | 'comment' | 'createdAt'>
+
+interface HistoryGroup {
+  key: string
+  post: HistoryRow['post']
+  createdAt: number
+  actions: HistoryAction[]
+}
+
+/** Fold consecutive rows on the same post into one group; rows without a post never group. */
+function groupHistory(rows: HistoryRow[]): HistoryGroup[] {
+  const groups: HistoryGroup[] = []
+  for (const row of rows) {
+    const last = groups[groups.length - 1]
+    if (row.post !== null && last?.post?.id === row.post.id) {
+      last.actions.push(row)
+      last.createdAt = Math.max(last.createdAt, row.createdAt)
+      continue
+    }
+    groups.push({ key: row.id, post: row.post, createdAt: row.createdAt, actions: [row] })
+  }
+  return groups
+}
+
+/** The one body shown per group: the newest comment wins, else the newest AI draft with text. */
+function groupBody(group: HistoryGroup): string | undefined {
+  const comment = group.actions.find(action => action.kind === 'comment' && action.comment)
+  return (comment ?? group.actions.find(action => action.kind === 'ai_draft' && action.comment))?.comment
+}
+
+function ActionChip({ action }: { action: HistoryAction }) {
+  const { t } = useTranslation()
+  const reaction = action.kind === 'reaction' ? REACTIONS.find(r => r.value === action.reaction) : undefined
+  const aiDraft = action.kind === 'ai_draft'
   const label = reaction
     ? t('history.youReactedWith', { reaction: t(reaction.labelKey) })
     : aiDraft
       ? t('history.youDrafted')
       : t('history.youCommented')
   return (
+    <Badge className="gap-1">
+      {/* Glyph and label are separate nodes so AT reads only the label, never the glyph. */}
+      {reaction ? (
+        <span aria-hidden="true">{reaction.emoji}</span>
+      ) : aiDraft ? (
+        <Sparkles
+          aria-hidden="true"
+          className="size-3.5 shrink-0"
+        />
+      ) : (
+        <MessageSquare
+          aria-hidden="true"
+          className="size-3.5 shrink-0"
+        />
+      )}
+      <span>{label}</span>
+    </Badge>
+  )
+}
+
+function GroupCard({ group }: { group: HistoryGroup }) {
+  const { t, i18n } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+  const body = groupBody(group)
+  const long = body !== undefined && isLong(body)
+  const when = new Date(group.createdAt)
+  return (
     <li className="border-border bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Badge className="gap-1">
-          {/* Glyph and label are separate nodes so AT reads only the label, never the glyph. */}
-          {reaction ? (
-            <span aria-hidden="true">{reaction.emoji}</span>
-          ) : aiDraft ? (
-            <Sparkles
-              aria-hidden="true"
-              className="size-3.5 shrink-0"
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <span className="flex flex-wrap items-center gap-1">
+          {group.actions.map(action => (
+            <ActionChip
+              key={action.id}
+              action={action}
             />
-          ) : (
-            <MessageSquare
-              aria-hidden="true"
-              className="size-3.5 shrink-0"
-            />
-          )}
-          <span>{label}</span>
-        </Badge>
-        <time
-          dateTime={when.toISOString()}
-          title={when.toLocaleString(i18n.language)}
-          className="text-muted-foreground shrink-0 text-xs"
-        >
-          {timeAgo(row.createdAt, t)}
-        </time>
+          ))}
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <time
+              dateTime={when.toISOString()}
+              className="text-muted-foreground shrink-0 text-xs"
+              tabIndex={0}
+            >
+              {timeAgo(group.createdAt, t)}
+            </time>
+          </TooltipTrigger>
+          <TooltipContent>{when.toLocaleString(i18n.language)}</TooltipContent>
+        </Tooltip>
       </div>
-      {(row.kind === 'comment' || aiDraft) && row.comment && (
+      {body && (
         <>
           <p
             className={cn(
@@ -72,7 +123,7 @@ function Row({ row }: { row: HistoryRow }) {
               long && !expanded && 'line-clamp-6'
             )}
           >
-            {row.comment}
+            {body}
           </p>
           {long && (
             <button
@@ -87,16 +138,16 @@ function Row({ row }: { row: HistoryRow }) {
         </>
       )}
       <div className="text-xs">
-        {row.post ? (
+        {group.post ? (
           <div className="flex flex-col gap-1">
-            <p className={cn('m-0 line-clamp-2', row.post.removed ? 'text-muted-foreground' : 'text-foreground')}>
-              {row.post.excerpt}
+            <p className={cn('m-0 line-clamp-2', group.post.removed ? 'text-muted-foreground' : 'text-foreground')}>
+              {group.post.excerpt}
             </p>
             <p className="text-muted-foreground m-0 flex flex-wrap items-center gap-2">
-              {row.post.authorName && <span>{t('history.by', { name: row.post.authorName })}</span>}
-              {row.post.removed && <Badge variant="outline">{t('history.removed')}</Badge>}
+              {group.post.authorName && <span>{t('history.by', { name: group.post.authorName })}</span>}
+              {group.post.removed && <Badge variant="outline">{t('history.removed')}</Badge>}
               <a
-                href={buildPostUrl(row.post.linkedinPostUrn, row.post.sourceUrl)}
+                href={buildPostUrl(group.post.linkedinPostUrn, group.post.sourceUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
@@ -113,7 +164,8 @@ function Row({ row }: { row: HistoryRow }) {
   )
 }
 
-// backlog/R16 — every recorded interaction, newest first. Comments are shown verbatim.
+// backlog/R16 — every recorded interaction, newest first. Comments are shown verbatim. Consecutive rows on the
+// same post fold into one card so a react + comment + AI draft on one post reads as one activity.
 export default function HistoryPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
@@ -126,6 +178,8 @@ export default function HistoryPage() {
     sessionToken ? { sessionToken, since } : 'skip',
     { initialNumItems: PAGE }
   )
+
+  const groups = groupHistory(results)
 
   return (
     <div className="mx-auto max-w-160 px-4 py-8 font-sans">
@@ -149,9 +203,9 @@ export default function HistoryPage() {
           aria-busy="true"
           className="flex flex-col gap-3"
         >
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
+          <div className="bg-muted h-32 animate-pulse rounded-xl" />
+          <div className="bg-muted h-32 animate-pulse rounded-xl" />
+          <div className="bg-muted h-32 animate-pulse rounded-xl" />
         </div>
       ) : results.length === 0 ? (
         <div className="border-border bg-card rounded-xl border p-8 text-center shadow-xs">
@@ -163,10 +217,10 @@ export default function HistoryPage() {
       ) : (
         <>
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {results.map(row => (
-              <Row
-                key={row.id}
-                row={row}
+            {groups.map(group => (
+              <GroupCard
+                key={group.key}
+                group={group}
               />
             ))}
           </ul>

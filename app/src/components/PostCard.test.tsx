@@ -340,6 +340,57 @@ describe('PostCard done footer (R21)', () => {
     expect(onHide).toHaveBeenCalledOnce()
   })
 
+  // Mobile layout: row 1 = chips + Hide, row 2 = countdown + View on LinkedIn. The mobile grid is
+  // deterministic (and keeps the same two-row height) in every viewer state; the order-* classes
+  // put the countdown back before Hide at `sm`+.
+  it('lays out a done card as a mobile grid with Hide beside the chips and the countdown below', () => {
+    render(
+      <PostCard
+        post={{
+          ...mockPost,
+          sourceUrl: 'https://www.linkedin.com/posts/test',
+          viewerState: { reacted: true, commented: false, hidesAt: inFiveHours }
+        }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    const actions = screen.getByTestId('post-footer-actions')
+    const footer = actions.parentElement as HTMLElement
+    const hide = screen.getByRole('button', { name: /hide now/i })
+    const countdown = screen.getByText(/leaves in 5 h/i)
+    const link = screen.getByRole('link', { name: /view on linkedin/i })
+
+    expect(footer).toHaveClass('max-sm:grid', 'max-sm:grid-cols-[minmax(0,1fr)_auto]')
+    expect(actions).toHaveClass('order-1')
+    expect(hide).toHaveClass('order-2', 'sm:order-3')
+    expect(countdown).toHaveClass('order-3', 'sm:order-2', 'whitespace-nowrap')
+    expect(link).toHaveClass('order-4', 'max-sm:ml-auto')
+    // Hide, the countdown and the link are direct siblings of the chips, not nested in a trailing
+    // cluster wrapper.
+    expect(hide.parentElement).toBe(footer)
+    expect(countdown.parentElement).toBe(footer)
+    expect(link.parentElement).toBe(footer)
+    expect(actions).not.toContainElement(hide)
+  })
+
+  // An untouched card has no countdown; the link still owns the mobile second row (and the footer
+  // keeps its two-row height) instead of drifting under the chips.
+  it('keeps the LinkedIn link on the mobile second row when there is no countdown', () => {
+    render(
+      <PostCard
+        post={{ ...mockPost, sourceUrl: 'https://www.linkedin.com/posts/test' }}
+        onComment={() => {}}
+        onReact={() => {}}
+        onHide={() => {}}
+      />
+    )
+    const link = screen.getByRole('link', { name: /view on linkedin/i })
+    expect(link).toHaveClass('max-sm:col-start-2', 'max-sm:row-start-2', 'max-sm:justify-self-end')
+    expect(screen.queryByText(/leaves in/i)).not.toBeInTheDocument()
+  })
+
   it('keeps the react button first in the normal state', () => {
     render(
       <PostCard

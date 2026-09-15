@@ -8,18 +8,30 @@ vi.mock('convex/react', () => ({
   useMutation: vi.fn()
 }))
 
-// Mock useSearchParams with a simple in-memory implementation.
-// Tab state is now URL-driven (§8D structural change): clicking a tab calls
-// setSearchParams({ tab: value }), which is the observable behavior we test.
+// Mock useSearchParams with a stateful in-memory implementation.
+// Tab state is URL-driven (§8D): clicking a tab calls setSearchParams({ tab: value }) and the
+// hook's state update re-renders the page, so tests can click a tab and then assert its content.
 const mockSetSearchParams = vi.fn()
 const mockSearchParams = new URLSearchParams()
 
 const mockNavigate = vi.fn((_props: unknown) => null)
 
-vi.mock('react-router-dom', () => ({
-  Navigate: (props: unknown) => mockNavigate(props),
-  useSearchParams: vi.fn(() => [mockSearchParams, mockSetSearchParams])
-}))
+vi.mock('react-router-dom', async () => {
+  const { useState } = await import('react')
+  return {
+    Navigate: (props: unknown) => mockNavigate(props),
+    useSearchParams: () => {
+      const [params, setParams] = useState(() => mockSearchParams)
+      return [
+        params,
+        (next: Record<string, string>, options?: { replace?: boolean }) => {
+          mockSetSearchParams(next, options)
+          setParams(new URLSearchParams(next))
+        }
+      ]
+    }
+  }
+})
 
 import AdminPage from './AdminPage'
 
@@ -46,8 +58,10 @@ const SURVIVAL_FIXTURE = {
 
 const mockRebuildRankings = vi.fn()
 
-// One received_no_reply row for the Attention card. `now`-relative values are irrelevant here —
-// the card only renders the fields it is given.
+const DAY = 86_400_000
+
+// One row per reason group: a received_no_reply member with both facts set, and a cooling member
+// with neither (whose row must omit the fact line entirely — never print "none yet").
 const CHURN_FIXTURE = [
   {
     userId: 'u1',
@@ -57,10 +71,23 @@ const CHURN_FIXTURE = [
     made7d: 0,
     made30d: 0,
     received7d: 3,
-    lastInteractionAt: null,
-    lastPostAt: null,
+    lastInteractionAt: Date.now() - 3 * DAY,
+    lastPostAt: Date.now() - 2 * DAY,
     reasons: ['received_no_reply'],
     hook: '3 reactions on your post, no reply'
+  },
+  {
+    userId: 'u2',
+    name: 'Omar',
+    headline: undefined,
+    profilePictureUrl: undefined,
+    made7d: 0,
+    made30d: 4,
+    received7d: 0,
+    lastInteractionAt: null,
+    lastPostAt: null,
+    reasons: ['cooling'],
+    hook: '0 interactions this week, down from 4 in 30 days'
   }
 ]
 
@@ -131,13 +158,25 @@ describe('AdminPage tabs', () => {
   })
 })
 
-describe('AdminPage attention card', () => {
+describe('AdminPage attention tab', () => {
+  // Radix Tabs triggers activate on mousedown. The stateful useSearchParams mock re-renders the
+  // page, so the tab's content is rendered after this call.
+  function openAttentionTab() {
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /attention/i }))
+  }
+
+  it('keeps the attention list off the default tab', () => {
+    render(<AdminPage />)
+    expect(screen.queryByText('No one needs attention right now.')).not.toBeInTheDocument()
+  })
+
   it('shows the empty state when nobody needs attention', () => {
     render(<AdminPage />)
+    openAttentionTab()
     expect(screen.getByText('No one needs attention right now.')).toBeInTheDocument()
   })
 
-  it('renders a flagged member with their reason badge and hook', () => {
+  it('groups flagged members by reason and shows only the facts that exist', () => {
     vi.mocked(useQuery).mockImplementation((ref: unknown, ..._rest: unknown[]) => {
       const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
       if (name === 'admin:checkIsAdmin') return true as never
@@ -146,9 +185,15 @@ describe('AdminPage attention card', () => {
       return [] as never
     })
     render(<AdminPage />)
+    openAttentionTab()
+    expect(screen.getByText('2 members flagged by the interaction graph. Read-only.')).toBeInTheDocument()
+    expect(screen.getByText('Needs a reply (1)')).toBeInTheDocument()
+    expect(screen.getByText('Cooling off (1)')).toBeInTheDocument()
     expect(screen.getByText('Nadia')).toBeInTheDocument()
-    expect(screen.getByText('Needs a reply')).toBeInTheDocument()
     expect(screen.getByText('3 reactions on your post, no reply')).toBeInTheDocument()
+    expect(screen.getByText('Last post: 2 days ago · Last interaction: 3 days ago')).toBeInTheDocument()
+    expect(screen.getByText('Omar')).toBeInTheDocument()
+    expect(screen.queryByText(/none yet/i)).not.toBeInTheDocument()
   })
 })
 

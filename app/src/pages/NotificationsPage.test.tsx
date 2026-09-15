@@ -115,6 +115,15 @@ describe('NotificationsPage', () => {
     expect(unreadList).toHaveClass('[&>li]:border-l-2', '[&>li]:border-l-primary')
   })
 
+  it('holds the card height with skeleton cards while the first page loads', () => {
+    mockPaginated[LIST] = { results: [], status: 'LoadingFirstPage', loadMore: vi.fn() }
+    const { container } = renderPage()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+    const skeletons = container.querySelectorAll('.animate-pulse')
+    expect(skeletons).toHaveLength(3)
+    skeletons.forEach(card => expect(card).toHaveClass('h-24'))
+  })
+
   it('marks all as read with the session token', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))

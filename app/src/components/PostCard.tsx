@@ -160,11 +160,15 @@ export default function PostCard({
       <LinkedInEmbed
         urn={post.linkedinPostUrn}
         footer={
-          // One fixed-height row on desktop; on small screens the trailing meta/hide/link cluster
-          // takes a second row. The layout is the same in every viewer state, so reacting or
-          // commenting never reflows the footer or changes its height.
-          <div className="border-border bg-card flex flex-wrap items-center gap-x-2 border-t px-4 sm:h-13 sm:flex-nowrap sm:gap-x-3">
-            <div className="flex min-w-0 flex-1 items-center gap-x-1 sm:gap-x-2">
+          // One fixed-height row on desktop; below `sm` a deterministic 2-column grid with the
+          // chips + Hide on row 1 and the countdown + View on LinkedIn on row 2. It is the same
+          // in every viewer state, so reacting or commenting never reflows the footer or changes
+          // its height. The `order-*` classes restore the desktop reading order.
+          <div className="border-border bg-card flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-4 max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] sm:h-13 sm:flex-nowrap sm:gap-x-3">
+            <div
+              data-testid="post-footer-actions"
+              className="order-1 flex min-w-0 flex-1 items-center gap-x-1 sm:gap-x-2"
+            >
               {done?.reacted ? (
                 // The reaction stays put after it is recorded, as a checked chip carrying the same
                 // emoji + count the button showed, so the leftmost action never moves or vanishes.
@@ -223,44 +227,42 @@ export default function PostCard({
               )}
             </div>
 
-            <div className="flex items-center gap-x-1.5 max-sm:w-full max-sm:justify-end sm:shrink-0 sm:gap-x-3">
-              {done && (
-                <span className="text-muted-foreground flex items-center gap-1 text-xs whitespace-nowrap">
-                  <Clock
-                    className="size-3.5"
-                    aria-hidden="true"
-                  />
-                  {t('feed.leavesIn', { hours: hoursLeft })}
-                </span>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onHide}
-                className="text-muted-foreground h-7 min-h-11 shrink-0 cursor-pointer px-2 text-xs sm:min-h-0"
+            {done && (
+              <span className="text-muted-foreground order-3 flex items-center gap-1 text-xs whitespace-nowrap sm:order-2">
+                <Clock
+                  className="size-3.5"
+                  aria-hidden="true"
+                />
+                {t('feed.leavesIn', { hours: hoursLeft })}
+              </span>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onHide}
+              className="text-muted-foreground order-2 h-7 min-h-11 shrink-0 cursor-pointer px-2 text-xs max-sm:justify-self-end sm:order-3 sm:min-h-0"
+            >
+              {done ? t('feed.hideNow') : t('feed.hide')}
+            </Button>
+            {!!post.sourceUrl && (
+              <a
+                href={post.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={
+                  gated
+                    ? e => {
+                        e.preventDefault()
+                        onGated?.('linkedin')
+                      }
+                    : undefined
+                }
+                className="order-4 shrink-0 whitespace-nowrap text-gold-text no-underline hover:underline max-sm:col-start-2 max-sm:row-start-2 max-sm:ml-auto max-sm:justify-self-end"
               >
-                {done ? t('feed.hideNow') : t('feed.hide')}
-              </Button>
-              {!!post.sourceUrl && (
-                <a
-                  href={post.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={
-                    gated
-                      ? e => {
-                          e.preventDefault()
-                          onGated?.('linkedin')
-                        }
-                      : undefined
-                  }
-                  className="shrink-0 whitespace-nowrap text-gold-text no-underline hover:underline"
-                >
-                  {t('feed.viewOnLinkedIn')}
-                </a>
-              )}
-            </div>
+                {t('feed.viewOnLinkedIn')}
+              </a>
+            )}
           </div>
         }
       />

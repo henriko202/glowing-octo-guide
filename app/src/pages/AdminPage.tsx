@@ -13,10 +13,9 @@ import { PageHeader } from '../components/PageHeader'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Button } from '../components/ui/button'
 import { Avatar } from '../components/ui/avatar'
-import { Badge } from '../components/ui/badge'
 import { friendlyError } from '@/lib/errors'
 
-type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd' | 'survival'
+type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd' | 'survival' | 'attention'
 
 // Churn reasons returned by admin.getChurnRisk. English hardcoded copy, per admin-page convention.
 type ChurnReason = 'received_no_reply' | 'silent_7d' | 'cooling'
@@ -27,21 +26,21 @@ const CHURN_REASON_LABEL: Record<ChurnReason, string> = {
   cooling: 'Cooling off'
 }
 
-const CHURN_REASON_VARIANT: Record<ChurnReason, 'warning' | 'destructive' | 'outline'> = {
-  received_no_reply: 'warning',
-  silent_7d: 'destructive',
-  cooling: 'outline'
-}
+// Fixed order for the grouped Attention list; a member carrying several reasons lands under the first.
+const ATTENTION_REASON_ORDER: ChurnReason[] = ['received_no_reply', 'silent_7d', 'cooling']
 
 // The list is a glance, not a queue — the full result set stays server-side.
 const ATTENTION_LIMIT = 20
 
-function recencyLabel(ts: number | null): string {
-  if (ts === null) return 'none yet'
+function recencyLabel(ts: number): string {
   const days = Math.floor((Date.now() - ts) / 86_400_000)
   if (days <= 0) return 'today'
   if (days === 1) return 'yesterday'
   return `${days} days ago`
+}
+
+function primaryReason(reasons: ChurnReason[]): ChurnReason | null {
+  return ATTENTION_REASON_ORDER.find(reason => reasons.includes(reason)) ?? null
 }
 
 export default function AdminPage() {
@@ -158,65 +157,22 @@ export default function AdminPage() {
     setSearchParams({ tab: value }, { replace: true })
   }
 
+  // The cap spans the whole grouped list, not each group; groups render in the fixed reason order.
+  const attentionRows = (churnRisk ?? []).slice(0, ATTENTION_LIMIT)
+  const attentionGroups = ATTENTION_REASON_ORDER.map(reason => ({
+    reason,
+    rows: attentionRows.filter(row => primaryReason(row.reasons) === reason)
+  })).filter(group => group.rows.length > 0)
+
   return (
     <div className="mx-auto max-w-[640px] p-8 font-sans">
       <PageHeader title="Admin Panel" />
-
-      <div className="border-border bg-card mb-4 rounded-lg border p-5">
-        <h2 className="text-foreground m-0 text-base font-semibold">Attention</h2>
-        <p className="text-muted-foreground mt-1 text-[13px]">
-          Members flagged from the interaction graph — a nudge may bring them back.
-        </p>
-        {churnRisk === undefined ? (
-          <p className="text-muted-foreground mt-3 text-[13px]">Loading…</p>
-        ) : churnRisk.length === 0 ? (
-          <p className="text-muted-foreground mt-3 text-[13px]">No one needs attention right now.</p>
-        ) : (
-          <>
-            <ul className="m-0 mt-3 flex list-none flex-col gap-3 p-0">
-              {churnRisk.slice(0, ATTENTION_LIMIT).map(row => (
-                <li
-                  key={row.userId}
-                  className="flex items-start gap-3"
-                >
-                  <Avatar
-                    name={row.name}
-                    src={row.profilePictureUrl}
-                    size="sm"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-foreground text-sm font-medium">{row.name}</span>
-                      {row.reasons.map(reason => (
-                        <Badge
-                          key={reason}
-                          variant={CHURN_REASON_VARIANT[reason]}
-                        >
-                          {CHURN_REASON_LABEL[reason]}
-                        </Badge>
-                      ))}
-                    </div>
-                    <p className="text-foreground mt-0.5 text-[13px]">{row.hook}</p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
-                      Last interaction: {recencyLabel(row.lastInteractionAt)} · Last post:{' '}
-                      {recencyLabel(row.lastPostAt)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {churnRisk.length > ATTENTION_LIMIT && (
-              <p className="text-muted-foreground mt-2 text-xs">+{churnRisk.length - ATTENTION_LIMIT} more</p>
-            )}
-          </>
-        )}
-      </div>
 
       <Tabs
         value={tab}
         onValueChange={handleTabChange}
       >
-        {/* Six triggers overflow a phone viewport; the list scrolls sideways instead of wrapping. */}
+        {/* Seven triggers overflow a phone viewport; the list scrolls sideways instead of wrapping. */}
         <TabsList className="overflow-x-auto">
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="planLimits">Plan Limits</TabsTrigger>
@@ -224,6 +180,7 @@ export default function AdminPage() {
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
           <TabsTrigger value="motd">MOTD</TabsTrigger>
           <TabsTrigger value="survival">Survival</TabsTrigger>
+          <TabsTrigger value="attention">Attention</TabsTrigger>
         </TabsList>
 
         {/* Settings tab */}
@@ -415,6 +372,66 @@ export default function AdminPage() {
             sessionToken={sessionToken}
             isAdmin={isAdmin}
           />
+        </TabsContent>
+
+        {/* Attention tab — read-only churn list from the interaction graph */}
+        <TabsContent value="attention">
+          <div className="border-border bg-card mb-4 rounded-lg border p-5">
+            <h2 className="text-foreground m-0 text-base font-semibold">Attention</h2>
+            {churnRisk === undefined ? (
+              <p className="text-muted-foreground mt-3 text-[13px]">Loading…</p>
+            ) : churnRisk.length === 0 ? (
+              <p className="text-muted-foreground mt-1 text-[13px]">No one needs attention right now.</p>
+            ) : (
+              <>
+                <p className="text-muted-foreground mt-1 text-[13px]">
+                  {churnRisk.length} {churnRisk.length === 1 ? 'member' : 'members'} flagged by the interaction graph.
+                  Read-only.
+                </p>
+                <div className="mt-4 flex flex-col gap-4">
+                  {attentionGroups.map(group => (
+                    <div key={group.reason}>
+                      <h3 className="text-muted-foreground m-0 text-xs font-semibold tracking-wide uppercase">
+                        {CHURN_REASON_LABEL[group.reason]} ({group.rows.length})
+                      </h3>
+                      <ul className="m-0 mt-2 flex list-none flex-col gap-3 p-0">
+                        {group.rows.map(row => {
+                          const facts = [
+                            row.lastPostAt !== null ? `Last post: ${recencyLabel(row.lastPostAt)}` : null,
+                            row.lastInteractionAt !== null
+                              ? `Last interaction: ${recencyLabel(row.lastInteractionAt)}`
+                              : null
+                          ].filter((fact): fact is string => fact !== null)
+                          return (
+                            <li
+                              key={row.userId}
+                              className="flex items-start gap-3"
+                            >
+                              <Avatar
+                                name={row.name}
+                                src={row.profilePictureUrl}
+                                size="sm"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-foreground text-sm font-medium">{row.name}</div>
+                                <p className="text-foreground mt-0.5 text-[13px]">{row.hook}</p>
+                                {facts.length > 0 && (
+                                  <p className="text-muted-foreground mt-0.5 text-xs">{facts.join(' · ')}</p>
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+                {churnRisk.length > ATTENTION_LIMIT && (
+                  <p className="text-muted-foreground mt-2 text-xs">+{churnRisk.length - ATTENTION_LIMIT} more</p>
+                )}
+              </>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

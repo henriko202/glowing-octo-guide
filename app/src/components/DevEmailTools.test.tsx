@@ -46,6 +46,20 @@ describe('DevEmailTools', () => {
     expect(screen.getByRole('button', { name: 'Copy unsubscribe link' })).toBeInTheDocument()
   })
 
+  it('truncates a long member email so it cannot push the close button out of the clipping panel', () => {
+    const original = meVal.email
+    meVal.email = 'a-very-long-member-address-that-would-overflow-the-panel@example.com'
+    try {
+      openPanel()
+      const emailLine = screen.getByText(/^To: /)
+      expect(emailLine).toHaveClass('truncate')
+      expect(emailLine.parentElement).toHaveClass('min-w-0')
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    } finally {
+      meVal.email = original
+    }
+  })
+
   it('sends the clicked kind with the session token and the optional recipient override', async () => {
     openPanel()
     fireEvent.change(screen.getByLabelText('To'), { target: { value: 'override@example.com' } })

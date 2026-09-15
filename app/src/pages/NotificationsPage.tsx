@@ -63,9 +63,9 @@ export default function NotificationsPage() {
           aria-busy="true"
           className="flex flex-col gap-3"
         >
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
-          <div className="bg-muted h-16 animate-pulse rounded-xl" />
+          <div className="bg-muted h-24 animate-pulse rounded-xl" />
+          <div className="bg-muted h-24 animate-pulse rounded-xl" />
+          <div className="bg-muted h-24 animate-pulse rounded-xl" />
         </div>
       ) : results.length === 0 ? (
         <div className="border-border bg-card rounded-xl border p-8 text-center shadow-xs">

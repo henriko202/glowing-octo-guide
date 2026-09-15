@@ -15,6 +15,24 @@ import { floorToHour } from '../../../convex/lib/recap'
 type Window = '7d' | '30d'
 const WINDOWS: ReadonlyArray<Window> = ['7d', '30d']
 
+function RankingSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      className="mt-3 flex flex-col gap-2"
+    >
+      {Array.from({ length: 5 }, (_, index) => (
+        <div
+          key={index}
+          className="bg-muted h-12 animate-pulse rounded-lg"
+        />
+      ))}
+    </div>
+  )
+}
+
 export default function RankingsPage() {
   const { t } = useTranslation()
   const [window, setWindow] = useState<Window>('7d')
@@ -54,13 +72,13 @@ export default function RankingsPage() {
         />
       </PageHeader>
       {rankings === undefined ? (
-        <p className="text-muted-foreground text-sm">…</p>
+        <RankingSkeleton />
       ) : (
         <>
           <section>
             <h2 className="text-foreground text-base font-semibold">{t('rankings.you')}</h2>
             {mine === undefined ? (
-              <p className="text-muted-foreground text-sm">…</p>
+              <RankingSkeleton />
             ) : (
               <>
                 <RankingList

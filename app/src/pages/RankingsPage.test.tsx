@@ -111,6 +111,15 @@ beforeEach(() => {
 })
 
 describe('RankingsPage', () => {
+  it('holds the row height with skeleton rows while the rankings load', () => {
+    mockQueryReturns = { 'users.getInviteSummary': { inviteCode: 'code', joined: 0 } }
+    const { container } = renderPage()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+    const skeletons = container.querySelectorAll('.animate-pulse')
+    expect(skeletons).toHaveLength(5)
+    skeletons.forEach(row => expect(row).toHaveClass('h-12'))
+  })
+
   it('renders the personal and site boards, the position line and the snapshot caption', () => {
     renderPage()
     expect(screen.getByText('Ana')).toBeInTheDocument()

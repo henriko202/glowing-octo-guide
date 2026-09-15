@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import PeopleAccordion from './PeopleAccordion'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import PeopleAccordion, { type AccordionPost } from './PeopleAccordion'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -43,9 +44,18 @@ const post = {
   ]
 }
 
+// The Tooltip primitive needs a provider (mounted in main.tsx in the app).
+function renderAccordion(posts: AccordionPost[]) {
+  return render(
+    <TooltipProvider>
+      <PeopleAccordion posts={posts} />
+    </TooltipProvider>
+  )
+}
+
 describe('PeopleAccordion', () => {
   it('renders the post as a card surface and toggles the actor panel', () => {
-    const { container } = render(<PeopleAccordion posts={[post]} />)
+    const { container } = renderAccordion([post])
     expect(container.querySelector('li')).toHaveClass('rounded-xl', 'border', 'border-border', 'bg-card', 'shadow-xs')
     const toggle = screen.getByRole('button', { name: /people\.accordionToggle/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -58,14 +68,14 @@ describe('PeopleAccordion', () => {
   })
 
   it('renders the aggregate reaction and comment chips summed over the actors', () => {
-    render(<PeopleAccordion posts={[post]} />)
+    renderAccordion([post])
     expect(screen.getByText('people.tallyReactions{"count":4}')).toBeInTheDocument()
     expect(screen.getByText('people.tallyComments{"count":0}')).toBeInTheDocument()
     expect(screen.queryByText('people.count{"count":4}')).not.toBeInTheDocument()
   })
 
   it('does not render per-user reaction or comment tallies in the expanded actor rows', () => {
-    render(<PeopleAccordion posts={[post]} />)
+    renderAccordion([post])
     fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
     expect(screen.getByText('people.tallyReactions{"count":4}')).toBeInTheDocument()
     expect(screen.queryByText('people.tallyReactions{"count":2}')).not.toBeInTheDocument()
@@ -85,7 +95,7 @@ describe('PeopleAccordion', () => {
         lastAt: index
       }))
     }
-    const { container } = render(<PeopleAccordion posts={[stackPost]} />)
+    const { container } = renderAccordion([stackPost])
     for (const initial of ['A', 'B', 'C', 'D']) {
       expect(screen.getByText(initial)).toBeInTheDocument()
     }
@@ -95,7 +105,7 @@ describe('PeopleAccordion', () => {
   })
 
   it('renders the reaction emoji and the LinkedIn link in the expanded panel', () => {
-    render(<PeopleAccordion posts={[post]} />)
+    renderAccordion([post])
     fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
     expect(screen.getByLabelText('reactions.like')).toHaveTextContent('👍')
     expect(screen.getByRole('link', { name: 'feed.viewOnLinkedIn' })).toHaveAttribute(
@@ -113,24 +123,26 @@ describe('PeopleAccordion', () => {
         { ...post.actors[0]!, userId: 'u2', name: 'Bea', reaction: undefined, reactions: 0, comments: 1, total: 1 }
       ]
     }
-    const { container } = render(<PeopleAccordion posts={[commentPost]} />)
+    const { container } = renderAccordion([commentPost])
     expect(container.querySelectorAll('.lucide-message-square')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
     expect(container.querySelectorAll('.lucide-message-square')).toHaveLength(2)
   })
 
-  it('titles and labels the relative time with the exact localized date and time', () => {
-    render(<PeopleAccordion posts={[post]} />)
+  it('shows the exact localized date and time in a tooltip on focus', async () => {
+    renderAccordion([post])
     fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
     const anaRow = screen.getByText('Ana').closest('li')!
     const time = within(anaRow).getByText(/^myPosts\./)
     const expected = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(1)
-    expect(time).toHaveAttribute('title', expected)
+    expect(time).not.toHaveAttribute('title')
     expect(time).toHaveAttribute('aria-label', expected)
+    fireEvent.focus(time)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(expected)
   })
 
   it('caps the expanded actor panel with internal scrolling and keeps the LinkedIn link inside it', () => {
-    render(<PeopleAccordion posts={[post]} />)
+    renderAccordion([post])
     fireEvent.click(screen.getByRole('button', { name: /people\.accordionToggle/ }))
     const panel = document.getElementById('post-actors-p1')
     expect(panel).toHaveClass('max-h-[340px]', 'overflow-auto', 'overscroll-contain')
