@@ -86,6 +86,7 @@ import type * as linkedin_tokenRefresh from "../linkedin/tokenRefresh.js";
 import type * as linkedin_types from "../linkedin/types.js";
 import type * as linkedin_verifyPostOwnership from "../linkedin/verifyPostOwnership.js";
 import type * as migrations_backfillFeedFields from "../migrations/backfillFeedFields.js";
+import type * as migrations_backfillInviteCodes from "../migrations/backfillInviteCodes.js";
 import type * as migrations_normalizeContactFeaturedLimit from "../migrations/normalizeContactFeaturedLimit.js";
 import type * as migrations_seedPlanLimits from "../migrations/seedPlanLimits.js";
 import type * as motd_motd from "../motd/motd.js";
@@ -188,6 +189,7 @@ declare const fullApi: ApiFromModules<{
   "linkedin/types": typeof linkedin_types;
   "linkedin/verifyPostOwnership": typeof linkedin_verifyPostOwnership;
   "migrations/backfillFeedFields": typeof migrations_backfillFeedFields;
+  "migrations/backfillInviteCodes": typeof migrations_backfillInviteCodes;
   "migrations/normalizeContactFeaturedLimit": typeof migrations_normalizeContactFeaturedLimit;
   "migrations/seedPlanLimits": typeof migrations_seedPlanLimits;
   "motd/motd": typeof motd_motd;

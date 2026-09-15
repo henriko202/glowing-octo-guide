@@ -5016,7 +5016,12 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
   denied permission — it falls back to selecting the text and saying so (`settings.inviteCopyManual`); that fallback
   fires **no event**. Underneath, the joined count: `settings.inviteNone`, the `_one`/`_other` plural, or
   `settings.inviteJoinedMany` ("100+") once the query's bounded `.take(101)` is exceeded. No skeleton input renders
-  while the code mints — an empty box reads as broken, so the button carries the waiting state.
+  while the code mints — an empty box reads as broken, so the button carries the waiting state. Because the mint is
+  lazy, members who joined before R19 (or never opened Settings) have no code — their own `?ref=` links match nobody
+  and their invitees get the plain 7-day trial. **`migrations/backfillInviteCodes.ts`** mints one for every member
+  still missing one (batched + self-rescheduling, idempotent, never touches an existing code); run it once per
+  environment after deploying: `npx convex run migrations/backfillInviteCodes:backfillInviteCodes` — add `--prod` for
+  production, from the repo root.
 - **BillingPage** — `getMe` + `getSubscriptionInfo` + `getTrialProgress` + `billingNode.createCheckoutSession` +
   `billingNode.createPortalSession` + `createPlanSwitchSession` + `resumeSubscription` + `undoScheduledDowngrade` +
   `users.clearBillingNotice`. Every Stripe action is on `billingNode` since 2026-09-09 — `createPortalSession` moved
