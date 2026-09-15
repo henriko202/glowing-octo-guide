@@ -55,6 +55,15 @@ describe('digestEmail', () => {
     }
   })
 
+  it('renders the two CTAs side by side inside a single table', () => {
+    const m = digestEmail('en', input)
+    expect(m.html).toContain('See people')
+    expect(m.html).toContain('See rankings')
+    expect(m.html).toMatch(
+      /<table[^>]*>(?:(?!<\/table>).)*See people(?:(?!<\/table>).)*See rankings(?:(?!<\/table>).)*<\/table>/s
+    )
+  })
+
   it('stays transactional: no exclamation mark and no urgency verbs, in every locale', () => {
     for (const l of LOCALES) {
       const m = digestEmail(l, input)
@@ -124,6 +133,11 @@ describe('digestEmail', () => {
     const on = digestEmail('en', { ...input, includePostalAddress: true })
     expect(on.text).toContain(`Postal address: ${address}`)
     expect(on.html).toContain(address)
+    expect(on.html).toMatch(
+      new RegExp(
+        `<span style="[^"]*font-size:12px;[^"]*color:#6e6757;[^"]*text-decoration:none;">Postal address: ${address}</span>`
+      )
+    )
   })
 
   it('escapes member names in the html', () => {

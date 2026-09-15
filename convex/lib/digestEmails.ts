@@ -6,7 +6,15 @@
 // case, precise numbers, no urgency and no exclamation marks.
 import type { EmailContent } from './email'
 import type { EmailLang } from './emailLayout'
-import { emailButton, emailFacts, emailLabel, emailNote, emailParagraph, renderEmailLayout } from './emailLayout'
+import {
+  emailButtonRow,
+  emailFacts,
+  emailFinePrint,
+  emailLabel,
+  emailNote,
+  emailParagraph,
+  renderEmailLayout
+} from './emailLayout'
 import { escapeHtml } from './html'
 import { INTL_TAG } from './billingEmails'
 
@@ -256,9 +264,10 @@ export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent
       : ''
   const siteBlock = siteSummary + siteLists
   const standing = emailParagraph(escapeHtml(position)) + (movement ? emailParagraph(escapeHtml(movement)) : '')
-  const ctas =
-    emailButton({ href: input.peopleUrl, label: c.peopleCta }) +
-    emailButton({ href: input.rankingsUrl, label: c.rankingsCta })
+  const ctas = emailButtonRow([
+    { href: input.peopleUrl, label: c.peopleCta },
+    { href: input.rankingsUrl, label: c.rankingsCta }
+  ])
   // Trusted URLs are emitted verbatim, matching emailButton's contract: entity-escaping a query string's '&'
   // would change the link.
   const footer =
@@ -266,7 +275,7 @@ export function digestEmail(locale: EmailLang, input: DigestInput): EmailContent
     `<a href="${input.unsubscribeUrl}">${escapeHtml(c.unsubscribe)}</a> · ` +
     `<a href="${input.settingsUrl}">${escapeHtml(c.settings)}</a><br>` +
     escapeHtml(fill(c.support, { email: input.supportEmail })) +
-    (input.includePostalAddress ? `<br>${escapeHtml(c.postal)} ${escapeHtml(POSTAL_ADDRESS)}` : '')
+    (input.includePostalAddress ? emailFinePrint(`${escapeHtml(c.postal)} ${escapeHtml(POSTAL_ADDRESS)}`) : '')
 
   const contentHtml =
     emailParagraph(escapeHtml(fill(c.greeting, { name: input.name }))) +

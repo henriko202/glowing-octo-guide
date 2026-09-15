@@ -132,8 +132,24 @@ export function emailNote(html: string): string {
   return `<p style="margin:20px 0 16px;padding:12px 16px;background-color:${WASH};border:1px solid ${BORDER};border-radius:10px;font-family:${BODY_FONT};font-size:15px;line-height:1.6;color:${INK};">${html}</p>`
 }
 
+export function emailFinePrint(html: string): string {
+  return `<br><span style="display:inline-block;margin-top:6px;font-family:${BODY_FONT};font-size:12px;line-height:1.5;color:${MUTED};text-decoration:none;">${html}</span>`
+}
+
 // href is emitted verbatim: callers pass trusted URLs whose query strings contain '&', and
 // entity-escaping them here would alter the URL the builder promised to link.
 export function emailButton({ href, label }: { href: string; label: string }): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 0;"><tr><td align="center" bgcolor="${GOLD}" style="background-color:${GOLD};border-radius:10px;"><a href="${href}" style="display:inline-block;padding:15px 24px;font-family:${BODY_FONT};font-size:15px;font-weight:600;line-height:1;color:${INK};text-decoration:none;border-radius:10px;">${escapeHtml(label)}</a></td></tr></table>`
+}
+
+// Side-by-side buttons: one flat table, one row, one cell per button, so two CTAs sit next to each
+// other instead of stacking. Cells separate with right padding; anchors carry the button look.
+export function emailButtonRow(buttons: Array<{ href: string; label: string }>): string {
+  const cells = buttons
+    .map(
+      (button, index) =>
+        `<td style="${index < buttons.length - 1 ? 'padding-right:8px;' : ''}"><a href="${button.href}" style="display:inline-block;padding:15px 24px;background-color:${GOLD};border-radius:10px;font-family:${BODY_FONT};font-size:15px;font-weight:600;line-height:1;color:${INK};text-decoration:none;">${escapeHtml(button.label)}</a></td>`
+    )
+    .join('')
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 0;"><tr>${cells}</tr></table>`
 }

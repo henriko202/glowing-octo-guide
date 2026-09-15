@@ -1612,7 +1612,8 @@ webhook layer.
 
 Every transactional body now renders through the shared branded shell **`lib/emailLayout.ts`**, with escaping in **
 `lib/html.ts`**: a table-based 600 px card (dark header band + wordmark, gold rule, white content card, muted footer)
-assembled from `emailParagraph` / `emailLabel` / `emailQuote` / `emailFacts` / `emailNote` / `emailButton`. The shell is
+assembled from `emailParagraph` / `emailLabel` / `emailQuote` / `emailFacts` / `emailNote` / `emailButton` (and
+`emailButtonRow` for two side-by-side buttons). The shell is
 client-safe by construction — inline styles, no flexbox/grid/CSS variables/canvas/web fonts, one `<style>` block limited
 to the mobile padding media query and the link color. The billing builders add localized headings, fact labels and
 button labels (Plan/Price/Trial ends, _Manage billing_ / _Gerenciar assinatura_ / _Gestionar suscripción_, …) while
@@ -1628,7 +1629,8 @@ nothing else, and the `$150/yr` strings live on the client. Rather than duplicat
 pricing changes, both subscription webhooks persist `items.data[0].price`'s `unit_amount`, `currency` and
 `recurring.interval` onto the `subscriptions` row (`priceAmount` / `priceCurrency` / `priceInterval`), and
 `formatPriceLabel` renders them with `Intl.NumberFormat` in the member's locale, writing the dollar as `U$` in pt/es and
-`$` in en. A missing snapshot degrades to an empty label, never to a wrong number.
+`$` in en. A missing snapshot degrades to an empty label, never to a wrong number; the builders run the plan name
+through `planWithPrice`, so a notice names the plan alone rather than reading "Pro ()".
 
 `sendEmail` (`lib/email.ts`) no-ops when `RESEND_API_KEY` / `EMAIL_FROM` are unset. Every message it does send is
 addressed `From: Link Into The SSI <EMAIL_FROM>`, so mail clients show the brand instead of the bare `noreply` local
@@ -2674,8 +2676,9 @@ proof — `siteTotalInteractions` (the sum of the snapshot's full `interactorCou
 
 **Content order (`lib/digestEmails.ts`, spec §8).** 1) personal numbers — reactions/comments received and made; 2) who
 interacted most with your posts (top 3); 3) who you interacted most with (top 3); 4) site-wide top posters and top
-interactors for the stated 7-day window (top 3 each); 5) position and movement; 6) CTA buttons to `/people` and
-`/rankings`, then the footer with the unsubscribe link, the Settings link and the support address. The subject carries
+interactors for the stated 7-day window (top 3 each); 5) position and movement; 6) two side-by-side CTA buttons
+(`emailButtonRow`) to `/people` and `/rankings`, then the footer with the unsubscribe link, the Settings link and the
+support address. The subject carries
 the precise personal number (e.g. "3 reactions and 1 comment on your posts"), and falls back to a plain summary title (
 "Activity summary" / "Resumo de atividades" / "Resumen de actividades") when the member received zero reactions and
 zero comments, so the email never leads with "0 reactions and 0 comments". The builder renders through the shared
@@ -2739,9 +2742,10 @@ flowchart TD
 ```
 
 **CAN-SPAM postal address — resolved.** Every digest footer carries the controller's fiscal address
-(`AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`): `includePostalAddress` is `true` at the
-call site (`jobs/digest.ts`) and the verbatim constant lives in `lib/digestEmails.ts`
-(`docs/compliance/GAP-ASSESSMENT.md`, item 11).
+(`AV SETE DE SETEMBRO, 2775, REBOUÇAS - 80230-010 - Curitiba, Paraná - Brazil`): `composeDigest` sets
+`includePostalAddress` through `lib/digest.isDigestAddressEnabled(env)` — unset or any value other than `'false'` keeps
+the address ([§16](#16-environment-variables), the CAN-SPAM default), `'false'` omits it — and the verbatim constant
+lives in `lib/digestEmails.ts` (`docs/compliance/GAP-ASSESSMENT.md`, item 11).
 
 ---
 
@@ -5535,7 +5539,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                      | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -6364,6 +6368,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                                                    | Optional model slug override. Provider routing (ZDR + no-data-collection pin governs selection, no price-floor suffix) is enforced in code, not via env. Blank ⇒ falls back to this valid, verified-live default (not broken — see [§11A](#11a-ai-reaction--comment-assistance) for the DeepInfra/Google zero-data-retention caveat: Google logs Gemma prompts/responses for abuse-monitoring independent of DeepInfra's ZDR commitment).                                                                                                                                                                              |
 | `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                                                    | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `UNSUBSCRIBE_SECRET`             |       – (digest no‑ops if unset)        | `http.ts`, `users.ts`, `jobs/digest.ts`                                      | HMAC-SHA256 key for the stateless digest unsubscribe tokens (`lib/unsubscribeToken.ts`). **Unset ⇒ the digest sweep logs and sends nothing** — no digest goes out without a working opt-out — and the public endpoints (`POST /unsubscribe/digest`, `users.unsubscribeByToken`) answer `unavailable`. Set it in the Convex dashboard before enabling the digest.                                                                                                                                                                                                                                                       |
+| `INCLUDE_DIGEST_ADDRESS`         |      – (default keeps the address)      | `lib/digest.ts`, `jobs/digest.ts`, `dev.ts`                                  | CAN-SPAM postal address line in the digest footer: unset or any value other than `'false'` keeps the controller's fiscal address; `'false'` omits it. Production leaves it unset.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 > **Stripe component/SDK versions (plan 023, 2026-09-10).** `@convex-dev/stripe` `^0.1.6` + `stripe` `^22.2.1`
 > (lockfile resolves `22.6.1`); Node ≥18 required and met. No `apiVersion` is set on the direct `new Stripe(key)`

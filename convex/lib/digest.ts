@@ -9,6 +9,11 @@ export interface DigestCandidate {
   lastDigestAt?: number
 }
 
+/** CAN-SPAM keeps the postal address unless the flag is explicitly 'false'. */
+export function isDigestAddressEnabled(envVars: Record<string, string | undefined>): boolean {
+  return envVars.INCLUDE_DIGEST_ADDRESS !== 'false'
+}
+
 export function isDigestDue(user: DigestCandidate, now: number): boolean {
   if (!user.email) return false
   if (user.digestEmailsEnabled === false) return false

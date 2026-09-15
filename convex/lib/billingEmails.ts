@@ -62,6 +62,14 @@ export function formatPriceLabel(
   return unit ? `${amount} / ${unit}` : amount
 }
 
+/**
+ * The plan name with its price label in parentheses, or just the plan name when there is no price
+ * snapshot to show (rows created before Stripe sent one, or by dev tooling): never "Pro ()".
+ */
+export function planWithPrice(planName: string, priceLabel: string): string {
+  return priceLabel.trim() ? `${planName} (${priceLabel})` : planName
+}
+
 interface NearEndArgs {
   made: number
   received: number
@@ -196,7 +204,7 @@ export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailC
       subject: `${total} ${interactionWord} so far on ${APP}`,
       heading: `${total} ${interactionWord} so far`,
       lead: `You have ${a.made} ${a.made === 1 ? 'interaction' : 'interactions'} made and ${a.received} received — ${total} in total.`,
-      term: `Your ${a.planName} plan (${a.priceLabel}) starts after ${a.remaining} more ${a.remaining === 1 ? 'interaction' : 'interactions'}, or on the last day of your trial, whichever comes first.`,
+      term: `Your ${planWithPrice(`${a.planName} plan`, a.priceLabel)} starts after ${a.remaining} more ${a.remaining === 1 ? 'interaction' : 'interactions'}, or on the last day of your trial, whichever comes first.`,
       cancel: `Cancel before then and you pay nothing:`,
       planLabel: 'Plan',
       priceLabel: 'Price',
@@ -206,7 +214,7 @@ export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailC
       subject: `${total} ${total === 1 ? 'interação' : 'interações'} até agora no ${APP}`,
       heading: `${total} ${total === 1 ? 'interação' : 'interações'} até agora`,
       lead: `Você tem ${a.made} ${a.made === 1 ? 'interação feita' : 'interações feitas'} e ${a.received} ${a.received === 1 ? 'recebida' : 'recebidas'} — ${total} no total.`,
-      term: `Seu plano ${a.planName} (${a.priceLabel}) começa depois de mais ${a.remaining} ${a.remaining === 1 ? 'interação' : 'interações'}, ou no último dia do seu teste, o que vier primeiro.`,
+      term: `Seu plano ${planWithPrice(a.planName, a.priceLabel)} começa depois de mais ${a.remaining} ${a.remaining === 1 ? 'interação' : 'interações'}, ou no último dia do seu teste, o que vier primeiro.`,
       cancel: `Cancele antes disso e você não paga nada:`,
       planLabel: 'Plano',
       priceLabel: 'Preço',
@@ -216,7 +224,7 @@ export function trialNearEndEmail(locale: BillingLocale, a: NearEndArgs): EmailC
       subject: `${total} ${total === 1 ? 'interacción' : 'interacciones'} hasta ahora en ${APP}`,
       heading: `${total} ${total === 1 ? 'interacción' : 'interacciones'} hasta ahora`,
       lead: `Tienes ${a.made} ${a.made === 1 ? 'interacción hecha' : 'interacciones hechas'} y ${a.received} ${a.received === 1 ? 'recibida' : 'recibidas'}: ${total} en total.`,
-      term: `Tu plan ${a.planName} (${a.priceLabel}) comienza después de ${a.remaining} ${a.remaining === 1 ? 'interacción' : 'interacciones'} más, o el último día de tu prueba, lo que ocurra primero.`,
+      term: `Tu plan ${planWithPrice(a.planName, a.priceLabel)} comienza después de ${a.remaining} ${a.remaining === 1 ? 'interacción' : 'interacciones'} más, o el último día de tu prueba, lo que ocurra primero.`,
       cancel: `Cancela antes y no pagas nada:`,
       planLabel: 'Plan',
       priceLabel: 'Precio',
@@ -270,7 +278,7 @@ export function trialEndingEmail(locale: BillingLocale, a: EndingArgs): EmailCon
     en: {
       subject: `Your ${APP} trial ends on ${a.endsOn}`,
       heading: `Your trial ends on ${a.endsOn}`,
-      term: `Your free trial ends on ${a.endsOn}, or as soon as you reach ${TRIAL_INTERACTION_THRESHOLD} interactions, whichever comes first. Your ${a.planName} plan (${a.priceLabel}) starts then.`,
+      term: `Your free trial ends on ${a.endsOn}, or as soon as you reach ${TRIAL_INTERACTION_THRESHOLD} interactions, whichever comes first. Your ${planWithPrice(`${a.planName} plan`, a.priceLabel)} starts then.`,
       cancel: `Cancel before then and you pay nothing:`,
       planLabel: 'Plan',
       priceLabel: 'Price',
@@ -280,7 +288,7 @@ export function trialEndingEmail(locale: BillingLocale, a: EndingArgs): EmailCon
     pt: {
       subject: `Seu teste do ${APP} termina em ${a.endsOn}`,
       heading: `Seu teste termina em ${a.endsOn}`,
-      term: `Seu teste grátis termina em ${a.endsOn} ou assim que você chegar a ${TRIAL_INTERACTION_THRESHOLD} interações, o que ocorrer primeiro. Seu plano ${a.planName} (${a.priceLabel}) começa nesse momento.`,
+      term: `Seu teste grátis termina em ${a.endsOn} ou assim que você chegar a ${TRIAL_INTERACTION_THRESHOLD} interações, o que ocorrer primeiro. Seu plano ${planWithPrice(a.planName, a.priceLabel)} começa nesse momento.`,
       cancel: `Cancele antes disso e você não paga nada:`,
       planLabel: 'Plano',
       priceLabel: 'Preço',
@@ -290,7 +298,7 @@ export function trialEndingEmail(locale: BillingLocale, a: EndingArgs): EmailCon
     es: {
       subject: `Tu prueba de ${APP} termina el ${a.endsOn}`,
       heading: `Tu prueba termina el ${a.endsOn}`,
-      term: `Tu prueba gratuita termina el ${a.endsOn} o en cuanto llegues a ${TRIAL_INTERACTION_THRESHOLD} interacciones, lo que ocurra primero. Tu plan ${a.planName} (${a.priceLabel}) comienza en ese momento.`,
+      term: `Tu prueba gratuita termina el ${a.endsOn} o en cuanto llegues a ${TRIAL_INTERACTION_THRESHOLD} interacciones, lo que ocurra primero. Tu plan ${planWithPrice(a.planName, a.priceLabel)} comienza en ese momento.`,
       cancel: `Cancela antes y no pagas nada:`,
       planLabel: 'Plan',
       priceLabel: 'Precio',
@@ -386,7 +394,7 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
     en: {
       subject: `Your ${a.planName} plan started today`,
       lead: `During your trial you made ${a.made} ${a.made === 1 ? 'interaction' : 'interactions'} and your posts received ${a.received}.`,
-      term: `Your ${a.planName} plan (${a.priceLabel}) is now active.`,
+      term: `Your ${planWithPrice(`${a.planName} plan`, a.priceLabel)} is now active.`,
       link: 'See your recap:',
       planLabel: 'Plan',
       priceLabel: 'Price',
@@ -395,7 +403,7 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
     pt: {
       subject: `Seu plano ${a.planName} começou hoje`,
       lead: `Durante o seu teste você fez ${a.made} ${a.made === 1 ? 'interação' : 'interações'} e suas publicações receberam ${a.received} ${a.received === 1 ? 'interação' : 'interações'}.`,
-      term: `Seu plano ${a.planName} (${a.priceLabel}) está ativo.`,
+      term: `Seu plano ${planWithPrice(a.planName, a.priceLabel)} está ativo.`,
       link: 'Veja seu resumo:',
       planLabel: 'Plano',
       priceLabel: 'Preço',
@@ -404,7 +412,7 @@ export function trialConvertedEmail(locale: BillingLocale, a: ConvertedArgs): Em
     es: {
       subject: `Tu plan ${a.planName} comenzó hoy`,
       lead: `Durante tu prueba hiciste ${a.made} ${a.made === 1 ? 'interacción' : 'interacciones'} y tus publicaciones recibieron ${a.received}.`,
-      term: `Tu plan ${a.planName} (${a.priceLabel}) ya está activo.`,
+      term: `Tu plan ${planWithPrice(a.planName, a.priceLabel)} ya está activo.`,
       link: 'Mira tu resumen:',
       planLabel: 'Plan',
       priceLabel: 'Precio',

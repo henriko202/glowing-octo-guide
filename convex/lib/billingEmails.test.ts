@@ -3,6 +3,7 @@ import {
   duplicateSubscriptionCanceledEmail,
   formatPriceLabel,
   planName,
+  planWithPrice,
   postCapReachedEmail,
   trialConvertedEmail,
   trialEndingEmail,
@@ -29,6 +30,16 @@ describe('formatPriceLabel', () => {
     expect(formatPriceLabel('es', PRICE)).toBe('U$150 / año')
     expect(formatPriceLabel('en', PRICE)).toBe('$150 / year')
     expect(formatPriceLabel('pt', { amount: 1250, currency: 'usd', interval: 'month' })).toBe('U$12,50 / mês')
+  })
+})
+
+describe('planWithPrice', () => {
+  it('appends the price label in parentheses when there is one', () => {
+    expect(planWithPrice('Growth', '$150 / year')).toBe('Growth ($150 / year)')
+  })
+  it('drops the parentheses entirely when the label is empty or only whitespace', () => {
+    expect(planWithPrice('Growth', '')).toBe('Growth')
+    expect(planWithPrice('Growth', '   ')).toBe('Growth')
   })
 })
 
@@ -203,6 +214,54 @@ describe('trialConvertedEmail', () => {
     expect(m.text).toContain('você fez 1 interação')
     expect(m.text).toContain('receberam 1 interação')
     expect(m.text).not.toContain('1 interações')
+  })
+})
+
+describe('emails without a price snapshot', () => {
+  it('trialNearEndEmail names the plan with no empty parentheses, in every locale', () => {
+    for (const l of LOCALES) {
+      const m = trialNearEndEmail(l, {
+        made: 32,
+        received: 8,
+        remaining: 10,
+        planName: 'Growth',
+        priceLabel: '',
+        billingUrl: BILLING_URL
+      })
+      expect(m.text).toContain('Growth')
+      expect(m.text).not.toContain('()')
+      expect(m.html).toContain('Growth')
+      expect(m.html).not.toContain('()')
+    }
+  })
+  it('trialEndingEmail names the plan with no empty parentheses, in every locale', () => {
+    for (const l of LOCALES) {
+      const m = trialEndingEmail(l, {
+        endsOn: '13 September 2026',
+        planName: 'Growth',
+        priceLabel: '',
+        billingUrl: BILLING_URL
+      })
+      expect(m.text).toContain('Growth')
+      expect(m.text).not.toContain('()')
+      expect(m.html).toContain('Growth')
+      expect(m.html).not.toContain('()')
+    }
+  })
+  it('trialConvertedEmail names the plan with no empty parentheses, in every locale', () => {
+    for (const l of LOCALES) {
+      const m = trialConvertedEmail(l, {
+        made: 3,
+        received: 2,
+        planName: 'Growth',
+        priceLabel: '',
+        recapUrl: RECAP_URL
+      })
+      expect(m.text).toContain('Growth')
+      expect(m.text).not.toContain('()')
+      expect(m.html).toContain('Growth')
+      expect(m.html).not.toContain('()')
+    }
   })
 })
 

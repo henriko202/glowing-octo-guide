@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { DIGEST_SPAN_MS, isDigestDue } from './digest'
+import { DIGEST_SPAN_MS, isDigestAddressEnabled, isDigestDue } from './digest'
 
 const NOW = Date.now()
+
+describe('isDigestAddressEnabled', () => {
+  it('keeps the postal address unless the flag is exactly "false"', () => {
+    expect(isDigestAddressEnabled({})).toBe(true)
+    expect(isDigestAddressEnabled({ INCLUDE_DIGEST_ADDRESS: 'true' })).toBe(true)
+    expect(isDigestAddressEnabled({ INCLUDE_DIGEST_ADDRESS: 'false' })).toBe(false)
+    expect(isDigestAddressEnabled({ INCLUDE_DIGEST_ADDRESS: 'FALSE' })).toBe(true)
+    expect(isDigestAddressEnabled({ INCLUDE_DIGEST_ADDRESS: '' })).toBe(true)
+  })
+})
 
 describe('isDigestDue', () => {
   it('is due when never sent, when 3+ days old and when explicitly enabled', () => {

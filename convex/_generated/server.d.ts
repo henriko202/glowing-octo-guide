@@ -38,6 +38,7 @@ type Env = {
   readonly APP_URL: string;
   readonly EMAIL_FROM: string | undefined;
   readonly FEEDBACK_REPLY_TO: string | undefined;
+  readonly INCLUDE_DIGEST_ADDRESS: string | undefined;
   readonly LINKEDIN_CLIENT_ID: string;
   readonly LINKEDIN_CLIENT_SECRET: string;
   readonly LINKEDIN_REDIRECT_URI: string;

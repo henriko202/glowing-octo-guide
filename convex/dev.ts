@@ -17,6 +17,7 @@ import { requireAuthAction } from './lib/auth'
 import { sendEmail } from './lib/email'
 import type { EmailContent } from './lib/email'
 import { composeDigest } from './jobs/digest'
+import { isDigestAddressEnabled } from './lib/digest'
 import { digestEmail, digestFeatureNote, type DigestInput } from './lib/digestEmails'
 import { signUnsubscribeToken } from './lib/unsubscribeToken'
 import { resolveBillingLocale, type BillingLocale } from './lib/checkoutCopy'
@@ -113,7 +114,14 @@ async function deliver(to: string, message: EmailContent, headers?: Record<strin
 
 // Three names per list and mixed zeros, so every digest section (and the fallback subject that a
 // member with no received activity gets) renders in one send. No database data involved.
-function digestSample(name: string, now: number, locale: BillingLocale, appUrl: string, token: string): DigestInput {
+function digestSample(
+  name: string,
+  now: number,
+  locale: BillingLocale,
+  appUrl: string,
+  token: string,
+  includePostalAddress: boolean
+): DigestInput {
   const people = ['Ana Souza', 'Bruno Lima', 'Carla Mendes']
   return {
     name,
@@ -136,7 +144,7 @@ function digestSample(name: string, now: number, locale: BillingLocale, appUrl: 
     unsubscribeUrl: `${appUrl}/unsubscribe?token=${token}`,
     settingsUrl: `${appUrl}/settings`,
     supportEmail: SUPPORT_EMAIL,
-    includePostalAddress: true
+    includePostalAddress
   }
 }
 
@@ -179,7 +187,10 @@ export const sendTestEmail = action({
         if (!secret) return { status: 'skipped', detail: 'UNSUBSCRIBE_SECRET unset' }
         const now = Date.now()
         const token = await signUnsubscribeToken(user._id as string, secret)
-        return await deliver(recipient, digestEmail(locale, digestSample(user.name, now, locale, appUrl, token)))
+        return await deliver(
+          recipient,
+          digestEmail(locale, digestSample(user.name, now, locale, appUrl, token, isDigestAddressEnabled(env)))
+        )
       }
       case 'trial_near_end': {
         const c = await ctx.runQuery(internal.billing.getBillingContext, { userId: user._id })

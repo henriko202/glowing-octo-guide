@@ -12,7 +12,7 @@ import { internal } from '../_generated/api'
 import { sendEmail } from '../lib/email'
 import type { EmailContent } from '../lib/email'
 import { digestEmail, digestFeatureNote, type DigestInput } from '../lib/digestEmails'
-import { isDigestDue } from '../lib/digest'
+import { isDigestAddressEnabled, isDigestDue } from '../lib/digest'
 import { digestWindow, movement, pickPreviousGeneration, positionOf } from '../lib/ranking'
 import { signUnsubscribeToken } from '../lib/unsubscribeToken'
 import { resolveBillingLocale } from '../lib/checkoutCopy'
@@ -257,7 +257,7 @@ export async function composeDigest(
     unsubscribeUrl,
     settingsUrl: `${ctxArgs.appUrl}/settings`,
     supportEmail: SUPPORT_EMAIL,
-    includePostalAddress: true
+    includePostalAddress: isDigestAddressEnabled(env)
   }
   return {
     message: digestEmail(locale, input),

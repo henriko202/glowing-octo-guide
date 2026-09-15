@@ -482,6 +482,9 @@ interactions between 14 members in the last 7 days.") renders above the site top
 Date.UTC(2026, 9, 28)` a plain factual footer line above the unsubscribe links announces the post-reaction page
 (`digestFeatureNote(now, locale)`).
 
+The fiscal postal address (spec §9) is included unless `INCLUDE_DIGEST_ADDRESS='false'`; unset or any other value
+keeps it (CAN-SPAM default).
+
 ## 9. Compliance and lifecycle
 
 - **Privacy Policy (3 locales).** New processing note: activity digest under legitimate interest with the right to
