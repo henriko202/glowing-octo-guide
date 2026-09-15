@@ -4749,7 +4749,8 @@ sync with the compliance docs and live support inbox.
   clears the persistent `signedOut` marker (§7), and navigates to `/feed`. It fails closed to the landing site without
   redeeming when the code or verifier is missing (a handed‑over code must not be burned for its owner), and on a
   redeem failure. A run‑once latch keeps the single‑use code from being redeemed twice under StrictMode.
-- **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`); for **Pro/Contact** viewers (gated on `getMe.tier`)
+- **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`; a successful add toasts `feed.postAdded`); for
+  **Pro/Contact** viewers (gated on `getMe.tier`)
   a collapsible **`FeedFilterPanel`** — two `ChipMultiSelect` pickers (industries / countries) whose add/remove/clear
   each call `setFeedFilter`; the saved arrays come from `getMe`, so the feed re-filters reactively (no local state).
   When a filter hides everything, the empty state shows `feed.emptyFiltered` (a plain recovery line — adjust or clear
@@ -5539,7 +5540,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |

@@ -105,6 +105,7 @@ export default function FeedPage() {
   async function handlePostSubmit(url: string) {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
     await submitPost({ sessionToken, postUrl: url })
+    toast(t('feed.postAdded'))
   }
 
   async function handleConfirmHide() {

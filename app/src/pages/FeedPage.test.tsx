@@ -61,12 +61,17 @@ vi.mock('../components/PostCard', () => ({
   )
 }))
 
+vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }))
+
+import { toast } from '@/components/ui/toast'
+
 function renderPage() {
   return render(<FeedPage />)
 }
 
 beforeEach(() => {
   sessionStorage.setItem('sessionToken', 'tok')
+  vi.mocked(toast).mockClear()
   mockHidePost = vi.fn(async () => {})
   mockPaginated = { results: [], status: 'Exhausted', loadMore: vi.fn() }
   mockQueryReturns = {
@@ -245,6 +250,17 @@ describe('FeedPage hide confirmation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide post' }))
     await waitFor(() => expect(mockHidePost).toHaveBeenCalledWith({ sessionToken: 'tok', postId: 'p2' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+})
+
+describe('FeedPage composer', () => {
+  it('toasts a success confirmation once the post is added', async () => {
+    renderPage()
+    fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
+      target: { value: 'https://www.linkedin.com/posts/henri_activity-7000000000000000000-abcd' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: /add post/i }))
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Post added to the feed.'))
   })
 })
 
