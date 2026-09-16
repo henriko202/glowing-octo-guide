@@ -6089,14 +6089,15 @@ content** (encodes the business rules):
 - `Hero` retains the centered headline and CTA layout, describing relevant posts and manual LinkedIn actions. It now
   renders a `hero.eyebrow` label ("LinkedIn SSI tool" / localized) above the H1 so the primary keyword is visible
   on-page as well as in the metadata.
-  It names the selected Growth offer and renewal amount alongside the shared trial disclosure. It contains no
-  sample post or simulated product interface.
+  It names a plan-agnostic offer ("choose any plan", the interval's Starter price as the from-floor) alongside the
+  shared trial disclosure. It contains no sample post or simulated product interface.
 - `HowItWorks` explains connecting, joining conversations, and reviewing activity. `Features` presents the three
   shipped capabilities with their plan labels. The redundant standalone pain section was removed to bring pricing
   closer to the product explanation.
 - `Pricing` has three cards and an annual/monthly selector. Annual remains the initial interval; Growth remains the
   recommended plan. Monthly prices are Starter $10, Growth $15, and Pro $50, with annual prices at ten times monthly.
-  `landing/lib/trial.ts` supplies both card prices and the Growth offer beside the generic CTAs. `Intl.NumberFormat`
+  `landing/lib/trial.ts` supplies both card prices and the plan-agnostic offer beside the generic CTAs; the quoted
+  price is the interval's Starter price, the floor, because a trial can start on any plan. `Intl.NumberFormat`
   formats USD in the page locale, with pt/es writing the dollar as `U$` and en keeping `$`. These are display values;
   Stripe Prices remain authoritative for charges.
 - Each pricing card states its **per-post** visibility cap of 25, 50, or 200 reactions and comments. The
@@ -6113,7 +6114,7 @@ content** (encodes the business rules):
   to `https://www.linkedin.com/sales/ssi` in a new tab in all three languages.
 - `FAQ` answers safety, trial, SSI, activity, and cancellation questions. Closed answers use the native `hidden`
   attribute, so they are absent from the accessibility tree. Open answers have no fixed maximum height.
-- `FinalCTA` repeats the selected Growth renewal offer, the same card and trial disclosure as the hero/pricing,
+- `FinalCTA` repeats the plan-agnostic trial offer, the same card and trial disclosure as the hero/pricing, and the
   sign-in reassurance. `Footer` retains localized legal links and contact details.
 
 ### Legal pages — pt/es drafts
@@ -6255,8 +6256,9 @@ OAuth on load instead of bouncing a signed-out visitor back to the landing site.
 `TrialProvider` wraps the server-rendered page children in `app/[lang]/layout.tsx`. It owns one
 `BillingInterval` (`annual` or `monthly`), initially annual. `Pricing` changes that shared state. The navigation,
 hero, final CTA, and every plan card then render their links with the same interval. Generic CTAs select Growth;
-plan cards select their own tier. `SelectedOffer` displays Growth's matching renewal price beside the hero and
-final CTA. A full page load initializes the interval to annual; this preference is not persisted in browser storage.
+plan cards select their own tier. `SelectedOffer` displays the interval's plan-agnostic offer beside the hero and
+final CTA: "choose any plan" with the Starter price as the from-floor, since the trial can start on any plan. A full
+page load initializes the interval to annual; this preference is not persisted in browser storage.
 The section content remains server-rendered rather than becoming a single client page.
 
 The `plan` and `interval` parameters are used by OAuth and billing, not merely displayed. The callback forwards them
@@ -6281,13 +6283,13 @@ Trial buttons do not promise a fixed duration: the static landing cannot identif
 upper bound, and either trial can end first at 50 recorded interactions. The app shows the actual invited member's
 trial duration after sign-in.
 
-| Location     | Selected plan | Interval                  | Adjacent information                                                                |
-|--------------|---------------|---------------------------|-------------------------------------------------------------------------------------|
-| Navigation   | Growth        | Shared selection          | Mobile Pricing shortcut remains visible; trial shortcut starts at `sm`              |
-| Hero         | Growth        | Shared selection          | Growth renewal amount/period, card and account-wide trial rule, sign-in reassurance |
-| Pricing card | Card's tier   | Shared selection          | Per-post cap, card and account-wide trial rule, tier's renewal amount/period        |
-| Final CTA    | Growth        | Shared selection          | Growth renewal amount/period, card and account-wide trial rule, sign-in reassurance |
-| Custom       | Negotiated    | Display follows selection | Existing $100/month or $1,000/year floor; contact by email                          |
+| Location     | Selected plan | Interval                  | Adjacent information                                                                            |
+|--------------|---------------|---------------------------|-------------------------------------------------------------------------------------------------|
+| Navigation   | Growth        | Shared selection          | Mobile Pricing shortcut remains visible; trial shortcut starts at `sm`                          |
+| Hero         | Growth        | Shared selection          | Plan-agnostic offer (Starter from-floor), card and account-wide trial rule, sign-in reassurance |
+| Pricing card | Card's tier   | Shared selection          | Per-post cap, card and account-wide trial rule, tier's renewal amount/period                    |
+| Final CTA    | Growth        | Shared selection          | Plan-agnostic offer (Starter from-floor), card and account-wide trial rule, sign-in reassurance |
+| Custom       | Negotiated    | Display follows selection | Existing $100/month or $1,000/year floor; contact by email                                      |
 
 The sign-in reassurance describes OIDC-only name/photo/email access and manual posting. It makes no claim of
 LinkedIn endorsement or guaranteed account safety.

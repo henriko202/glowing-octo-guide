@@ -1,8 +1,8 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, type ReactNode, useContext, useEffect, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
-import { formatPrice, planPrice, trialHref, validReferral, type BillingInterval } from '@/lib/trial'
+import { type BillingInterval, formatPrice, planPrice, trialHref, validReferral } from '@/lib/trial'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
 
@@ -75,6 +75,6 @@ export function TrialLink({
 
 export function SelectedOffer({ dict, lang }: { dict: Dictionary['trialOffer']; lang: Locale }) {
   const { interval } = useTrial()
-  const price = formatPrice(planPrice('growth', interval), lang)
+  const price = formatPrice(planPrice('starter', interval), lang)
   return <p className="text-sm font-medium text-cream">{dict[interval].replace('{{price}}', price)}</p>
 }

@@ -43,7 +43,7 @@
     "eyebrow": "Ferramenta de SSI do LinkedIn",
     "headlineLine1": "Publicações relevantes do LinkedIn.",
     "headlineLine2": "Em um só feed.",
-    "subLine1": "Sua próxima oportunidade depende do LinkedIn. Encontre publicações relevantes, receba um rascunho e conclua cada ação por lá.",
+    "subLine1": "Sua próxima oportunidade depende do LinkedIn. Encontre publicações relevantes, receba um rascunho de comentário e conclua cada ação por lá.",
     "subLine2": "Você decide cada ação. Nada é automatizado.",
     "cta": "Começar meu teste",
     "ctaDisclaimer": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
@@ -272,7 +272,7 @@
     "es": "Español"
   },
   "trialOffer": {
-    "annual": "Teste do Growth · Depois, {{price}} cobrados anualmente",
-    "monthly": "Teste do Growth · Depois, {{price}} cobrados mensalmente"
+    "annual": "Escolha qualquer plano · Depois, a partir de {{price}} por ano",
+    "monthly": "Escolha qualquer plano · Depois, a partir de {{price}} por mês"
   }
 }

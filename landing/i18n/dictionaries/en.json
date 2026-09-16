@@ -267,7 +267,7 @@
     "es": "Español"
   },
   "trialOffer": {
-    "annual": "Growth trial · Then {{price}} billed annually",
-    "monthly": "Growth trial · Then {{price}} billed monthly"
+    "annual": "Choose any plan · Then from {{price}} a year",
+    "monthly": "Choose any plan · Then from {{price}} a month"
   }
 }

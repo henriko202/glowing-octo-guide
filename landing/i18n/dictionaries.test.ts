@@ -38,6 +38,16 @@ describe('landing translations', () => {
     ['en', en],
     ['pt', pt],
     ['es', es]
+  ] as const)('%s keeps the generic trial offer plan-agnostic', (_locale, dictionary) => {
+    for (const value of Object.values(dictionary.trialOffer)) {
+      expect(value).not.toMatch(/\b(Starter|Growth|Pro)\b/)
+    }
+  })
+
+  it.each([
+    ['en', en],
+    ['pt', pt],
+    ['es', es]
   ] as const)('%s keeps every social title brand-first', (_locale, dictionary) => {
     expect(dictionary.meta.ogTitle.startsWith(`${SITE_NAME} · `)).toBe(true)
     for (const page of Object.values(dictionary.legalMeta)) {

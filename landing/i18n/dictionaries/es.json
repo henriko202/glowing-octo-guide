@@ -43,7 +43,7 @@
     "eyebrow": "Herramienta de SSI de LinkedIn",
     "headlineLine1": "Publicaciones relevantes de LinkedIn.",
     "headlineLine2": "En un solo feed.",
-    "subLine1": "Tu próxima oportunidad depende de LinkedIn. Encuentra publicaciones relevantes, recibe un borrador y completa allí cada acción.",
+    "subLine1": "Tu próxima oportunidad depende de LinkedIn. Encuentra publicaciones relevantes, recibe un borrador de comentario y completa allí cada acción.",
     "subLine2": "Tú decides cada acción. Nada está automatizado.",
     "cta": "Empezar mi prueba",
     "ctaDisclaimer": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
@@ -272,7 +272,7 @@
     "es": "Español"
   },
   "trialOffer": {
-    "annual": "Prueba de Growth · Después, {{price}} facturados anualmente",
-    "monthly": "Prueba de Growth · Después, {{price}} facturados mensualmente"
+    "annual": "Elige cualquier plan · Después, desde {{price}} al año",
+    "monthly": "Elige cualquier plan · Después, desde {{price}} al mes"
   }
 }
