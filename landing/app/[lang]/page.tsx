@@ -3,6 +3,7 @@ import type { Locale } from '@/i18n/config'
 import Nav from '@/components/Nav'
 import Hero from '@/components/Hero'
 import HowItWorks from '@/components/HowItWorks'
+import Positioning from '@/components/Positioning'
 import SSIExplainer from '@/components/SSIExplainer'
 import Proof from '@/components/Proof'
 import Features from '@/components/Features'
@@ -44,6 +45,7 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
           lang={lang}
         />
         <HowItWorks dict={dict.howItWorks} />
+        <Positioning dict={dict.positioning} />
         <Features
           dict={dict.features}
           tiers={dict.tiers}

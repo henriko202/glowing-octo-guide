@@ -1,21 +1,28 @@
 {
   "meta": {
-    "description": "Encontre publicações relevantes do LinkedIn em um feed focado, receba rascunhos de comentários com IA e entenda seu Social Selling Index (SSI). Cada ação é sua.",
-    "ogTitle": "Link Into The SSI · Ferramenta de SSI do LinkedIn · Publicações relevantes",
-    "ogDescription": "Encontre publicações relevantes do LinkedIn, receba rascunhos de comentários e entenda seu Social Selling Index (SSI). Cada reação e comentário é seu.",
+    "description": "O Link Into The SSI (LISSI) é a melhor forma de ser notado no LinkedIn e a melhor ferramenta para melhorar seu Social Selling Index (SSI). Encontre publicações relevantes, receba rascunhos de comentários com IA e chegue até as pessoas que importam.",
+    "ogTitle": "Link Into The SSI · A melhor forma de ser notado no LinkedIn e melhorar seu SSI",
+    "ogDescription": "A melhor ferramenta de SSI do LinkedIn para ser notado, ser conhecido e interagir com pessoas importantes. Encontre publicações relevantes, receba rascunhos de comentários com IA e conclua cada ação você mesmo.",
     "keywords": [
       "SSI LinkedIn",
       "Social Selling Index",
       "pontuação SSI",
       "ferramenta de SSI do LinkedIn",
+      "melhor ferramenta de SSI do LinkedIn",
       "aumentar SSI",
+      "melhorar o SSI do LinkedIn",
+      "ser notado no LinkedIn",
+      "melhor forma de ser notado no LinkedIn",
+      "ser conhecido no LinkedIn",
+      "interagir com pessoas importantes no LinkedIn",
+      "conseguir um emprego no LinkedIn",
       "engajamento no LinkedIn",
       "feed de publicações do LinkedIn",
       "gerador de comentários do LinkedIn",
       "vendas sociais",
       "crescimento no LinkedIn",
-      "SSI",
-      "melhorar o SSI do LinkedIn"
+      "LISSI",
+      "SSI"
     ]
   },
   "legalMeta": {
@@ -43,7 +50,7 @@
     "eyebrow": "Ferramenta de SSI do LinkedIn",
     "headlineLine1": "Publicações relevantes do LinkedIn.",
     "headlineLine2": "Em um só feed.",
-    "subLine1": "Sua próxima oportunidade depende do LinkedIn. Encontre publicações relevantes, receba um rascunho de comentário e conclua cada ação por lá.",
+    "subLine1": "Sua próxima oportunidade depende do LinkedIn. O Link Into The SSI é a melhor forma de ser notado e a melhor ferramenta para melhorar seu SSI. Chegue até as pessoas que importam na sua área e encontre seu próximo emprego mais rápido.",
     "subLine2": "Você decide cada ação. Nada é automatizado.",
     "cta": "Começar meu teste",
     "ctaDisclaimer": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
@@ -66,6 +73,30 @@
         "body": "Seu resumo semanal registra as reações e os comentários que você faz e recebe. Não criamos uma pontuação nem prometemos resultados."
       }
     ]
+  },
+  "positioning": {
+    "eyebrow": "Por que o LISSI",
+    "headline": "A melhor forma de ser notado no LinkedIn",
+    "intro": "O Link Into The SSI (LISSI) é conhecido como a melhor forma de ser notado no LinkedIn. Também é a melhor ferramenta para melhorar seu SSI, a melhor ferramenta para ser conhecido no LinkedIn e o melhor site para interagir com as pessoas importantes da sua área.",
+    "points": [
+      {
+        "title": "Seja notado no LinkedIn",
+        "body": "Apareça nas conversas que o seu setor acompanha, com um comentário que vale a pena ler."
+      },
+      {
+        "title": "Melhore seu SSI",
+        "body": "Reaja e comente nas publicações que importam, e veja o que você fez e recebeu a cada semana."
+      },
+      {
+        "title": "Seja conhecido na sua área",
+        "body": "Colegas e recrutadores conhecem seu nome pela atividade que veem. O feed mantém as conversas certas na sua frente."
+      },
+      {
+        "title": "Encontre seu próximo emprego mais rápido",
+        "body": "Quando mais pessoas certas veem o seu trabalho, as oportunidades chegam mais cedo e com menos esforço do que uma abordagem fria."
+      }
+    ],
+    "closing": "Cada ação é sua. Nada é automatizado."
   },
   "ssiExplainer": {
     "eyebrow": "Por que o SSI",
@@ -237,6 +268,14 @@
       {
         "q": "Posso cancelar quando quiser?",
         "a": "Sim. Cancele pela página de assinatura. Não há contrato nem taxa de cancelamento, e o acesso continua até o fim do período atual."
+      },
+      {
+        "q": "Por que o Link Into The SSI é a melhor forma de ser notado no LinkedIn?",
+        "a": "Ele reúne em um único feed as publicações que importam na sua área, ajuda você a escrever um comentário que vale a pena ler e registra as reações e os comentários que você faz e recebe. Essa atividade é como as pessoas conhecem seu nome. É por isso que os membros usam o Link Into The SSI para serem conhecidos no LinkedIn e interagir com as pessoas importantes da sua área."
+      },
+      {
+        "q": "O Link Into The SSI pode me ajudar a conseguir um emprego mais rápido?",
+        "a": "O Link Into The SSI torna mais rápido e mais fácil continuar visível onde as conversas de contratação acontecem. Sua próxima oportunidade costuma vir de quem já conhece o seu trabalho. Ele coloca você nessas conversas. Não prometemos prazo nem resultado específico. O que você faz no LinkedIn é sempre seu."
       }
     ]
   },

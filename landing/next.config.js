@@ -9,6 +9,16 @@
 // `next dev` evals every module (eval-source-map devtool + Fast Refresh runtime), so
 // dev needs 'unsafe-eval' or the client bundle throws and nothing hydrates. NODE_ENV
 // is 'production' under `next build`, so the deployed Worker never gets this relaxation.
+// Agent discovery headers (RFC 8288, RFC 9727 §3). One comma-separated `Link` header points at
+// the API catalog, the OpenAPI description, the product page, and the LLM-facing summary.
+// Must stay in sync with `lib/discovery.ts` `AGENT_LINK_HEADER` (this config cannot import TS).
+const AGENT_LINK_HEADER = [
+  '</.well-known/api-catalog>; rel="api-catalog"',
+  '</openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json;version=3.1"',
+  '</en>; rel="service-doc"',
+  '</llms.txt>; rel="describedby"; type="text/plain"'
+].join(', ')
+
 const isDev = process.env.NODE_ENV !== 'production'
 const CONTENT_SECURITY_POLICY = [
   `default-src 'self'`,
@@ -29,6 +39,7 @@ const nextConfig = {
       {
         source: '/:path*',
         headers: [
+          { key: 'Link', value: AGENT_LINK_HEADER },
           { key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY },
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },

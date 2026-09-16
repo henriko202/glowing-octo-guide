@@ -17,4 +17,13 @@ describe('landing middleware', () => {
 
     expect(middleware(request)).toBeUndefined()
   })
+
+  it.each(['/.well-known/api-catalog', '/openapi.json', '/auth.md', '/llms-full.txt', '/robots.txt'])(
+    'passes %s through without locale routing',
+    path => {
+      const request = new NextRequest(`https://www.linkintothessi.com${path}`)
+
+      expect(middleware(request)).toBeUndefined()
+    }
+  )
 })

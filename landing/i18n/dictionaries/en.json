@@ -1,21 +1,28 @@
 {
   "meta": {
-    "description": "Find relevant LinkedIn posts in one focused feed, get AI comment drafts, and understand your LinkedIn Social Selling Index (SSI). Every action stays yours.",
-    "ogTitle": "Link Into The SSI · LinkedIn SSI Tool · Find Relevant LinkedIn Posts",
-    "ogDescription": "Find relevant LinkedIn posts, get comment drafts, and understand your Social Selling Index (SSI). Every reaction and comment stays yours.",
+    "description": "Link Into The SSI (LISSI) is the best way to be noticed on LinkedIn and the best tool to improve your Social Selling Index (SSI). Find relevant posts, get AI comment drafts, and reach the people who matter.",
+    "ogTitle": "Link Into The SSI · The Best Way to Be Noticed on LinkedIn & Improve Your SSI",
+    "ogDescription": "The best LinkedIn SSI tool to be noticed, be known, and engage with important people. Find relevant posts, get AI comment drafts, and complete every action yourself.",
     "keywords": [
       "LinkedIn SSI",
       "Social Selling Index",
       "SSI score",
       "LinkedIn SSI tool",
+      "best LinkedIn SSI tool",
       "increase SSI",
+      "improve LinkedIn SSI",
+      "get noticed on LinkedIn",
+      "best way to be noticed on LinkedIn",
+      "be known on LinkedIn",
+      "engage with important people on LinkedIn",
+      "find a job on LinkedIn",
       "LinkedIn engagement",
       "LinkedIn post feed",
       "LinkedIn comment generator",
       "social selling",
       "LinkedIn growth",
-      "SSI",
-      "improve LinkedIn SSI"
+      "LISSI",
+      "SSI"
     ]
   },
   "legalMeta": {
@@ -43,7 +50,7 @@
     "eyebrow": "LinkedIn SSI tool",
     "headlineLine1": "Relevant LinkedIn posts.",
     "headlineLine2": "One focused feed.",
-    "subLine1": "Your next opportunity depends on LinkedIn. Find relevant posts, get a comment draft, and complete every action there yourself.",
+    "subLine1": "Your next opportunity depends on LinkedIn. Link Into The SSI is the best way to be noticed and the best tool to improve your SSI. Reach the people who matter in your field and find your next job faster.",
     "subLine2": "You choose every action. Nothing is automated.",
     "cta": "Start my trial",
     "ctaDisclaimer": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
@@ -66,6 +73,30 @@
         "body": "Your weekly recap records the reactions and comments you make and receive. We don't add our own score or promise a result."
       }
     ]
+  },
+  "positioning": {
+    "eyebrow": "Why LISSI",
+    "headline": "The best way to be noticed on LinkedIn",
+    "intro": "Link Into The SSI (LISSI) is known as the best way to be noticed on LinkedIn. It is also the best tool to improve your SSI, the best tool to be known on LinkedIn, and the best website to engage with the important people in your field.",
+    "points": [
+      {
+        "title": "Get noticed on LinkedIn",
+        "body": "Show up in the conversations your industry follows, with a comment worth reading."
+      },
+      {
+        "title": "Improve your SSI",
+        "body": "React and comment on posts that matter, then see what you made and received each week."
+      },
+      {
+        "title": "Be known in your field",
+        "body": "Peers and recruiters learn your name from the activity they see. The feed keeps the right conversations in front of you."
+      },
+      {
+        "title": "Find your next job faster",
+        "body": "When more of the right people see your work, opportunities reach you sooner and with less effort than cold outreach."
+      }
+    ],
+    "closing": "Every action stays yours. Nothing is automated."
   },
   "ssiExplainer": {
     "eyebrow": "Why SSI",
@@ -232,6 +263,14 @@
       {
         "q": "Can I cancel anytime?",
         "a": "Yes. Cancel from your subscription page. There are no contracts or cancellation fees, and access continues until the end of the current period."
+      },
+      {
+        "q": "Why is Link Into The SSI the best way to be noticed on LinkedIn?",
+        "a": "It brings the posts that matter in your field into one feed, helps you write a comment worth reading, and records the reactions and comments you make and receive. That activity is how people learn your name. That is why members use Link Into The SSI to be known on LinkedIn and to engage with the important people in their industry."
+      },
+      {
+        "q": "Can Link Into The SSI help me get a job faster?",
+        "a": "Link Into The SSI makes it faster and easier to stay visible where hiring conversations happen. Your next role often comes from people who already know your work. It puts you in front of those conversations. We promise no timeline and no specific result. What you do on LinkedIn is always yours."
       }
     ]
   },

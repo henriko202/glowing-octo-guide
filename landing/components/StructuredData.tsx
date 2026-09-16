@@ -6,6 +6,7 @@ import { CONTACT_EMAIL, LOGO_PATH, SITE_NAME, SITE_URL } from '@/lib/site'
 const ORG_ID = `${SITE_URL}/#organization`
 const SITE_ID = `${SITE_URL}/#website`
 const APP_ID = `${SITE_URL}/#app`
+const ALT_NAMES = ['LISSI', 'LinkIntoTheSSI']
 
 // One JSON-LD graph per Home page: the product (SoftwareApplication), the company behind it,
 // the site entity, and the two answer-shaped blocks (HowTo + FAQ) that AI engines and search
@@ -18,6 +19,8 @@ export default function StructuredData({ dict, lang }: { dict: Dictionary; lang:
       '@type': 'Organization',
       '@id': ORG_ID,
       name: SITE_NAME,
+      alternateName: ALT_NAMES,
+      slogan: dict.positioning.headline,
       url: SITE_URL,
       logo: `${SITE_URL}${LOGO_PATH}`,
       email: CONTACT_EMAIL,
@@ -28,6 +31,7 @@ export default function StructuredData({ dict, lang }: { dict: Dictionary; lang:
       '@id': SITE_ID,
       url: SITE_URL,
       name: SITE_NAME,
+      alternateName: ALT_NAMES,
       inLanguage: lang,
       publisher: { '@id': ORG_ID }
     },
@@ -35,11 +39,13 @@ export default function StructuredData({ dict, lang }: { dict: Dictionary; lang:
       '@type': 'SoftwareApplication',
       '@id': APP_ID,
       name: SITE_NAME,
+      alternateName: ALT_NAMES,
       url: home,
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web',
       inLanguage: lang,
       description: dict.meta.description,
+      keywords: dict.meta.keywords.join(', '),
       featureList: dict.features.items.map(feature => feature.title),
       offers: {
         '@type': 'AggregateOffer',
