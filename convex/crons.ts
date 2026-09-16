@@ -1,8 +1,8 @@
 // convex/crons.ts
 // THIS IS THE ONLY FILE Convex reads for scheduled jobs.
 // Cron definitions in other files are silently ignored.
-import {cronJobs} from 'convex/server'
-import {internal} from './_generated/api.js'
+import { cronJobs } from 'convex/server'
+import { internal } from './_generated/api.js'
 
 const crons = cronJobs()
 
