@@ -1,7 +1,7 @@
 import type { Locale } from '@/i18n/config'
 import type { Dictionary } from '@/i18n/getDictionary'
 import { planPrice } from '@/lib/trial'
-import { CONTACT_EMAIL, LOGO_PATH, SITE_NAME, SITE_URL } from '@/lib/site'
+import { CONTACT_EMAIL, FOUNDER_LINKEDIN_URL, LOGO_PATH, SITE_NAME, SITE_URL } from '@/lib/site'
 
 const ORG_ID = `${SITE_URL}/#organization`
 const SITE_ID = `${SITE_URL}/#website`
@@ -24,7 +24,7 @@ export default function StructuredData({ dict, lang }: { dict: Dictionary; lang:
       url: SITE_URL,
       logo: `${SITE_URL}${LOGO_PATH}`,
       email: CONTACT_EMAIL,
-      founder: { '@type': 'Person', name: dict.proof.founderName }
+      founder: { '@type': 'Person', name: dict.proof.founderName, url: FOUNDER_LINKEDIN_URL }
     },
     {
       '@type': 'WebSite',

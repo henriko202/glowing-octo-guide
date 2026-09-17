@@ -9,6 +9,7 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://ww
 
 export const SITE_NAME = 'Link Into The SSI'
 export const CONTACT_EMAIL = 'contact@linkintothessi.com'
+export const FOUNDER_LINKEDIN_URL = 'https://www.linkedin.com/in/henriko202/'
 export const LOGO_PATH = '/logo.png'
 
 // OpenGraph locale uses language_TERRITORY; hreflang keeps the bare language codes.

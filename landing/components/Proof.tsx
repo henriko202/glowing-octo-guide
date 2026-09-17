@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { FOUNDER_LINKEDIN_URL } from '@/lib/site'
 import type { Dictionary } from '@/i18n/getDictionary'
 
 const FOUNDER_PHOTO = '/founder.jpg' // add landing/public/founder.jpg
@@ -31,7 +32,15 @@ export default function Proof({ dict }: { dict: Dictionary['proof'] }) {
                 className="h-12 w-12 rounded-full object-cover"
               />
               <div>
-                <p className="text-sm font-medium text-cream">{dict.founderName}</p>
+                <a
+                  href={FOUNDER_LINKEDIN_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={dict.founderProfileLabel.replace('{{name}}', dict.founderName)}
+                  className="text-sm font-medium text-cream underline decoration-cream/30 underline-offset-4 hover:decoration-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+                >
+                  {dict.founderName}
+                </a>
                 <p className="text-sm text-cream-muted">{dict.founderRole}</p>
               </div>
             </div>

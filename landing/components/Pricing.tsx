@@ -19,9 +19,10 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
           <h2 className="font-display text-4xl font-semibold text-cream md:text-5xl">{dict.headline}</h2>
           <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-cream-muted">{dict.subheadline}</p>
 
-          {/* Annual is the price on the cards; monthly sits behind this text link so the yearly
-              number is what every visitor reads first (backlog/R13). The label names where it
-              goes, so it needs no aria-pressed; min-h-11 keeps a 44 px target on phones. */}
+          {/* Annual leads every card as its monthly equivalent, with the annual total and the two
+              free months on the line below; monthly sits behind this text link so it never
+              competes for the anchor (backlog/R13). The label names where it goes, so it needs no
+              aria-pressed; min-h-11 keeps a 44 px target on phones. */}
           <button
             type="button"
             onClick={() => setInterval(annual ? 'monthly' : 'annual')}
@@ -35,10 +36,9 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
           {dict.plans.map(plan => {
             const highlight = plan.id === 'growth'
             const amount = planPrice(plan.id, interval)
-            const price = formatPrice(amount, lang)
-            const sub = annual
-              ? dict.annualSubLabel.replace('{{perMonth}}', formatPrice(amount / 12, lang, 2))
-              : dict.monthlySubLabel
+            const monthlyPrice = annual ? formatPrice(amount / 12, lang, 2) : formatPrice(amount, lang)
+            const totalPrice = formatPrice(amount, lang)
+            const sub = annual ? dict.annualSubLabel.replace('{{price}}', totalPrice) : dict.monthlySubLabel
             return (
               <div
                 key={plan.id}
@@ -60,8 +60,8 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                   <p className="mt-1 text-sm leading-relaxed text-cream-muted">{plan.description}</p>
                 </div>
                 <div className="mb-6">
-                  <span className="font-display text-4xl font-semibold text-cream">{price}</span>
-                  <span className="ml-1 text-sm text-cream-muted">{annual ? dict.periodYear : dict.periodMonth}</span>
+                  <span className="font-display text-4xl font-semibold text-cream">{monthlyPrice}</span>
+                  <span className="ml-1 text-sm text-cream-muted">{dict.periodMonth}</span>
                   <p className="mt-2 text-xs text-gold-text">{sub}</p>
                 </div>
                 {/* The one axis the three plans are compared on (backlog/R13): the number the ladder
@@ -95,7 +95,7 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                 </TrialLink>
                 <p className="mt-3 text-xs leading-relaxed text-cream-muted">{dict.trialNote}</p>
                 <p className="mt-2 text-xs leading-relaxed text-cream-muted">
-                  {(annual ? dict.renewalAnnual : dict.renewalMonthly).replace('{{price}}', price)}
+                  {(annual ? dict.renewalAnnual : dict.renewalMonthly).replace('{{price}}', totalPrice)}
                 </p>
               </div>
             )

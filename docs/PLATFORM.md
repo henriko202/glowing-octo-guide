@@ -6134,6 +6134,10 @@ content** (encodes the business rules):
   closer to the product explanation.
 - `Pricing` has three cards and an annual/monthly selector. Annual remains the initial interval; Growth remains the
   recommended plan. Monthly prices are Starter $10, Growth $15, and Pro $50, with annual prices at ten times monthly.
+  Since 2026‑09‑16 the annual card leads with the plan's monthly equivalent (`$8.33`, `$12.50`, `$41.67`) and the line
+  under it states the charge and the saving (`$100 billed annually · 2 months free`); monthly mode leads with the
+  monthly price and keeps the `2 months free if you pay annually` line. The renewal line under each CTA repeats the
+  interval's total, so the amount charged after the trial is visible on the card in both intervals.
   `landing/lib/trial.ts` supplies both card prices and the plan-agnostic offer beside the generic CTAs; the quoted
   price is the interval's Starter price, the floor, because a trial can start on any plan. `Intl.NumberFormat`
   formats USD in the page locale, with pt/es writing the dollar as `U$` and en keeping `$`. These are display values;
@@ -6145,7 +6149,9 @@ content** (encodes the business rules):
   cancellation is available. The next line states that plan's renewal price and billing interval.
 - `Proof` leads with the activity recap and lists the four categories it records: reactions/comments made and
   reactions/comments received. The founder note keeps the early-access disclosure and makes no customer-results
-  claim. The recap description is not presented as a live report or a testimonial.
+  claim. The founder name links to his LinkedIn profile (`FOUNDER_LINKEDIN_URL`, `landing/lib/site.ts`) in a new tab
+  with a localized accessible name (`proof.founderProfileLabel`), and the same URL is the `url` of the `founder`
+  Person in the JSON-LD graph. The recap description is not presented as a live report or a testimonial.
 - The compact `SSIExplainer` follows pricing. It describes LinkedIn's four scored areas, links the original source,
   and makes no claim that SSI controls ranking or that the product can predict it. The earlier sales-statistics
   panel remains removed. The Sales Navigator caveat remains in the proof note and FAQ. The full proof note links
@@ -7099,6 +7105,22 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑16 (founder profile link). **The founder's name in the proof card links to his LinkedIn
+profile.** `FOUNDER_LINKEDIN_URL` in `landing/lib/site.ts` is the one source for the URL. The proof card renders it
+as an underlined link that opens in a new tab with a localized accessible name (`proof.founderProfileLabel`,
+`{{name}} on LinkedIn`), and the same URL is the `url` of the `founder` Person in the JSON-LD graph. No other proof
+content changed. Sections updated: §15, §21._
+
+_Last updated: 2026‑09‑16 (installment-first pricing). **The annual plan card leads with the monthly equivalent,
+not the yearly total.** Annual is the default interval, and each card used to show the yearly charge (`$150`) as
+its largest number. The card now shows the plan's monthly equivalent (`$12.50/mo`) in the display face, with the
+charge and the saving on the line below (`$150 billed annually · 2 months free`). The renewal line under each
+CTA still quotes the interval's total, so the card never hides the amount charged after the trial. Monthly mode
+is unchanged: the card leads with `$10`, `$15`, or `$50` and keeps the `2 months free if you pay annually` line.
+`annualSubLabel` now interpolates `{{price}}` (the interval's total) in all three dictionaries, and the unused
+`periodYear` key is removed. No price, plan limit, CTA destination, or Stripe value changed. Sections updated:
+§15, §21._
 
 _Last updated: 2026‑09‑16 (AEO / agent readiness). **The landing now publishes agent discovery documents, Link
 headers, and the positioning copy.** New `/.well-known/api-catalog` (RFC 9727 linkset, `lib/discovery.ts`) with the
