@@ -43,6 +43,7 @@ import type * as lib_cookies from "../lib/cookies.js";
 import type * as lib_digest from "../lib/digest.js";
 import type * as lib_digestEmails from "../lib/digestEmails.js";
 import type * as lib_digestOptOut from "../lib/digestOptOut.js";
+import type * as lib_discountGuard from "../lib/discountGuard.js";
 import type * as lib_downgrade from "../lib/downgrade.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_emailLayout from "../lib/emailLayout.js";
@@ -146,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   "lib/digest": typeof lib_digest;
   "lib/digestEmails": typeof lib_digestEmails;
   "lib/digestOptOut": typeof lib_digestOptOut;
+  "lib/discountGuard": typeof lib_discountGuard;
   "lib/downgrade": typeof lib_downgrade;
   "lib/email": typeof lib_email;
   "lib/emailLayout": typeof lib_emailLayout;

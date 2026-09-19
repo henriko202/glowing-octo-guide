@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { TrialLink } from './TrialProvider'
+import LogoMark from './LogoMark'
 import ThemeToggle from './ThemeToggle'
 import LanguageSelector from './LanguageSelector'
 import type { Dictionary } from '@/i18n/getDictionary'
@@ -38,9 +39,7 @@ export default function Nav({
           aria-label="Link Into The SSI"
           className="group flex min-h-11 min-w-11 shrink-0 items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gold transition-[border-color,box-shadow] duration-300 group-hover:border-gold-light group-hover:shadow-[0_0_12px_rgba(201,150,62,0.4)]">
-            <div className="h-2 w-2 rounded-full bg-gold transition-colors duration-300 group-hover:bg-gold-light" />
-          </div>
+          <LogoMark className="h-6 w-[15px] shrink-0 text-gold transition-[color,filter] duration-300 group-hover:text-gold-light group-hover:drop-shadow-[0_0_6px_rgba(201,150,62,0.45)]" />
           <span className="hidden font-display text-base font-semibold tracking-wide whitespace-nowrap text-cream min-[430px]:inline md:text-lg">
             Link Into The SSI
           </span>

@@ -11,7 +11,7 @@ import type { Doc } from './_generated/dataModel'
 import { tierToRank } from './lib/planLimits'
 import { restampUserPostsTierRank } from './lib/feedRank'
 import { canEngage } from './lib/access'
-import { isApifyPostSyncEnabled, type ApifyFlags } from './lib/apify'
+import { type ApifyFlags, isApifyPostSyncEnabled } from './lib/apify'
 import {
   findDuplicateSubscription,
   findLiveSubscription,
@@ -20,6 +20,7 @@ import {
   isTrialConversion
 } from './lib/trialMilestone'
 import { resolvePendingDowngrade } from './lib/downgrade'
+import { shouldDetachDiscounts } from './lib/discountGuard'
 import { getTierFromPriceId } from './lib/stripePrices'
 
 // `Stripe.Event` is the SDK's discriminated union of every webhook payload. `eventCreatedMs` works
@@ -52,6 +53,13 @@ export function syncArgs(event: SubscriptionEvent) {
   // how the member's renewal date (BillingPage) and users.subscriptionEndsAt came to be blank while
   // every test still passed. Read both, newest location first.
   const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end
+  // Discounts moved the same way: a modern payload carries `discounts` (a list), an older one a
+  // singular `discount`. Only ids are needed — the webhook's job is to know a discount is attached
+  // so it can schedule a detach when the price changes (lib/discountGuard).
+  const legacyDiscount = (sub as { discount?: string | { id: string } | null }).discount
+  const discounts =
+    (sub as { discounts?: Array<string | { id: string }> | null }).discounts ?? (legacyDiscount ? [legacyDiscount] : [])
+  const discountIds = discounts.map(d => (typeof d === 'string' ? d : d.id)).filter(Boolean)
   return {
     stripeCustomerId: String(sub.customer),
     stripeSubscriptionId: sub.id,
@@ -63,6 +71,8 @@ export function syncArgs(event: SubscriptionEvent) {
     priceAmount: typeof price?.unit_amount === 'number' ? price.unit_amount : undefined,
     priceCurrency: price?.currency ?? undefined,
     priceInterval: price?.recurring?.interval ?? undefined,
+    // The discounts still attached at event time, if any — see the guard in syncUserSubscription.
+    discountIds,
     // Any scheduled cancel, not just the flag — see isCancelPending.
     cancelAtPeriodEnd: isCancelPending(sub),
     // backlog/B07 — the subscription schedule attached to this subscription, if any. Its PRESENCE is
@@ -143,6 +153,8 @@ export const syncUserSubscription = internalMutation({
     cancelAtPeriodEnd: v.optional(v.boolean()),
     // backlog/B07 — presence of an attached subscription schedule. See lib/downgrade.
     stripeScheduleId: v.optional(v.string()),
+    // The discounts still attached to the subscription at event time (lib/discountGuard).
+    discountIds: v.optional(v.array(v.string())),
     stripeCreated: v.optional(v.number()),
     // Stripe `created` of the EVENT (ms), not of the subscription — see schema: subscriptions.lastEventAt.
     eventCreated: v.optional(v.number())
@@ -213,6 +225,24 @@ export const syncUserSubscription = internalMutation({
       // "downgrade pending". Hand it back now; the self-release is the backstop if this never runs.
       if (pending === 'applied') {
         await ctx.scheduler.runAfter(0, internal.billingNode.releaseSubscriptionSchedule, {
+          stripeSubscriptionId: args.stripeSubscriptionId
+        })
+      }
+      // A plan or interval change while a discount is still attached would let a free-month
+      // promotion code discount the NEW price: a monthly -> annual switch inside the coupon window
+      // makes the annual invoice 100% off — a free year (found 2026-09-18). The portal's own refusal
+      // during a trial is the first line (lib/portalConfig); this detach is the backstop for every
+      // other path, the Dashboard included. Our scheduled downgrade applying is exempt because
+      // buildDowngradePhases carries the discount into the cheaper phase on purpose.
+      if (
+        shouldDetachDiscounts({
+          existing: existing ? { tier: existing.tier, priceInterval: existing.priceInterval } : null,
+          incoming: { tier: args.tier, priceInterval: args.priceInterval },
+          pending,
+          hasDiscount: (args.discountIds?.length ?? 0) > 0
+        })
+      ) {
+        await ctx.scheduler.runAfter(0, internal.billingNode.detachSubscriptionDiscounts, {
           stripeSubscriptionId: args.stripeSubscriptionId
         })
       }

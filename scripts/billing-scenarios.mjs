@@ -1,9 +1,18 @@
-// scripts/billing-scenarios.mjs — the whole B07 proof in one run: does a cross-tier downgrade swap at
-// period end, does our own code follow it, and was anyone credited a cent? TEST MODE ONLY.
+// scripts/billing-scenarios.mjs — the billing proofs in one script: the B07 downgrade run below, and
+// the promotion-code guard run selected by --coupons. TEST MODE ONLY.
 //
-//   node scripts/billing-scenarios.mjs                    full run, deletes the test clock afterwards
+//   node scripts/billing-scenarios.mjs                    full B07 run, deletes the test clock afterwards
 //   node scripts/billing-scenarios.mjs --keep             keep the clock (and its customer/subscription)
 //   node scripts/billing-scenarios.mjs --user <convexId>  read-only audit of one member, writes nothing
+//   node scripts/billing-scenarios.mjs --coupons          coupon guard run: a free month must not become a free year
+//
+// The --coupons run (2026-09-18): a 100%-off promotion code is attached to a trialing monthly
+// subscription, then the portal-equivalent switch to annual happens on day 3 — while the `once`
+// coupon is still unconsumed, which is exactly when it became a free year in test mode. It asserts
+// two things: the no-plan-switching trial portal configuration exists, and the webhook discount
+// guard (lib/discountGuard) detaches the coupon before the trial-end invoice, so that invoice is
+// PAID IN FULL. Checkout cannot drive a test-clock customer, so the coupon is attached the way a
+// promotion code attaches it there: a subscription-level discount on the created subscription.
 //
 // It drives OUR public actions through the Convex CLI, so it answers "does the platform behave?" —
 // the guards, the pending-downgrade mirror, and the webhook half (syncUserSubscription →
@@ -108,6 +117,12 @@ const PRICE = {
   growth: readEnv('.env.local', 'STRIPE_GROWTH_PRICE_ID'),
   pro: readEnv('.env.local', 'STRIPE_PRO_PRICE_ID')
 }
+// Only the coupon run needs an annual price by name: the switch it drives is monthly -> annual.
+const ANNUAL_PRICE = {
+  starter: readEnv('.env.local', 'STRIPE_STARTER_ANNUAL_PRICE_ID'),
+  growth: readEnv('.env.local', 'STRIPE_GROWTH_ANNUAL_PRICE_ID'),
+  pro: readEnv('.env.local', 'STRIPE_PRO_ANNUAL_PRICE_ID')
+}
 
 // Every price → its tier, annual included. The run below only ever touches monthly, but --user has to
 // name whatever price a real member is actually on — and annual is where a credit costs the most.
@@ -183,6 +198,7 @@ const readSub = id =>
   `const r = await ctx.db.query('subscriptions').withIndex('by_stripe_id', q =>
      q.eq('stripeSubscriptionId', ${JSON.stringify(id)})).first()
    return r && { tier: r.tier, status: r.status, currentPeriodEnd: r.currentPeriodEnd ?? null,
+     priceInterval: r.priceInterval ?? null,
      pendingTier: r.pendingTier ?? null, pendingAt: r.pendingAt ?? null,
      cancelAtPeriodEnd: r.cancelAtPeriodEnd ?? null, userId: r.userId }`
 
@@ -236,6 +252,25 @@ async function waitFor(label, js, predicate, seconds = 45) {
     const r = query(js)
     if (!r.ok) fail(`inline query failed:\n${r.error}`)
     last = r.value
+    if (predicate(last)) {
+      check(label, true)
+      return last
+    }
+    await sleep(500)
+  }
+  check(label, false, `timed out after ${seconds}s — last read ${JSON.stringify(last)}`)
+  return last
+}
+
+/**
+ * The Stripe-side twin of waitFor. The coupon guard's detach is scheduled from a webhook, so the
+ * delete lands after the API call that caused it has already returned — and the state to assert
+ * lives in Stripe, not in our row.
+ */
+async function waitForStripe(label, read, predicate, seconds = 45) {
+  let last
+  for (let i = 0; i < seconds * 2; i++) {
+    last = await read()
     if (predicate(last)) {
       check(label, true)
       return last
@@ -627,6 +662,161 @@ async function run() {
   }
 }
 
+// ── Coupon guard run (--coupons) ───────────────────────────────────────────────────────────────
+// The promotion-code campaign's one money question: does a free month stay a free month? In test
+// mode it did not, twice (2026-09-18). A `repeating` coupon discounted the prorated ANNUAL invoice
+// of a monthly -> annual switch inside its window; a `once` coupon did the same when the switch
+// happened DURING a trial, because it is not consumed until the first invoice after the trial ends.
+// The fix has two halves — a no-plan-switching portal configuration for trialing members
+// (stripe-provision + lib/portalConfig), and a webhook detach for every other price change with a
+// discount still attached (lib/discountGuard -> billingNode.detachSubscriptionDiscounts). This run
+// proves the second half through a real clock and asserts the money at trial end: the annual
+// invoice is paid in full, not $0. The first half is asserted as account state: the trial config
+// exists and disables plan switching.
+async function couponRun() {
+  const now = Math.floor(Date.now() / 1000)
+  let clockId
+  let couponId
+  let probeUserId
+
+  try {
+    preflight()
+    if (!PRICE.growth) fail('STRIPE_GROWTH_PRICE_ID is missing from .env.local — run scripts/stripe-provision.mjs')
+    if (!ANNUAL_PRICE.growth)
+      fail('STRIPE_GROWTH_ANNUAL_PRICE_ID is missing from .env.local — run scripts/stripe-provision.mjs')
+
+    heading('Coupon guard — a free-month promotion code must not become a free year')
+    const coupon = await stripe('POST', '/coupons', {
+      percent_off: 100,
+      duration: 'once',
+      name: 'lits-coupon-guard'
+    })
+    couponId = coupon.id
+    note(`coupon ${coupon.id} — 100% off, duration once (what a promotion code wraps)`)
+
+    const stale = (await stripe('GET', '/test_helpers/test_clocks?limit=100')).data.filter(
+      c => c.name === 'billing-coupons'
+    )
+    for (const c of stale) {
+      await stripe('DELETE', `/test_helpers/test_clocks/${c.id}`)
+      note(`swept a leftover clock ${c.id} from an earlier run`)
+    }
+    const clock = await stripe('POST', '/test_helpers/test_clocks', { frozen_time: now, name: 'billing-coupons' })
+    clockId = clock.id
+    const customer = await stripe('POST', '/customers', {
+      test_clock: clock.id,
+      email: 'billing-coupon-probe@example.invalid',
+      description: 'LITS coupon guard probe — safe to delete'
+    })
+    const pm = await stripe('POST', '/payment_methods', { type: 'card', card: { token: 'tok_visa' } })
+    await stripe('POST', `/payment_methods/${pm.id}/attach`, { customer: customer.id })
+    await stripe('POST', `/customers/${customer.id}`, { invoice_settings: { default_payment_method: pm.id } })
+
+    const upserted = call('linkedin/auth:upsertUser', {
+      linkedinId: `lits-coupon-guard-${Date.now().toString(36)}`,
+      name: 'Coupon Guard Probe',
+      email: 'billing-coupon-probe@example.invalid',
+      accessToken: 'probe-not-a-real-token',
+      tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
+    })
+    if (!upserted.ok) fail(`could not create the probe member — is \`npx convex dev\` running?\n${upserted.error}`)
+    probeUserId = upserted.value
+    call('billing:setStripeCustomerId', { userId: probeUserId, stripeCustomerId: customer.id })
+
+    // Checkout cannot drive a test-clock customer, so the coupon is attached the way a promotion
+    // code attaches it at checkout: a subscription-level discount on the created subscription.
+    const sub = await stripe('POST', '/subscriptions', {
+      customer: customer.id,
+      items: [{ price: PRICE.growth }],
+      trial_period_days: 7,
+      discounts: [{ coupon: coupon.id }],
+      payment_behavior: 'error_if_incomplete',
+      metadata: { convexUserId: probeUserId },
+      expand: ['items.data.price']
+    })
+    note(`subscription ${sub.id} — Growth monthly, 7-day trial, coupon attached`)
+
+    const trialRow = await waitFor(
+      'row created by the webhook (trialing, growth, month)',
+      readSub(sub.id),
+      r => r?.status === 'trialing' && r?.tier === 'growth' && r?.priceInterval === 'month'
+    )
+    check('row belongs to the probe member', trialRow?.userId === probeUserId, trialRow?.userId)
+
+    // The portal half of the fix, as account state. billingNode's portalSession picks by
+    // metadata.lits_tier, so a trialing member must find this configuration — and it must have
+    // plan switching off, or the switch driven below is a click away in the hosted portal.
+    const configs = await stripe('GET', '/billing_portal/configurations?active=true&limit=100')
+    const trialConfig = configs.data.find(c => c.metadata?.lits_tier === 'trial')
+    check(
+      'a trial portal configuration exists',
+      Boolean(trialConfig),
+      trialConfig?.id ?? 'missing — run scripts/stripe-provision.mjs'
+    )
+    if (trialConfig) {
+      const full = await stripe('GET', `/billing_portal/configurations/${trialConfig.id}`)
+      check(
+        'the trial configuration disables plan switching',
+        full.features?.subscription_update?.enabled === false,
+        String(full.features?.subscription_update?.enabled)
+      )
+    }
+
+    // ── The switch ──
+    heading('Day 3 — portal-equivalent switch to annual while the `once` coupon is unconsumed')
+    await advanceTo(clock.id, now + 3 * 86400)
+    const switched = await stripe('POST', `/subscriptions/${sub.id}`, {
+      items: [{ id: sub.items.data[0].id, price: ANNUAL_PRICE.growth }],
+      proration_behavior: 'always_invoice'
+    })
+    check('switch accepted and the trial kept', switched.status === 'trialing', switched.status)
+
+    const detached = await waitForStripe(
+      'the webhook guard detached the coupon',
+      () => stripe('GET', `/subscriptions/${sub.id}`),
+      s => (s.discounts?.length ?? 0) === 0
+    )
+    check(
+      'the subscription is on the annual price',
+      detached?.items?.data?.[0]?.price?.id === ANNUAL_PRICE.growth,
+      detached?.items?.data?.[0]?.price?.id
+    )
+    await waitFor('row mirrors the interval switch (year)', readSub(sub.id), r => r?.priceInterval === 'year', 15)
+
+    // ── The money ──
+    heading('Trial end — the first invoice after the trial must charge the full annual price')
+    await advanceTo(clock.id, sub.trial_end + 3600, 'trial end')
+    const annual = await stripe('GET', `/prices/${ANNUAL_PRICE.growth}`)
+    const [charge] = await invoicesOf(sub.id)
+    check(
+      'the trial-end invoice is paid in full',
+      charge?.status === 'paid' && charge?.amount_paid === annual.unit_amount,
+      `${charge?.status} ${charge?.amount_paid} vs ${annual.unit_amount}`
+    )
+    check(
+      'no discount reached it',
+      (charge?.total_discount_amounts ?? []).length === 0,
+      JSON.stringify(charge?.total_discount_amounts ?? [])
+    )
+    await waitFor('row is active after the paid trial-end invoice', readSub(sub.id), r => r?.status === 'active')
+  } finally {
+    heading('Cleanup')
+    if (!clockId) {
+      note('nothing created')
+    } else if (flag('keep')) {
+      note(`kept: test clock ${clockId}, with its customer, subscription and invoices`)
+    } else {
+      await stripe('DELETE', `/test_helpers/test_clocks/${clockId}`)
+      note(`test clock ${clockId} deleted, with its customer, subscription and invoices`)
+    }
+    if (couponId) {
+      await stripe('DELETE', `/coupons/${couponId}`)
+      note(`coupon ${couponId} deleted`)
+    }
+    if (probeUserId) note(`probe member ${probeUserId} left in the dev DB; harmless, never reused`)
+  }
+}
+
 // ── Read-only audit ───────────────────────────────────────────────────────────────────────────
 // Every Stripe call here is a GET and the Convex read is a sandboxed readonly query, so this is safe
 // against a member's real test-mode subscription at any time — including while a downgrade is
@@ -712,7 +902,7 @@ async function audit(convexUserId) {
 
 let aborted = false
 try {
-  await (USER ? audit(USER) : run())
+  await (USER ? audit(USER) : flag('coupons') ? couponRun() : run())
 } catch (err) {
   aborted = true
   // fail() has already printed and set the exit code; anything else is a genuine crash.

@@ -7,8 +7,9 @@
 //
 // Creates: 3 plan products × 2 prices (monthly + annual), the one-time featured-post price, the
 // webhook endpoint with exactly the six events convex/http.ts handles, and the Customer Portal
-// configuration. Then writes the price ids into the three local .env files and prints the
-// `npx convex env set` block for the deployment (the fourth copy — see docs/PLATFORM.md §8).
+// configurations (one per tier, plus a no-plan-switching one for trialing members). Then writes the
+// price ids into the three local .env files and prints the `npx convex env set` block for the
+// deployment (the fourth copy — see docs/PLATFORM.md §8).
 //
 // CONVERGENT: every object is looked up by identity (product by name, price by amount+interval,
 // webhook by url, portal by is_default) and only created when missing. So it is safe to re-run, and
@@ -419,6 +420,35 @@ for (const tier of PORTAL_TIERS) {
       `✓ portal ${id} (${tier}): ${listedPrices.length} prices [${offeredTo(tier).join(' ')}], ` +
         `${PRORATION}, deferred [${scheduled.join(', ')}], continue_trial`
     )
+  }
+}
+
+// The TRIAL configuration: plan switching OFF. A trial runs on the plan it started on, and the
+// portal's plan picker was the one place that rule was not true — `trial_update_behavior:
+// 'continue_trial'` lets a trialing member switch without being charged then, and with a free-month
+// promotion code attached that turns a monthly -> annual switch into a free year (found 2026-09-18
+// in test mode: the trial-end invoice was annual, 100% off, paid $0). convex/lib/portalConfig.ts
+// hands a trialing member this configuration, never a tier's.
+const TRIAL_KEY = 'trial'
+{
+  const existing = existingConfigs.find(c => c.metadata?.[TIER_KEY] === TRIAL_KEY)
+  const body = {
+    features: { ...baseFeatures, subscription_update: { enabled: false } },
+    metadata: { [TIER_KEY]: TRIAL_KEY }
+  }
+  const id = existing
+    ? (await call('POST', `/billing_portal/configurations/${existing.id}`, body)).id
+    : (await call('POST', '/billing_portal/configurations', body, idem('portal-trial'))).id
+  const portal = await call('GET', `/billing_portal/configurations/${id}`)
+  if (portal.features?.subscription_update?.enabled !== false) {
+    problems.push(
+      `portal ${id} (trial): subscription_update reads enabled=` +
+        `${portal.features?.subscription_update?.enabled}, expected false.\n` +
+        '  While it is on, a trialing member can switch plan in the portal and a promotion-code\n' +
+        '  discount lands on the new invoice — a free month becomes a free year.'
+    )
+  } else {
+    console.log(`✓ portal ${id} (trial): plan switching off — a trial runs on the plan it started on`)
   }
 }
 

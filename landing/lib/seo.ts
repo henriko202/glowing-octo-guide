@@ -11,6 +11,13 @@ export function homeMetadata({ lang, meta }: { lang: Locale; meta: Dictionary['m
     keywords: meta.keywords,
     applicationName: SITE_NAME,
     category: 'Business',
+    icons: {
+      icon: [
+        { url: '/favicon.svg', type: 'image/svg+xml' },
+        { url: '/favicon.ico', sizes: 'any' }
+      ],
+      apple: '/apple-icon.png'
+    },
     alternates: {
       canonical: `/${lang}`,
       languages: {

@@ -1,6 +1,6 @@
 'use node'
 import Stripe from 'stripe'
-import { action, env, internalAction, type ActionCtx } from './_generated/server'
+import { action, type ActionCtx, env, internalAction } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
@@ -14,7 +14,7 @@ import {
   starterPriceIdFor
 } from './lib/stripePrices'
 import { buildDowngradePhases, isSpentSchedule, planChangeDirection } from './lib/downgrade'
-import { PORTAL_TIER_KEY, portalTierFor } from './lib/portalConfig'
+import { PORTAL_TIER_KEY, portalConfigKeyFor } from './lib/portalConfig'
 import { findLiveSubscription, isCancelPending, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
@@ -218,16 +218,14 @@ async function liveSubscriptionFor(
 }
 
 /**
- * The portal configuration for this member's tier — the one that lists their tier and the tiers
- * above it, and no cheaper one (lib/portalConfig). Looked up by the `metadata` stamp
- * scripts/stripe-provision.mjs writes, deliberately not by env var: three more ids would have to
+ * The portal configuration for a member — looked up by the `metadata` stamp
+ * scripts/stripe-provision.mjs writes, deliberately not by env var: five more ids would have to
  * reach all four env copies (§8) and drift in any one of them would silently re-open the gap.
  * One extra GET on a click-rate operation is the cheaper price.
  */
-async function portalConfigurationId(tier?: string): Promise<string> {
-  const want = portalTierFor(tier)
+async function portalConfigurationId(configKey: string): Promise<string> {
   const { data } = await stripe().billingPortal.configurations.list({ active: true, limit: 100 })
-  const match = data.find(c => c.metadata?.[PORTAL_TIER_KEY] === want)
+  const match = data.find(c => c.metadata?.[PORTAL_TIER_KEY] === configKey)
   // Never fall back to the account default. On a provisioned account it carries
   // `subscription_update: { enabled: false }`, so falling back would silently strip plan switching
   // from a member who has every right to upgrade; on an unprovisioned one it is whatever the
@@ -240,13 +238,16 @@ async function portalConfigurationId(tier?: string): Promise<string> {
 
 /**
  * Mints a portal session. The flow is already decided by the caller; omitting it opens the portal
- * home ("Manage subscription"). `tier` chooses the configuration and is never optional in practice —
- * an unreadable tier clamps to the most restrictive one.
+ * home ("Manage subscription"). `tier` and `status` choose the configuration: a trialing member gets
+ * the no-plan-switching trial config whatever their tier (lib/portalConfig), because a plan change
+ * during a trial is how a free-month promotion code becomes a free year. Neither is optional in
+ * practice — an unreadable pair clamps to the most restrictive configuration.
  */
 async function portalSession(
   ctx: ActionCtx,
   user: Doc<'users'>,
   tier: string | undefined,
+  status: string | undefined,
   flow?: FlowData
 ): Promise<{ url: string }> {
   const customer = await stripeComponent.getOrCreateCustomer(ctx, {
@@ -256,7 +257,7 @@ async function portalSession(
   })
   const session = await stripe().billingPortal.sessions.create({
     customer: customer.customerId,
-    configuration: await portalConfigurationId(tier),
+    configuration: await portalConfigurationId(portalConfigKeyFor(tier, status)),
     return_url: `${appOrigin()}/billing`,
     ...(flow ? { flow_data: flow } : {})
   })
@@ -281,7 +282,11 @@ export const createPortalSession = action({
       maxPerHour: 20
     })
     if (!user.stripeCustomerId) throw new ConvexError('No Stripe customer found')
-    return portalSession(ctx, user, user.tier)
+    // The configuration follows the subscription's STATUS as well as the tier: a trialing member
+    // gets the no-plan-switching config, because the portal is where a trial switch could discount
+    // an annual invoice with a free-month code. No live row (a churned member) is fine — tier config.
+    const subscriptions = await ctx.runQuery(internal.billing.listUserSubscriptions, { userId: user._id })
+    return portalSession(ctx, user, user.tier, findLiveSubscription(subscriptions)?.status)
   }
 })
 
@@ -382,6 +387,28 @@ export const releaseSubscriptionSchedule = internalAction({
   }
 })
 
+/**
+ * Detaches the discounts still attached to a subscription after its price changed — scheduled by
+ * syncUserSubscription when lib/discountGuard decides the change would otherwise hand a free-month
+ * promotion code a new, dearer invoice. Idempotent: nothing attached is a silent no-op, and a
+ * consumed `once` coupon has already removed itself. Stripe currently allows one discount per
+ * subscription, so one delete clears it; a future multi-discount payload would need a loop, and the
+ * guard's unit tests are where that ceiling is pinned.
+ */
+export const detachSubscriptionDiscounts = internalAction({
+  args: { stripeSubscriptionId: v.string() },
+  handler: async (_ctx, { stripeSubscriptionId }) => {
+    const sub = await stripe().subscriptions.retrieve(stripeSubscriptionId)
+    if (!sub.discounts?.length) return
+    try {
+      await stripe().subscriptions.deleteDiscount(stripeSubscriptionId)
+      console.log('[billing] detached discount after a price change', scrubError({ stripeSubscriptionId }))
+    } catch (err) {
+      console.error('[billing] could not detach subscription discount', scrubError(err))
+    }
+  }
+})
+
 export const createCancelFlowSession = action({
   args: { sessionToken: v.string(), flow: v.union(v.literal('cancel'), v.literal('downgrade')) },
   handler: async (ctx, { sessionToken, flow }): Promise<{ url: string | null }> => {
@@ -398,7 +425,7 @@ export const createCancelFlowSession = action({
       // wins: release the schedule so the portal acts on a plain subscription. A member who then
       // abandons the portal has lost the downgrade and can schedule it again.
       await releaseScheduleOn(ctx, sub)
-      return portalSession(ctx, user, live.tier, {
+      return portalSession(ctx, user, live.tier, sub.status, {
         type: 'subscription_cancel',
         subscription_cancel: { subscription: sub.id },
         after_completion: { type: 'redirect', redirect: { return_url: `${appOrigin()}/billing?canceled=true` } }
@@ -474,7 +501,7 @@ export const createPlanSwitchSession = action({
       await releaseScheduleOn(ctx, sub)
     }
 
-    return portalSession(ctx, user, live.tier, {
+    return portalSession(ctx, user, live.tier, sub.status, {
       type: 'subscription_update_confirm',
       subscription_update_confirm: { subscription: sub.id, items: [{ id: item.id, price: priceId, quantity: 1 }] },
       // BillingPage reads the tier back: "Switching you to X…" until the webhook moves `me.tier`,

@@ -16,3 +16,6 @@ landing/.open-next/
 # which Prettier re-pads by codepoint count and thereby misaligns. Same reason as docs/.
 plans/
 *.md
+
+# Static SVG assets are hand-authored — Prettier has no SVG parser.
+*.svg

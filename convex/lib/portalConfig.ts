@@ -26,14 +26,35 @@ export const PORTAL_TIER_KEY = 'lits_tier'
  * configuration, listing Pro alone. That is the fail-closed direction: a tier we cannot read is a
  * tier whose cheaper neighbours we must not offer. It costs a `contact` or corrupted row the ability
  * to switch plans in the portal home, which is the right trade against re-opening the credit gap.
- *
- * Status is deliberately NOT a parameter. `trialing` and `past_due` get the same configuration as
- * `active`, because the restriction they need is identical — no cheaper tier, ever. The rule that a
- * trial cannot change plan at all is enforced where the member actually clicks (billingNode's two
- * actions), not by handing trials a different portal.
  */
 export function portalTierFor(tier?: string): PortalTier {
   return tier === 'starter' || tier === 'growth' ? tier : 'pro'
+}
+
+/**
+ * The configuration a TRIALING member gets: `subscription_update` off. That is the whole product
+ * rule ("a trial runs on the plan it started on") made true at the one place the member can still
+ * click a different plan — the portal home, which BillingPage keeps reachable during a trial.
+ *
+ * Why this exists (found 2026-09-18, proven against Stripe test mode): plan switching during a trial
+ * is not blocked by the hosted portal. `trial_update_behavior: 'continue_trial'` (stripe-provision)
+ * deliberately lets a trialing member change plan without being charged then, and the change takes
+ * effect at trial end. With a promotion code attached that is a free-year hole: a `once` coupon is
+ * not consumed until the first invoice after the trial, so switching monthly → annual on day 3 makes
+ * the trial-end invoice annual — 100% off. billingNode's own actions refuse trial switches; this
+ * config is the portal half of the same refusal. The webhook discount guard (lib/discountGuard) is
+ * the backstop for any other path that changes a subscription's price while a discount is attached.
+ */
+export const PORTAL_TRIAL_KEY = 'trial'
+export type PortalConfigKey = PortalTier | typeof PORTAL_TRIAL_KEY
+
+/**
+ * The lookup value for a member's portal configuration. `status` only ever promotes `trialing` to
+ * the trial config; `past_due` deliberately keeps its tier's config, which already withholds every
+ * cheaper plan and whose cancel/update rules Stripe's dunning still owns.
+ */
+export function portalConfigKeyFor(tier?: string, status?: string): PortalConfigKey {
+  return status === 'trialing' ? PORTAL_TRIAL_KEY : portalTierFor(tier)
 }
 
 /**

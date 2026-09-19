@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PORTAL_TIERS, portalTierFor, tiersOfferedTo } from './portalConfig'
+import { PORTAL_TIERS, PORTAL_TRIAL_KEY, portalConfigKeyFor, portalTierFor, tiersOfferedTo } from './portalConfig'
 
 describe('portalTierFor', () => {
   it('gives each known tier its own configuration', () => {
@@ -16,6 +16,26 @@ describe('portalTierFor', () => {
     expect(portalTierFor('')).toBe('pro')
     expect(portalTierFor('Growth')).toBe('pro')
     expect(portalTierFor('enterprise')).toBe('pro')
+  })
+})
+
+// The free-year hole found 2026-09-18: the portal's plan picker is live during a trial
+// (continue_trial), and a promotion-code discount is not consumed until the first invoice after the
+// trial ends — so a trial member switching to annual made the trial-end invoice annual and 100% off.
+describe('portalConfigKeyFor', () => {
+  it('sends a trialing member to the trial config, whatever their tier', () => {
+    expect(portalConfigKeyFor('growth', 'trialing')).toBe(PORTAL_TRIAL_KEY)
+    expect(portalConfigKeyFor('starter', 'trialing')).toBe(PORTAL_TRIAL_KEY)
+    expect(portalConfigKeyFor('pro', 'trialing')).toBe(PORTAL_TRIAL_KEY)
+    expect(portalConfigKeyFor(undefined, 'trialing')).toBe(PORTAL_TRIAL_KEY)
+  })
+
+  it('leaves every other status on its tier configuration, past_due included', () => {
+    expect(portalConfigKeyFor('growth', 'active')).toBe('growth')
+    expect(portalConfigKeyFor('growth', 'past_due')).toBe('growth')
+    expect(portalConfigKeyFor('growth', 'canceled')).toBe('growth')
+    expect(portalConfigKeyFor('growth', undefined)).toBe('growth')
+    expect(portalConfigKeyFor('mystery', 'active')).toBe('pro')
   })
 })
 
