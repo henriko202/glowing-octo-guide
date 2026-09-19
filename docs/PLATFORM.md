@@ -1411,12 +1411,15 @@ Key checkout parameters:
   backend and UI read one source. **The R01 repeat-trial rule still wins:** a member who has already held a subscription
   gets no trial at all, referral or not — a referral lengthens a trial, it never re-grants one.
 - `payment_method_collection: 'always'` — card required even during the trial (no free-ride signups).
-- `allow_promotion_codes: true` — enables Henriko's manual free-month promotion-code campaign on Stripe hosted checkout.
-  No coupons are created or auto-applied in code. **Create the coupon as 100% off, duration `once`.** A `once` code is
-  consumed by the first real invoice (the one after the trial), so it cannot discount a later annual switch; a
-  `repeating` window discounts any invoice created inside it — a prorated annual one included, which is a free year
-  (proven and fixed 2026-09-18, §8). A plan change with a discount still attached is detached by the webhook guard
-  (`lib/discountGuard`), and a trialing member cannot switch plans at all (trial portal configuration, §8).
+- `allow_promotion_codes: promotionCodesAllowed(env, priceId)` — Henriko's manual free-month promotion-code campaign,
+  **monthly prices only**. A Stripe coupon attaches to the subscription and cannot be price-scoped (`applies_to` lists
+  products, and each tier's monthly and annual prices share one product), so an annual Checkout with a 100%-off code
+  would zero the whole year ($150 → $0, proven 2026-09-18). No coupons are created or auto-applied in code. **Create
+  the coupon as 100% off, duration `once`.** A `once` code is consumed by the first real invoice (the one after the
+  trial), so it cannot discount a later annual switch; a `repeating` window discounts any invoice created inside it —
+  a prorated annual one included, which is a free year (proven and fixed 2026-09-18, §8). A plan change with a
+  discount still attached is detached by the webhook guard (`lib/discountGuard`), and a trialing member cannot switch
+  plans at all (trial portal configuration, §8).
 - `locale: stripeCheckoutLocale(billingLocale)` (`lib/checkoutCopy.ts`) — the hosted page renders in the member's own
   language. Stripe's codes are not ours: our `pt` maps onto Stripe's `pt-BR`.
 - `custom_text.submit.message: checkoutSubmitMessage(billingLocale, { trial, days })` — the early-charge rule, stated
@@ -2392,18 +2395,25 @@ as
 > it), so a trialing member could switch to annual from the **portal home** — BillingPage keeps "Manage subscription"
 > visible during a trial — and the trial-end invoice was annual, 100% off, **$0** again. `TRIAL_NO_SWITCH` never saw
 > this: that guard is on our own actions, and the portal is Stripe's page (`trial_update_behavior: 'continue_trial'`
-> is exactly what makes a mid-trial switch painless). **Fix one**: the trial portal configuration above — trialing
-> members get `subscription_update: { enabled: false }`, so the portal offers no plan picker at all. **Fix two**:
-> `lib/discountGuard` + `billingNode.detachSubscriptionDiscounts` — any other price change (tier or interval) with a
-> discount still attached schedules a detach from the webhook. Our own scheduled downgrade applying is exempt, because
-> `buildDowngradePhases` carries the discount into the cheaper phase on purpose. The scenario's money check: after a
-> day-3 switch to annual the coupon is gone before trial end, and the trial-end invoice is **paid in full** ($150),
-> not $0.
+> is exactly what makes a mid-trial switch painless). **(3) the coupon is not price-scoped at all**: a customer
+> choosing the annual plan at Checkout could apply the same code and zero the year — $150 → $0, proven. Stripe's
+> `applies_to` lists products only, and one product carries both intervals (the portal requires unique intervals per
+> product), so no coupon configuration separates them. **Fix one**: the trial portal configuration above — trialing
+> members get `subscription_update: { enabled: false }`, so the portal offers no plan picker at all, and
+> `portalHomeKeyFor` gives the same no-switch config to a member whose subscription row has not landed yet, closing
+> the checkout-to-webhook window. **Fix two**: `lib/discountGuard` + `billingNode.detachSubscriptionDiscounts` — any
+> other price change (tier or interval) with a discount still attached schedules a detach from the webhook, with
+> bounded retries on transient Stripe failures. Our own scheduled downgrade applying is exempt, because
+> `buildDowngradePhases` carries the discount into the cheaper phase on purpose. **Fix three**:
+> `allow_promotion_codes: promotionCodesAllowed(env, priceId)` — the hosted promotion-code field is offered on
+> monthly prices only. The scenario's money check: after a day-3 switch to annual the coupon is gone before trial
+> end, and the trial-end invoice is **paid in full** ($150), not $0.
 >
-> First test-mode proof, 2026-09-18: `--coupons` **11/11 checks**, clock `clock_1UH4xZFPUrUP5vm6s1nytp0M` (deleted),
-> subscription `sub_1UH4xeFPUrUP5vm6HOjPLZwf`, coupon `Y1qqG14R` (deleted), trial configuration
-> `bpc_1UH4xCFPUrUP5vm6SPGbd7oz` — the trial-end invoice read `paid 15000 vs 15000`, discount `[]`. The B07 default run
-> re-passed **69/69** against the same deployment afterwards.
+> Test-mode proof, 2026-09-18: `--coupons` **13/13 checks**, clock `clock_1UHVcoFPUrUP5vm60OBLnJQR` (deleted),
+> subscription `sub_1UHVcvFPUrUP5vm6UWGqr60P`, coupon `fhRoTCT8` (deleted), trial configuration
+> `bpc_1UH4xCFPUrUP5vm6SPGbd7oz` — the monthly Checkout offered the promotion-code field and the annual one hid it
+> (`allow_promotion_codes` true / false), the trial-end invoice read `paid 15000 vs 15000`, discount `[]`. The B07
+> default run re-passed **69/69** against the same deployment afterwards.
 >
 > ⚠️ The webhook-scheduled release **cannot be asserted under a test clock.** Stripe locks writes while a clock
 > advances (`Test clock advancement underway - cannot perform modifications`), and the swap webhook necessarily fires
@@ -2642,6 +2652,13 @@ returns. Storing five more ids in env would mean five more values to propagate a
 already warns about, and a stale one fails silently. If no configuration matches, it throws `PORTAL_NOT_CONFIGURED`
 and the portal does not open — a hard refusal, because the only fallback available is the account default, and the
 account default is the gap.
+
+`createPortalSession` (the portal home) uses `portalHomeKeyFor(tier, liveStatus)`: the same lookup plus one rule —
+a member with **no live row** gets the trial key, not their tier's. That is not about churn. Checkout sets the member's
+customer before they pay, and the `created` webhook writes our row seconds later; a scripted member opening the portal
+inside that window would otherwise get a plan picker while their promotion-code coupon is still unconsumed, and a
+switch to annual would zero the year. With no live row there is nothing to switch yet, so a churned member loses
+nothing.
 
 The decision itself is pure and lives in `convex/lib/portalConfig.ts`, so it is unit-tested where the action is not:
 `portalTierFor(tier)` clamps anything that is not `starter` or `growth` to `pro` (fail-closed: an unknown tier is

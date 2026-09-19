@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { PORTAL_TIERS, PORTAL_TRIAL_KEY, portalConfigKeyFor, portalTierFor, tiersOfferedTo } from './portalConfig'
+import {
+  PORTAL_TIERS,
+  PORTAL_TRIAL_KEY,
+  portalConfigKeyFor,
+  portalHomeKeyFor,
+  portalTierFor,
+  tiersOfferedTo
+} from './portalConfig'
 
 describe('portalTierFor', () => {
   it('gives each known tier its own configuration', () => {
@@ -36,6 +43,23 @@ describe('portalConfigKeyFor', () => {
     expect(portalConfigKeyFor('growth', 'canceled')).toBe('growth')
     expect(portalConfigKeyFor('growth', undefined)).toBe('growth')
     expect(portalConfigKeyFor('mystery', 'active')).toBe('pro')
+  })
+})
+
+// The checkout race, closed 2026-09-18: createCheckoutSession sets the customer before the member
+// pays, and the created webhook writes our row seconds later. A scripted member opening the portal
+// inside that window would otherwise get a plan picker while the coupon is unconsumed.
+describe('portalHomeKeyFor', () => {
+  it('sends a member with NO live row to the no-switch trial config', () => {
+    expect(portalHomeKeyFor('growth', undefined)).toBe(PORTAL_TRIAL_KEY)
+    expect(portalHomeKeyFor(undefined, undefined)).toBe(PORTAL_TRIAL_KEY)
+  })
+
+  it('otherwise behaves exactly like portalConfigKeyFor', () => {
+    expect(portalHomeKeyFor('growth', 'trialing')).toBe(PORTAL_TRIAL_KEY)
+    expect(portalHomeKeyFor('growth', 'active')).toBe('growth')
+    expect(portalHomeKeyFor('growth', 'past_due')).toBe('growth')
+    expect(portalHomeKeyFor('starter', 'canceled')).toBe('starter')
   })
 })
 

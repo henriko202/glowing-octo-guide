@@ -9,10 +9,13 @@
 // The --coupons run (2026-09-18): a 100%-off promotion code is attached to a trialing monthly
 // subscription, then the portal-equivalent switch to annual happens on day 3 — while the `once`
 // coupon is still unconsumed, which is exactly when it became a free year in test mode. It asserts
-// two things: the no-plan-switching trial portal configuration exists, and the webhook discount
-// guard (lib/discountGuard) detaches the coupon before the trial-end invoice, so that invoice is
-// PAID IN FULL. Checkout cannot drive a test-clock customer, so the coupon is attached the way a
-// promotion code attaches it there: a subscription-level discount on the created subscription.
+// three things: the no-plan-switching trial portal configuration exists, the promotion-code field
+// is offered on MONTHLY Checkout sessions only (a 100%-off coupon on an annual Checkout zeroes the
+// whole year, and Stripe cannot price-scope a coupon), and the webhook discount guard
+// (lib/discountGuard) detaches the coupon before the trial-end invoice, so that invoice is PAID IN
+// FULL. Checkout cannot drive a test-clock customer, so the coupon is attached the way a promotion
+// code attaches it there: a subscription-level discount on the created subscription. The Checkout
+// assertions drive our real createCheckoutSession action against its own disposable probe member.
 //
 // It drives OUR public actions through the Convex CLI, so it answers "does the platform behave?" —
 // the guards, the pending-downgrade mirror, and the webhook half (syncUserSubscription →
@@ -678,6 +681,7 @@ async function couponRun() {
   let clockId
   let couponId
   let probeUserId
+  const openSessions = []
 
   try {
     preflight()
@@ -762,6 +766,49 @@ async function couponRun() {
       )
     }
 
+    // The coupon itself cannot be price-scoped — Stripe's `applies_to` lists products, and each
+    // tier's monthly and annual prices share one product — so monthly-only is enforced on the
+    // Checkout session: the promotion-code field must be offered for monthly and hidden for annual.
+    heading('Checkout — the promotion-code field is monthly-only')
+    const checkoutProbe = call('linkedin/auth:upsertUser', {
+      linkedinId: `lits-coupon-checkout-${Date.now().toString(36)}`,
+      name: 'Coupon Checkout Probe',
+      email: 'billing-coupon-probe@example.invalid',
+      accessToken: 'probe-not-a-real-token',
+      tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
+    })
+    if (!checkoutProbe.ok) fail(`could not create the checkout probe member:\n${checkoutProbe.error}`)
+    const checkoutToken = crypto.randomUUID()
+    const minted = call('sessions:create', { token: checkoutToken, userId: checkoutProbe.value })
+    if (!minted.ok) fail(`could not mint the checkout probe session:\n${minted.error}`)
+
+    for (const [label, priceId, wanted] of [
+      ['monthly', PRICE.growth, true],
+      ['annual', ANNUAL_PRICE.growth, false]
+    ]) {
+      const created = call('billingNode:createCheckoutSession', {
+        priceId,
+        sessionToken: checkoutToken,
+        locale: 'en'
+      })
+      if (!created.ok) {
+        check(`the ${label} checkout session is created`, false, errLine(created.error))
+        continue
+      }
+      const sessionId = String(created.value?.url ?? '').match(/cs_(?:test|live)_[A-Za-z0-9]+/)?.[0]
+      if (!sessionId) {
+        check(`the ${label} checkout session id is readable`, false, String(created.value?.url))
+        continue
+      }
+      openSessions.push(sessionId)
+      const session = await stripe('GET', `/checkout/sessions/${sessionId}`)
+      check(
+        `the ${label} checkout ${wanted ? 'offers' : 'hides'} the promotion-code field`,
+        (session.allow_promotion_codes ?? false) === wanted,
+        `allow_promotion_codes=${session.allow_promotion_codes}`
+      )
+    }
+
     // ── The switch ──
     heading('Day 3 — portal-equivalent switch to annual while the `once` coupon is unconsumed')
     await advanceTo(clock.id, now + 3 * 86400)
@@ -812,6 +859,14 @@ async function couponRun() {
     if (couponId) {
       await stripe('DELETE', `/coupons/${couponId}`)
       note(`coupon ${couponId} deleted`)
+    }
+    for (const id of openSessions) {
+      try {
+        await stripe('POST', `/checkout/sessions/${id}/expire`)
+        note(`expired checkout session ${id}`)
+      } catch (err) {
+        note(`could not expire checkout session ${id}: ${err.message}`)
+      }
     }
     if (probeUserId) note(`probe member ${probeUserId} left in the dev DB; harmless, never reused`)
   }

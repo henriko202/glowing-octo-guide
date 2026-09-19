@@ -2,6 +2,7 @@
 // Pure helpers (buildPriceMap/resolveTier) are unit-tested; the module-level
 // ALLOWED_PRICE_IDS / getTierFromPriceId read env once at load.
 import { env } from '../_generated/server'
+
 export type Tier = 'starter' | 'growth' | 'pro'
 
 type Env = Record<string, string | undefined>
@@ -52,6 +53,22 @@ export function intervalForPriceId(env: Env, priceId: string): 'month' | 'year' 
   const monthly = [env.STRIPE_STARTER_PRICE_ID, env.STRIPE_GROWTH_PRICE_ID, env.STRIPE_PRO_PRICE_ID]
   if (monthly.includes(priceId)) return 'month'
   return undefined
+}
+
+/**
+ * Whether the hosted Checkout for this price may show the promotion-code field.
+ *
+ * The free-month campaign is a 100%-off coupon, and a Stripe coupon attaches to the SUBSCRIPTION —
+ * it is NOT price-scoped. `applies_to` can only list products, and each tier's monthly and annual
+ * prices live on ONE product (the portal requires unique intervals per product), so no coupon
+ * configuration can separate the intervals. Applied at an annual Checkout, a `once` coupon zeroes
+ * the whole year ($150 → $0, proven 2026-09-18). The only place the choice can be made is the
+ * Checkout session itself, so the field is offered on monthly prices only.
+ *
+ * Fail-closed: an unreadable price offers no promotion-code field.
+ */
+export function promotionCodesAllowed(env: Env, priceId: string): boolean {
+  return intervalForPriceId(env, priceId) === 'month'
 }
 
 // backlog/R17 — the one-time $5 "Featured post" Price (Checkout mode: payment). Deliberately NOT

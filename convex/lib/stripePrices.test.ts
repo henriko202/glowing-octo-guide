@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { buildPriceMap, intervalForPriceId, resolveTier, starterPriceIdFor } from './stripePrices'
+import { describe, expect, it } from 'vitest'
+import {
+  buildPriceMap,
+  intervalForPriceId,
+  promotionCodesAllowed,
+  resolveTier,
+  starterPriceIdFor
+} from './stripePrices'
 
 const ENV = {
   STRIPE_STARTER_PRICE_ID: 'price_s_m',
@@ -63,5 +69,28 @@ describe('intervalForPriceId', () => {
 
   it('returns undefined when the env has no prices configured', () => {
     expect(intervalForPriceId({}, 'price_s_m')).toBeUndefined()
+  })
+})
+
+// The annual hole found 2026-09-18: a `once` 100%-off coupon applied at an ANNUAL Checkout zeroed
+// the year ($150 → $0, proven in test mode). Stripe cannot price-scope a coupon, so the field is
+// offered on monthly prices only — and anything unreadable fails closed.
+describe('promotionCodesAllowed', () => {
+  it('allows the promotion-code field on every monthly price', () => {
+    expect(promotionCodesAllowed(ENV, 'price_s_m')).toBe(true)
+    expect(promotionCodesAllowed(ENV, 'price_g_m')).toBe(true)
+    expect(promotionCodesAllowed(ENV, 'price_p_m')).toBe(true)
+  })
+
+  it('refuses it on every annual price, including during a trial', () => {
+    expect(promotionCodesAllowed(ENV, 'price_s_y')).toBe(false)
+    expect(promotionCodesAllowed(ENV, 'price_g_y')).toBe(false)
+    expect(promotionCodesAllowed(ENV, 'price_p_y')).toBe(false)
+  })
+
+  it('fails closed for an unknown, blank, or unconfigured price', () => {
+    expect(promotionCodesAllowed(ENV, 'price_featured')).toBe(false)
+    expect(promotionCodesAllowed(ENV, '')).toBe(false)
+    expect(promotionCodesAllowed({}, 'price_g_m')).toBe(false)
   })
 })

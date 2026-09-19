@@ -58,6 +58,19 @@ export function portalConfigKeyFor(tier?: string, status?: string): PortalConfig
 }
 
 /**
+ * The key for the portal HOME (`createPortalSession`), where a missing live row is a real state and
+ * not just churn: checkout creates the Stripe subscription seconds before its `created` webhook
+ * writes our row, and a scripted member can open the portal inside that window. A tier config would
+ * then offer the plan picker while their promotion-code coupon is still unconsumed — a switch to
+ * annual would zero the new year. With no live row there is nothing to switch yet, so the no-switch
+ * trial key is both the safe answer and a no-op for churned members (who have no switchable
+ * subscription either way).
+ */
+export function portalHomeKeyFor(tier?: string, liveStatus?: string): PortalConfigKey {
+  return liveStatus === undefined ? PORTAL_TRIAL_KEY : portalConfigKeyFor(tier, liveStatus)
+}
+
+/**
  * The prices a tier's configuration may list: its own, plus every tier above it. Ordered cheapest
  * first so the portal's plan list reads the way the pricing page does.
  *
