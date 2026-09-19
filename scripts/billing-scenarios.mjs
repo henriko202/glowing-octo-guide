@@ -16,6 +16,9 @@
 // FULL. Checkout cannot drive a test-clock customer, so the coupon is attached the way a promotion
 // code attaches it there: a subscription-level discount on the created subscription. The Checkout
 // assertions drive our real createCheckoutSession action against its own disposable probe member.
+// A second, no-trial subscription then carries the coupon to its own conclusion: consumed by its
+// first invoice, so the same-day switch to annual is charged in full — the proof that the promotion
+// only ever discounts one first monthly invoice.
 //
 // It drives OUR public actions through the Convex CLI, so it answers "does the platform behave?" —
 // the guards, the pending-downgrade mirror, and the webhook half (syncUserSubscription →
@@ -809,6 +812,42 @@ async function couponRun() {
       )
     }
 
+    // ── The no-trial trajectory (a returning subscriber) ──
+    // No trial means the `once` coupon is consumed by the invoice created WITH the subscription, so
+    // it is gone before any plan switch is possible. The switch driven below (same clock, same day)
+    // must therefore be CHARGED. This is the other half of "the coupon can only ever discount the
+    // first monthly invoice" — and exactly the case a `repeating` coupon gets wrong.
+    const cusNoTrial = await stripe('POST', '/customers', {
+      test_clock: clock.id,
+      email: 'billing-coupon-probe@example.invalid',
+      description: 'LITS coupon guard probe (no trial) — safe to delete'
+    })
+    const pmNoTrial = await stripe('POST', '/payment_methods', { type: 'card', card: { token: 'tok_visa' } })
+    await stripe('POST', `/payment_methods/${pmNoTrial.id}/attach`, { customer: cusNoTrial.id })
+    await stripe('POST', `/customers/${cusNoTrial.id}`, {
+      invoice_settings: { default_payment_method: pmNoTrial.id }
+    })
+    const subNoTrial = await stripe('POST', '/subscriptions', {
+      customer: cusNoTrial.id,
+      items: [{ price: PRICE.growth }],
+      discounts: [{ coupon: coupon.id }],
+      payment_behavior: 'error_if_incomplete',
+      expand: ['items.data.price']
+    })
+    note(`subscription ${subNoTrial.id} — Growth monthly, NO trial, coupon attached`)
+    // This customer is deliberately NOT linked to a member row: the no-trial path needs no webhook
+    // sync to prove its money, so every assertion below reads Stripe itself.
+    await waitForStripe(
+      'the no-trial first invoice is the free month, already paid',
+      async () => (await invoicesOf(subNoTrial.id))[0],
+      inv => inv?.status === 'paid' && inv?.total === 0 && inv?.amount_paid === 0
+    )
+    await waitForStripe(
+      'and the `once` coupon is already consumed',
+      () => stripe('GET', `/subscriptions/${subNoTrial.id}`),
+      s => (s.discounts ?? []).length === 0
+    )
+
     // ── The switch ──
     heading('Day 3 — portal-equivalent switch to annual while the `once` coupon is unconsumed')
     await advanceTo(clock.id, now + 3 * 86400)
@@ -829,6 +868,28 @@ async function couponRun() {
       detached?.items?.data?.[0]?.price?.id
     )
     await waitFor('row mirrors the interval switch (year)', readSub(sub.id), r => r?.priceInterval === 'year', 15)
+
+    // ── The no-trial switch: no coupon left, so annual is charged ──
+    heading('The same day — the no-trial member switches with no coupon left to lose')
+    await stripe('POST', `/subscriptions/${subNoTrial.id}`, {
+      items: [{ id: subNoTrial.items.data[0].id, price: ANNUAL_PRICE.growth }],
+      proration_behavior: 'always_invoice'
+    })
+    const [switchCharge] = await invoicesOf(subNoTrial.id)
+    check(
+      'the post-free-month switch to annual is charged, not discounted',
+      switchCharge?.status === 'paid' &&
+        switchCharge.amount_paid === switchCharge.total &&
+        switchCharge.total > 0 &&
+        (switchCharge.total_discount_amounts ?? []).length === 0,
+      `${switchCharge?.status} paid=${switchCharge?.amount_paid} total=${switchCharge?.total}`
+    )
+    const noTrialAfter = await stripe('GET', `/subscriptions/${subNoTrial.id}?expand[]=items.data.price`)
+    check(
+      'no discount survives on the annual subscription',
+      (noTrialAfter.discounts ?? []).length === 0 && noTrialAfter.items.data[0].price.id === ANNUAL_PRICE.growth,
+      `${(noTrialAfter.discounts ?? []).length} discount(s), price ${noTrialAfter.items.data[0].price.id}`
+    )
 
     // ── The money ──
     heading('Trial end — the first invoice after the trial must charge the full annual price')

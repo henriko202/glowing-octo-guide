@@ -1,8 +1,10 @@
 // app/src/pages/BillingPage.test.tsx
-import { StrictMode, type ReactNode } from 'react'
+import { type ReactNode, StrictMode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
+import { captureEvent } from '@/lib/observability/analytics'
+import BillingPage from './BillingPage'
 
 // PLAN_PRICE_IDS is read from import.meta.env at BillingPage module scope, and the real values
 // only exist in a developer's gitignored app/.env.local. Stub them before the module is imported
@@ -48,6 +50,8 @@ const mockResume = vi.fn(async () => null)
 const mockCancelFlow = vi.fn(async () => ({ url: '' }))
 const mockSwitch = vi.fn(async () => ({ url: '' }) as { url: string | null })
 const mockUndo = vi.fn(async () => null)
+// Every mutation (the notice dismiss, CancelInterstitial's feedback) shares one spy.
+const mockMutation = vi.fn(async () => {})
 const ACTIONS: Record<string, unknown> = {
   'billingNode.createPortalSession': mockPortal,
   'billingNode.resumeSubscription': mockResume,
@@ -59,7 +63,7 @@ const ACTIONS: Record<string, unknown> = {
 vi.mock('convex/react', () => ({
   useQuery: vi.fn((ref: string) => mockQueryReturns[ref]),
   useAction: vi.fn((ref: string) => ACTIONS[ref] ?? mockCheckout),
-  useMutation: vi.fn(() => vi.fn(async () => {}))
+  useMutation: vi.fn(() => mockMutation)
 }))
 // BillingPage mounts CancelInterstitial, whose recap now goes through the one-shot hook; the page's
 // own data path is unchanged (undefined data, exactly as the useQuery mock returned before).
@@ -115,9 +119,6 @@ vi.mock('react-i18next', () => ({
     i18n: { language: 'en' }
   })
 }))
-
-import { captureEvent } from '@/lib/observability/analytics'
-import BillingPage from './BillingPage'
 
 function setUser(over: Record<string, unknown> = {}) {
   mockQueryReturns['users.getMe'] = { _id: 'u1', tier: 'growth', subscriptionStatus: 'none', ...over }
@@ -205,6 +206,24 @@ describe('plan click routing (R01)', () => {
     fireEvent.click(blocked[0])
     expect(mockSwitch).not.toHaveBeenCalled()
     expect(mockCheckout).not.toHaveBeenCalled()
+    expect(mockPortal).not.toHaveBeenCalled()
+  })
+
+  // A canceled member is a pre-card member again (`hasCard` excludes 'canceled'), so the grid must
+  // send them through Checkout for a fresh subscription — with no trial — and never to the portal
+  // switch, which has no live subscription to act on (the server answers NO_LIVE_SUBSCRIPTION).
+  it("sends a canceled member's plan click to checkout, not the portal switch", async () => {
+    setUser({ subscriptionStatus: 'canceled', trialEligible: false })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.noTrialCta:.*"plan":"Growth"/ })[0])
+    await waitFor(() =>
+      expect(mockCheckout).toHaveBeenCalledWith({
+        priceId: 'price_growth_year',
+        sessionToken: 'tok',
+        locale: 'en'
+      })
+    )
+    expect(mockSwitch).not.toHaveBeenCalled()
     expect(mockPortal).not.toHaveBeenCalled()
   })
 
@@ -964,5 +983,114 @@ describe('scheduled downgrade (B07)', () => {
     renderPage()
     fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
     await waitFor(() => expect(mockPortal).toHaveBeenCalled())
+  })
+})
+
+// The status matrix around the two subscription actions: card-backed statuses switch plans in the
+// portal, everyone else checks out. `past_due` is the thinnest covered status — it is card-backed
+// (info card + switch path apply) but engagement-blocked, which the add-on must respect. The
+// expired-trial case is the client-side window before the conversion webhook lands: the trial
+// banner must go, the ended banner must appear, and no switch is offered.
+describe('BillingPage status matrix', () => {
+  it('routes a past_due member to the plan switch, not checkout', async () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = { tier: 'growth', status: 'past_due', cancelAtPeriodEnd: false }
+    setUser({ subscriptionStatus: 'past_due' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.switchPlan/ })[0])
+    await waitFor(() => expect(mockSwitch).toHaveBeenCalledWith({ sessionToken: 'tok', priceId: expect.any(String) }))
+    expect(mockCheckout).not.toHaveBeenCalled()
+    expect(mockPortal).not.toHaveBeenCalled()
+  })
+
+  it('shows a past_due member the info card, the cancel link, and no ended banner or add-on', () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = { tier: 'growth', status: 'past_due', cancelAtPeriodEnd: false }
+    setUser({ subscriptionStatus: 'past_due', tier: 'growth' })
+    renderPage()
+    expect(screen.getByText('past_due')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'billing.manageSubscription' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'billing.cancel.link' })).toBeInTheDocument()
+    expect(screen.queryByText(/billing\.expiredBanner/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
+  })
+
+  it('sends a "none" member with no trial left to checkout', async () => {
+    setUser({ subscriptionStatus: 'none', trialEligible: false })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.noTrialCta:.*"plan":"Growth"/ })[0])
+    await waitFor(() =>
+      expect(mockCheckout).toHaveBeenCalledWith({
+        priceId: 'price_growth_year',
+        sessionToken: 'tok',
+        locale: 'en'
+      })
+    )
+    expect(mockSwitch).not.toHaveBeenCalled()
+  })
+
+  it('treats an expired trial as ended: ended banner, no trial banner, every switch blocked', () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = { tier: 'growth', status: 'trialing', cancelAtPeriodEnd: false }
+    setUser({ subscriptionStatus: 'trialing', trialEndsAt: Date.now() - 1000 })
+    renderPage()
+    expect(screen.getByText(/billing\.expiredBanner/)).toBeInTheDocument()
+    expect(screen.queryByText(/billing\.trialBanner/)).not.toBeInTheDocument()
+    const blocked = screen.getAllByRole('button', { name: 'billing.trialNoSwitch' })
+    expect(blocked.length).toBeGreaterThan(0)
+    for (const button of blocked) expect(button).toBeDisabled()
+  })
+
+  it('opens the portal from the info card', async () => {
+    setUser({ subscriptionStatus: 'trialing' })
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'billing.manageSubscription' }))
+    await waitFor(() => expect(mockPortal).toHaveBeenCalledWith({ sessionToken: 'tok' }))
+  })
+
+  it('offers Resume, not Cancel, to a past_due member with a pending cancel', () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = {
+      tier: 'growth',
+      status: 'past_due',
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: Date.parse('2026-10-01T00:00:00Z')
+    }
+    setUser({ subscriptionStatus: 'past_due' })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'billing.cancel.resume' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'billing.cancel.link' })).not.toBeInTheDocument()
+  })
+
+  it('stays switch-blocked while a trial cancel is pending, and offers Resume', () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = {
+      tier: 'growth',
+      status: 'trialing',
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: Date.parse('2026-10-01T00:00:00Z')
+    }
+    setUser({ subscriptionStatus: 'trialing', trialEndsAt: Date.now() + 86400000 })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'billing.cancel.resume' })).toBeInTheDocument()
+    const blocked = screen.getAllByRole('button', { name: 'billing.trialNoSwitch' })
+    expect(blocked.length).toBeGreaterThan(0)
+    for (const button of blocked) expect(button).toBeDisabled()
+  })
+
+  it('routes a see-all-plans click on a non-recommended plan to checkout too', async () => {
+    setUser({ subscriptionStatus: 'none', trialEligible: true })
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'billing.seeAllPlans' }))
+    fireEvent.click(screen.getByRole('button', { name: /billing\.startTrialCta.*Starter/ }))
+    await waitFor(() =>
+      expect(mockCheckout).toHaveBeenCalledWith({
+        priceId: 'price_starter_year',
+        sessionToken: 'tok',
+        locale: 'en'
+      })
+    )
+  })
+
+  it('dismisses the duplicate notice through the mutation', async () => {
+    setUser({ billingNotice: 'duplicate_canceled' })
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'billing.dismiss' }))
+    await waitFor(() => expect(mockMutation).toHaveBeenCalledWith({ sessionToken: 'tok' }))
   })
 })

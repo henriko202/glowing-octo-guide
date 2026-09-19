@@ -2406,14 +2406,17 @@ as
 > bounded retries on transient Stripe failures. Our own scheduled downgrade applying is exempt, because
 > `buildDowngradePhases` carries the discount into the cheaper phase on purpose. **Fix three**:
 > `allow_promotion_codes: promotionCodesAllowed(env, priceId)` — the hosted promotion-code field is offered on
-> monthly prices only. The scenario's money check: after a day-3 switch to annual the coupon is gone before trial
-> end, and the trial-end invoice is **paid in full** ($150), not $0.
+> monthly prices only. The scenario's money checks: with a trial, the coupon is detached before trial end and the
+> trial-end invoice is **paid in full** ($150), not $0; with no trial (a returning subscriber), the coupon is
+> consumed by the invoice created with the subscription, and the same-day switch to annual is **charged** — no
+> discount survives on the annual subscription.
 >
-> Test-mode proof, 2026-09-18: `--coupons` **13/13 checks**, clock `clock_1UHVcoFPUrUP5vm60OBLnJQR` (deleted),
-> subscription `sub_1UHVcvFPUrUP5vm6UWGqr60P`, coupon `fhRoTCT8` (deleted), trial configuration
-> `bpc_1UH4xCFPUrUP5vm6SPGbd7oz` — the monthly Checkout offered the promotion-code field and the annual one hid it
-> (`allow_promotion_codes` true / false), the trial-end invoice read `paid 15000 vs 15000`, discount `[]`. The B07
-> default run re-passed **69/69** against the same deployment afterwards.
+> Test-mode proof, 2026-09-18: `--coupons` **17/17 checks**, clock `clock_1UHVtlFPUrUP5vm648LrxVht` (deleted),
+> subscription `sub_1UHVtrFPUrUP5vm6WhOdwDhi` (trial) + `sub_1UHVu8FPUrUP5vm6DFqxPaHr` (no trial), coupon `YOtAGlVT`
+> (deleted), trial configuration `bpc_1UH4xCFPUrUP5vm6SPGbd7oz`. The money reads: the monthly Checkout offered the
+> promotion-code field and the annual one hid it (`allow_promotion_codes` true / false); the no-trial first invoice
+> was $0, its switch to annual was **paid in full** ($148.77); the trial-end invoice read `paid 15000 vs 15000`,
+> discount `[]`. The B07 default run re-passed **69/69** against the same deployment afterwards.
 >
 > ⚠️ The webhook-scheduled release **cannot be asserted under a test clock.** Stripe locks writes while a clock
 > advances (`Test clock advancement underway - cannot perform modifications`), and the swap webhook necessarily fires
