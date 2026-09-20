@@ -5,6 +5,8 @@ import { ConvexError } from 'convex/values'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import MyPostsPage from './MyPostsPage'
+import { toast } from '@/components/ui/toast'
+import { captureEvent } from '@/lib/observability/analytics'
 
 // Mock the Convex API module so each query/action has a stable, identifiable
 // reference. This lets the useQuery mock dispatch by *which* query was asked
@@ -46,9 +48,6 @@ vi.mock('convex/react', () => ({
 }))
 vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
-
-import { toast } from '@/components/ui/toast'
-import { captureEvent } from '@/lib/observability/analytics'
 
 // The page strips its one-shot params; this shows what is left in the URL.
 function SearchProbe() {
@@ -128,6 +127,49 @@ describe('MyPostsPage', () => {
       '/billing?plan=growth&interval=annual'
     )
     expect(screen.getByRole('button', { name: /add post/i })).toBeDisabled()
+  })
+
+  // assertCanSubmitPost (convex/lib/access.ts) blocks only past_due: Submit stays disabled with the
+  // fix-payment hint even after a valid URL is typed, linking to Billing. `none` keeps the composer —
+  // the onboarding first post is created hidden by design until a card arrives.
+  it('blocks submission for a past_due member and links to billing instead', () => {
+    mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'growth', subscriptionStatus: 'past_due' }
+    renderPage()
+    fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
+      target: { value: 'https://www.linkedin.com/posts/henri_activity-7000000000000000000-abcd' }
+    })
+    expect(screen.getByRole('button', { name: /add post/i })).toBeDisabled()
+    expect(screen.getByText(/update your payment method to get your posts back/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /update payment method/i })).toHaveAttribute('href', '/billing')
+  })
+
+  it('keeps the composer usable for a none member (hidden onboarding first post)', () => {
+    mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'starter', subscriptionStatus: 'none' }
+    renderPage()
+    fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
+      target: { value: 'https://www.linkedin.com/posts/henri_activity-7000000000000000000-abcd' }
+    })
+    expect(screen.getByRole('button', { name: /add post/i })).not.toBeDisabled()
+  })
+
+  // isAuthorFeedEligible drops a past_due author's posts from the feed, so the per-post label must
+  // say hidden even when the post was never hidden-flagged — and must not promise "visible".
+  it("labels a past_due member's post as hidden while the payment is pending", () => {
+    mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'growth', subscriptionStatus: 'past_due' }
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p5',
+        linkedinPostUrn: 'urn:li:activity:5',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false
+      }
+    ]
+    renderPage()
+    expect(screen.getByText(/hidden while your payment is pending/i)).toBeInTheDocument()
+    expect(screen.queryByText(/visible in feed/i)).not.toBeInTheDocument()
   })
 
   it('shows Hide + Delete controls and a "Visible in feed" state for a visible post', () => {
@@ -219,6 +261,42 @@ describe('MyPostsPage', () => {
     renderPage()
     expect(screen.getByText('★ Featured')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^unfeature$/i })).toBeInTheDocument()
+  })
+
+  // The plan allowance follows the card gate (convex/posts.ts: featurePostHandler calls
+  // assertCanEngage): a past_due member sees the Feature control disabled with the payment reason,
+  // while Unfeature stays enabled — removing a boost must always work.
+  it('disables Feature with the payment reason for a past_due member, while Unfeature stays enabled', () => {
+    mockQueryReturns['users.getMe'] = { name: 'Henri Durand', tier: 'growth', subscriptionStatus: 'past_due' }
+    // Growth has an allowance, below its cap: without the gate this button would be enabled.
+    mockQueryReturns['posts.getFeaturedUsage'] = { usedCount: 0, featuredPerMonth: 1 }
+    mockQueryReturns['posts.getMyPosts'] = [
+      {
+        _id: 'p3',
+        linkedinPostUrn: 'urn:li:activity:3',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false,
+        isFeatured: false
+      },
+      {
+        _id: 'p4',
+        linkedinPostUrn: 'urn:li:activity:4',
+        content: 'Hi',
+        publishedAt: Date.now(),
+        likeCount: 0,
+        commentCount: 0,
+        hidden: false,
+        isFeatured: true
+      }
+    ]
+    renderPage()
+    const featureButton = screen.getByRole('button', { name: /^feature$/i })
+    expect(featureButton).toBeDisabled()
+    expect(featureButton).toHaveAttribute('title', 'Add or fix your payment method to feature posts')
+    expect(screen.getByRole('button', { name: /^unfeature$/i })).not.toBeDisabled()
   })
 
   it('confirms Unfeature and explains that the permanent entitlement can be reused', async () => {

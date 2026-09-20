@@ -282,6 +282,11 @@ describe('isAuthorFeedEligible', () => {
     expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled', subscriptionEndsAt: NOW - 1 }, NOW)).toBe(false)
     expect(isAuthorFeedEligible({ subscriptionStatus: 'canceled' }, NOW)).toBe(false) // unknown end → dropped
   })
+  it('drops a past_due author until the charge clears, then includes them again', () => {
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'past_due' }, NOW)).toBe(false)
+    // Recovery is a status flip only — the same author becomes eligible with no post mutation.
+    expect(isAuthorFeedEligible({ subscriptionStatus: 'active' }, NOW)).toBe(true)
+  })
 })
 
 // The engagement gate reuses isPostVisibleToViewer + the inFeed storage conditions, so the three
@@ -432,7 +437,7 @@ describe('fetchFeedPage — seeded feed-state parity', () => {
     user('zara', { tier: 'starter', subscriptionStatus: 'active', isBanned: true }), //                banned → ineligible
     user('elena', { tier: 'growth', subscriptionStatus: 'canceled', subscriptionEndsAt: NOW - 1 }), // lapsed → ineligible
     user('tom', { tier: 'pro', subscriptionStatus: 'active', deletionScheduledAt: NOW + 5000 }), //   deleting → ineligible
-    user('david', { tier: 'starter', subscriptionStatus: 'past_due' }), //                            eligible; post hidden
+    user('david', { tier: 'starter', subscriptionStatus: 'past_due' }), //                            ineligible while past_due
     user('kreo', { subscriptionStatus: 'none' }) //                                                   eligible; post hidden
   ]
 
@@ -463,6 +468,7 @@ describe('fetchFeedPage — seeded feed-state parity', () => {
     // Read-time excluded (reach the page, dropped by the per-viewer gate).
     post('zara-banned', 'zara', { authorTierRank: R.starter, publishedAt: 650 }), //                   banned author
     post('elena-lapsed', 'elena', { authorTierRank: R.growth, publishedAt: 640 }), //                  canceled + lapsed
+    post('david-pastdue', 'david', { authorTierRank: R.starter, publishedAt: 645 }), //                past_due author
     post('tom-deleting', 'tom', { authorTierRank: R.pro, publishedAt: 630 }), //                       pending deletion
     post('viewer-own', 'viewer', { authorTierRank: R.pro, publishedAt: 999 }) //                       viewer's own
   ]
@@ -485,6 +491,7 @@ describe('fetchFeedPage — seeded feed-state parity', () => {
       'gustavo-vis', //    visibility: civil-eng (51) ≠ viewer's software (4)
       'zara-banned', //    author banned
       'elena-lapsed', //   author canceled past paid-through
+      'david-pastdue', //  author past_due (hides until the charge clears)
       'tom-deleting', //   author pending deletion
       'junior-hidden', //  ── below: storage-excluded, never paged in ──
       'junior-capped',
@@ -512,7 +519,7 @@ describe('fetchFeedPage — seeded feed-state parity', () => {
       expect(staged).not.toContain(gone)
     }
     // Ineligible-author posts DO survive the index (author state is a read-time concern, not inFeed).
-    for (const kept of ['zara-banned', 'elena-lapsed', 'tom-deleting']) {
+    for (const kept of ['zara-banned', 'elena-lapsed', 'david-pastdue', 'tom-deleting']) {
       expect(staged).toContain(kept)
     }
   })

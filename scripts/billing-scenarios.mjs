@@ -1,10 +1,26 @@
-// scripts/billing-scenarios.mjs — the billing proofs in one script: the B07 downgrade run below, and
-// the promotion-code guard run selected by --coupons. TEST MODE ONLY.
+// scripts/billing-scenarios.mjs — the billing proofs in one script: the B07 downgrade run below, the
+// promotion-code guard run selected by --coupons, and the past-due dunning round trip selected by
+// --pastdue. TEST MODE ONLY.
 //
 //   node scripts/billing-scenarios.mjs                    full B07 run, deletes the test clock afterwards
 //   node scripts/billing-scenarios.mjs --keep             keep the clock (and its customer/subscription)
 //   node scripts/billing-scenarios.mjs --user <convexId>  read-only audit of one member, writes nothing
 //   node scripts/billing-scenarios.mjs --coupons          coupon guard run: a free month must not become a free year
+//   node scripts/billing-scenarios.mjs --pastdue          dunning: failed renewal → past_due → retries → terminal cancel
+//
+// The --pastdue run (2026-09-18): a trial whose renewal is charged to Stripe's failing card
+// (`tok_chargeCustomerFail`, 4000000000000341 — attaches fine, every charge declines) lands
+// `past_due` at trial end, the engagement-blocking status. It asserts the webhook round trip (row
+// and user), that the billing actions a past_due member still needs work — checkout refused
+// (ALREADY_SUBSCRIBED, they are live), a downgrade still schedules, the portal home still opens —
+// and that paying the open invoice restores `active` on both Stripe and our row, so the status is
+// cleared, never latched. A second subscription is then left to Stripe's dunning ladder, walked WEEK
+// BY WEEK off its own `next_payment_attempt`: the attempt count only moves forward, retries land in
+// distinct later weeks, the ladder exhausts, and the terminal state the account's failed-payment
+// setting produces is followed through the webhook — this account CANCELS after the last retry, and
+// the `unpaid` branch is asserted too should the setting ever move. After the terminal cancel, the
+// member's route back is proven: a plan switch refuses (`NO_LIVE_SUBSCRIPTION`, the subscription is
+// gone) and checkout accepts a fresh subscription.
 //
 // The --coupons run (2026-09-18): a 100%-off promotion code is attached to a trialing monthly
 // subscription, then the portal-equivalent switch to annual happens on day 3 — while the `once`
@@ -51,9 +67,11 @@
 //   `--user` needs neither to be useful: it is all GETs plus one sandboxed readonly query, and it
 //   degrades to a Stripe-only report when the deployment is unreachable.
 //
-// NOT COVERED, deliberately: past_due/dunning (needs a failing card and repeated advances),
-// invoice.payment_failed, the featured-post one-time checkout, the duplicate-subscription guard, and
-// endTrialEarly's 50-interaction TRIGGER — reaching 50 needs 50 real interactions. What that trigger
+// NOT COVERED, deliberately: Stripe's exact retry TIMESTAMPS (`--pastdue` asserts the timetable's
+// shape — attempts monotonic, retries in distinct later weeks, exhaustion inside the window — but a
+// test clock replays scheduled retries with multi-day lag, so pinning an exact hour would test the
+// scheduler rather than our code), the featured-post one-time checkout, the duplicate-subscription
+// guard, and endTrialEarly's 50-interaction TRIGGER — reaching 50 needs 50 real interactions. What that trigger
 // then DOES is covered: the conversion step below runs endTrialEarly itself, first on a cancelled
 // trial (it must not convert) and then on a live one, where it asserts the MONEY — one paid invoice
 // for the full price, nothing pending. The row moving to `active` never proved a charge: the
@@ -933,6 +951,281 @@ async function couponRun() {
   }
 }
 
+// ── Past-due run (--pastdue) ───────────────────────────────────────────────────────────────────
+// The dunning round trip the B07 run deliberately skipped. `past_due` is the one status that BLOCKS
+// engagement (lib/access.canEngage) while the subscription is still live: checkout must refuse a
+// second subscription, a cheaper plan must still schedule without money, and the portal home must
+// still open so the member can fix their card. The recovery leg matters most — paying the open
+// invoice must clear the status, or a member who fixes their card stays locked out forever.
+//
+// Two subscriptions on one clock. A recovers: pay the open invoice and watch `active` return
+// everywhere. B is left to Stripe's dunning ladder — the renewal is retried on the account's
+// schedule, and when the retries are exhausted the account's failed-payment setting ends the
+// subscription (this account CANCELS after the last retry; discovered by advancing a throwaway clock
+// through the window, and worth re-checking if the Dashboard setting ever moves). The app must
+// follow the terminal state through the webhook; the `unpaid` branch is asserted too, for an account
+// configured to mark-unpaid instead.
+async function pastDueRun() {
+  const now = Math.floor(Date.now() / 1000)
+  let clockId
+  let probeUserId
+  let probeUserIdB
+
+  try {
+    preflight()
+
+    heading('Past due — a failed renewal blocks engagement, but never locks the member out of billing')
+    const stale = (await stripe('GET', '/test_helpers/test_clocks?limit=100')).data.filter(
+      c => c.name === 'billing-pastdue'
+    )
+    for (const c of stale) {
+      await stripe('DELETE', `/test_helpers/test_clocks/${c.id}`)
+      note(`swept a leftover clock ${c.id} from an earlier run`)
+    }
+    const clock = await stripe('POST', '/test_helpers/test_clocks', { frozen_time: now, name: 'billing-pastdue' })
+    clockId = clock.id
+    const customer = await stripe('POST', '/customers', {
+      test_clock: clock.id,
+      email: 'billing-pastdue-probe@example.invalid',
+      description: 'LITS past-due probe — safe to delete'
+    })
+    // `tok_chargeCustomerFail` maps to 4000000000000341 — Stripe's dunning card, where attaching
+    // succeeds but every charge declines `card_declined/generic_decline`. Raw card numbers are
+    // refused on this account ("enable raw card data APIs"), so the token is the only way in.
+    const badPm = await stripe('POST', '/payment_methods', { type: 'card', card: { token: 'tok_chargeCustomerFail' } })
+    await stripe('POST', `/payment_methods/${badPm.id}/attach`, { customer: customer.id })
+    await stripe('POST', `/customers/${customer.id}`, { invoice_settings: { default_payment_method: badPm.id } })
+
+    const upserted = call('linkedin/auth:upsertUser', {
+      linkedinId: `lits-pastdue-${Date.now().toString(36)}`,
+      name: 'Past Due Probe',
+      email: 'billing-pastdue-probe@example.invalid',
+      accessToken: 'probe-not-a-real-token',
+      tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
+    })
+    if (!upserted.ok) fail(`could not create the probe member — is \`npx convex dev\` running?\n${upserted.error}`)
+    probeUserId = upserted.value
+    call('billing:setStripeCustomerId', { userId: probeUserId, stripeCustomerId: customer.id })
+    const sessionToken = crypto.randomUUID()
+    call('sessions:create', { token: sessionToken, userId: probeUserId })
+
+    const sub = await stripe('POST', '/subscriptions', {
+      customer: customer.id,
+      items: [{ price: PRICE.growth }],
+      trial_period_days: 7,
+      payment_behavior: 'error_if_incomplete',
+      metadata: { convexUserId: probeUserId },
+      expand: ['items.data.price']
+    })
+    note(`subscription ${sub.id} — Growth monthly, 7-day trial, failing card`)
+    await waitFor('row created by the webhook (trialing)', readSub(sub.id), r => r?.status === 'trialing')
+
+    // B — the dunning-ladder subscription, on its own customer and member, left to Stripe.
+    const customerB = await stripe('POST', '/customers', {
+      test_clock: clock.id,
+      email: 'billing-pastdue-probe-b@example.invalid',
+      description: 'LITS past-due dunning probe — safe to delete'
+    })
+    const badPmB = await stripe('POST', '/payment_methods', { type: 'card', card: { token: 'tok_chargeCustomerFail' } })
+    await stripe('POST', `/payment_methods/${badPmB.id}/attach`, { customer: customerB.id })
+    await stripe('POST', `/customers/${customerB.id}`, { invoice_settings: { default_payment_method: badPmB.id } })
+    const upsertedB = call('linkedin/auth:upsertUser', {
+      linkedinId: `lits-pastdue-b-${Date.now().toString(36)}`,
+      name: 'Past Due Dunning Probe',
+      email: 'billing-pastdue-probe-b@example.invalid',
+      accessToken: 'probe-not-a-real-token',
+      tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
+    })
+    if (!upsertedB.ok) fail(`could not create the dunning probe member:\n${upsertedB.error}`)
+    probeUserIdB = upsertedB.value
+    call('billing:setStripeCustomerId', { userId: probeUserIdB, stripeCustomerId: customerB.id })
+    const sessionTokenB = crypto.randomUUID()
+    call('sessions:create', { token: sessionTokenB, userId: probeUserIdB })
+    const subB = await stripe('POST', '/subscriptions', {
+      customer: customerB.id,
+      items: [{ price: PRICE.growth }],
+      trial_period_days: 7,
+      metadata: { convexUserId: probeUserIdB },
+      expand: ['items.data.price']
+    })
+    note(`subscription ${subB.id} — the dunning ladder's own subscription (failing card)`)
+    await waitFor('dunning row created by the webhook (trialing)', readSub(subB.id), r => r?.status === 'trialing')
+
+    // ── The failure ──
+    heading('Trial end — the renewal charge fails and Stripe moves the subscription past due')
+    await advanceTo(clock.id, sub.trial_end + 3600, 'trial end')
+    const failed = await stripe('GET', `/subscriptions/${sub.id}`)
+    check('Stripe status is past_due or unpaid', ['past_due', 'unpaid'].includes(failed.status), failed.status)
+    const openInvoice = (await invoicesOf(sub.id)).find(inv => inv.status === 'open')
+    check('the renewal invoice is open, not paid', Boolean(openInvoice), openInvoice?.id ?? 'no open invoice')
+
+    const row = await waitFor(
+      'our row mirrors the Stripe status',
+      readSub(sub.id),
+      r => r?.status === failed.status,
+      60
+    )
+    check('row is past_due or unpaid', ['past_due', 'unpaid'].includes(row?.status), row?.status)
+    await waitFor('users.subscriptionStatus is past_due', readUser(probeUserId), u => u?.status === 'past_due', 60)
+
+    // ── What still has to work in past_due ──
+    heading('Billing actions in past_due — checkout refused, downgrade scheduled, portal still opens')
+    expectRefusal('a second checkout is refused', 'ALREADY_SUBSCRIBED', 'billingNode:createCheckoutSession', {
+      priceId: PRICE.growth,
+      sessionToken,
+      locale: 'en'
+    })
+    const downgrade = call('billingNode:createPlanSwitchSession', { sessionToken, priceId: PRICE.starter })
+    check(
+      'a downgrade is scheduled, not refused',
+      downgrade.ok && downgrade.value?.url === null,
+      downgrade.ok ? JSON.stringify(downgrade.value) : errLine(downgrade.error)
+    )
+    await waitFor('row mirrors pendingTier "starter"', readSub(sub.id), r => r?.pendingTier === 'starter', 10)
+    const undone = call('billingNode:undoScheduledDowngrade', { sessionToken })
+    check('the scheduled downgrade is undoable', undone.ok, undone.ok ? 'ok' : errLine(undone.error))
+    const portal = call('billingNode:createPortalSession', { sessionToken })
+    check(
+      'the portal home still opens',
+      portal.ok && typeof portal.value?.url === 'string',
+      portal.ok ? portal.value?.url : errLine(portal.error)
+    )
+
+    // ── The recovery ──
+    heading('Recovery — paying the open invoice restores active on Stripe, our row, and the user')
+    const goodPm = await stripe('POST', '/payment_methods', { type: 'card', card: { token: 'tok_visa' } })
+    await stripe('POST', `/payment_methods/${goodPm.id}/attach`, { customer: customer.id })
+    await stripe('POST', `/customers/${customer.id}`, { invoice_settings: { default_payment_method: goodPm.id } })
+    const paid = await stripe('POST', `/invoices/${openInvoice.id}/pay`, { payment_method: goodPm.id })
+    check('the open invoice is paid', paid.status === 'paid', `${paid.status} paid=${paid.amount_paid}`)
+    await waitForStripe(
+      'Stripe moved back to active',
+      () => stripe('GET', `/subscriptions/${sub.id}`),
+      s => s.status === 'active',
+      30
+    )
+    await waitFor('our row moved back to active', readSub(sub.id), r => r?.status === 'active', 60)
+    await waitFor('users.subscriptionStatus cleared to active', readUser(probeUserId), u => u?.status === 'active', 60)
+
+    // ── The dunning ladder and its terminal state ──
+    // Walked WEEK BY WEEK rather than jumping to a fixed end date. Each scheduled retry is Stripe's
+    // own `next_payment_attempt`, and the run asserts the timetable's SHAPE: the attempt count only
+    // moves forward, retries land in distinct later weeks (multi-retry, not one-and-done), and the
+    // ladder exhausts (no next attempt) inside the window — then the terminal state the account is
+    // configured for. Exact retry HOURS are deliberately not pinned: a test clock replays scheduled
+    // retries with multi-day lag (measured 2026-09-18 on this account), so an exact-time assertion
+    // would be testing Stripe's scheduler, not our code.
+    heading('Dunning ladder — Stripe retries week after week, then the terminal state lands')
+    const openInvoiceB = (await invoicesOf(subB.id)).find(inv => inv.status === 'open')
+    check(
+      'the ladder starts with a scheduled retry',
+      Boolean(openInvoiceB?.next_payment_attempt),
+      openInvoiceB?.id ?? 'no open invoice'
+    )
+    const weekly = []
+    for (let week = 1; week <= 8; week++) {
+      await advanceTo(clock.id, now + (7 + week * 7) * 86400 + 7200, `dunning week ${week}`)
+      const inv = (await invoicesOf(subB.id)).find(i => i.id === openInvoiceB.id)
+      const subState = await stripe('GET', `/subscriptions/${subB.id}`)
+      weekly.push({
+        week,
+        attempts: inv?.attempt_count ?? 0,
+        next: inv?.next_payment_attempt ?? null,
+        status: subState.status
+      })
+      if (!inv?.next_payment_attempt) break
+    }
+    const attemptsSeen = weekly.at(-1)?.attempts ?? 0
+    // Count every week in which the attempt count moved, starting from the failure's own attempt.
+    let previousAttempts = openInvoiceB.attempt_count ?? 0
+    const retryWeeks = []
+    for (const sample of weekly) {
+      if (sample.attempts > previousAttempts) retryWeeks.push(sample.week)
+      previousAttempts = Math.max(previousAttempts, sample.attempts)
+    }
+    check('the ladder retried more than once', attemptsSeen >= 3, `attempts=${attemptsSeen}`)
+    check('retries landed across distinct weeks', retryWeeks.length >= 2, `weeks ${retryWeeks.join()}`)
+    check(
+      'the attempt count never went backwards',
+      weekly.every((s, i) => i === 0 || s.attempts >= weekly[i - 1].attempts),
+      JSON.stringify(weekly.map(s => s.attempts))
+    )
+    const preTerminal = weekly.filter(s => s.next !== null)
+    check(
+      'every sample with a scheduled retry was still past_due',
+      preTerminal.length > 0 && preTerminal.every(s => s.status === 'past_due'),
+      JSON.stringify(weekly.map(s => `${s.week}:${s.status}`))
+    )
+    check(
+      'the ladder is exhausted (no next attempt)',
+      weekly.at(-1)?.next === null,
+      `next=${weekly.at(-1)?.next ?? 'none'}`
+    )
+
+    const finalSub = await stripe('GET', `/subscriptions/${subB.id}`)
+    if (finalSub.status === 'canceled') {
+      await waitFor('the terminal cancel reaches our row', readSub(subB.id), r => r?.status === 'canceled', 60)
+      const userB = await waitFor(
+        'the member is canceled too',
+        readUser(probeUserIdB),
+        u => u?.status === 'canceled',
+        60
+      )
+      check(
+        'the member keeps the row tier until the cancel lands, then falls to starter',
+        userB?.tier === 'starter',
+        String(userB?.tier)
+      )
+      // A canceled member's route back is CHECKOUT, not a plan switch: the subscription is gone, so
+      // the switch action refuses and a fresh subscription is exactly what checkout is for. This is
+      // the server half of BillingPage's routing (`hasCard` excludes 'canceled' → handleUpgrade).
+      expectRefusal(
+        'a plan switch on the canceled subscription is refused',
+        'NO_LIVE_SUBSCRIPTION',
+        'billingNode:createPlanSwitchSession',
+        { sessionToken: sessionTokenB, priceId: PRICE.growth }
+      )
+      const resub = call('billingNode:createCheckoutSession', {
+        priceId: PRICE.growth,
+        sessionToken: sessionTokenB,
+        locale: 'en'
+      })
+      check(
+        'a canceled member can start a new subscription',
+        resub.ok && typeof resub.value?.url === 'string',
+        resub.ok ? resub.value?.url : errLine(resub.error)
+      )
+      const resubId = String(resub.ok ? resub.value?.url : '').match(/cs_(?:test|live)_[A-Za-z0-9]+/)?.[0]
+      if (resubId) {
+        try {
+          await stripe('POST', `/checkout/sessions/${resubId}/expire`)
+          note(`expired checkout session ${resubId}`)
+        } catch (err) {
+          note(`could not expire checkout session ${resubId}: ${err.message}`)
+        }
+      }
+    } else if (finalSub.status === 'unpaid') {
+      // The mark-unpaid setting: the row keeps Stripe's raw status, the user maps to past_due.
+      await waitFor('the row mirrors unpaid', readSub(subB.id), r => r?.status === 'unpaid', 60)
+      await waitFor('the user maps unpaid to past_due', readUser(probeUserIdB), u => u?.status === 'past_due', 60)
+    } else {
+      check('the ladder ended canceled or unpaid', false, `Stripe says ${finalSub.status}`)
+    }
+  } finally {
+    heading('Cleanup')
+    if (!clockId) {
+      note('nothing created')
+    } else if (flag('keep')) {
+      note(`kept: test clock ${clockId}, with its customer, subscription and invoices`)
+    } else {
+      await stripe('DELETE', `/test_helpers/test_clocks/${clockId}`)
+      note(`test clock ${clockId} deleted, with its customer, subscription and invoices`)
+    }
+    if (probeUserId) note(`probe member ${probeUserId} left in the dev DB; harmless, never reused`)
+    if (probeUserIdB) note(`dunning probe member ${probeUserIdB} left in the dev DB; harmless, never reused`)
+  }
+}
+
 // ── Read-only audit ───────────────────────────────────────────────────────────────────────────
 // Every Stripe call here is a GET and the Convex read is a sandboxed readonly query, so this is safe
 // against a member's real test-mode subscription at any time — including while a downgrade is
@@ -1018,7 +1311,7 @@ async function audit(convexUserId) {
 
 let aborted = false
 try {
-  await (USER ? audit(USER) : flag('coupons') ? couponRun() : run())
+  await (USER ? audit(USER) : flag('coupons') ? couponRun() : flag('pastdue') ? pastDueRun() : run())
 } catch (err) {
   aborted = true
   // fail() has already printed and set the exit code; anything else is a genuine crash.

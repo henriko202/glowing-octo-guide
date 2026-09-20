@@ -14,6 +14,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import { FeedFilterPanel } from '@/components/FeedFilterPanel'
 import CardGateBanner, { useOwnPostState } from '@/components/CardGateBanner'
 import CardGateDialog, { type GateSource } from '@/components/CardGateDialog'
+import PaymentRequiredHint from '@/components/PaymentRequiredHint'
 import EmptyFeed from '@/components/EmptyFeed'
 import Modal from '@/components/Modal'
 import { PageHeader } from '@/components/PageHeader'
@@ -32,7 +33,10 @@ const MAX_EMPTY_LOADS = 5
 export default function FeedPage() {
   const { t } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
-  const { gated } = useCardGate()
+  const { gated, status: cardStatus } = useCardGate()
+  // A failed payment blocks submission (convex/lib/access.ts: assertCanSubmitPost); the composer
+  // says why and links to Billing instead of surfacing the server refusal as an error.
+  const pastDue = cardStatus === 'past_due'
   // Which control opened the gate dialog — drives its copy/analytics. PostCard reports its own
   // source per control (react/comment/linkedin).
   const [gateSource, setGateSource] = useState<GateSource | null>(null)
@@ -209,9 +213,16 @@ export default function FeedPage() {
 
       {/* One attention point per screen: never stacks with the empty state (Task 5) or the pulsing
           Billing nav item plus a dialog. */}
-      {gated && hasHiddenPost && posts.length > 0 && <CardGateBanner />}
+      {/* Past_due hides the member's existing posts from the feed (isAuthorFeedEligible), not only
+          posts created hidden — so the banner shows for any post they own, not just a
+          hidden-flagged one. */}
+      {gated && (hasHiddenPost || (pastDue && hasAnyPost)) && posts.length > 0 && <CardGateBanner />}
 
-      <PostComposer onSubmit={handlePostSubmit} />
+      <PostComposer
+        onSubmit={handlePostSubmit}
+        atLimit={pastDue}
+        limitHint={pastDue ? <PaymentRequiredHint /> : undefined}
+      />
 
       {canFilter && sessionToken && (
         <FeedFilterPanel

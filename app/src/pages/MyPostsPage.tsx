@@ -18,6 +18,7 @@ import PostComposer from '../components/PostComposer'
 import LinkedInEmbed, { buildPostUrl } from '../components/LinkedInEmbed'
 import PlanUsagePills, { type FeaturedUsage, type WeeklyUsage } from '@/components/PlanUsagePills'
 import UpgradeAtLimit from '../components/UpgradeAtLimit'
+import PaymentRequiredHint from '../components/PaymentRequiredHint'
 import { friendlyError, mapLimitError } from '@/lib/errors'
 import { timeAgo } from '@/lib/relativeDay'
 import { toast } from '@/components/ui/toast'
@@ -116,7 +117,10 @@ export default function MyPostsPage() {
   const featurePost = useMutation(api.posts.featurePost)
   const unfeaturePost = useMutation(api.posts.unfeaturePost)
   const purchaseFeaturedPost = useAction(api.billingNode.purchaseFeaturedPost)
-  const { gated, isTrialing } = useCardGate()
+  const { gated, isTrialing, status } = useCardGate()
+  // A failed payment blocks submission (convex/lib/access.ts: assertCanSubmitPost). A `none`
+  // member keeps the composer — their onboarding first post is created hidden by design.
+  const pastDue = status === 'past_due'
   const [searchParams, setSearchParams] = useSearchParams()
 
   // backlog/R17 — two one-shot URL params, latched during render (BillingPage's `justSubscribed`
@@ -333,8 +337,8 @@ export default function MyPostsPage() {
       {/* Manual share — copied from the Feed page, re-themed light to match this page.
           Disabled at the weekly limit so we don't trigger a guaranteed-to-fail submit. */}
       <PostComposer
-        atLimit={atLimit}
-        limitHint={<UpgradeAtLimit limit="weeklyPosts" />}
+        atLimit={atLimit || pastDue}
+        limitHint={pastDue ? <PaymentRequiredHint /> : <UpgradeAtLimit limit="weeklyPosts" />}
         onSubmit={handleSubmit}
       />
 
@@ -378,12 +382,12 @@ export default function MyPostsPage() {
                         : t('feed.featured')}
                     </Badge>
                   )}
-                  {post.hidden ? (
+                  {post.hidden || pastDue ? (
                     <Badge
                       variant="warning"
                       className="rounded-full px-2 py-0.5 text-[11px]"
                     >
-                      {t('myPosts.hiddenFromFeed')}
+                      {t(pastDue && !post.hidden ? 'myPosts.hiddenPaymentPending' : 'myPosts.hiddenFromFeed')}
                     </Badge>
                   ) : (
                     <span className="text-muted-foreground text-[11px]">{t('myPosts.visibleInFeed')}</span>
@@ -411,6 +415,10 @@ export default function MyPostsPage() {
                       onBuy={handleBuyFeatured}
                     />
                   ) : (
+                    /* The plan allowance is card-gated too: featurePostHandler refuses a
+                       past_due/none member with PAYMENT_REQUIRED (convex/posts.ts). The control
+                       stays visible with the reason, and Unfeature always works — removing a boost
+                       must never be blocked. */
                     <Button
                       type="button"
                       variant="outline"
@@ -418,7 +426,8 @@ export default function MyPostsPage() {
                       aria-pressed={post.isFeatured ?? false}
                       disabled={
                         !post.isFeatured &&
-                        ((featuredAtCap && !hasPermanentFeaturedEntitlement(post)) ||
+                        (gated ||
+                          (featuredAtCap && !hasPermanentFeaturedEntitlement(post)) ||
                           post.interactionLimitReached === true)
                       }
                       title={
@@ -428,7 +437,9 @@ export default function MyPostsPage() {
                             ? t('myPosts.featuredCappedTitle')
                             : featuredAtCap && !hasPermanentFeaturedEntitlement(post)
                               ? t('myPosts.featureLimitReached')
-                              : undefined
+                              : gated
+                                ? t('myPosts.featurePaymentRequired')
+                                : undefined
                       }
                       onClick={() => handleToggleFeatured(post)}
                       className="cursor-pointer"

@@ -1013,6 +1013,18 @@ describe('BillingPage status matrix', () => {
     expect(screen.queryByText(/billing\.featuredAddon/)).not.toBeInTheDocument()
   })
 
+  // The failed-payment banner: posts and featured boosts are hidden until the charge clears
+  // (isAuthorFeedEligible), so the page says so and offers the portal action that fixes it.
+  it('shows the past-due banner and opens the portal to fix the payment', async () => {
+    mockQueryReturns['users.getSubscriptionInfo'] = { tier: 'growth', status: 'past_due', cancelAtPeriodEnd: false }
+    setUser({ subscriptionStatus: 'past_due' })
+    renderPage()
+    expect(screen.getByText('billing.pastDueTitle')).toBeInTheDocument()
+    expect(screen.getByText('billing.pastDueBody')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'feed.cardGatePastDueCta' }))
+    await waitFor(() => expect(mockPortal).toHaveBeenCalledWith({ sessionToken: 'tok' }))
+  })
+
   it('sends a "none" member with no trial left to checkout', async () => {
     setUser({ subscriptionStatus: 'none', trialEligible: false })
     renderPage()

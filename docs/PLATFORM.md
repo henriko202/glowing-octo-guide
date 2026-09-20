@@ -2337,9 +2337,14 @@ status active, pendingTier none`, schedule already handed back.
 > tell a genuinely pending downgrade from a **spent** schedule (attached on Stripe, nothing pending on our row). With
 > no deployment reachable it degrades to a Stripe-only report rather than failing.
 >
-> The full run needs `npx convex dev` running, because it asserts on webhook-delivered state. Deliberately **not**
-> covered: `past_due` dunning, `invoice.payment_failed`, the featured-post checkout, the duplicate-subscription guard,
-> and `endTrialEarly`'s 50-interaction trigger. What the trigger then does **is** covered: the run calls `endTrialEarly`
+> The full run needs `npx convex dev` running, because it asserts on webhook-delivered state. The **`past_due` round
+> trip** (failed renewal → `invoice.payment_failed` → `past_due` → dunning retries → terminal state, plus the
+> pay-the-invoice recovery) has its own `--pastdue` run, see the dated block below. The run walks the ladder week by
+> week and asserts its shape (attempts monotonic, retries in distinct later weeks, exhausted inside the window);
+> Stripe's exact retry timestamps are still not pinned — a test clock replays scheduled retries with multi-day lag,
+> so an exact hour would test Stripe's scheduler rather than our code. Deliberately **not** covered: the
+> featured-post checkout, the duplicate-subscription guard, and `endTrialEarly`'s 50-interaction
+> trigger. What the trigger then does **is** covered: the run calls `endTrialEarly`
 > itself, on a portal-cancelled trial (must not convert) and on a live one (one paid full-price invoice, nothing
 > pending).
 >
@@ -2417,6 +2422,25 @@ as
 > promotion-code field and the annual one hid it (`allow_promotion_codes` true / false); the no-trial first invoice
 > was $0, its switch to annual was **paid in full** ($148.77); the trial-end invoice read `paid 15000 vs 15000`,
 > discount `[]`. The B07 default run re-passed **69/69** against the same deployment afterwards.
+>
+> ✅ **The dunning round trip and its terminal state are proven too, 2026-09-18 — `--pastdue` 27/27 checks.** The
+> trial renewal charged to `tok_chargeCustomerFail` (4000000000000341 — attaches fine, every charge declines) at
+> trial end: Stripe `past_due`, the renewal invoice `open`, and our row and the user both `past_due`. In that state a
+> second checkout is refused (`ALREADY_SUBSCRIBED`), a downgrade still schedules (`{url: null}`) and is undoable, and
+> the portal home still opens. Paying the open invoice restores `active` on Stripe, the row and the user — the status
+> is cleared, never latched. A second subscription is then left to Stripe's **dunning ladder**, walked WEEK BY WEEK
+> off Stripe's own `next_payment_attempt`: the attempt count only moves forward (1 → 2 → 3), retries land across
+> distinct weeks, every sample with a retry still scheduled is `past_due`, and the ladder exhausts
+> (`next_payment_attempt` none) — after which this account's failed-payment setting **cancels** the subscription,
+> which the webhook follows into our row and the member (`canceled`, tier falls to starter). **A canceled member's
+> route back is then proven on that same account**: a plan switch refuses (`NO_LIVE_SUBSCRIPTION` — the subscription
+> is gone) while checkout accepts a fresh subscription. The `unpaid` branch — row keeps Stripe's raw status, the user
+> maps to `past_due` — is asserted too, for an account configured to mark-unpaid rather than cancel. Exact retry
+> **timestamps** are still not pinned: runs on this account exhausted the ladder at ~2 and ~5 weeks respectively
+> (test-clock replay varies), so the assertions pin the shape — monotonic attempts, retries across weeks, exhaustion —
+> not the days. Clock `clock_1UHZ3cFPUrUP5vm6gkjpc1mJ` (deleted), subscriptions
+> `sub_1UHZ3kFPUrUP5vm6LF2qCPlk` (recovery) and `sub_1UHZ3vFPUrUP5vm6YwevSpzU` (dunning). Raw card numbers are
+> refused on this account, so the token — not the number — is the fixture.
 >
 > ⚠️ The webhook-scheduled release **cannot be asserted under a test clock.** Stripe locks writes while a clock
 > advances (`Test clock advancement underway - cannot perform modifications`), and the swap webhook necessarily fires
@@ -3140,6 +3164,10 @@ authorization as hide/delete). Featuring pins a post to the top of the feed (`li
 see [§11](#11-feed--engagement))
 and is gated by a per‑tier **monthly quota** (`planLimits.featuredPerMonth`, see [§9](#9-plan-limits-system)).
 
+- **Card-gated since 2026-09-18.** `featurePost` calls `assertCanEngage(user)` before anything else: a `none`/`past_due`
+  member is refused with `PAYMENT_REQUIRED`, the same gate reactions and comments use. `unfeaturePost` stays ungated —
+  removing a boost must always work. My Posts keeps the toggle visible but disabled with
+  `myPosts.featurePaymentRequired` for a gated member (the buy-$5 control is already hidden by `canBuy`'s `!gated`).
 - **First feature** (`featurePost`) rejects with a thrown error when the caller's `featuredPostUsage` row for the
   current UTC month already has `usedCount ≥ featuredPerMonth` (`lib/postLimit.ts:isFeaturedLimitReached`), and rejects
   a soft‑deleted post the same way `setPostHidden` does. On success it patches the post
@@ -3363,7 +3391,9 @@ page renders no items to scroll to.
 
 **Feed eligibility and the trial (Plan 2B).** The pure `isAuthorFeedEligible(author, now)` helper (`feed.ts`)
 excludes **banned** authors (`isBanned` — moderation; their posts leave the feed and search on ban and return on unban,
-with no post mutation) and authors with `deletionScheduledAt` set, and drops a **canceled** author once their paid
+with no post mutation), authors with `deletionScheduledAt` set, and a **`past_due`** author: a failed renewal hides
+their posts — and any featured boost on them — until the charge clears, and the status flip back to `active` is the
+whole recovery (no post mutation). It then drops a **canceled** author once their paid
 period ends:
 `subscriptionStatus === 'canceled'` stays eligible only while `now < subscriptionEndsAt` (the paid‑through instant
 stamped by `cancelUserSubscription`); a missing/elapsed `subscriptionEndsAt` → not eligible. This is the sole feed
@@ -3377,15 +3407,17 @@ member's onboarding first post). Existing hidden posts from before Plan 2B are n
 data). The `syncUserSubscription` webhook un-hides the author's posts when they **gain a card**
 (`unhideHidden: canEngage(status)`) — so a trial start (subscribe), not just an `active` transition, reveals it.
 
-**Card gate on engagement.** `commentOnPost` and `reactToPost` call `assertCanEngage(user)` (from
-`convex/lib/access.ts`) immediately after resolving the caller — `submitPost` does NOT: a no-card member may submit (the
-post is created hidden via `postCreatedHidden`), only reactions/comments are card-gated. Engagement is granted for
-`subscriptionStatus ∈ {trialing, active, canceled}` — **cancellation never revokes access**; only `none` (never
-subscribed) and `past_due` (failed payment) receive a `PAYMENT_REQUIRED` error. Admins (`isAdmin`) always bypass the
-gate. The frontend mirror `useCardGate()` (`app/src/hooks/useCardGate.ts`) uses the same status set and must stay in
-sync. The in-app UI for this gate (hidden-post banner, tap-bound `CardGateDialog`, progress bar, CTA) is **Plan 2C**
-— shipped, reordered by **R04 (Option A)**; see [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c). R04 is copy and
-routing only: this backend gate is unchanged.
+**Card gate on engagement.** `commentOnPost`, `reactToPost` and `posts.featurePost` call `assertCanEngage(user)` (from
+`convex/lib/access.ts`) immediately after resolving the caller. `submitPost` has its own, looser gate —
+`assertCanSubmitPost` blocks only `past_due` (a post written mid-dunning would be created hidden into a void), while
+`none` stays allowed so the onboarding first post can be written hidden. `unfeaturePost` is ungated either way (removing
+a boost must always work). Engagement is granted for `subscriptionStatus ∈ {trialing, active, canceled}` —
+**cancellation never revokes access**; only `none` (never subscribed) and `past_due` (failed payment) receive a
+`PAYMENT_REQUIRED` error. Admins (`isAdmin`) always bypass the gate. The frontend mirror `useCardGate()`
+(`app/src/hooks/useCardGate.ts`) uses the same status set and must stay in sync. The in-app UI for this gate
+(hidden-post banner, tap-bound `CardGateDialog`, progress bar, CTA) is **Plan 2C** — shipped, reordered by **R04 (Option
+A)**; see [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c). R04 is copy and routing only: this backend gate is
+unchanged.
 
 **Per-post engageability gate.** The card gate answers _"may this member engage at all?"_; a second gate answers _"is
 **this post** engageable?"_. All three engagement entry points — `commentOnPost`, `reactToPost` (below) and
@@ -4879,8 +4911,14 @@ sync with the compliance docs and live support inbox.
   of M featured this month") — both fully localized via the
   `myPosts` i18n namespace — each turns **amber** at its cap; the weekly one also disables the composer (`atLimit`).
   At the weekly cap the composer's `limitHint` is the shared `UpgradeAtLimit limit="weeklyPosts"` (R08); at the
-  featured cap the same component (`limit="featured"`) renders under the pill row. Each post's owner action bar gets a
-  **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the monthly cap is reached) alongside
+  featured cap the same component (`limit="featured"`) renders under the pill row. A **`past_due`** member's composer
+  is blocked the same way, with the card-gate copy + Billing link as its `limitHint` (`assertCanSubmitPost` is the
+  server half, [§11](#11-feed--engagement)); `none` keeps the composer for the hidden onboarding first post. Their
+  posts' visibility line reads `myPosts.hiddenPaymentPending` instead of `visibleInFeed`, because
+  `isAuthorFeedEligible` holds those posts (and any featured boost) out of the feed until the charge clears. Each
+  post's owner action bar gets a **Feature/Unfeature** toggle (`aria-pressed`, disabled + `title` reason once the
+  monthly cap is reached, once the
+  post's interaction cap is spent, or for a card-gated member — `myPosts.featurePaymentRequired`) alongside
   the existing Hide/Unhide + Delete; posts with retained `featuredAt` bypass that cap because their first allowance is
   permanent. Unfeature opens a themed destructive confirmation explaining that the same post can be featured again
   later without another allowance or payment. A featured post also shows the shared `feed.featured` ("★ Featured")
@@ -5110,213 +5148,248 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
       a card holder — they re-subscribe through checkout, without a trial, enforced server-side (§8). The
       billing-info card and the **Manage Subscription** button now render for all three card-holder statuses, so a
       trialing or `past_due` member can actually reach the portal; previously only `active` could.
-    - **`ALREADY_SUBSCRIBED`.** When the server refuses a second live subscription (§8), `handleUpgrade` toasts
-      `billing.alreadySubscribed` and opens the portal. The member sees a door, never the error prefix.
-    - **The plan the visitor chose.** `targetPlan` calls the shared `resolveTargetPlan(searchParams)` helper
-      (`lib/targetPlan.ts`, which also exports `PLAN_IDS`/`isPlanId` — the single validation source, reused by
-      `CardGateDialog`/`CardGateBanner` for their own trial-CTA links, R04): `?plan=` → `sessionStorage.chosenPlan`
-      (stashed by `AuthSuccessPage` out of the OAuth hash) → `'growth'`. The interval
-      toggle resolves the **same way, one step longer** (`?interval=` → `sessionStorage.chosenInterval` → the interval
-      the member is billed on, off `getSubscriptionInfo.priceInterval` → `'annual'`), so a direct
-      `/billing?plan=pro&interval=monthly` link honours both halves of the landing's choice and a monthly member
-      comparing plans is quoted monthly prices. It is a derivation, not synced state: `pickedInterval` (URL, stash, or
-      a click) `?? liveInterval ?? 'annual'`, so the row arriving after first paint never overwrites a click, and
-      `chargedInterval` (the pre-charge amount) is `liveInterval ?? billingInterval` — the row, never the toggle. A
-      pre-card
-      member sees **one primary card** for that plan with a **"See all plans"** toggle that reveals the full grid; card
-      holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead` when
-      the plan came from the URL or the stash and `billing.newUserLead` otherwise. A chosen plan is labelled **"Your
-      choice"**; the Growth fallback is labelled **"Best for targeted feeds"**. Every pre-card CTA says "Start
-      {{plan}} trial" without promising a fixed duration — **unless the member has no trial left**, see the next bullet.
-      `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
-      a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle and the
-      Custom card stay visible in every layout.
-    - **How long the trial can last, everywhere on the page (R19).**
-      `const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS` —
-      the server's own answer (`getMe` → `toSafeMe.trialDays`, itself `trialDaysFor(user)`, §8), with the 7-day
-      constant only as the pre-load fallback. The disclosure interpolates it as an upper bound alongside
-      `TRIAL_INTERACTION_THRESHOLD`: card required; free until 50 interactions made or received, as recorded in the app,
-      or for up to
-      `{{days}}` days, whichever comes first. CTA and chosen-plan labels omit duration rather than implying the full
-      period is guaranteed. Directly under the pre-card lead, an invited member also gets the gift line
-      `billing.giftFrom` — "{{name}} invited you, so your trial can last up to {{days}} days instead of {{base}} days" —
-      rendered only
-      when `me.inviterName` is set (`getMe` resolves the inviter's **first name only** through
-      `by_invite_code`, §7), only inside the `!hasCard` block, **and** only while `canTrial` (below): it is a statement
-      of fact about the offer, so it disappears the moment there is a card, and it never claims the trial has started.
-        - **No trial left ⇒ no trial promise (`canTrial`).** `const canTrial = me?.trialEligible !== false` — the
-          server's
-          own row-count answer (§8), never a status guess. `!hasCard` is `trialing || active || past_due` inverted, so
-          it
-          covers a **canceled** member re-subscribing _and_ a member whose Stripe subscription went `incomplete`/
-          `paused`
-          (both read as `'none'` with a row on file), and one trial per account means checkout gives all of them
-          nothing.
-          Each of the three trial promises in the pre-card block therefore has an honest twin, swapped on `canTrial`:
-          `billing.chosenPlanLead` → **`billing.noTrialChosenPlanLead`**, `billing.newUserTrialNote` → **
-          `billing.noTrialNote`**, and the plan-card CTA `billing.startTrialCta` → **`billing.noTrialCta`**
-          ("Subscribe to {{plan}}"). None of the three carries `{{days}}` — there is no trial length to quote. The copy
-          deliberately mirrors `NO_TRIAL_MESSAGE` in `convex/lib/checkoutCopy.ts`, the line Stripe prints under its own
-          pay
-          button two clicks later, so the page and the checkout never contradict each other. `billing.newUserLead` needs
-          no
-          twin: "select a plan below" is true either way. The default is optimistic (`!== false`) because `me` is
-          `undefined` for one render and the majority case is a genuinely new visitor. - **Reused by `UpgradeAtLimit` (
-          R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
-          [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
-          `/billing?plan=${nextTier}&interval=${chargedInterval}` — the same `?plan=`/`?interval=` deep link this
-          page
-          already reads via `resolveTargetPlan`/the interval toggle above, so it needs no bespoke routing. It never
-          re‑derives `hasCard` itself: landing on this page with a card already on file still routes the click
-          through
-          `handlePlanClick`'s existing portal‑switch branch (above), so a card holder always ends up in the Customer
-          Portal regardless of which cap sent them here. - **Trial banner, tier-aware and exact.** `billing.trialBanner`
-          interpolates the member's **real** plan name (`billing.plans.<tier>.name`), the real threshold (
-          `progress.threshold`, falling back to
-          `TRIAL_INTERACTION_THRESHOLD` while the query loads) and the trial's end **date** (`me.trialEndsAt`,
-          localized
-          via
-          `i18n.language`; `billing.trialBannerNoDate` when the row has no date) — "your {{plan}} plan starts at
-          {{threshold}} interactions or on {{date}}", the same promise `shell.trialGoal` and `feed.cardGateCost`
-          make,
-          never
-          a typed "50" or a relative "after 7 days" that is stale from day two. It sits above the X/50 progress
-          meter.
-          The
-          banner's SSI link‑out (`billing.ssiLink`) was removed 2026‑09‑06, and the sidebar's SSI link‑out followed
-          on
-          2026‑09‑07: the whole app now holds **exactly one** SSI link, the qualified Sales Navigator line in the
-          recap
-          footer (`recap.salesNav`, R15). From 40 of 50 (`progress.nearThreshold`,
-          §8) it swaps to `billing.nearThresholdBanner` —
-          "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour
-          token
-          in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
+    - **The past-due banner (2026-09-18).** A `past_due` member gets a dedicated banner above the info card
+      (`billing.pastDueTitle` / `billing.pastDueBody`) naming the failed payment and its consequence — posts and
+      featured boosts are hidden until the charge clears (§11) — with a CTA that opens the portal
+      (`feed.cardGatePastDueCta`, the same handler as Manage Subscription), so the one fixing action is on the page,
+      not just implied by the status field.
+        - **`ALREADY_SUBSCRIBED`.** When the server refuses a second live subscription (§8), `handleUpgrade` toasts
+          `billing.alreadySubscribed` and opens the portal. The member sees a door, never the error prefix.
+        - **The plan the visitor chose.** `targetPlan` calls the shared `resolveTargetPlan(searchParams)` helper
+          (`lib/targetPlan.ts`, which also exports `PLAN_IDS`/`isPlanId` — the single validation source, reused by
+          `CardGateDialog`/`CardGateBanner` for their own trial-CTA links, R04): `?plan=` → `sessionStorage.chosenPlan`
+          (stashed by `AuthSuccessPage` out of the OAuth hash) → `'growth'`. The interval
+          toggle resolves the **same way, one step longer** (`?interval=` → `sessionStorage.chosenInterval` → the
+          interval
+          the member is billed on, off `getSubscriptionInfo.priceInterval` → `'annual'`), so a direct
+          `/billing?plan=pro&interval=monthly` link honours both halves of the landing's choice and a monthly member
+          comparing plans is quoted monthly prices. It is a derivation, not synced state: `pickedInterval` (URL, stash,
+          or
+          a click) `?? liveInterval ?? 'annual'`, so the row arriving after first paint never overwrites a click, and
+          `chargedInterval` (the pre-charge amount) is `liveInterval ?? billingInterval` — the row, never the toggle. A
+          pre-card
+          member sees **one primary card** for that plan with a **"See all plans"** toggle that reveals the full grid;
+          card
+          holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead`
+          when
+          the plan came from the URL or the stash and `billing.newUserLead` otherwise. A chosen plan is labelled **"Your
+          choice"**; the Growth fallback is labelled **"Best for targeted feeds"**. Every pre-card CTA says "Start
+          {{plan}} trial" without promising a fixed duration — **unless the member has no trial left**, see the next
+          bullet.
+          `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
+          a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle and
+          the
+          Custom card stay visible in every layout.
+        - **How long the trial can last, everywhere on the page (R19).**
+          `const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS` —
+          the server's own answer (`getMe` → `toSafeMe.trialDays`, itself `trialDaysFor(user)`, §8), with the 7-day
+          constant only as the pre-load fallback. The disclosure interpolates it as an upper bound alongside
+          `TRIAL_INTERACTION_THRESHOLD`: card required; free until 50 interactions made or received, as recorded in the
+          app,
+          or for up to
+          `{{days}}` days, whichever comes first. CTA and chosen-plan labels omit duration rather than implying the full
+          period is guaranteed. Directly under the pre-card lead, an invited member also gets the gift line
+          `billing.giftFrom` — "{{name}} invited you, so your trial can last up to {{days}} days instead of {{base}}
+          days" —
+          rendered only
+          when `me.inviterName` is set (`getMe` resolves the inviter's **first name only** through
+          `by_invite_code`, §7), only inside the `!hasCard` block, **and** only while `canTrial` (below): it is a
+          statement
+          of fact about the offer, so it disappears the moment there is a card, and it never claims the trial has
+          started.
+            - **No trial left ⇒ no trial promise (`canTrial`).** `const canTrial = me?.trialEligible !== false` — the
+              server's
+              own row-count answer (§8), never a status guess. `!hasCard` is `trialing || active || past_due` inverted,
+              so
+              it
+              covers a **canceled** member re-subscribing _and_ a member whose Stripe subscription went `incomplete`/
+              `paused`
+              (both read as `'none'` with a row on file), and one trial per account means checkout gives all of them
+              nothing.
+              Each of the three trial promises in the pre-card block therefore has an honest twin, swapped on
+              `canTrial`:
+              `billing.chosenPlanLead` → **`billing.noTrialChosenPlanLead`**, `billing.newUserTrialNote` → **
+              `billing.noTrialNote`**, and the plan-card CTA `billing.startTrialCta` → **`billing.noTrialCta`**
+              ("Subscribe to {{plan}}"). None of the three carries `{{days}}` — there is no trial length to quote. The
+              copy
+              deliberately mirrors `NO_TRIAL_MESSAGE` in `convex/lib/checkoutCopy.ts`, the line Stripe prints under its
+              own
+              pay
+              button two clicks later, so the page and the checkout never contradict each other. `billing.newUserLead`
+              needs
+              no
+              twin: "select a plan below" is true either way. The default is optimistic (`!== false`) because `me` is
+              `undefined` for one render and the majority case is a genuinely new visitor. - **Reused by
+              `UpgradeAtLimit` (R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
+              [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
+              `/billing?plan=${nextTier}&interval=${chargedInterval}` — the same `?plan=`/`?interval=` deep link this
+              page
+              already reads via `resolveTargetPlan`/the interval toggle above, so it needs no bespoke routing. It never
+              re‑derives `hasCard` itself: landing on this page with a card already on file still routes the click
+              through
+              `handlePlanClick`'s existing portal‑switch branch (above), so a card holder always ends up in the Customer
+              Portal regardless of which cap sent them here. - **Trial banner, tier-aware and exact.**
+              `billing.trialBanner`
+              interpolates the member's **real** plan name (`billing.plans.<tier>.name`), the real threshold (
+              `progress.threshold`, falling back to
+              `TRIAL_INTERACTION_THRESHOLD` while the query loads) and the trial's end **date** (`me.trialEndsAt`,
+              localized
+              via
+              `i18n.language`; `billing.trialBannerNoDate` when the row has no date) — "your {{plan}} plan starts at
+              {{threshold}} interactions or on {{date}}", the same promise `shell.trialGoal` and `feed.cardGateCost`
+              make,
+              never
+              a typed "50" or a relative "after 7 days" that is stale from day two. It sits above the X/50 progress
+              meter.
+              The
+              banner's SSI link‑out (`billing.ssiLink`) was removed 2026‑09‑06, and the sidebar's SSI link‑out followed
+              on
+              2026‑09‑07: the whole app now holds **exactly one** SSI link, the qualified Sales Navigator line in the
+              recap
+              footer (`recap.salesNav`, R15). From 40 of 50 (`progress.nearThreshold`,
+              §8) it swaps to `billing.nearThresholdBanner` —
+              "{{remaining}} interactions from your plan starting · {{plan}}, {{price}}". **There is no `warning` colour
+              token
+              in this design system:** the near-threshold state is emphasised with `border-primary bg-accent
 text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses (the `Badge` `warning` variant
-          itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system). -
-          **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible
-          notice
-          renders
-          above the plans; **Dismiss** calls `users.clearBillingNotice`. - **Unchanged states.** The red **"Your
-          subscription has ended"** banner still shows only for genuinely
-          ended
-          subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing
-          block
-          still
-          appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's
-          own
-          tier,
-          and
-          the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id);
-          the
-          "Renews on {date}" / "Access until {date}" line still comes from
-          `getSubscriptionInfo.currentPeriodEnd`
-          ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
-          (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]). - **Custom** card (
-          all states) and the footer "Need more?" line both deep-link to the support email (via
-          the
-          `SUPPORT_EMAIL` constant). - **Checkout return (R07 — celebrate activation; see §8 for the full flow).** A
-          `?success=true` redirect
-          latches
-          `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true
-          and
-          `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
-          `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
-          `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the
-          status
-          becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
-          `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your
-          {{plan}}
-          plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a
-          post (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were
-          never
-          hidden); then `billing.successOutcome`, which sends the member to their first relevant conversation
-          without
-          promising a LinkedIn result; then the plan's own use-case description. A card holder who arrives via an
-          upgrade-at-the-limit link (`?plan=` in the URL, R08) sees **"Your choice"** on that plan. A no-card
-          visitor
-          with no explicit choice sees Growth's objective **"Best for targeted feeds"** rationale. Neither badge
-          appears
-          on the plan the member already holds or on an unselected plan. - **Cancel, downgrade and resume (R09 —
-          see [§8](#8-subscriptions--billing) for the backend).** The
-          subscription
-          card (`rounded-xl border border-border bg-card p-4 shadow-xs`) carries exactly one of two controls, chosen on
-          `subscriptionInfo.cancelAtPeriodEnd`: **"Cancel
-          plan"**
-          (`billing.cancel.link`) opens the single `CancelInterstitial` dialog, or — once the cancel is pending — **"
-          Resume
-          plan"** (`billing.cancel.resume`) calls `billingNode.resumeSubscription` and toasts
-          `billing.cancel.resumed` / `billing.cancel.resumeFailed`. A pending cancel also swaps the date line to
-          `billing.cancelsOn` (styled `text-destructive`) and adds `billing.cancel.postsLeave` naming the day the
-          member's
-          posts leave the feed. Nothing here polls: `getSubscriptionInfo` is reactive, so the webhook flip
-          re-renders
-          the
-          card on its own. - **The pending downgrade (B07 — see [§8](#8-subscriptions--billing)).**
-          `getSubscriptionInfo` also surfaces
-          `pendingTier` / `pendingAt`, and the card reads them **only when no cancel is pending** — a cancellation
-          outranks a downgrade, and the schedule is released when the cancel flow opens, so the two states can never
-          both be shown. The date line becomes `billing.pendingChange` / `billing.pendingFrom` ("Starter from
-          <date>", `pendingAt` falling back to the period end), a **"Keep {{plan}}"** button (`billing.pendingKeep`,
-          naming the tier they are on now) calls `billingNode.undoScheduledDowngrade` and
-          toasts `billing.pendingKept`, and the footnote becomes `billing.pendingUntil`. The "Cancel plan" link
-          stays
-          reachable beside the undo — the cancel flow releases the schedule itself, so it is never a dead end. Both
-          buttons share `resumeLoading`, since neither can be pressed while the other runs. - **The `?canceled=true`
-          return.** Stripe's hosted cancel flow redirects back to
-          `/billing?canceled=true`.
-          The
-          page
-          latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh
-          can't
-          lose
-          it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state,
-          so it
-          is
-          StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so
-          the
-          event
-          records a confirmed cancel rather than a visit to the URL. The param is stripped with
-          `setSearchParams({}, { replace: true })` in the same effect. - **The `?switched=<tier>` return (R08 / R20).**
-          The plan-switch deep link ([§8](#8-subscriptions--billing))
-          returns with the tier it was aimed at. **A scheduled downgrade appends
-          no marker** — it never leaves the app, so it can never reach the 20-second wait below or report a
-          false
-          timeout for a tier that was never going to move on this visit. The page latches it during render (`landing`,
-          the `justSubscribed` pattern), shows **"Switching you to X…"** while `me.tier` still
-          differs — the same 20-second timeout and Manage escape valve as the R07 activation, a Sentry exception
-          on
-          timeout — and, once the tier matches, **"You're on X now."** plus exactly one **
-          `plan_switch_completed { plan }`** (a `useRef` latch), stripping the param only then (the F4 rule).
-          Card-less members ignore the marker: their default tier could otherwise "complete" a switch that never
-          happened. Three keys per locale: `billing.switching`, `billing.switched`, `billing.switchTimeout`.
-          The **`?downgraded=<tier>` counterpart was deleted on 2026-09-09** along with the last path that
-          produced it: `cancel_alternative_completed { from }` is now fired by `CancelInterstitial` the moment
-          the
-          scheduling action resolves, so the save funnel no longer depends on a return leg that no longer
-          exists.
-        - **The two funnel events (R18/R20).** `handleUpgrade` fires **`checkout_started { plan, interval }`** before it
-          calls `createCheckoutSession`, marking the card-entry step so the survival panel's signup → trial gap can be
-          read
-          as a card-gate leak rather than an activation leak. Separately, the post-cap email's single link lands here as
-          `/billing?plan=…&interval=…&src=cap_email` ([§8](#8-subscriptions--billing)); a `useRef`-latched effect — the
-          same
-          StrictMode-safe pattern as `cancel_completed` above — fires **`cap_email_billing_opened { plan }`** once per
-          landing, resolving the plan through the same `resolveTargetPlan(searchParams)`. `src` is read, never stripped:
-          it
-          is inert for routing, and leaving it lets a refresh stay identifiable in the URL.
-        - Covered by `app/src/pages/BillingPage.test.tsx` (60 tests: plan-click routing incl. the portal deep link and
-          its
-          fallback, `ALREADY_SUBSCRIBED` → portal,
-          Manage-button visibility, chosen-plan and chosen-interval resolution order incl. the billed-interval seed and
-          the
-          click-before-row case, the localized current-plan label,
-          the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice, the R07
-          checkout-return celebration/activating states incl. the canceled re‑subscriber path, the R08 card‑holder
-          plan highlight, the R09 cancel/resume swap plus the `?canceled=true` latch, the R19 `{{days}}` trial length
-          and
-          gift line, the R20 `src=cap_email` event, the `?switched=` landing and the stale `?downgraded=` being ignored,
-          and the trial gate — no Switch button, every plan button disabled, and a click firing nothing).
+              itself resolves to accent). Do not "fix" it into a raw amber hex — see [§14A](#14a-design-system). -
+              **Duplicate-canceled notice.** When `me.billingNotice === 'duplicate_canceled'` (§8) a dismissible
+              notice
+              renders
+              above the plans; **Dismiss** calls `users.clearBillingNotice`. - **Unchanged states.** The red **"Your
+              subscription has ended"** banner still shows only for genuinely
+              ended
+              subscriptions (`canceled` or an expired trial — never `none`); the "what you'll miss" loss-framing
+              block
+              still
+              appears on the Starter card while trialing; the "Current plan" badge marks an `active` subscriber's
+              own
+              tier,
+              and
+              the page lead names it with the localized `billing.plans.<tier>.name` (never the capitalized raw id);
+              the
+              "Renews on {date}" / "Access until {date}" line still comes from
+              `getSubscriptionInfo.currentPeriodEnd`
+              ([[B21]]; §8 "Renewal / access-end date"). Checkout/portal failures surface through `toast()`
+              (`billing.checkoutFailed` / `billing.portalFailed`), never a native `alert()` ([[B18]]). - **Custom**
+              card (all states) and the footer "Need more?" line both deep-link to the support email (via
+              the
+              `SUPPORT_EMAIL` constant). - **Checkout return (R07 — celebrate activation; see §8 for the full flow).** A
+              `?success=true` redirect
+              latches
+              `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true
+              and
+              `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
+              `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
+              `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the
+              status
+              becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
+              `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your
+              {{plan}}
+              plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a
+              post (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were
+              never
+              hidden); then `billing.successOutcome`, which sends the member to their first relevant conversation
+              without
+              promising a LinkedIn result; then the plan's own use-case description. A card holder who arrives via an
+              upgrade-at-the-limit link (`?plan=` in the URL, R08) sees **"Your choice"** on that plan. A no-card
+              visitor
+              with no explicit choice sees Growth's objective **"Best for targeted feeds"** rationale. Neither badge
+              appears
+              on the plan the member already holds or on an unselected plan. - **Cancel, downgrade and resume (R09 —
+              see [§8](#8-subscriptions--billing) for the backend).** The
+              subscription
+              card (`rounded-xl border border-border bg-card p-4 shadow-xs`) carries exactly one of two controls, chosen
+              on
+              `subscriptionInfo.cancelAtPeriodEnd`: **"Cancel
+              plan"**
+              (`billing.cancel.link`) opens the single `CancelInterstitial` dialog, or — once the cancel is pending —
+              **"
+              Resume
+              plan"** (`billing.cancel.resume`) calls `billingNode.resumeSubscription` and toasts
+              `billing.cancel.resumed` / `billing.cancel.resumeFailed`. A pending cancel also swaps the date line to
+              `billing.cancelsOn` (styled `text-destructive`) and adds `billing.cancel.postsLeave` naming the day the
+              member's
+              posts leave the feed. Nothing here polls: `getSubscriptionInfo` is reactive, so the webhook flip
+              re-renders
+              the
+              card on its own. - **The pending downgrade (B07 — see [§8](#8-subscriptions--billing)).**
+              `getSubscriptionInfo` also surfaces
+              `pendingTier` / `pendingAt`, and the card reads them **only when no cancel is pending** — a cancellation
+              outranks a downgrade, and the schedule is released when the cancel flow opens, so the two states can never
+              both be shown. The date line becomes `billing.pendingChange` / `billing.pendingFrom` ("Starter from
+              <date>", `pendingAt` falling back to the period end), a **"Keep {{plan}}"** button (`billing.pendingKeep`,
+              naming the tier they are on now) calls `billingNode.undoScheduledDowngrade` and
+              toasts `billing.pendingKept`, and the footnote becomes `billing.pendingUntil`. The "Cancel plan" link
+              stays
+              reachable beside the undo — the cancel flow releases the schedule itself, so it is never a dead end. Both
+              buttons share `resumeLoading`, since neither can be pressed while the other runs. - **The `?canceled=true`
+              return.** Stripe's hosted cancel flow redirects back to
+              `/billing?canceled=true`.
+              The
+              page
+              latches `justCanceled` during render (the same pattern as `justSubscribed`, so a mid-flight refresh
+              can't
+              lose
+              it), then fires **`cancel_completed { plan }`** exactly once — gated on a `useRef` latch, not state,
+              so it
+              is
+              StrictMode-safe and never re-renders — and only **after** `cancelAtPeriodEnd` has actually flipped, so
+              the
+              event
+              records a confirmed cancel rather than a visit to the URL. The param is stripped with
+              `setSearchParams({}, { replace: true })` in the same effect. - **The `?switched=<tier>` return (R08 /
+              R20).**
+              The plan-switch deep link ([§8](#8-subscriptions--billing))
+              returns with the tier it was aimed at. **A scheduled downgrade appends
+              no marker** — it never leaves the app, so it can never reach the 20-second wait below or report a
+              false
+              timeout for a tier that was never going to move on this visit. The page latches it during render (
+              `landing`,
+              the `justSubscribed` pattern), shows **"Switching you to X…"** while `me.tier` still
+              differs — the same 20-second timeout and Manage escape valve as the R07 activation, a Sentry exception
+              on
+              timeout — and, once the tier matches, **"You're on X now."** plus exactly one **
+              `plan_switch_completed { plan }`** (a `useRef` latch), stripping the param only then (the F4 rule).
+              Card-less members ignore the marker: their default tier could otherwise "complete" a switch that never
+              happened. Three keys per locale: `billing.switching`, `billing.switched`, `billing.switchTimeout`.
+              The **`?downgraded=<tier>` counterpart was deleted on 2026-09-09** along with the last path that
+              produced it: `cancel_alternative_completed { from }` is now fired by `CancelInterstitial` the moment
+              the
+              scheduling action resolves, so the save funnel no longer depends on a return leg that no longer
+              exists.
+            - **The two funnel events (R18/R20).** `handleUpgrade` fires **`checkout_started { plan, interval }`**
+              before it
+              calls `createCheckoutSession`, marking the card-entry step so the survival panel's signup → trial gap can
+              be
+              read
+              as a card-gate leak rather than an activation leak. Separately, the post-cap email's single link lands
+              here as
+              `/billing?plan=…&interval=…&src=cap_email` ([§8](#8-subscriptions--billing)); a `useRef`-latched effect —
+              the
+              same
+              StrictMode-safe pattern as `cancel_completed` above — fires **`cap_email_billing_opened { plan }`** once
+              per
+              landing, resolving the plan through the same `resolveTargetPlan(searchParams)`. `src` is read, never
+              stripped:
+              it
+              is inert for routing, and leaving it lets a refresh stay identifiable in the URL.
+            - Covered by `app/src/pages/BillingPage.test.tsx` (60 tests: plan-click routing incl. the portal deep link
+              and
+              its
+              fallback, `ALREADY_SUBSCRIBED` → portal,
+              Manage-button visibility, chosen-plan and chosen-interval resolution order incl. the billed-interval seed
+              and
+              the
+              click-before-row case, the localized current-plan label,
+              the near-threshold swap, the charged interval and Stripe-snapshot amount, the duplicate notice, the R07
+              checkout-return celebration/activating states incl. the canceled re‑subscriber path, the R08 card‑holder
+              plan highlight, the R09 cancel/resume swap plus the `?canceled=true` latch, the R19 `{{days}}` trial
+              length
+              and
+              gift line, the R20 `src=cap_email` event, the `?switched=` landing and the stale `?downgraded=` being
+              ignored,
+              and the trial gate — no Switch button, every plan button disabled, and a click firing nothing).
 
 - **AdminPage** — `/admin` is wrapped in **`RequireAdmin`** (`components/RequireAdmin.tsx`, inside
   `RequireAuth`): `<LoadingSpinner>` while `checkIsAdmin` resolves, then a declarative
@@ -5608,7 +5681,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -7141,7 +7214,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                                                                                                                                                                                                                                                             | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
 | Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                                                                                                                                                                                                                                                        | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Customer Portal configurations (`convex/lib/portalConfig.ts`, `billingNode.portalConfigurationId` / `portalSession` / `createPortalSession`, the portal block in `scripts/stripe-provision.mjs`)                                                                                                                                                                                                                                                                                               | [§8](#8-subscriptions--billing) per-tier portal configurations + Dashboard table, [§14](#14-frontend--authenticated-app-app) BillingPage                                                                                                                                                                                                 |
-| Billing scenario runs (`scripts/billing-scenarios.mjs`, the default nine plus `--coupons`)                                                                                                                                                                                                                                                                                                                                                                                                     | [§8](#8-subscriptions--billing) the scenarios — add one whenever a billing guard, mirror field or webhook effect is added                                                                                                                                                                                                                |
+| Billing scenario runs (`scripts/billing-scenarios.mjs`, the default nine plus `--coupons` / `--pastdue`)                                                                                                                                                                                                                                                                                                                                                                                       | [§8](#8-subscriptions--billing) the scenarios — add one whenever a billing guard, mirror field or webhook effect is added                                                                                                                                                                                                                |
 | Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `billingNotices.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                                                                                                                                                                                                                                                         | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
 | Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                                                                                                                                                                                                                                                   | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
 | Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/TrialProvider.tsx`)                                                                                                                                                                                                                                                                                                                                                | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                                                                                                                                                                                                                                                |

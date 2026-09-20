@@ -463,6 +463,24 @@ export default function BillingPage() {
         </div>
       )}
 
+      {/* A failed payment gets its own banner, not just the info card's status field: the member's
+          posts (and any featured boost) are hidden from the feed until the charge clears
+          (isAuthorFeedEligible), so the page has to say what happened and offer the one action that
+          fixes it. */}
+      {me?.subscriptionStatus === 'past_due' && (
+        <div className="border-destructive/30 bg-destructive/10 text-destructive mb-6 rounded-xl border p-4 text-sm">
+          <p className="m-0 font-semibold">{t('billing.pastDueTitle')}</p>
+          <p className="mt-1 mb-0">{t('billing.pastDueBody')}</p>
+          <Button
+            onClick={handleManageSubscription}
+            disabled={portalLoading}
+            className="mt-3 cursor-pointer text-[13px]"
+          >
+            {portalLoading ? '...' : t('feed.cardGatePastDueCta')}
+          </Button>
+        </div>
+      )}
+
       {/* Billing Info Card — shown to every card holder, so a trialing or past_due member can
           reach the Customer Portal (and cancel) at all. */}
       {subscriptionInfo && hasCard && (

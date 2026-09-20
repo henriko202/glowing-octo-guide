@@ -144,12 +144,13 @@ describe('canModifyPost', () => {
   })
 })
 
-function featuredToggleCtx(post: Record<string, unknown>) {
+function featuredToggleCtx(post: Record<string, unknown>, user: Record<string, unknown> = {}) {
   const patches: { id: string; data: Record<string, unknown> }[] = []
   const queriedTables: string[] = []
   const docs: Record<string, Record<string, unknown>> = {
     p1: post,
-    u1: { _id: 'u1', tier: 'growth', isAdmin: false }
+    // `subscriptionStatus` satisfies featurePostHandler's card gate; override it per test.
+    u1: { _id: 'u1', tier: 'growth', isAdmin: false, subscriptionStatus: 'active', ...user }
   }
   const ctx = {
     db: {
@@ -206,6 +207,30 @@ describe('featured entitlement handlers', () => {
     expect(patches).toHaveLength(1)
     expect(patches[0].data).toMatchObject({ isFeatured: false })
     expect(patches[0].data).not.toHaveProperty('featuredAt')
+  })
+
+  // The plan allowance is part of the card gate: a past_due member (failed payment) must not boost
+  // a post. Unfeaturing stays allowed — removing a boost must always work.
+  it('refuses to feature for a past_due member, while unfeaturing stays allowed', async () => {
+    const pastDue = featuredToggleCtx({ ...post, isFeatured: false }, { subscriptionStatus: 'past_due' })
+    await expect(featurePostHandler(pastDue.ctx, { sessionToken: 'tok', postId: 'p1' as Id<'posts'> })).rejects.toThrow(
+      /PAYMENT_REQUIRED/
+    )
+    expect(pastDue.patches).toHaveLength(0)
+
+    const featured = featuredToggleCtx(
+      { ...post, isFeatured: true, featuredAt: 42 },
+      { subscriptionStatus: 'past_due' }
+    )
+    await unfeaturePostHandler(featured.ctx, { sessionToken: 'tok', postId: 'p1' as Id<'posts'> })
+    expect(featured.patches).toHaveLength(1)
+    expect(featured.patches[0].data).toMatchObject({ isFeatured: false })
+  })
+
+  it('lets an admin feature regardless of their subscription status', async () => {
+    const admin = featuredToggleCtx({ ...post, isFeatured: false }, { isAdmin: true, subscriptionStatus: 'none' })
+    await featurePostHandler(admin.ctx, { sessionToken: 'tok', postId: 'p1' as Id<'posts'> })
+    expect(admin.patches).toHaveLength(1)
   })
 })
 

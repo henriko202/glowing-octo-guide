@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../convex'
 import BrandMark from '@/components/BrandMark'
 import PostComposer from './PostComposer'
+import PaymentRequiredHint from './PaymentRequiredHint'
+import { useCardGate } from '@/hooks/useCardGate'
 
 // One-time first-login nudge to share the member's first post. Shown by RequireAuth until
 // users.firstPostPromptedAt is set — which happens when they submit any post (server-side in
@@ -11,6 +13,10 @@ export default function FirstPostPromptScreen() {
   const { t } = useTranslation()
   const submitPost = useAction(api.posts.submitPost)
   const dismiss = useMutation(api.users.dismissFirstPostPrompt)
+  const { status } = useCardGate()
+  // A past_due member cannot submit (assertCanSubmitPost): same disabled composer + fix-payment
+  // link as the feed and My Posts, instead of a server refusal shown as an error.
+  const pastDue = status === 'past_due'
 
   async function handleSubmit(postUrl: string) {
     const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
@@ -35,7 +41,11 @@ export default function FirstPostPromptScreen() {
         <BrandMark className="mb-4 justify-center" />
         <h1 className="text-foreground font-display text-2xl font-semibold">{t('onboarding.firstPost.title')}</h1>
         <p className="text-muted-foreground mt-2 mb-4 text-sm leading-relaxed">{t('onboarding.firstPost.intro')}</p>
-        <PostComposer onSubmit={handleSubmit} />
+        <PostComposer
+          onSubmit={handleSubmit}
+          atLimit={pastDue}
+          limitHint={pastDue ? <PaymentRequiredHint /> : undefined}
+        />
         <button
           type="button"
           onClick={handleSkip}

@@ -76,9 +76,12 @@ export function toFeedAuthor(author: Doc<'users'>) {
 /**
  * Author eligibility for the shared feed. Excludes BANNED authors (moderation — their content
  * leaves the feed and search the moment they are banned, and returns on unban, with no post
- * mutation) and authors pending account deletion (their content disappears the moment they request
- * erasure, and reappears if they cancel). Trialing authors ARE eligible: they hold a card-backed
- * Growth trial (Task 4 / Plan 2B) so their posts belong in the feed (reciprocity).
+ * mutation), authors pending account deletion (their content disappears the moment they request
+ * erasure, and reappears if they cancel), and `past_due` authors: a failed renewal hides their
+ * posts (and any featured boost on them) until the charge clears, and `syncUserSubscription`
+ * writing `active` brings them back — computed live from the status, so recovery needs no post
+ * mutation. Trialing authors ARE eligible: they hold a card-backed Growth trial (Task 4 / Plan 2B)
+ * so their posts belong in the feed (reciprocity).
  *
  * A CANCELED author keeps their posts in the feed only until their paid period ends: cancellation
  * never revokes engage access (see lib/access.canEngage), but the member's own posts drop out once
@@ -96,6 +99,7 @@ export function isAuthorFeedEligible(
   if (!author) return false
   if (author.isBanned) return false
   if (author.deletionScheduledAt) return false
+  if (author.subscriptionStatus === 'past_due') return false
   if (author.subscriptionStatus === 'canceled') {
     return author.subscriptionEndsAt !== undefined && now < author.subscriptionEndsAt
   }

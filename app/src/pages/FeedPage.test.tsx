@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FeedPage from './FeedPage'
+import { toast } from '@/components/ui/toast'
 
 // Mock the Convex API module so each query/action has a stable, identifiable reference — the same
 // by-function-identity dispatch MyPostsPage.test.tsx and BillingPage.test.tsx use, not call order.
@@ -63,8 +64,6 @@ vi.mock('../components/PostCard', () => ({
 
 vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }))
 
-import { toast } from '@/components/ui/toast'
-
 function renderPage() {
   return render(<FeedPage />)
 }
@@ -93,7 +92,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('FeedPage empty states (R05)', () => {
+describe('FeedPage empty states (R05)', ;() => {
   it('renders EmptyFeed on an empty unfiltered feed', () => {
     renderPage()
     expect(screen.getByText(/your feed fills as members post/i)).toBeInTheDocument()
@@ -112,6 +111,28 @@ describe('FeedPage empty states (R05)', () => {
       screen.getByText(/no posts match your filter yet\. adjust it or clear it to see more\./i)
     ).toBeInTheDocument()
     expect(screen.queryByText(/your feed fills as members post/i)).not.toBeInTheDocument()
+  })
+
+  // assertCanSubmitPost (convex/lib/access.ts) blocks only past_due: the feed composer stays
+  // visible but Submit is disabled with the fix-payment hint, instead of a server refusal.
+  it('blocks the composer for a past_due member and links to billing', () => {
+    mockQueryReturns['users.getMe'] = { tier: 'growth', subscriptionStatus: 'past_due' }
+    renderPage()
+    fireEvent.change(screen.getByPlaceholderText(/linkedin\.com\/posts/i), {
+      target: { value: 'https://www.linkedin.com/posts/jane_hello-activity-123' }
+    })
+    expect(screen.getByRole('button', { name: /add post/i })).toBeDisabled()
+    expect(screen.getByRole('link', { name: /update payment method/i })).toHaveAttribute('href', '/billing')
+  })
+
+  // Past_due hides existing posts from the feed (isAuthorFeedEligible) even when they were never
+  // hidden-flagged, so the banner must show for any post the member owns.
+  it('shows the past-due banner for a member with a visible post', () => {
+    mockQueryReturns['users.getMe'] = { tier: 'growth', subscriptionStatus: 'past_due' }
+    mockQueryReturns['posts.getMyPosts'] = [{ _id: 'mine', hidden: false }]
+    mockPaginated = { results: [{ _id: 'p1', authorId: 'a1' }], status: 'Exhausted', loadMore: vi.fn() }
+    renderPage()
+    expect(screen.getByText(/your post is hidden until you update your payment method/i)).toBeInTheDocument()
   })
 })
 

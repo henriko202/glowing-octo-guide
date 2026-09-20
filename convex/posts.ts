@@ -22,7 +22,7 @@ import {
 import { type OwnershipResult, verifyPostOwnership } from './linkedin/verifyPostOwnership'
 import { requireAuth, requireAuthAction } from './lib/auth'
 import { fetchWithTimeout } from './lib/fetchWithTimeout'
-import { postCreatedHidden } from './lib/access'
+import { assertCanEngage, assertCanSubmitPost, postCreatedHidden } from './lib/access'
 import { DEFAULTS, getPlanLimitsHelper, type PlanLimits, type Tier } from './lib/planLimits'
 import { computeFeedFields } from './lib/feedRank'
 import { currentUtcMonthKey, hasPermanentFeaturedEntitlement, isFeaturedLimitReached } from './lib/postLimit'
@@ -253,6 +253,11 @@ export const submitPost = action({
     //    dev deployment via the ALLOW_ADMIN_SHARE_ANY_POST env var. When off (always
     //    the case in production), admins submit under the normal rules below.
     const adminShareOverride = isAdminShareOverrideEnabled(user, env)
+
+    // 2b. A failed payment blocks submission (assertCanSubmitPost): the member already has an
+    //     account in dunning, and a post written now would be created hidden into a void. `none`
+    //     stays allowed — the onboarding first post is hidden by design until a card arrives.
+    assertCanSubmitPost(user)
 
     // 3. Posting throttles — BEFORE any outbound fetch (shortlink resolution and the page fetches
     //    below), so submitting is what consumes budget: an invalid or hostile URL still consumes the
@@ -568,6 +573,10 @@ export async function featurePostHandler(
   { sessionToken, postId }: FeaturedToggleArgs
 ): Promise<void> {
   const user = await requireAuth(ctx, sessionToken)
+  // The plan allowance is card-gated like every other engagement: a `past_due` member (payment
+  // failed) or a `none` member cannot boost a post while the subscription behind it is not in
+  // good standing. `unfeaturePost` stays ungated on purpose — removing a boost must always work.
+  assertCanEngage(user)
   const post = await ctx.db.get(postId)
   if (!post) throw new ConvexError('Post not found')
   if (!canModifyPost(user, post)) {

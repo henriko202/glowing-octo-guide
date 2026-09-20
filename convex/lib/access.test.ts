@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { canEngage, assertCanEngage, postCreatedHidden } from './access'
+import { describe, expect, it } from 'vitest'
+import { assertCanEngage, assertCanSubmitPost, canEngage, postCreatedHidden } from './access'
 
 describe('access', () => {
   it('allows engaging only with a card-backed status', () => {
@@ -20,6 +20,15 @@ describe('access', () => {
   it('admins always bypass the gate regardless of status', () => {
     expect(() => assertCanEngage({ subscriptionStatus: 'none', isAdmin: true })).not.toThrow()
     expect(() => assertCanEngage({ subscriptionStatus: 'canceled', isAdmin: true })).not.toThrow()
+  })
+
+  it('assertCanSubmitPost blocks only past_due — none keeps the onboarding first post', () => {
+    expect(() => assertCanSubmitPost({ subscriptionStatus: 'past_due' })).toThrow(/PAYMENT_REQUIRED/)
+    expect(() => assertCanSubmitPost({ subscriptionStatus: 'none' })).not.toThrow()
+    expect(() => assertCanSubmitPost({ subscriptionStatus: 'trialing' })).not.toThrow()
+    expect(() => assertCanSubmitPost({ subscriptionStatus: 'active' })).not.toThrow()
+    expect(() => assertCanSubmitPost({ subscriptionStatus: 'canceled' })).not.toThrow()
+    expect(() => assertCanSubmitPost({ subscriptionStatus: 'past_due', isAdmin: true })).not.toThrow()
   })
 
   it('postCreatedHidden hides posts only for members with no usable card', () => {

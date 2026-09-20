@@ -19,6 +19,20 @@ export function assertCanEngage(user: Pick<Doc<'users'>, 'subscriptionStatus' | 
   }
 }
 
+/**
+ * Submission has its own gate, deliberately looser than engagement: a brand-new `none` member MUST
+ * be able to write their onboarding first post (it is created hidden and revealed when a card
+ * arrives — see postCreatedHidden), so `none` is allowed. `past_due` is not: the member already has
+ * an account in dunning, and a post written now would be created hidden and could stay invisible if
+ * the payment never clears — a clear refusal beats a silent void. Admins bypass, like every gate.
+ */
+export function assertCanSubmitPost(user: Pick<Doc<'users'>, 'subscriptionStatus' | 'isAdmin'>): void {
+  if (user.isAdmin) return
+  if (user.subscriptionStatus === 'past_due') {
+    throw new ConvexError('PAYMENT_REQUIRED: Fix your payment method to submit posts.')
+  }
+}
+
 // A newly-submitted post is created HIDDEN only for members with no usable card — i.e. who can't
 // engage ('none' new members, 'past_due' lapsed payment). Carded members (trialing/active) and the
 // canceled-but-paid-through window post visibly (Plan 2B: a card on file ⇒ posts visible); admins
