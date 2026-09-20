@@ -92,7 +92,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('FeedPage empty states (R05)', ;() => {
+describe('FeedPage empty states (R05)', () => {
   it('renders EmptyFeed on an empty unfiltered feed', () => {
     renderPage()
     expect(screen.getByText(/your feed fills as members post/i)).toBeInTheDocument()
