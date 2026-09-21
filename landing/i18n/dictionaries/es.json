@@ -44,6 +44,7 @@
     "features": "Funciones",
     "pricing": "Planes",
     "cta": "Empezar prueba",
+    "loginCta": "Iniciar sesión",
     "skipToContent": "Saltar al contenido"
   },
   "hero": {
@@ -53,6 +54,7 @@
     "subLine1": "Tu próxima oportunidad depende de LinkedIn. Link Into The SSI es la mejor manera de que te noten y la mejor herramienta para mejorar tu SSI. Llega a las personas que importan en tu sector y encuentra tu próximo empleo más rápido.",
     "subLine2": "Tú decides cada acción. Nada está automatizado.",
     "cta": "Empezar mi prueba",
+    "loginCta": "Iniciar sesión",
     "ctaDisclaimer": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
     "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos en tu nombre"
   },
@@ -284,6 +286,7 @@
     "headlineLine2": "Tú decides el siguiente paso.",
     "subheadline": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
     "cta": "Empezar mi prueba",
+    "loginCta": "Iniciar sesión",
     "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos en tu nombre"
   },
   "footer": {

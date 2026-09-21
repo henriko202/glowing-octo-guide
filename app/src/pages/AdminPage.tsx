@@ -8,14 +8,15 @@ import UsersTab from '../components/UsersTab'
 import FeedbackTab from '../components/FeedbackTab'
 import MotdTab from '../components/MotdTab'
 import SurvivalTab from '../components/SurvivalTab'
+import LandingTab from '../components/LandingTab'
 import { Flash, useFlash } from '../components/useFlash'
 import { PageHeader } from '../components/PageHeader'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Button } from '../components/ui/button'
 import { Avatar } from '../components/ui/avatar'
 import { friendlyError } from '@/lib/errors'
 
-type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd' | 'survival' | 'attention'
+type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd' | 'survival' | 'landing' | 'attention'
 
 // Churn reasons returned by admin.getChurnRisk. English hardcoded copy, per admin-page convention.
 type ChurnReason = 'received_no_reply' | 'silent_7d' | 'cooling'
@@ -172,7 +173,7 @@ export default function AdminPage() {
         value={tab}
         onValueChange={handleTabChange}
       >
-        {/* Seven triggers overflow a phone viewport; the list scrolls sideways instead of wrapping. */}
+        {/* Eight triggers overflow a phone viewport; the list scrolls sideways instead of wrapping. */}
         <TabsList className="overflow-x-auto">
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="planLimits">Plan Limits</TabsTrigger>
@@ -180,6 +181,7 @@ export default function AdminPage() {
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
           <TabsTrigger value="motd">MOTD</TabsTrigger>
           <TabsTrigger value="survival">Survival</TabsTrigger>
+          <TabsTrigger value="landing">Landing</TabsTrigger>
           <TabsTrigger value="attention">Attention</TabsTrigger>
         </TabsList>
 
@@ -369,6 +371,14 @@ export default function AdminPage() {
         {/* Survival tab (backlog/R18) */}
         <TabsContent value="survival">
           <SurvivalTab
+            sessionToken={sessionToken}
+            isAdmin={isAdmin}
+          />
+        </TabsContent>
+
+        {/* Landing tab — cookieless landing funnel counters (convex/landingMetrics.ts) */}
+        <TabsContent value="landing">
+          <LandingTab
             sessionToken={sessionToken}
             isAdmin={isAdmin}
           />

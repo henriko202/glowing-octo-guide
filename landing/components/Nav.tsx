@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { TrialLink } from './TrialProvider'
+import { PrimaryCta } from './TrialProvider'
 import LogoMark from './LogoMark'
 import ThemeToggle from './ThemeToggle'
 import LanguageSelector from './LanguageSelector'
@@ -78,9 +78,13 @@ export default function Nav({
             lang={lang}
           />
           <ThemeToggle dict={themeToggleDict} />
-          <TrialLink className="hidden min-h-11 items-center rounded-full border border-gold/60 px-3 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold sm:inline-flex md:px-5">
+          <PrimaryCta
+            placement="nav"
+            loginLabel={dict.loginCta}
+            className="hidden min-h-11 items-center rounded-full border border-gold/60 px-3 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold sm:inline-flex md:px-5"
+          >
             {dict.cta}
-          </TrialLink>
+          </PrimaryCta>
         </div>
       </nav>
     </header>

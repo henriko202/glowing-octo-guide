@@ -1,4 +1,4 @@
-import { SelectedOffer, TrialLink } from './TrialProvider'
+import { PrimaryCta, SelectedOffer } from './TrialProvider'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
 
@@ -20,7 +20,11 @@ export default function FinalCTA({
           <span className="text-gold-text">{dict.headlineLine2}</span>
         </h2>
         <div className="flex flex-col items-center gap-3">
-          <TrialLink className="inline-flex min-h-11 items-center rounded-full bg-gold px-8 py-4 font-semibold text-on-gold transition-colors hover:bg-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold">
+          <PrimaryCta
+            placement="final"
+            loginLabel={dict.loginCta}
+            className="inline-flex min-h-11 items-center rounded-full bg-gold px-8 py-4 font-semibold text-on-gold transition-colors hover:bg-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+          >
             {dict.cta}
             <span
               aria-hidden="true"
@@ -28,7 +32,7 @@ export default function FinalCTA({
             >
               →
             </span>
-          </TrialLink>
+          </PrimaryCta>
           <SelectedOffer
             dict={offer}
             lang={lang}

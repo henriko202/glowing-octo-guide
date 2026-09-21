@@ -7,10 +7,12 @@ import { cn } from '@/lib/utils'
  * elements — they expose the correct implicit ARIA roles (table / row / columnheader / cell) for
  * free, so consumers don't hand-roll role="grid" on divs. Column widths are set per-usage via
  * `className` on `<TableHead>`/`<TableCell>` (pair with `table-fixed` on `<Table>` for exact widths).
+ * The wrapper scrolls horizontally when a table cannot fit its column widths, so an admin table
+ * never silently clips a column on a narrow screen.
  */
 function Table({ className, ...props }: React.ComponentProps<'table'>) {
   return (
-    <div className="border-border bg-card overflow-hidden rounded-lg border">
+    <div className="border-border bg-card overflow-x-auto rounded-lg border">
       <table
         className={cn('w-full caption-bottom text-sm', className)}
         {...props}

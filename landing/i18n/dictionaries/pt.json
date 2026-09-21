@@ -44,6 +44,7 @@
     "features": "Recursos",
     "pricing": "Planos",
     "cta": "Começar teste",
+    "loginCta": "Entrar",
     "skipToContent": "Pular para o conteúdo"
   },
   "hero": {
@@ -53,6 +54,7 @@
     "subLine1": "Sua próxima oportunidade depende do LinkedIn. O Link Into The SSI é a melhor forma de ser notado e a melhor ferramenta para melhorar seu SSI. Chegue até as pessoas que importam na sua área e encontre seu próximo emprego mais rápido.",
     "subLine2": "Você decide cada ação. Nada é automatizado.",
     "cta": "Começar meu teste",
+    "loginCta": "Entrar",
     "ctaDisclaimer": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
     "ctaTrust": "Login oficial do LinkedIn · Recebemos apenas nome, foto e e-mail · Nunca publicamos em seu nome"
   },
@@ -284,6 +286,7 @@
     "headlineLine2": "Você decide o próximo passo.",
     "subheadline": "Cartão necessário. Grátis até 50 interações feitas ou recebidas na sua conta, ou por até 7 dias, o que ocorrer primeiro. Cancele quando quiser.",
     "cta": "Começar meu teste",
+    "loginCta": "Entrar",
     "ctaTrust": "Login oficial do LinkedIn · Recebemos apenas nome, foto e e-mail · Nunca publicamos em seu nome"
   },
   "footer": {

@@ -571,5 +571,41 @@ export default defineSchema({
     interactorCountsDescending: v.array(v.number()),
     // True when a scan ceiling was hit: the board is a truncated view, never a wrong one.
     partial: v.boolean()
-  }).index('by_window_and_generated_at', ['window', 'generatedAt'])
+  }).index('by_window_and_generated_at', ['window', 'generatedAt']),
+
+  // First-party landing funnel counters (pricing section views + trial CTA clicks), one row per
+  // (UTC day, event). Written only by landingMetrics.recordLandingEvent from the landing's
+  // cookieless beacon: no cookie and no client identifier — the beacon sends only the event name.
+  // `uniqueCount` counts the visitor keys (see landingVisitors) whose flag for this event first
+  // became true that day; optional so rows written before unique tracking existed keep validating.
+  // The compound index's day prefix serves the admin window range query.
+  landingMetrics: defineTable({
+    day: v.string(),
+    event: v.union(
+      v.literal('pricing_view'),
+      v.literal('cta_click_hero'),
+      v.literal('cta_click_nav'),
+      v.literal('cta_click_pricing'),
+      v.literal('cta_click_final')
+    ),
+    count: v.number(),
+    uniqueCount: v.optional(v.number())
+  }).index('by_day_and_event', ['day', 'event']),
+
+  // One row per (UTC day, visitor key). The key is a daily-rotated HMAC-SHA256 of the request IP and
+  // User-Agent, computed server-side in http.ts — never a raw IP or user-agent, and never a
+  // client-side identifier, so uniqueness deliberately resets each UTC day. The boolean flags record
+  // which events the visitor became unique for that day; landingMetrics.recordLandingEvent is the
+  // only writer. Rows are pruned after ~2 days (landingMetrics.pruneLandingVisitors), so only the
+  // integer aggregates in landingMetrics survive. The compound index serves both the dedup lookup
+  // and the prune's day range.
+  landingVisitors: defineTable({
+    day: v.string(),
+    visitorKey: v.string(),
+    pricingView: v.boolean(),
+    ctaClickHero: v.boolean(),
+    ctaClickNav: v.boolean(),
+    ctaClickPricing: v.boolean(),
+    ctaClickFinal: v.boolean()
+  }).index('by_day_and_visitor_key', ['day', 'visitorKey'])
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatPrice, planPrice, trialHref, validReferral } from './trial'
+import { formatPrice, loginHref, planPrice, trialHref, validReferral } from './trial'
 
 describe('landing trial offer', () => {
   it.each([
@@ -34,6 +34,24 @@ describe('landing trial offer', () => {
     value => {
       expect(validReferral(value)).toBeNull()
       expect(new URL(trialHref('growth', 'annual', value)).searchParams.has('ref')).toBe(false)
+    }
+  )
+
+  it('sends returning visitors to the app login route without plan or interval', () => {
+    const url = new URL(loginHref(null))
+    expect(url.pathname).toBe('/auth/start')
+    expect(Object.fromEntries(url.searchParams)).toEqual({})
+  })
+
+  it('keeps a valid referral on the login link', () => {
+    const url = new URL(loginHref('abc12345'))
+    expect(Object.fromEntries(url.searchParams)).toEqual({ ref: 'abc12345' })
+  })
+
+  it.each([null, '', 'ABC12345', 'abc1234', 'abc123456', 'abc1234&interval=monthly'])(
+    'drops invalid referral %s from the login link',
+    value => {
+      expect(new URL(loginHref(value)).searchParams.has('ref')).toBe(false)
     }
   )
 

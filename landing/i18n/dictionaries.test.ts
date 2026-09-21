@@ -38,6 +38,15 @@ describe('landing translations', () => {
     ['en', en],
     ['pt', pt],
     ['es', es]
+  ] as const)('%s keeps the same login label in every primary CTA slot', (_locale, dictionary) => {
+    expect(dictionary.nav.loginCta).toBe(dictionary.hero.loginCta)
+    expect(dictionary.finalCta.loginCta).toBe(dictionary.hero.loginCta)
+  })
+
+  it.each([
+    ['en', en],
+    ['pt', pt],
+    ['es', es]
   ] as const)('%s keeps the generic trial offer plan-agnostic', (_locale, dictionary) => {
     for (const value of Object.values(dictionary.trialOffer)) {
       expect(value).not.toMatch(/\b(Starter|Growth|Pro)\b/)

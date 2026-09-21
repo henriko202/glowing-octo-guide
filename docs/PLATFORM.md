@@ -166,8 +166,8 @@ flowchart LR
     subgraph Convex["Convex Backend (managed)"]
         direction TB
         Cloud[".convex.cloud<br/>queries / mutations / actions<br/>(WebSocket + HTTP)"]
-        Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook"]
-        DB[("Convex DB<br/>22 tables")]
+        Site[".convex.site<br/>HTTP actions:<br/>/auth/linkedin, callback,<br/>/stripe/webhook,<br/>/landing/event"]
+        DB[("Convex DB<br/>25 tables")]
         Crons["Cron scheduler"]
         Cloud --- DB
         Site --- DB
@@ -256,7 +256,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │       └── i18n/                # i18next init + locales/{en,pt,es}.json
 │
 ├── convex/                      # Convex backend (shared by both apps)
-│   ├── schema.ts                # 20-table database schema
+│   ├── schema.ts                # 25-table database schema
 │   ├── convex.config.ts         # registers @convex-dev/stripe + @convex-dev/rate-limiter components
 │   ├── crons.ts                 # the ONLY file Convex reads for scheduled jobs
 │   ├── http.ts                  # LinkedIn OAuth + Stripe webhook HTTP routes
@@ -297,7 +297,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 
 ## 5. Data Model
 
-All state lives in **Convex** (`convex/schema.ts`). There are **22 tables**. Every document also carries Convex‑managed
+All state lives in **Convex** (`convex/schema.ts`). There are **25 tables**. Every document also carries Convex‑managed
 `_id` (`Id<table>`) and `_creationTime` (ms epoch) fields implicitly.
 
 Convex `v.id('table')` fields are **logical foreign keys** — there is **no DB‑enforced referential integrity**;
@@ -902,6 +902,56 @@ position 1, because the member overtook the stored leader after the rebuild (`po
 
 Index: `by_window_and_generated_at [window, generatedAt]` — the newest‑first read and the generation trim (keep 4).
 
+#### `landingMetrics` — daily landing funnel counters
+
+One row per **(UTC day, event)** — the landing site's first‑party funnel count. `landingMetrics.recordLandingEvent`
+(internal) upserts the row (`count + 1`), deriving the day server‑side from `Date.now()`; only the cookieless beacon
+`POST /landing/event` may call it ([§15](#15-frontend--landing-site-landing)). The five frozen event names are
+`pricing_view` plus `cta_click_{hero|nav|pricing|final}`. The beacon carries no client‑side identifier; the only
+visitor‑derived value is the daily‑rotated HMAC in `landingVisitors` (`uniqueCount` counts its first‑true flags for
+that day). `landingMetrics.getMetrics` (admin‑only, [§12](#12-admin--moderation)) range‑reads the window through the
+index and projects it via the pure `summarizeLandingMetrics` (the totals and unique sums plus all four placements
+with zeros included), alongside `uniqueTrackingEnabled`.
+
+| Field         | Type                                                                                      | Req | Meaning                                                                                                     |
+|---------------|-------------------------------------------------------------------------------------------|:---:|-------------------------------------------------------------------------------------------------------------|
+| `day`         | `"YYYY-MM-DD"` (UTC)                                                                      | ✓  | Server‑derived day bucket. Leading half of the compound index.                                              |
+| `event`       | `pricing_view \| cta_click_hero \| cta_click_nav \| cta_click_pricing \| cta_click_final` | ✓  | The frozen event name.                                                                                      |
+| `count`       | number                                                                                    | ✓  | Events recorded for that (day, event) — increments by one per beacon.                                       |
+| `uniqueCount` | number                                                                                    |  –  | Visitors whose flag for this event first became true that day. Optional (legacy rows lack it); read as `0`. |
+
+Index: `by_day_and_event [day, event]` — the upsert's exact lookup and the admin window's `q.gte('day', sinceDay)`
+range. No separate `by_day` index: the compound index's day prefix serves the range (dead indexes are a tracked issue).
+
+#### `landingVisitors` — daily unique‑visitor dedup rows
+
+One row per **(UTC day, visitor key)**. The key is
+`hex(HMAC‑SHA256(secret, "landing-visitor:" + day + ":" + ip + ":" + ua)).slice(0, 32)`, computed **server‑side in the
+HTTP action** (`convex/lib/landingVisitorKey.ts`) from the first `x-forwarded-for` hop and the `user-agent` header —
+never a raw IP or user‑agent (the hash is the only visitor‑derived mutation argument, so Convex logs never see
+either), and never anything the browser sent. The five boolean flags mark which events the visitor became unique for
+that day, so a
+visitor who clicked hero and pricing counts once under **each** event but never twice for one. Uniqueness deliberately
+resets at the UTC day boundary, and the `prune landing visitors` cron deletes rows older than ~2 days
+([§12](#12-admin--moderation), [§13](#13-scheduled-jobs-crons)) — only the integer aggregates in `landingMetrics`
+survive. `secret` is `LANDING_METRICS_SECRET || UNSUBSCRIBE_SECRET` (an empty value counts as unset); with no secret (or
+no IP) there is no key, totals still count and uniques do not ([§16](#16-environment-variables)).
+
+| Field             | Type    | Req | Meaning                                                                   |
+|-------------------|---------|:---:|---------------------------------------------------------------------------|
+| `day`             | string  | ✓  | The UTC day the hash was derived for. Leading half of the compound index. |
+| `visitorKey`      | string  | ✓  | 32‑char lowercase hex HMAC of day+IP+User‑Agent, truncated.               |
+| `pricingView`     | boolean | ✓  | Visitor counted as unique for `pricing_view` that day.                    |
+| `ctaClickHero`    | boolean | ✓  | Visitor counted as unique for `cta_click_hero` that day.                  |
+| `ctaClickNav`     | boolean | ✓  | Visitor counted as unique for `cta_click_nav` that day.                   |
+| `ctaClickPricing` | boolean | ✓  | Visitor counted as unique for `cta_click_pricing` that day.               |
+| `ctaClickFinal`   | boolean | ✓  | Visitor counted as unique for `cta_click_final` that day.                 |
+
+Index: `by_day_and_visitor_key [day, visitorKey]` — serves both the in‑transaction dedup lookup (exact day+key) and
+the prune's `q.lt('day', cutoffDay)` range. One compound index, no second index (dead indexes are a tracked issue).
+Write path: `landingMetrics.recordLandingEvent` (insert on first sight, else patch the event's flag to true) in the
+same transaction as the `landingMetrics` upsert.
+
 ---
 
 ## 6. Backend Architecture & Conventions
@@ -914,7 +964,7 @@ Index: `by_window_and_generated_at [window, generatedAt]` — the newest‑first
 | `mutation`   | –         | `ctx.db` read/write (transactional) | ✗             | writes (upsert, ban, plan limits)                                  |
 | `action`     | –         | via `ctx.runQuery/runMutation`      | ✓             | LinkedIn/Stripe/Apify calls (submitPost, comment, react, checkout) |
 | `internal*`  | –         | as above                            | as above       | server‑only; not callable from clients                             |
-| `httpAction` | –         | via `ctx.run*`                      | ✓             | OAuth routes + Stripe webhook (`http.ts`)                          |
+| `httpAction` | –         | via `ctx.run*`                      | ✓             | OAuth routes + Stripe webhook + landing beacon (`http.ts`)         |
 | cron         | –         | mutation/action                     | as above       | scheduled jobs (`crons.ts`)                                        |
 
 ### Auth helper pattern (every protected function uses it)
@@ -4115,6 +4165,42 @@ paying member with no `tier` counts as `starter`, the app's default. Its heading
 
 The UI is `SurvivalTab` — see [§14](#14-frontend--authenticated-app-app).
 
+### Landing funnel metrics (`convex/landingMetrics.ts`)
+
+`landingMetrics.getMetrics({ sessionToken, days: 7 | 28 })` is the **Landing** admin tab's only data source. It is
+gated by `requireAuth` + `assertAdmin` like every other admin endpoint. It computes `sinceDay` (UTC, `days` calendar
+days including today), range-reads `landingMetrics` through `by_day_and_event` (`.take(500)` — the ceiling sits far
+above the 5 events × 28 days the schema can hold) and returns `{ days, sinceDay, uniqueTrackingEnabled, pricingViews,
+ctaClicks, uniquePricingViewers, uniqueCtaClickers, byPlacement, daily }` from the pure `summarizeLandingMetrics`.
+`byPlacement` always lists all four placements in `hero, nav, pricing, final` order, zeros included, each with
+`clicks` and `uniqueClicks`; `daily` projects one row per UTC day in the window — `day`, `pricingViews`,
+`uniquePricingViewers`, `ctaClicks`, `uniqueCtaClickers` — newest first, zero‑filling days without events (a missing
+day would read as unknown, a zero day as zero), while placements stay window‑level. The click‑through percentage is
+presentation, derived in the tab as
+`share(uniqueCtaClickers, uniquePricingViewers)` (a zero base reads as "not enough data yet", the same distinction
+`share()` draws in the Survival panel). `uniqueTrackingEnabled` is exactly "a visitor secret is configured"
+(`landingVisitorSecret() !== undefined`) — not whether traffic exists — so the tab can warn while still showing the
+totals.
+
+`recordLandingEvent` is an internal mutation (the HTTP beacon is its only caller). It derives the UTC day with
+`new Date().toISOString().slice(0, 10)` and upserts the `(day, event)` row with the compound index + `.unique()`, so
+concurrent beacons can never insert duplicate day rows. The optional `visitorKey` is the
+`hex(HMAC‑SHA256(secret, "landing-visitor:" + day + ":" + ip + ":" + ua)).slice(0, 32)` computed in `http.ts` from the
+first `x-forwarded-for` hop and the `user-agent` header; the raw IP/UA never become mutation arguments. With it, the
+same transaction reads `landingVisitors` via `by_day_and_visitor_key`: absent ⇒ insert the row with the event's flag
+true and the other four false (`becameUnique`), present with the flag false ⇒ patch it true (`becameUnique`), present
+with the flag true ⇒ not unique. `count` always increments; `uniqueCount` increments only when `becameUnique`.
+Concurrent same‑visitor beacons are settled by Convex's serializable isolation — no manual dedup retry logic.
+`secret` is `landingVisitorSecret()` (`LANDING_METRICS_SECRET || UNSUBSCRIBE_SECRET`, empty counts as unset); with no
+secret or no IP the key is omitted, totals still count and uniques do not. Raw rows are pruned to today + yesterday by
+`pruneLandingVisitors` (`shouldContinueVisitorPurge` reschedules self‑chaining 200‑row batches, mirroring the session
+purges), so the hash is retained at most ~2 days. The beacon route is anonymous, so it is bounded by
+`lib/rateLimit.enforceLandingEventBudget` — **240/hour per best-effort client** (`x-forwarded-for`, forgeable) and
+**6000/hour global** — mirroring the OAuth-start budget; neither limit is in `RATE_LIMIT_ACTIONS` (that list exists
+for per-user erasure and the beacon has no user). See [§5](#5-data-model) for the tables,
+[§15](#15-frontend--landing-site-landing) for the transport and privacy stance, and
+[§14](#14-frontend--authenticated-app-app) for the tab.
+
 ### Manual Apify sync triggers
 
 Four admin‑only mutations let an admin run a sync on demand instead of waiting for the daily cron. Each **respects the
@@ -4321,6 +4407,7 @@ time (`crons.interval`).
 | `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`                   | Purge expired sessions in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`                | Purge expired CSRF nonces in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `cleanup expired auth codes`   | every **1h**        | `sessions.deleteExpiredAuthCodes`                  | Purge expired 2‑minute login codes in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `prune landing visitors`       | every **24h**       | `landingMetrics.pruneLandingVisitors`              | Delete `landingVisitors` rows whose `day` is older than yesterday (UTC) (self‑rescheduling 200‑row batches via `shouldContinueVisitorPurge`), so the daily‑rotated IP+UA hash is retained at most ~2 days; only the integer aggregates in `landingMetrics` survive.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions`         | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `refresh LinkedIn tokens`      | every **6h**        | `linkedin/tokenRefresh.refreshExpiringTokens`      | Renews tokens entering their pre-expiry window (`tokenExpiresAt` in `[now, now+7d)` **and** a refresh token on file) via `linkedin.oauth.refreshAccessToken` + `linkedin.auth.updateTokens`. Reads via `by_token_expiry`, **cursor-paginated** (≤100/page, mirrors `migrations/backfillFeedFields.ts`'s pattern) rather than a single `.take(100)` snapshot — the cursor is captured before any refresh attempt and advances every run regardless of per-user outcome, so a full 6h tick pages through the **entire** pre-expiry window even if rows near the front keep failing. Each user's refresh is try/caught independently (one `invalid_grant` skips that user, never aborts the batch or stalls the cursor). **Runs more often than `enforce data retention` below on purpose** — see ordering note. Best-effort/mostly dormant in practice: see [§7](#7-authentication--identity). |
 | `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`           | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); purge notifications older than **180 days**; flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit/notification sweeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -4656,8 +4743,10 @@ a calm working surface, in light (default) and dark.
   **and** mirrored in `localStorage` for speed/back-compat. Cookie read/write is handled by
   `app/src/lib/cookies.ts`. See [§14B](#14b-cross-site-theme--language-persistence) for the cross-site persistence
   architecture.
-- **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar, Table) are shadcn-style (cva + `cn`);
-  `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline used by every screen. Its layout is
+- **Primitives:** `app/src/components/ui/` (Button, Input, Badge, Avatar, Table) are shadcn-style (cva + `cn`); the
+  Table wrapper scrolls horizontally when a table's fixed column widths outgrow their container, so an admin table
+  never clips a column on a phone. `app/src/components/PageHeader.tsx` provides the serif H1 + gold underline used by
+  every screen. Its layout is
   deterministic: the title/lead block always renders first, and `children` (window toggles, actions) always render on
   their own left-aligned row below it, so control placement never depends on locale or viewport width.
 - **Brand mark:** the cut L with a rising node — a bold monogram whose stem top and arm end are sliced on the same
@@ -5399,7 +5488,7 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
   return as a fallback. This is a **UX nicety only**: `checkIsAdmin` soft‑fails to
   `false` and every `api.admin.*` function independently enforces `assertAdmin` server‑side (§12), so a stale or
   bypassed client redirect can't grant access. `/admin` is **intentionally URL‑only** (see routing table above) — a
-  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Seven tabs (the `TabsList` is
+  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Eight tabs (the `TabsList` is
   `overflow-x-auto`, so the row scrolls instead of wrapping on a narrow screen):
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync status), **Plan
   Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's effective limits, with an "override"
@@ -5410,7 +5499,9 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
   `api.feedback.feedback.respondToFeedback`; Respond button and textarea are disabled with a warning when the submitter
   has no email on file), **Archive**
   (`archiveFeedback`), **Reopen** (`reopenFeedback`)), **MOTD** (`MotdTab` — authoring the in-app banner; see
-  [§12B](#12b-message-of-the-day-motd)), **Survival** (`SurvivalTab`, **R18**), and **Attention** — the read-only
+  [§12B](#12b-message-of-the-day-motd)), **Survival** (`SurvivalTab`, **R18**), **Landing** (`LandingTab` — cookieless
+  funnel counters over `landingMetrics.getMetrics`; see [§12](#12-admin--moderation) and
+  [§15](#15-frontend--landing-site-landing)), and **Attention** — the read-only
   churn attention list over `admin.getChurnRisk` ([§12](#12-admin--moderation)), grouped by reason in the fixed order
   `received_no_reply` → `silent_7d` → `cooling`, each row showing only the facts that exist, under the 20-row cap.
     - **Survival** (`/admin?tab=survival`) is the funnel panel: a 7-day / 28-day toggle over one
@@ -5437,6 +5528,19 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
       render an error state from, and an empty cohort is a real answer rather than a failure. The footer states the
       reading rules that the numbers are meaningless without: **UTC**, cohort = members who signed up in the window,
       all active members for the tier table, and what "Of" counts.
+    - **Landing** (`/admin?tab=landing`) is the cookieless funnel panel: a 7-day / 28-day toggle (default 28) over
+      `landingMetrics.getMetrics`, two headline cards — **Unique pricing viewers** (`{pricingViews} total views`) and
+      **Unique trial CTA clickers** (`{ctaClicks} total clicks`, plus the whole-percent click-through share from the
+      shared `share(uniqueCtaClickers, uniquePricingViewers)` helper, **"–"** when nothing has been viewed) — and a
+      four-row **placement table** (Hero / Nav / Pricing / Final CTA) with right-aligned **Clicks** and **Unique**
+      columns. Below it, a **Daily** table lists every UTC day in the window — **Day / Views / Unique
+      views / Clicks / Unique clicks**, right-aligned — newest first, zero-filling a day without events (a missing
+      day reads as unknown, a zero day as zero). When `uniqueTrackingEnabled` is false the panel adds one muted
+      warning that unique counting is off and
+      names `LANDING_METRICS_SECRET` / `UNSUBSCRIBE_SECRET`. The footer prints the window start (`sinceDay` UTC) and
+      the reading rule that **uniques reset each UTC day** (cookieless, no stored identifier), so the window figure
+      sums daily uniques. An empty window renders **"No landing events in the last N days."** instead of a table of
+      zeros. See [§12](#12-admin--moderation).
 - **PrivacyDataPage** (`/privacy-data`, guarded) — data‑subject rights self‑service UI (Phase 2b
     - 3b). Three sections: (1) **Consent preferences** (`ConsentToggles` — see below) — marketing and analytics toggles,
       OFF by default, reading `api.privacy.consent.getConsents` and writing
@@ -5516,6 +5620,9 @@ on file; calls `respondToFeedback`),
 `listContactUsersWithLimits`),
 `SurvivalTab` (R18 — the admin funnel table over `admin.survivalMetrics`; see the AdminPage entry above and
 [§12](#12-admin--moderation). Exports its `share(part, base)` helper so the zero-base case is testable on its own),
+`LandingTab` (the cookieless landing funnel counters over `landingMetrics.getMetrics`, 7/28-day toggle, unique
+headline figures, placement table with a Unique column, disabled-unique warning and empty state; imports the same
+`share(part, base)` helper from `SurvivalTab` — see the AdminPage entry above and [§12](#12-admin--moderation)),
 `RowActionsMenu`, `LoadingSpinner`,
 `CancelDeletionScreen` (grace‑window full‑screen interstitial shown by `RequireAuth` when
 `me.deletionScheduledAt` is set; "Keep my account" button calls
@@ -5681,7 +5788,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                            | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -6013,8 +6120,10 @@ alone would catch. There is still no automated parity test, so both are run by h
 ## 15. Frontend — Landing Site (`landing/`)
 
 Standalone **Next.js 15 (App Router)**, React 19, **Tailwind CSS 4** (CSS-first, migrated from v3 in Plan 1 Phase B).
-Pure marketing — **no API/Convex calls**; all content (pricing, FAQ, section copy) is hard‑coded in module constants
-and the locale dictionaries. There is no statistics block any more — see the SSI explainer below (R10).
+Pure marketing — its only backend interaction is the fire-and-forget cookieless funnel beacon
+([Landing funnel metrics](#landing-funnel-metrics-cookieless)); all content (pricing, FAQ, section copy) is hard‑coded
+in module constants and the locale dictionaries. There is no statistics block any more — see the SSI explainer below
+(R10).
 
 ### Audience & awareness (R11 / R12)
 
@@ -6453,7 +6562,8 @@ into the app's session hash, and `AuthSuccessPage` stores them for `BillingPage`
 `ref` from the current URL or `sessionStorage['ref']`; an effect stores valid URL codes so they survive locale
 navigation. The server snapshot is empty, which keeps static HTML and hydration consistent. The provider observes
 pathname changes, browser history events, and storage events. If storage is unavailable, a valid URL referral still
-works. There are no Convex calls on the landing.
+works. Apart from the fire-and-forget funnel beacon ([Landing funnel metrics](#landing-funnel-metrics-cookieless)),
+there are no Convex calls on the landing.
 
 `validReferral` in `landing/lib/trial.ts` accepts only eight lowercase letters/digits. Its pattern is deliberately
 kept in sync with `convex/lib/invite.ts` without importing backend code. `trialHref` builds the full destination with
@@ -6477,6 +6587,29 @@ trial duration after sign-in.
 The sign-in reassurance describes OIDC-only name/photo/email access and manual posting. It makes no claim of
 LinkedIn endorsement or guaranteed account safety.
 
+#### Returning-visitor CTA — "Log in" after a trial click (2026‑09‑21)
+
+The landing cannot see the app's session: the token lives in app-origin `sessionStorage`, and the explicit sign-out
+marker lives in app-origin `localStorage` (`app/src/lib/session.ts`). The only signal available on this origin is the
+trial click itself, so every trial CTA — `TrialLink` on the pricing cards and the primary CTAs while unswapped —
+writes the landing-origin flag `trialStarted = '1'` in `onClick`, beside the funnel beacon. The read follows the same
+storage-guard shape as `CookieNotice`: a throw or an absent key counts as "not started".
+
+`PrimaryCta` (exported from `landing/components/TrialProvider.tsx`) renders the three primary slots (`hero`, `nav`,
+`final`) from that flag. It is a client component in this module, so `Hero` and `FinalCTA` stay server components.
+Before the flag is set it renders the usual Growth trial link; afterwards it swaps the label to the matching
+`loginCta` string ("Log in" / "Entrar" / "Iniciar sesión") and points at `${SIGN_IN_URL}?ref=…` (`loginHref` in
+`landing/lib/trial.ts`) — the same `/auth/start` route with **no** `plan` or `interval`. The app root is deliberately
+not the target: `RequireAuth` bounces a browser carrying the app-origin `signedOut` marker back to the landing
+(`app/src/App.tsx`), so a "Log in" click after an explicit sign-out would ping-pong; `/auth/start` always begins OAuth
+and clears that marker on success. The pricing cards keep their plan-specific `TrialLink`s — a pricing click still
+sets the flag, which is what switches the primary slots on the next visit.
+
+The server snapshot is `false`, so the statically prerendered HTML keeps the trial CTA and the label swaps after
+hydration (the same `useSyncExternalStore` shape as the referral read). No cookie is written, so static caching is
+unaffected, and no app or backend code is involved — the flag exists only on this origin. Both states fire the same
+`cta_click_{hero|nav|final}` beacon, so the admin funnel counts a login click in the same placement buckets.
+
 #### Layout and accessibility
 
 The centered hero uses normal content height; it no longer squeezes its heading and disclosures into a fixed viewport
@@ -6495,6 +6628,55 @@ color palette and fonts remain the product's existing light/dark system. Regress
 referral preservation across interval changes, invalid referral rejection, recursive locale key/placeholder parity,
 identical trial disclosures at the hero, pricing cards, and final CTA, and `lib/seo.ts` legal-page canonicals/hreflang.
 Run: `pnpm --filter landing test`.
+
+### Landing funnel metrics (cookieless)
+
+The landing measures its funnel first-party, with no cookie and no client identifier:
+
+- **`pricing_view`** — `Pricing.tsx` observes the `#pricing` section with an `IntersectionObserver` (`threshold:
+  0.25`) and fires once on the first intersection, then disconnects; cleanup disconnects too, so scroll depth or a
+  re-render cannot inflate the count.
+- **`cta_click_{hero|nav|pricing|final}`** — every trial/primary CTA carries one of the four placements (`PrimaryCta`
+  in `Hero`/`Nav`/`FinalCTA`, `TrialLink` on the `Pricing` cards) and its `onClick` fires the matching event without
+  preventing navigation. The `plan`/`interval`/`ref` href construction is unchanged; the returning-visitor swap above
+  only changes the destination and label.
+
+`landing/lib/metrics.ts` owns the transport: `trackLandingEvent(event)` POSTs `{"event":"<name>"}` to
+`${NEXT_PUBLIC_CONVEX_SITE}/landing/event` as **`Content-Type: text/plain;charset=UTF-8`** — a CORS-safelisted type,
+so the beacon needs no preflight — with **`keepalive: true`**, so a click that starts navigation still delivers. It
+is fire-and-forget: rejections are swallowed, and with `NEXT_PUBLIC_CONVEX_SITE` unset it is a no-op, so the
+statically prerendered page gains no dynamic requirement.
+
+On the backend, `http.ts` validates the body against the five frozen names (400 otherwise), charges the anonymous
+budget (`lib/rateLimit.enforceLandingEventBudget`, [§12](#12-admin--moderation)), and calls
+`landingMetrics.recordLandingEvent`, which increments the `(UTC day, event)` counter in `landingMetrics`
+([§5](#5-data-model)). When a visitor secret is configured and the request carries a first `x-forwarded-for` hop, the
+action also derives the day's visitor key —
+`hex(HMAC‑SHA256(secret, "landing-visitor:" + day + ":" + ip + ":" + ua)).slice(0, 32)`, computed by the pure
+`lib/landingVisitorKey.ts` — and passes it to the same mutation, which deduplicates the visitor for that event in
+`landingVisitors` (one row per visitor‑day, flags per event) and bumps `uniqueCount` only on the first sighting. The
+response is `204` with `Cache-Control: no-store` and `Access-Control-Allow-Origin: *` on every response, including
+the 400. `next.config.js` needs no change: its CSP already allows `https://*.convex.site` in `connect-src`.
+
+**Privacy stance.** No cookie, no client‑side identifier, and no stored raw IP or User‑Agent: the only visitor‑derived
+value is a daily‑rotated HMAC of IP+UA kept at most ~2 days by the `prune landing visitors` cron
+([§13](#13-scheduled-jobs-crons)), after which only integer aggregates survive. Uniqueness deliberately resets each UTC
+day, so the admin **Landing** tab's window figure is the sum of daily uniques, not distinct people
+([§14](#14-frontend--authenticated-app-app)). With no secret configured the hash is never computed and the tab says so.
+
+```mermaid
+flowchart LR
+    PV["Pricing section intersects<br/>(observer, threshold 0.25)"] --> EV["trackLandingEvent('pricing_view')"]
+    CTA["Trial CTA onClick<br/>(hero / nav / pricing / final)"] --> EV2["trackLandingEvent('cta_click_&lt;placement&gt;')"]
+    EV --> POST["POST /landing/event<br/>text/plain + keepalive"]
+    EV2 --> POST
+    POST --> RB{"budget ok?<br/>240/h client · 6000/h global"}
+    RB -->|yes| VK["landingVisitorKey<br/>HMAC(secret, day:ip:ua) → 32 hex"]
+    RB -->|no| DROP["dropped — beacon still answers 204"]
+    VK --> REC["landingMetrics.recordLandingEvent<br/>count + 1 · uniqueCount + 1 on first sighting"]
+    REC --> LV["landingVisitors row (day, key)<br/>flags per event · pruned after ~2 days"]
+    REC --> ADMIN["landingMetrics.getMetrics (admin-only)<br/>Landing tab: uniques · totals · placements"]
+```
 
 ### Styling
 
@@ -6561,6 +6743,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                                                    | Optional model slug override. Provider routing (ZDR + no-data-collection pin governs selection, no price-floor suffix) is enforced in code, not via env. Blank ⇒ falls back to this valid, verified-live default (not broken — see [§11A](#11a-ai-reaction--comment-assistance) for the DeepInfra/Google zero-data-retention caveat: Google logs Gemma prompts/responses for abuse-monitoring independent of DeepInfra's ZDR commitment).                                                                                                                                                                              |
 | `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                                                    | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `UNSUBSCRIBE_SECRET`             |       – (digest no‑ops if unset)        | `http.ts`, `users.ts`, `jobs/digest.ts`                                      | HMAC-SHA256 key for the stateless digest unsubscribe tokens (`lib/unsubscribeToken.ts`). **Unset ⇒ the digest sweep logs and sends nothing** — no digest goes out without a working opt-out — and the public endpoints (`POST /unsubscribe/digest`, `users.unsubscribeByToken`) answer `unavailable`. Set it in the Convex dashboard before enabling the digest.                                                                                                                                                                                                                                                       |
+| `LANDING_METRICS_SECRET`         |        – (uniques off if unset)         | `landingMetrics.ts`, `http.ts`                                               | HMAC-SHA256 key for the landing beacon's daily-rotated visitor keys (`landingVisitorSecret()` — unique counts only). **Unset ⇒ falls back to `UNSUBSCRIBE_SECRET`; with both unset, unique counting is off while the `count` totals still record.** The hash is computed server-side from IP+UA, kept at most ~2 days and then pruned; raw IP/User-Agent are never stored ([§5](#5-data-model), [§15](#15-frontend--landing-site-landing)).                                                                                                                                                                            |
 | `INCLUDE_DIGEST_ADDRESS`         |      – (default keeps the address)      | `lib/digest.ts`, `jobs/digest.ts`, `dev.ts`                                  | CAN-SPAM postal address line in the digest footer: unset or any value other than `'false'` keeps the controller's fiscal address; `'false'` omits it. Production leaves it unset.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 > **Stripe component/SDK versions (plan 023, 2026-09-10).** `@convex-dev/stripe` `^0.1.6` + `stripe` `^22.2.1`
@@ -6633,12 +6816,12 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
-| Variable                    |                    Required                     | Consumed in      | Purpose                                                                                                                                                                                                                                                       |
-|-----------------------------|:-----------------------------------------------:|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `NEXT_PUBLIC_APP_URL`       |       – (default `http://localhost:5173`)       | `lib/links.ts`   | App base URL; every landing CTA targets `${NEXT_PUBLIC_APP_URL}/auth/start`, and the static `/auth.md` discovery document publishes that same URL at build time. The `.example` ships the canonical prod URL (`https://www.app.linkintothessi.com`).          |
-| `NEXT_PUBLIC_SITE_URL`      |  – (default `https://www.linkintothessi.com`)   | `lib/site.ts`    | Canonical public origin of the landing site; drives absolute canonical/OpenGraph URLs, hreflang alternates, the sitemap, and JSON-LD. Set per preview deployment if needed.                                                                                   |
-| `NEXT_PUBLIC_CONVEX_SITE`   |      – (legacy; CTAs no longer consume it)      | – (unused)       | **Not consumed** since the PKCE change: landing CTAs target `${NEXT_PUBLIC_APP_URL}/auth/start`, which bounces to Convex's OAuth start with the challenge (see [§15](#15-frontend--landing-site-landing)). Kept in `.env.example` as a documented legacy var. |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                                                                                        |
+| Variable                    |                    Required                     | Consumed in      | Purpose                                                                                                                                                                                                                                                                                                                                                                |
+|-----------------------------|:-----------------------------------------------:|------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NEXT_PUBLIC_APP_URL`       |       – (default `http://localhost:5173`)       | `lib/links.ts`   | App base URL; every landing CTA targets `${NEXT_PUBLIC_APP_URL}/auth/start`, and the static `/auth.md` discovery document publishes that same URL at build time. The `.example` ships the canonical prod URL (`https://www.app.linkintothessi.com`).                                                                                                                   |
+| `NEXT_PUBLIC_SITE_URL`      |  – (default `https://www.linkintothessi.com`)   | `lib/site.ts`    | Canonical public origin of the landing site; drives absolute canonical/OpenGraph URLs, hreflang alternates, the sitemap, and JSON-LD. Set per preview deployment if needed.                                                                                                                                                                                            |
+| `NEXT_PUBLIC_CONVEX_SITE`   |           – (beacon no-ops if unset)            | `lib/metrics.ts` | `.convex.site` base for the cookieless funnel beacon (`POST /landing/event`, [§15](#15-frontend--landing-site-landing)). **Unset ⇒ `trackLandingEvent` is a no-op** — no funnel counts are recorded, and no error is surfaced. CTAs do **not** use it: they target `${NEXT_PUBLIC_APP_URL}/auth/start`, which bounces to Convex's OAuth start with the PKCE challenge. |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                                                                                                                                                                                                 |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
 > default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the
@@ -6923,8 +7106,9 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   send‑failure log in `convex/lib/email.ts` ([§13B](#13b-privacy--compliance)). The **same redactor feeds Sentry's
   `beforeSend`**, so both sinks share one redaction path.
 
-- **The digest unsubscribe `POST` is the only public, unauthenticated state‑changing HTTP route.** `GET`/`POST`
-  `/unsubscribe/digest?token=…` (`http.ts`) accepts a stateless HMAC-SHA256 token over `digest:<userId>`
+- **The digest unsubscribe `POST` and the landing event beacon are the public, unauthenticated state‑changing HTTP
+  routes.** `GET`/`POST` `/unsubscribe/digest?token=…` (`http.ts`) accepts a stateless HMAC-SHA256 token over
+  `digest:<userId>`
   (`lib/unsubscribeToken.ts`): base64url payload + signature, compared in constant time, deliberately never expiring.
   It grants no session and no read. `POST`'s only effect is `digestEmailsEnabled = false` plus one `auditLogs` row, and
   its response is a redirect carrying only a status code — never the token or any member data. `GET` is a 302 to the
@@ -6932,6 +7116,15 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   token-verified `users.unsubscribeByToken` (scope `digest`/`all`) is the only other unauthenticated writer, and scope
   `all` additionally appends one marketing-consent withdrawal. `UNSUBSCRIBE_SECRET` unset makes both answer
   `unavailable` and the sweep refuse to send (see [§8](#8-subscriptions--billing)).
+- **The landing event beacon is the other.** `POST /landing/event` ([§15](#15-frontend--landing-site-landing)) reads no
+  token and grants nothing: it accepts only the five frozen event names, stores one `(UTC day, event)` counter
+  increment, and records nothing else about the caller — no cookie, no client-side identifier, no raw IP or
+  user-agent. When a secret is configured (`LANDING_METRICS_SECRET` falling back to `UNSUBSCRIBE_SECRET`; an empty
+  value counts as unset) it also derives a
+  daily-rotated HMAC-SHA256 of IP+User-Agent for per-event dedup (`landingVisitors`), retained at most ~2 days and
+  then pruned ([§13](#13-scheduled-jobs-crons)); the raw pair never becomes a mutation argument or a log line. Being
+  anonymous, it is bounded by `lib/rateLimit.enforceLandingEventBudget` (6000/hour global, plus a best-effort
+  240/hour per `x-forwarded-for`), so it cannot grow `landingMetrics` unboundedly.
 
 ```mermaid
 flowchart TD
@@ -7230,6 +7423,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                                                                                                                                                                                                                                                         | [§11B Search & Command Palette](#11b-search--command-palette)                                                                                                                                                                                                                                                                            |
 | Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [§12](#12-admin--moderation)                                                                                                                                                                                                                                                                                                             |
 | Survival panel (`lib/survival.ts`, `jobs/survivalSnapshot.ts`, `schema.ts` `survivalSnapshots`, `crons.ts`, `admin.survivalMetrics`, `app/src/components/SurvivalTab.tsx`)                                                                                                                                                                                                                                                                                                                     | [§12](#12-admin--moderation), [§13](#13-scheduled-jobs-crons), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                |
+| Landing funnel metrics (`convex/landingMetrics.ts`, `schema.ts` `landingMetrics` + `landingVisitors` + prune cron, `lib/landingVisitorKey.ts`, `http.ts` `/landing/event`, `lib/rateLimit.ts` landing budget, `landing/lib/metrics.ts`, `TrialLink` placements + `Pricing.tsx` observer, `app/src/components/LandingTab.tsx`, AdminPage Landing tab)                                                                                                                                           | [§5](#5-data-model), [§6](#6-backend-architecture--conventions), [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app), [§13](#13-scheduled-jobs-crons), [§15](#15-frontend--landing-site-landing), [§16](#16-environment-variables), [§17](#17-security-posture)                                                     |
 | Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                                                                                                                                                                                                                                                               | [§12A](#12a-feedback)                                                                                                                                                                                                                                                                                                                    |
 | MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                                                                                                                                                                                                                                                          | [§12B](#12b-message-of-the-day-motd)                                                                                                                                                                                                                                                                                                     |
 | App UI (`app/src/**`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                                               |
@@ -7246,6 +7440,61 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑21 (zero-filled landing days). **The admin Landing tab's Daily table now lists every UTC day in
+the window, zeros included.** `summarizeLandingMetrics` takes the window (`{ sinceDay, days }`) and emits exactly
+`days` entries, one per UTC day from `sinceDay` through `sinceDay + (days − 1)`, newest first — a day without rows
+renders as `0/0/0/0` instead of being omitted, because the owner reads a missing day as unknown while a zero day reads
+as zero. Date arithmetic stays UTC and string‑safe (`Date.parse(day + 'T00:00:00Z')` plus 24‑hour steps). Totals and
+the placement table are unchanged; the fully‑empty‑window empty state ("No landing events in the last N days.") still
+short‑circuits before any table renders. Sections updated: §12, §14._
+
+_Last updated: 2026‑09‑21 (daily landing breakdown). **The admin Landing tab now breaks the window down by UTC day.**
+`summarizeLandingMetrics` reads the `day` each counter row already carries and adds a `daily` array — one entry per day
+present in the window, newest first, each with `pricingViews`, `uniquePricingViewers`, `ctaClicks` and
+`uniqueCtaClickers` — while the totals and the placement table stay exactly as they were. Days without events are
+omitted rather than zero‑filled (superseded the same day by the zero‑filled window in the entry above): a table of
+zeros reads like data, and the window totals already answer the same question. Placements stay window‑level. The
+five‑column table also forced the shared Table wrapper to scroll
+horizontally instead of clipping its last column on a phone (§14A). Sections updated: §12, §14, §14A._
+
+_Last updated: 2026‑09‑21 (returning-visitor CTA). **The landing now remembers a trial click and greets the returning
+visitor with "Log in" in the primary slots.** Every trial CTA — `TrialLink` on the pricing cards and `PrimaryCta`
+while unswapped — writes the landing-origin `localStorage` flag `trialStarted='1'` on click. On the next visit
+`PrimaryCta` (a client component in `landing/components/TrialProvider.tsx`, so `Hero` and `FinalCTA` stay server
+components) swaps the Hero/Nav/Final CTA label to the new `loginCta` dictionary string and points it at
+`/auth/start?ref=…` with no `plan`/`interval`, while the pricing cards keep plan-specific trial links. The app root is
+not the target: `RequireAuth` bounces a browser carrying the app-origin `signedOut` marker back to the landing, so
+`/auth/start` is the only target that cannot ping-pong. The server snapshot stays `false`, so the statically
+prerendered HTML keeps the trial CTA and the swap happens after hydration. No cookie, no app or backend change, and
+both states fire the same `cta_click_{hero|nav|final}` beacon. Section updated: §15._
+
+_Last updated: 2026‑09‑21 (unique landing visitors). **The landing funnel now counts unique visitors per event, per
+UTC day, with no cookie and no client-side identifier.** The beacon is unchanged on the wire (`{"event":"<name>"}`,
+text/plain, keepalive); `http.ts` derives a visitor key only when a secret (`LANDING_METRICS_SECRET`, falling back to
+`UNSUBSCRIBE_SECRET`) and a first `x-forwarded-for` hop are present:
+`hex(HMAC‑SHA256(secret, "landing-visitor:<day>:<ip>:<ua>")).slice(0, 32)`, computed by the pure
+`convex/lib/landingVisitorKey.ts` so the raw IP/User-Agent never enter a mutation argument (and never a log line).
+`recordLandingEvent` now takes that optional key and, in the same transaction, dedupes it per event in the new
+`landingVisitors` table (one row per visitor-day, five boolean flags) before bumping `landingMetrics.count` always
+and `uniqueCount` only on a first sighting. Uniqueness resets each UTC day, so the window figure sums daily uniques;
+the `prune landing visitors` cron deletes hash rows older than ~2 days. The admin **Landing** tab leads with **Unique
+pricing viewers** and **Unique trial CTA clickers** (its click-through share computed from the uniques),
+adds a right-aligned Unique column, warns when no secret is configured, and states the daily-reset rule.
+Sections updated: §2, §4, §5, §12, §13, §14, §15, §16, §17, §21._
+
+_Last updated: 2026‑09‑21 (landing funnel metrics). **The landing now measures its funnel first-party and cookieless,
+and the admin panel surfaces it.** `landing/lib/metrics.ts` sends `pricing_view` (fired once by an
+`IntersectionObserver` on `#pricing`, threshold 0.25) and `cta_click_{hero|nav|pricing|final}` (fired by each
+`TrialLink`'s onClick) as a `text/plain` keepalive POST to `${NEXT_PUBLIC_CONVEX_SITE}/landing/event`;
+`convex/http.ts` validates the five frozen names, charges an anonymous budget (240/h per best-effort client, 6000/h
+global) and calls `landingMetrics.recordLandingEvent`, which upserts the new `landingMetrics` table's `(UTC day,
+event)` counter. No cookie, no client identifier, no stored IP/user-agent — only `{ day, event, count }` (superseded
+the same day by the daily-rotated visitor key in the entry above). The admin **Landing** tab (`LandingTab`,
+`/admin?tab=landing`) reads `landingMetrics.getMetrics` (admin-only) for a 7/28-day
+window: pricing views, trial CTA clicks with the click-through share, and a four-placement table. Also encoded: the
+repo's `convex/vitest.config.ts` now excludes `integration/**` so the config matches the package `test` script.
+Sections updated: §2, §4, §5, §6, §12, §14, §15, §16, §17, §21._
 
 _Last updated: 2026‑09‑19 (brand mark). **The logo is now a cut L with a rising node; the ring‑and‑dot mark is gone.**
 One geometry ships everywhere: a bold monogram (stem top and arm end sliced on the same 45°) with a detached node above

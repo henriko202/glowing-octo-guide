@@ -2,7 +2,8 @@
 
 import { createContext, type ReactNode, useContext, useEffect, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
-import { type BillingInterval, formatPrice, planPrice, trialHref, validReferral } from '@/lib/trial'
+import { type BillingInterval, formatPrice, loginHref, planPrice, trialHref, validReferral } from '@/lib/trial'
+import { type CtaPlacement, trackLandingEvent } from '@/lib/metrics'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
 
@@ -31,6 +32,24 @@ function readReferral() {
   }
 }
 
+const TRIAL_STARTED_KEY = 'trialStarted'
+
+function readTrialStarted(): boolean {
+  try {
+    return localStorage.getItem(TRIAL_STARTED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markTrialStarted() {
+  try {
+    localStorage.setItem(TRIAL_STARTED_KEY, '1')
+  } catch {
+    /* Storage-unavailable browsers still navigate; only the label swap is lost. */
+  }
+}
+
 export default function TrialProvider({ children }: { children: ReactNode }) {
   const [interval, setInterval] = useState<BillingInterval>('annual')
   const pathname = usePathname()
@@ -55,10 +74,12 @@ export function useTrial() {
 
 export function TrialLink({
   plan = 'growth',
+  placement,
   children,
   className
 }: {
   plan?: string
+  placement: CtaPlacement
   children: ReactNode
   className?: string
 }) {
@@ -66,9 +87,50 @@ export function TrialLink({
   return (
     <a
       href={trialHref(plan, interval, referral)}
+      onClick={() => {
+        markTrialStarted()
+        trackLandingEvent(`cta_click_${placement}`)
+      }}
       className={className}
     >
       {children}
+    </a>
+  )
+}
+
+// The primary slots live here so Hero and FinalCTA stay server components. The server snapshot is
+// false, so the prerendered HTML keeps the trial CTA and the stored flag swaps in after hydration.
+export function PrimaryCta({
+  placement,
+  className,
+  loginLabel,
+  children
+}: {
+  placement: CtaPlacement
+  className: string
+  loginLabel: string
+  children: ReactNode
+}) {
+  const { referral } = useTrial()
+  const trialStarted = useSyncExternalStore(subscribe, readTrialStarted, () => false)
+  // The trial state stays TrialLink's job, so the click side effects (flag + beacon) have one owner.
+  if (!trialStarted) {
+    return (
+      <TrialLink
+        placement={placement}
+        className={className}
+      >
+        {children}
+      </TrialLink>
+    )
+  }
+  return (
+    <a
+      href={loginHref(referral)}
+      onClick={() => trackLandingEvent(`cta_click_${placement}`)}
+      className={className}
+    >
+      {loginLabel}
     </a>
   )
 }

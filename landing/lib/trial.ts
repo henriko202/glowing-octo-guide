@@ -38,3 +38,13 @@ export function trialHref(plan: string, interval: BillingInterval, referral: str
   if (code) url.searchParams.set('ref', code)
   return url.toString()
 }
+
+// The app root cannot be the login target: RequireAuth bounces a browser carrying the app-origin
+// `signedOut` marker back to the landing (app/src/App.tsx), so a "Log in" click after an explicit
+// sign-out would ping-pong. `/auth/start` always starts OAuth and clears that marker on success.
+export function loginHref(referral: string | null) {
+  const url = new URL(SIGN_IN_URL)
+  const code = validReferral(referral)
+  if (code) url.searchParams.set('ref', code)
+  return url.toString()
+}

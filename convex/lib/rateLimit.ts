@@ -126,22 +126,23 @@ export const checkAndIncrement = internalMutation({
   }
 })
 
-// Anonymous (no user key) limiter for the OAuth start route, whose caller has no identity yet.
-// `key` is supplied by the caller: the global backstop uses the fixed 'global' key, while the
-// per-client dimension uses a best-effort client value (untrusted x-forwarded-for) — see
-// enforceOAuthStartBudget.
+// Anonymous (no user key) limiter for the OAuth start route and the landing event beacon, whose
+// callers have no identity yet. `key` is supplied by the caller: the global backstop uses the fixed
+// 'global' key, while the per-client dimension uses a best-effort client value (untrusted
+// x-forwarded-for) — see enforceOAuthStartBudget / enforceLandingEventBudget.
 export async function checkAnonymousRateLimit(
   ctx: RunMutationCtx,
   action: string,
   key: string,
   maxPerWindow: number,
-  windowMs: number = WINDOW_MS
+  windowMs: number = WINDOW_MS,
+  message = 'Too many sign-in attempts. Please try again shortly.'
 ): Promise<void> {
   const { ok } = await rateLimiter.limit(ctx, action, {
     key,
     config: { kind: 'fixed window', rate: maxPerWindow, period: windowMs }
   })
-  if (!ok) throw new ConvexError('Too many sign-in attempts. Please try again shortly.')
+  if (!ok) throw new ConvexError(message)
 }
 
 // Two-dimensional budget for the OAuth start route (both 1-hour fixed windows). The per-client
@@ -162,5 +163,41 @@ export const checkOAuthStartBudget = internalMutation({
   args: { clientKey: v.optional(v.string()) },
   handler: async (ctx, { clientKey }) => {
     await enforceOAuthStartBudget(ctx, clientKey)
+  }
+})
+
+// Two-dimensional budget for the landing's cookieless event beacon (both 1-hour fixed windows). The
+// beacon is unauthenticated and carries no client identity, so the per-client dimension uses the
+// same best-effort x-forwarded-for value as OAuth and the global backstop is what actually bounds
+// landingMetrics growth. Not in RATE_LIMIT_ACTIONS: that list is for per-user erasure only.
+export const LANDING_EVENT_PER_CLIENT_PER_HOUR = 240
+export const LANDING_EVENT_GLOBAL_PER_HOUR = 6000
+
+/** Plain-function core (directly unit-testable) for the checkLandingEventBudget mutation below. */
+export async function enforceLandingEventBudget(ctx: RunMutationCtx, clientKey?: string): Promise<void> {
+  if (clientKey) {
+    await checkAnonymousRateLimit(
+      ctx,
+      'landingEventClient',
+      clientKey,
+      LANDING_EVENT_PER_CLIENT_PER_HOUR,
+      WINDOW_MS,
+      'Too many landing events. Please try again shortly.'
+    )
+  }
+  await checkAnonymousRateLimit(
+    ctx,
+    'landingEvent',
+    'global',
+    LANDING_EVENT_GLOBAL_PER_HOUR,
+    WINDOW_MS,
+    'Too many landing events. Please try again shortly.'
+  )
+}
+
+export const checkLandingEventBudget = internalMutation({
+  args: { clientKey: v.optional(v.string()) },
+  handler: async (ctx, { clientKey }) => {
+    await enforceLandingEventBudget(ctx, clientKey)
   }
 })

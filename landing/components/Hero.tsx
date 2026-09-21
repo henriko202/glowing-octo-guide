@@ -1,4 +1,4 @@
-import { SelectedOffer, TrialLink } from './TrialProvider'
+import { PrimaryCta, SelectedOffer } from './TrialProvider'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
 
@@ -24,7 +24,11 @@ export default function Hero({
           <p className="mx-auto max-w-xl text-lg leading-relaxed text-cream-muted">{dict.subLine1}</p>
           <p className="text-base leading-relaxed font-medium text-cream">{dict.subLine2}</p>
           <div className="mx-auto max-w-xl space-y-3">
-            <TrialLink className="inline-flex min-h-11 items-center rounded-full bg-gold px-8 py-3.5 font-semibold text-on-gold transition-colors hover:bg-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold">
+            <PrimaryCta
+              placement="hero"
+              loginLabel={dict.loginCta}
+              className="inline-flex min-h-11 items-center rounded-full bg-gold px-8 py-3.5 font-semibold text-on-gold transition-colors hover:bg-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+            >
               {dict.cta}
               <span
                 aria-hidden="true"
@@ -32,7 +36,7 @@ export default function Hero({
               >
                 →
               </span>
-            </TrialLink>
+            </PrimaryCta>
             <SelectedOffer
               dict={offer}
               lang={lang}

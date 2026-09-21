@@ -44,6 +44,7 @@
     "features": "Features",
     "pricing": "Pricing",
     "cta": "Start trial",
+    "loginCta": "Log in",
     "skipToContent": "Skip to content"
   },
   "hero": {
@@ -53,6 +54,7 @@
     "subLine1": "Your next opportunity depends on LinkedIn. Link Into The SSI is the best way to be noticed and the best tool to improve your SSI. Reach the people who matter in your field and find your next job faster.",
     "subLine2": "You choose every action. Nothing is automated.",
     "cta": "Start my trial",
+    "loginCta": "Log in",
     "ctaDisclaimer": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
     "ctaTrust": "Official LinkedIn sign-in · We receive only your name, photo and email · We never post for you"
   },
@@ -279,6 +281,7 @@
     "headlineLine2": "You choose what happens next.",
     "subheadline": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
     "cta": "Start my trial",
+    "loginCta": "Log in",
     "ctaTrust": "Official LinkedIn sign-in · We receive only your name, photo and email · We never post for you"
   },
   "footer": {

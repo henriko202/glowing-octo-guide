@@ -1,5 +1,7 @@
 'use client'
+import { useEffect, useRef } from 'react'
 import { TrialLink, useTrial } from './TrialProvider'
+import { trackLandingEvent } from '@/lib/metrics'
 import { formatPrice, planPrice } from '@/lib/trial'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
@@ -7,10 +9,30 @@ import type { Locale } from '@/i18n/config'
 export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; lang: Locale }) {
   const { interval, setInterval } = useTrial()
   const annual = interval === 'annual'
+  const sectionRef = useRef<HTMLElement | null>(null)
+
+  // Fires once, when the section is at least a quarter visible: "pricing was seen" must not grow
+  // with scroll depth or re-renders, so the observer disconnects after the first intersection.
+  useEffect(() => {
+    const section = sectionRef.current
+    if (!section) return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          trackLandingEvent('pricing_view')
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.25 }
+    )
+    observer.observe(section)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <section
       id="pricing"
+      ref={sectionRef}
       className="bg-ink px-6 py-16 md:py-20"
     >
       <div className="mx-auto max-w-6xl">
@@ -85,6 +107,7 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                 </ul>
                 <TrialLink
                   plan={plan.id}
+                  placement="pricing"
                   className={`block rounded-xl py-3 text-center text-sm font-semibold transition-[background-color,border-color] duration-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${
                     highlight
                       ? 'bg-lnblue text-on-lnblue shadow-[0_0_20px_rgba(0,119,181,0.4)] hover:bg-lnblue-hover'

@@ -1,7 +1,8 @@
 // convex/http.ts
-import { env, httpAction } from './_generated/server'
 import type { ActionCtx } from './_generated/server'
+import { env, httpAction } from './_generated/server'
 import { httpRouter } from 'convex/server'
+import { ConvexError } from 'convex/values'
 import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type Stripe from 'stripe'
@@ -14,6 +15,8 @@ import { isFeaturedPostCheckout } from './lib/featuredPurchase'
 import { readCookie } from './lib/cookies'
 import { isPkceChallenge } from './lib/pkce'
 import { verifyUnsubscribeToken } from './lib/unsubscribeToken'
+import { landingVisitorKey } from './lib/landingVisitorKey'
+import { isLandingEventName, landingVisitorSecret } from './landingMetrics'
 
 const http = httpRouter()
 
@@ -222,6 +225,48 @@ async function handleUnsubscribe(ctx: ActionCtx, token: string): Promise<Respons
   await ctx.runMutation(internal.jobs.digest.disableDigestByUserId, { userId: userId as Id<'users'> })
   return redirect(`${appUrl}/unsubscribe?status=ok`)
 }
+
+// ─── Landing funnel beacon ───────────────────────────────────────────────────
+// Cookieless, first-party: the landing POSTs `{"event":"<name>"}` as text/plain (a CORS-safelisted
+// content type, so no preflight) with keepalive. The only visitor-derived value stored is a
+// daily-rotated HMAC of IP+UA (`landingVisitors`, pruned after ~2 days); no cookie and no
+// client-side identifier ever exists, and raw IP/UA never leaves this handler.
+http.route({
+  path: '/landing/event',
+  method: 'POST',
+  handler: httpAction(async (ctx, req) => {
+    const headers = { ...NO_STORE, 'Access-Control-Allow-Origin': '*' }
+    const body: unknown = await req.json().catch(() => null)
+    const event = typeof body === 'object' && body !== null ? (body as { event?: unknown }).event : undefined
+    if (!isLandingEventName(event)) {
+      return new Response(null, { status: 400, headers })
+    }
+
+    // x-forwarded-for is best-effort/untrusted (same as the OAuth route): it only feeds the
+    // per-client dimension, while the global budget bounds the table's growth. The same first hop
+    // is the IP half of the visitor key.
+    const clientKey = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined
+    try {
+      await ctx.runMutation(internal.lib.rateLimit.checkLandingEventBudget, { clientKey })
+      const secret = landingVisitorSecret()
+      const visitorKey =
+        secret && clientKey
+          ? await landingVisitorKey(
+              secret,
+              new Date().toISOString().slice(0, 10),
+              clientKey,
+              req.headers.get('user-agent') ?? ''
+            )
+          : undefined
+      await ctx.runMutation(internal.landingMetrics.recordLandingEvent, { event, visitorKey })
+    } catch (err) {
+      // Fire-and-forget by contract: the beacon never surfaces an error to the visitor. A budget
+      // rejection is routine; anything else means the counter is silently not moving, so log it.
+      if (!(err instanceof ConvexError)) console.error('Landing event beacon failed:', scrubError(err))
+    }
+    return new Response(null, { status: 204, headers })
+  })
+})
 
 // ─── Stripe Webhooks (via @convex-dev/stripe component) ─────────────────────
 // The component auto-syncs customers, subscriptions, payments, and invoices.

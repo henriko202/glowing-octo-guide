@@ -35,7 +35,10 @@ const app = defineApp({
     ALLOW_DEV_IMPERSONATION: v.optional(v.string()),
     // Unset or any value other than 'false' keeps the digest postal address (CAN-SPAM default); 'false' omits it.
     INCLUDE_DIGEST_ADDRESS: v.optional(v.string()),
-    UNSUBSCRIBE_SECRET: v.optional(v.string())
+    UNSUBSCRIBE_SECRET: v.optional(v.string()),
+    // HMAC key for daily-rotated landing visitor keys. Unset ⇒ falls back to UNSUBSCRIBE_SECRET;
+    // both unset ⇒ unique counting is off while total counts still record.
+    LANDING_METRICS_SECRET: v.optional(v.string())
   }
 })
 app.use(stripe)
