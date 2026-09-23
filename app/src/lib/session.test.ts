@@ -1,6 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { signOut, beginSignOut, isSignedOut, markSignedOut, clearSignedOut, LANDING_URL } from './session'
-import { performSignOut } from './session'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  beginSignOut,
+  clearSignedOut,
+  isSignedOut,
+  LANDING_URL,
+  markSignedOut,
+  performSignOut,
+  signOut
+} from './session'
+import { syncAnalyticsConsent } from './observability/analytics'
+
+// The real analytics path reads window.location.hostname, which these tests replace with a bare { assign } stub.
+vi.mock('./observability/analytics', () => ({ syncAnalyticsConsent: vi.fn() }))
 
 describe('signed-out marker', () => {
   beforeEach(() => {
@@ -61,6 +72,18 @@ describe('signOut', () => {
     expect(localStorage.getItem('signedOut')).toBe('1')
     expect(sessionStorage.getItem('sessionToken')).toBeNull()
     expect(sessionStorage.getItem('motdDismissed')).toBeNull()
+  })
+
+  it('turns analytics off (DataFast and PostHog, stored identity included) before leaving for the landing site', () => {
+    vi.mocked(syncAnalyticsConsent).mockClear()
+    const assign = vi.fn()
+    Object.defineProperty(window, 'location', { value: { assign }, writable: true, configurable: true })
+
+    signOut()
+
+    // (no member, no consent) is the withdrawal path: stopDataFast + PostHog opt-out + reset.
+    expect(syncAnalyticsConsent).toHaveBeenCalledExactlyOnceWith(undefined, null)
+    expect(vi.mocked(syncAnalyticsConsent).mock.invocationCallOrder[0]).toBeLessThan(assign.mock.invocationCallOrder[0])
   })
 })
 

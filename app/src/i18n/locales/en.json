@@ -426,7 +426,7 @@
     "title": "Privacy & Data",
     "consentPrompt": {
       "title": "Set your preferences",
-      "intro": "Before you continue, choose how we may contact you. These are optional and off by default — you can change them anytime in Settings → Privacy & Data.",
+      "intro": "Before you continue, choose how we may contact you and whether we may measure how you use the app. These are optional and off by default — you can change them anytime in Settings → Privacy & Data.",
       "save": "Save & continue",
       "note": "Service, security, and legal processing happens regardless of these choices.",
       "digestNote": "The activity digest is on by default and can be turned off in Settings > Emails."
@@ -435,7 +435,7 @@
       "title": "Communication & analytics preferences",
       "note": "These are optional and off by default. Change them anytime.",
       "marketing": "Send me product news and tips by email",
-      "analytics": "Allow privacy-friendly usage analytics"
+      "analytics": "Allow usage analytics: PostHog and DataFast set cookies and record the pages and features you use"
     },
     "exportTitle": "Export your data",
     "exportNote": "Download a machine-readable copy of your account data. We'll prepare it and the download link will be available here (valid for 7 days).",

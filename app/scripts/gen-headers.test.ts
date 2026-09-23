@@ -30,7 +30,7 @@ describe('buildHeadersContent', () => {
       "script-src 'self' 'sha256-abc' https://static.cloudflareinsights.com/beacon.min.js https://*.posthog.com"
     )
     expect(out).toContain(
-      "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://*.sentry.io"
+      "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://*.sentry.io https://datafa.st"
     )
     expect(out).toContain("worker-src 'self' blob:")
     expect(out).toContain("child-src 'self' blob:")

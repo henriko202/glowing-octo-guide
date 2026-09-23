@@ -38,8 +38,8 @@ crons.interval('cleanup expired oauth states', { hours: 1 }, internal.sessions.d
 // Purge expired login codes every hour (they have a 2-minute TTL).
 crons.interval('cleanup expired auth codes', { hours: 1 }, internal.sessions.deleteExpiredAuthCodes, {})
 
-// Raw landingVisitors rows only dedupe within their UTC day, so keep the IP+UA hash at most ~2 days:
-// only the integer aggregates in landingMetrics survive.
+// Raw landingVisitors rows only dedupe within their UTC day, so each run deletes every earlier day's
+// rows and no IP+UA hash outlives 48h: only the integer aggregates in landingMetrics survive.
 crons.interval('prune landing visitors', { hours: 24 }, internal.landingMetrics.pruneLandingVisitors, {})
 
 // Hard-delete accounts whose 30-day deletion grace window has elapsed (self-service erasure).

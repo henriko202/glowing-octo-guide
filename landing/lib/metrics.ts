@@ -1,6 +1,6 @@
-// Cookieless, first-party landing funnel beacon. Nothing about the visitor leaves the browser: no
-// cookie, no client identifier, no IP or user-agent is sent or stored — only the event name, which
-// the backend turns into a per-(UTC day, event) counter. See convex/landingMetrics.ts.
+// Cookieless, first-party landing funnel beacon: no cookie and no client identifier. The body is only
+// the event name, which the backend turns into a per-(UTC day, event) counter; the request's IP+UA
+// feed a daily-rotated hash for unique counts, deleted within 48h. See convex/landingMetrics.ts.
 const CONVEX_SITE = process.env.NEXT_PUBLIC_CONVEX_SITE?.trim().replace(/\/+$/, '')
 
 export type CtaPlacement = 'hero' | 'nav' | 'pricing' | 'final'

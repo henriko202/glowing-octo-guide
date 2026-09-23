@@ -1,7 +1,10 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 import BannedScreen from './BannedScreen'
 import { SUPPORT_EMAIL } from '../lib/support'
+
+// The real stopDataFast reads window.location.hostname, which the sign-out test replaces with a bare stub.
+vi.mock('../lib/observability/datafast', () => ({ stopDataFast: vi.fn() }))
 
 describe('BannedScreen', () => {
   it('shows the suspension heading and a support mailto link', () => {

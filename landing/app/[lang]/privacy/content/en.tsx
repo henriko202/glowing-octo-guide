@@ -11,7 +11,7 @@ export default function En({ lang }: { lang: Locale }) {
         {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts, which drives the in-app re-consent
             prompt. The landing site has no convex dependency, so this string is a manual copy: bump it in
             en/pt/es whenever you bump the constant, or the page under-reports a policy members re-accepted. */}
-        <p>Policy version: 2026-09-08</p>
+        <p>Policy version: 2026-09-23</p>
 
         {/* 1. Who we are */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Who We Are</h2>
@@ -70,6 +70,29 @@ export default function En({ lang }: { lang: Locale }) {
           address, browser type, pages visited, timestamps) for security and performance monitoring.
         </p>
         <p>
+          <strong className="text-cream">Error reports.</strong> When something breaks in the app, Sentry receives an
+          error report with the error message, the page, and your browser and operating system. We strip cookies,
+          request headers, and account details from a report before it is sent. Sentry also records the screen for 10%
+          of app sessions and for every session with an error. These recordings mask all text and block images, so they
+          show the page layout and your clicks, not what you read or type.
+        </p>
+        <p>
+          <strong className="text-cream">Website visit statistics.</strong> On our website, DataFast counts visits
+          without cookies. It receives the page you view (without any invite code), the site that sent you, and your
+          browser, device, and country. It tells visitors apart by a code derived from your IP address and browser that
+          changes every day, so it cannot link your visits across days. We also count, on our own servers, how many
+          visitors see our pricing and click our sign-up buttons. To count each visitor once per day, we keep a code
+          derived from your IP address and browser that changes every day and is deleted within two days, after which
+          only the daily totals remain. Cloudflare Web Analytics measures page loads on the website and in the app,
+          without cookies.
+        </p>
+        <p>
+          <strong className="text-cream">App usage analytics (only with your consent).</strong> If you turn on analytics
+          in <strong className="text-cream">Settings &rarr; Privacy &amp; Data</strong>, PostHog and DataFast record the
+          pages you visit in the app, and PostHog also records which features you use. Both link this to your internal
+          member ID. We do not send them your name, email, posts, or payment details.
+        </p>
+        <p>
           <strong className="text-cream">No scraping.</strong> We do not scrape LinkedIn or any other third-party
           website. We receive data from your own use of our platform and from LinkedIn OpenID Connect sign-in, which
           returns your member ID, name, profile picture, and email. We hold no permission to post, comment, or react on
@@ -86,14 +109,15 @@ export default function En({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Legitimate interests (Art. 6(1)(f) GDPR).</strong> Optimising feed quality,
           preventing abuse, ensuring platform security, and maintaining aggregate, non-identifiable analytics about
-          service performance. We also rely on legitimate interests to send a 3-day activity digest by email, and you
-          can object at any time from the unsubscribe link in the email or in Settings &rarr; Emails. Signed-in members
-          can also see the site-wide ranking of the most active posters and interactors, and you can opt out of
-          appearing in it at any time in Settings &rarr; Emails.
+          service performance. This covers error monitoring in the app (Sentry) and the cookieless visit statistics on
+          our website (DataFast and Cloudflare Web Analytics). We also rely on legitimate interests to send a 3-day
+          activity digest by email, and you can object at any time from the unsubscribe link in the email or in Settings
+          &rarr; Emails. Signed-in members can also see the site-wide ranking of the most active posters and
+          interactors, and you can opt out of appearing in it at any time in Settings &rarr; Emails.
         </p>
         <p>
-          <strong className="text-cream">Consent (Art. 6(1)(a) GDPR).</strong> Marketing communications and optional
-          analytics are processed only with your explicit consent. Both are{' '}
+          <strong className="text-cream">Consent (Art. 6(1)(a) GDPR).</strong> Marketing communications and optional app
+          analytics (PostHog and DataFast) are processed only with your explicit consent. Both are{' '}
           <strong className="text-cream">off by default</strong> and can be toggled at any time in{' '}
           <strong className="text-cream">Settings &rarr; Privacy &amp; Data</strong>.
         </p>
@@ -118,7 +142,7 @@ export default function En({ lang }: { lang: Locale }) {
           </li>
           <li>
             <strong className="text-cream">Cloudflare</strong> &mdash; hosting for the landing site and the application,
-            plus DNS, CDN, and DDoS protection.
+            plus DNS, CDN, DDoS protection, and cookieless visit statistics (Cloudflare Web Analytics).
           </li>
           <li>
             <strong className="text-cream">Resend</strong> &mdash; transactional email delivery.
@@ -127,6 +151,18 @@ export default function En({ lang }: { lang: Locale }) {
             <strong className="text-cream">OpenRouter (AI inference)</strong> &mdash; generating reaction suggestions
             and draft comments from your public post content, including its images. OpenRouter routes only to inference
             providers with zero data retention (prompts are not stored or used for training).
+          </li>
+          <li>
+            <strong className="text-cream">Sentry</strong> &mdash; error monitoring for the app, including screen
+            recordings with all text masked.
+          </li>
+          <li>
+            <strong className="text-cream">PostHog</strong> &mdash; product analytics in the app, only if you turn on
+            analytics. PostHog stores this data in the EU.
+          </li>
+          <li>
+            <strong className="text-cream">DataFast</strong> &mdash; cookieless visit statistics on our website and,
+            only if you turn on analytics, page views in the app.
           </li>
         </ul>
         <p>
@@ -151,10 +187,11 @@ export default function En({ lang }: { lang: Locale }) {
         {/* 5. International transfers */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. International Transfers</h2>
         <p>
-          Our sub-processors are primarily based in the United States. Where data is transferred outside the European
-          Economic Area or United Kingdom, we rely on the European Commission&rsquo;s Standard Contractual Clauses
-          (SCCs) as the transfer mechanism for each processor. A copy of the relevant transfer safeguards is available
-          on request by contacting{' '}
+          Our sub-processors are primarily based in the United States. DataFast is a Singapore company that runs mostly
+          on servers outside the EU, including in the United States. PostHog stores the app analytics data in the EU.
+          Where data is transferred outside the European Economic Area or United Kingdom, we rely on the European
+          Commission&rsquo;s Standard Contractual Clauses (SCCs) as the transfer mechanism for each processor. A copy of
+          the relevant transfer safeguards is available on request by contacting{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
@@ -238,7 +275,8 @@ export default function En({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Categories collected.</strong> Identifiers (name, email, LinkedIn ID, IP
           address); professional or employment-related information (headline, industry); Internet or network activity
-          (session logs); commercial information (subscription status via Stripe).
+          (session logs, error reports, pages viewed on our website, and, if you turn on analytics, how you use the
+          app); commercial information (subscription status via Stripe).
         </p>
         <p>
           <strong className="text-cream">No sale or sharing.</strong> We do not sell personal information. We do not
@@ -286,9 +324,13 @@ export default function En({ lang }: { lang: Locale }) {
         {/* 10. Cookies & storage */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">10. Cookies &amp; Storage</h2>
         <p>
-          We use only <strong className="text-cream">essential</strong> browser storage (a session token to keep you
-          signed in and your preferences). We do not use advertising, cross-site tracking, or non-essential analytics
-          cookies. For full details see our{' '}
+          We use browser storage to keep you signed in and to remember your choices, such as your language and theme.
+          Our website counts visits with DataFast, which uses browser storage instead of cookies, and the app keeps a
+          short-lived Sentry record in session storage for error monitoring. In the app, DataFast and PostHog set
+          analytics cookies only if you turn on analytics in{' '}
+          <strong className="text-cream">Settings &rarr; Privacy &amp; Data</strong>, and we delete them when you turn
+          analytics off or sign out. We do not use advertising or cross-site tracking cookies. For the full list, see
+          our{' '}
           <a
             href={`/${lang}/cookies`}
             className="text-gold-text hover:underline"

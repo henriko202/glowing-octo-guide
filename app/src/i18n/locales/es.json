@@ -426,7 +426,7 @@
     "title": "Privacidad y datos",
     "consentPrompt": {
       "title": "Configura tus preferencias",
-      "intro": "Antes de continuar, elige cómo podemos contactarte. Son opcionales y están desactivadas por defecto — puedes cambiarlas cuando quieras en Configuración → Privacidad y datos.",
+      "intro": "Antes de continuar, elige cómo podemos contactarte y si podemos medir cómo usas la aplicación. Son opcionales y están desactivadas por defecto — puedes cambiarlas cuando quieras en Configuración → Privacidad y datos.",
       "save": "Guardar y continuar",
       "note": "El procesamiento de servicio, seguridad y obligaciones legales ocurre independientemente de estas opciones.",
       "digestNote": "El resumen de actividad está activado por defecto y puede desactivarse en Configuración > Correos."
@@ -435,7 +435,7 @@
       "title": "Preferencias de comunicación y analítica",
       "note": "Son opcionales y están desactivadas por defecto. Cámbialas cuando quieras.",
       "marketing": "Enviarme novedades y consejos del producto por correo",
-      "analytics": "Permitir analítica de uso respetuosa con la privacidad"
+      "analytics": "Permitir analítica de uso: PostHog y DataFast usan cookies y registran las páginas y funciones que usas"
     },
     "exportTitle": "Exporta tus datos",
     "exportNote": "Descarga una copia legible por máquina de los datos de tu cuenta. La prepararemos y el enlace de descarga estará disponible aquí (válido por 7 días).",

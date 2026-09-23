@@ -596,7 +596,7 @@ export default defineSchema({
   // User-Agent, computed server-side in http.ts — never a raw IP or user-agent, and never a
   // client-side identifier, so uniqueness deliberately resets each UTC day. The boolean flags record
   // which events the visitor became unique for that day; landingMetrics.recordLandingEvent is the
-  // only writer. Rows are pruned after ~2 days (landingMetrics.pruneLandingVisitors), so only the
+  // only writer. Rows are deleted within 48h (landingMetrics.pruneLandingVisitors), so only the
   // integer aggregates in landingMetrics survive. The compound index serves both the dedup lookup
   // and the prune's day range.
   landingVisitors: defineTable({

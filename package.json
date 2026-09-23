@@ -2,7 +2,7 @@
   "name": "link-into-the-ssi",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.24.0",
+  "packageManager": "pnpm@12.5.1",
   "scripts": {
     "dev:landing": "pnpm --filter landing dev",
     "dev:app": "pnpm --filter app dev",

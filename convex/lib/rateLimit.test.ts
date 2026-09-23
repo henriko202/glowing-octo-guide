@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   checkRateLimit,
+  CLIENT_BUCKETS,
+  clientBucket,
+  enforceLandingEventBudget,
   enforceOAuthStartBudget,
+  LANDING_EVENT_GLOBAL_PER_HOUR,
+  LANDING_EVENT_PER_CLIENT_PER_HOUR,
   OAUTH_START_GLOBAL_PER_HOUR,
   OAUTH_START_PER_CLIENT_PER_HOUR,
   RATE_LIMIT_ACTIONS,
@@ -83,14 +88,51 @@ describe('resetUserRateLimits', () => {
   })
 })
 
+// The component keeps one row per key until a manual reset, so whatever the per-client dimension uses as its key is
+// stored indefinitely. It must never be the caller's IP address.
+describe('clientBucket', () => {
+  it('maps a client to the same bucket every time, and never to its address', () => {
+    expect(clientBucket('203.0.113.7')).toBe(clientBucket('203.0.113.7'))
+    expect(clientBucket('203.0.113.7')).not.toContain('203.0.113.7')
+  })
+
+  it('caps the keys a flood of addresses can create, while still spreading distinct clients apart', () => {
+    const many = new Set(Array.from({ length: 20_000 }, (_, i) => clientBucket(`10.0.${i >> 8}.${i & 255}`)))
+    expect(many.size).toBeLessThanOrEqual(CLIENT_BUCKETS)
+    // A constant bucket would turn the per-client limit into a second, much lower global limit.
+    const few = new Set(Array.from({ length: 1000 }, (_, i) => clientBucket(`198.51.${i >> 8}.${i & 255}`)))
+    expect(few.size).toBeGreaterThan(800)
+  })
+})
+
+describe('enforceLandingEventBudget', () => {
+  it('keys the per-client 240/h limit by the client bucket, not the IP, plus the global 6000/h backstop', async () => {
+    await enforceLandingEventBudget(ctx, '203.0.113.7')
+    expect(calls.limit).toHaveLength(2)
+    expect(calls.limit[0]).toMatchObject({
+      name: 'landingEventClient',
+      opts: {
+        key: clientBucket('203.0.113.7'),
+        config: { kind: 'fixed window', rate: LANDING_EVENT_PER_CLIENT_PER_HOUR, period: 60 * 60 * 1000 }
+      }
+    })
+    expect(calls.limit[0].opts.key).not.toContain('203.0.113.7')
+    expect(calls.limit[1]).toMatchObject({
+      name: 'landingEvent',
+      opts: { key: 'global', config: { rate: LANDING_EVENT_GLOBAL_PER_HOUR } }
+    })
+  })
+})
+
 describe('enforceOAuthStartBudget', () => {
-  it('enforces the per-client 60/h limit and the global 1800/h backstop when a key is present', async () => {
+  it('enforces the per-client 60/h limit (keyed by bucket, not IP) and the global 1800/h backstop', async () => {
     await enforceOAuthStartBudget(ctx, '203.0.113.7')
     expect(calls.limit).toHaveLength(2)
+    expect(calls.limit[0].opts.key).not.toContain('203.0.113.7')
     expect(calls.limit[0]).toMatchObject({
       name: 'oauthStartClient',
       opts: {
-        key: '203.0.113.7',
+        key: clientBucket('203.0.113.7'),
         config: { kind: 'fixed window', rate: OAUTH_START_PER_CLIENT_PER_HOUR, period: 60 * 60 * 1000 }
       }
     })

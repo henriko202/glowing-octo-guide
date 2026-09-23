@@ -200,13 +200,14 @@ export function shouldContinueVisitorPurge(deletedCount: number, batchSize: numb
   return deletedCount === batchSize
 }
 
-// Raw visitor rows exist only to dedupe within their UTC day, so the cutoff keeps today's and
-// yesterday's (a late prune run still has slack) and deletes the rest — only the integer aggregates
-// in landingMetrics survive. Retention is at most ~48h.
+// Raw visitor rows exist only to dedupe within their UTC day (recordLandingEvent never reads an
+// earlier day), so the cutoff keeps today's and deletes the rest — only the integer aggregates in
+// landingMetrics survive. With the daily cron no row outlives 48h, the "deleted within two days"
+// promise on the public privacy and cookie pages.
 export const pruneLandingVisitors = internalMutation({
   args: {},
   handler: async ctx => {
-    const cutoffDay = new Date(Date.now() - DAY_MS).toISOString().slice(0, 10)
+    const cutoffDay = new Date().toISOString().slice(0, 10)
     const stale = await ctx.db
       .query('landingVisitors')
       .withIndex('by_day_and_visitor_key', q => q.lt('day', cutoffDay))

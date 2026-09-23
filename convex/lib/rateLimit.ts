@@ -126,10 +126,23 @@ export const checkAndIncrement = internalMutation({
   }
 })
 
+// The per-client dimension below keys on a bucket of the client's x-forwarded-for value, never the value itself:
+// the component keeps one row per key until a manual reset, so an IP key would be a permanent record of every
+// visitor's address. Each of the 4096 buckets covers ~1M IPv4 addresses, so a row identifies no one and the rows
+// per limit are capped. ponytail: a flood from one IP also throttles the ~1/4096 of callers sharing its bucket;
+// raise CLIENT_BUCKETS if that ever bites.
+export const CLIENT_BUCKETS = 4096
+
+export function clientBucket(clientKey: string): string {
+  let hash = 0x811c9dc5 // 32-bit FNV-1a
+  for (let i = 0; i < clientKey.length; i++) hash = Math.imul(hash ^ clientKey.charCodeAt(i), 0x01000193)
+  return `bucket:${(hash >>> 0) % CLIENT_BUCKETS}`
+}
+
 // Anonymous (no user key) limiter for the OAuth start route and the landing event beacon, whose
 // callers have no identity yet. `key` is supplied by the caller: the global backstop uses the fixed
-// 'global' key, while the per-client dimension uses a best-effort client value (untrusted
-// x-forwarded-for) — see enforceOAuthStartBudget / enforceLandingEventBudget.
+// 'global' key, while the per-client dimension uses clientBucket() of a best-effort client value
+// (untrusted x-forwarded-for) — see enforceOAuthStartBudget / enforceLandingEventBudget.
 export async function checkAnonymousRateLimit(
   ctx: RunMutationCtx,
   action: string,
@@ -154,7 +167,7 @@ export const OAUTH_START_GLOBAL_PER_HOUR = 1800
 /** Plain-function core (directly unit-testable) for the checkOAuthStartBudget mutation below. */
 export async function enforceOAuthStartBudget(ctx: RunMutationCtx, clientKey?: string): Promise<void> {
   if (clientKey) {
-    await checkAnonymousRateLimit(ctx, 'oauthStartClient', clientKey, OAUTH_START_PER_CLIENT_PER_HOUR)
+    await checkAnonymousRateLimit(ctx, 'oauthStartClient', clientBucket(clientKey), OAUTH_START_PER_CLIENT_PER_HOUR)
   }
   await checkAnonymousRateLimit(ctx, 'oauthStart', 'global', OAUTH_START_GLOBAL_PER_HOUR)
 }
@@ -179,7 +192,7 @@ export async function enforceLandingEventBudget(ctx: RunMutationCtx, clientKey?:
     await checkAnonymousRateLimit(
       ctx,
       'landingEventClient',
-      clientKey,
+      clientBucket(clientKey),
       LANDING_EVENT_PER_CLIENT_PER_HOUR,
       WINDOW_MS,
       'Too many landing events. Please try again shortly.'

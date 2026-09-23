@@ -5,6 +5,9 @@
 // stricter hashed CSP. Cloudflare Web Analytics (automatic setup) injects its beacon
 // into proxied HTML, so script-src allows that exact script URL; the beacon posts to
 // same-origin /cdn-cgi/rum, which connect-src 'self' already covers.
+// DataFast (bundled npm SDK, cookieless) posts pageviews to https://datafa.st, which connect-src allows.
+// Referrer-Policy is strict-origin, so a same-origin page load never carries the `?ref=` invite code in
+// document.referrer, which DataFast reports with each page load's first pageview.
 // frame-ancestors/HSTS etc. only work as real HTTP headers.
 // `next dev` evals every module (eval-source-map devtool + Fast Refresh runtime), so
 // dev needs 'unsafe-eval' or the client bundle throws and nothing hydrates. NODE_ENV
@@ -25,7 +28,7 @@ const CONTENT_SECURITY_POLICY = [
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://static.cloudflareinsights.com/beacon.min.js`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' https: data:`,
-  `connect-src 'self' https://*.convex.cloud https://*.convex.site`,
+  `connect-src 'self' https://*.convex.cloud https://*.convex.site https://datafa.st`,
   `object-src 'none'`,
   `base-uri 'self'`,
   `form-action 'self'`,
@@ -43,7 +46,7 @@ const nextConfig = {
           { key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY },
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Referrer-Policy', value: 'strict-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' }
         ]
       }

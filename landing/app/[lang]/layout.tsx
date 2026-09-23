@@ -5,6 +5,7 @@ import { getDictionary } from '@/i18n/getDictionary'
 import { i18n, type Locale } from '@/i18n/config'
 import { homeMetadata } from '@/lib/seo'
 import CookieNotice from '@/components/CookieNotice'
+import DataFast from '@/components/DataFast'
 import TrialProvider from '@/components/TrialProvider'
 
 // Self-hosted at build time → served from 'self', so the tight CSP needs no font/style host.
@@ -73,6 +74,7 @@ export default async function RootLayout({
           dict={dict.cookieNotice}
           lang={lang}
         />
+        <DataFast />
       </body>
     </html>
   )

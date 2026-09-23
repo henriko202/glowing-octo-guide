@@ -236,8 +236,10 @@ describe('getMetrics', () => {
   })
 })
 
-describe('pruneLandingVisitors', () => {
-  test('keeps today and yesterday and deletes older rows', async () => {
+describe('pruneLandingVisitors', ;() => {
+  // The public privacy and cookie pages promise the hash is deleted within two days. A row only dedupes within its
+  // own UTC day, so every earlier day goes: with the daily cron, no row outlives 48 hours.
+  test('keeps only today and deletes every earlier day', async () => {
     const t = convexTest(schema, modules)
     const yesterday = new Date(Date.now() - DAY).toISOString().slice(0, 10)
     const threeDaysAgo = new Date(Date.now() - 3 * DAY).toISOString().slice(0, 10)
@@ -258,6 +260,6 @@ describe('pruneLandingVisitors', () => {
     await t.mutation(internal.landingMetrics.pruneLandingVisitors, {})
 
     const remaining = await t.run(async ctx => ctx.db.query('landingVisitors').collect())
-    expect(remaining.map(row => row.day).sort()).toEqual([yesterday, TODAY].sort())
+    expect(remaining.map(row => row.day)).toEqual([TODAY])
   })
 })

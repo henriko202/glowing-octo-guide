@@ -1,6 +1,6 @@
 > **DRAFT — requires legal review.**
 >
-> Last updated: 2026-06-19
+> Last updated: 2026-09-23
 
 # Privacy & Compliance Documentation — Link Into The SSI
 
@@ -17,7 +17,7 @@ recording, data-subject rights endpoints, retention crons, audit logs) is descri
 | File                                       | Summary                                                                                                                                                                                                                                                                                      |
 |--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [DATA-INVENTORY.md](DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — catalogues every personal-data category, purpose, legal basis, retention period, and data-flow under GDPR Art. 30.                                                                                                                                  |
-| [SUBPROCESSORS.md](SUBPROCESSORS.md)       | Sub-processor list — names every third-party organisation that processes personal data on behalf of the controller (Convex, Stripe, LinkedIn, Resend). Also lists **OpenRouter** (US AI gateway) + its dynamically-routed, zero-data-retention inference providers as active sub-processors. |
+| [SUBPROCESSORS.md](SUBPROCESSORS.md)       | Sub-processor list — names every third-party organisation processing personal data for the controller: Convex, Stripe, LinkedIn, Cloudflare, Resend, Sentry, PostHog, DataFast, and **OpenRouter** (the US AI gateway) with its dynamically-routed, zero-data-retention inference providers. |
 | [RETENTION-POLICY.md](RETENTION-POLICY.md) | Data retention policy — states the retention window for each data category, the legal/business justification, and the automated enforcement mechanism in the codebase.                                                                                                                       |
 | [GAP-ASSESSMENT.md](GAP-ASSESSMENT.md)     | Compliance gap assessment — maps the post-Phase-3 implementation against GDPR, UK GDPR, LGPD, and CCPA/CPRA requirements; identifies residual gaps and required human actions.                                                                                                               |
 | [BREACH-RUNBOOK.md](BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook — step-by-step detection, triage, containment, authority notification (72-hour GDPR deadline), and post-incident review procedure.                                                                                                            |
@@ -61,8 +61,12 @@ Remove the `> DRAFT` banner from each document only after a lawyer has signed of
 
 Use `DPA-TEMPLATE.md` as the starting point, but note:
 
-- Convex, Stripe, Resend, and LinkedIn each have their own standard DPA. Accept / execute the
-  vendor's DPA via their dashboard or legal portal (do **not** send them the template).
+- Convex, Stripe, Cloudflare, Resend, Sentry, PostHog, OpenRouter, and LinkedIn each have their own standard DPA.
+  Accept / execute the vendor's DPA via their dashboard or legal portal (do **not** send them the template). Sign
+  Sentry's and PostHog's before their production keys are set.
+- DataFast (web analytics) generates its DPA at `datafa.st/dpa` in a cookie and a cookieless variant. Take the
+  **cookie** variant, because the app runs DataFast in cookie mode (the landing is cookieless), and sign it before the
+  DataFast website ids go live (see `SUBPROCESSORS.md`).
 - Keep a signed copy on file for each vendor.
 
 ### 4. Confirm the lawful-basis posture

@@ -1,4 +1,5 @@
 // Shared session / sign-out helpers for the app shell.
+import { syncAnalyticsConsent } from './observability/analytics'
 
 const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE as string
 
@@ -39,12 +40,14 @@ export function beginSignOut(): void {
 }
 
 /**
- * Sign the user out: mark the explicit sign-out, drop the local session token, and leave the SPA for
- * the landing site (a separate origin). Callers holding a live Convex session should invalidate it
- * server-side (users.logout) before calling this, and call beginSignOut() first so the marker is set
- * before logout flips getMe to null.
+ * Sign the user out: turn analytics off the way a withdrawal does (DataFast stopped and its cookies deleted, PostHog
+ * opted out and its stored identity cleared, so the next member on this browser starts as a new visitor), mark the
+ * explicit sign-out, drop the local session token, and leave the SPA for the landing site (a separate origin).
+ * Callers holding a live Convex session should invalidate it server-side (users.logout) before calling this, and
+ * call beginSignOut() first so the marker is set before logout flips getMe to null.
  */
 export function signOut(): void {
+  syncAnalyticsConsent(undefined, null)
   markSignedOut()
   sessionStorage.removeItem('sessionToken')
   // The dismissed-MOTD memory stores the session token, so it must die with the session.

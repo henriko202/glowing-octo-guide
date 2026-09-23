@@ -37,7 +37,7 @@
     },
     "cookies": {
       "title": "Link Into The SSI · Cookie & Storage Policy",
-      "description": "Link Into The SSI only uses essential browser storage for sign-in and your preferences. We don't use tracking or advertising cookies."
+      "description": "Every cookie and browser storage item Link Into The SSI uses, what each one does, and how to turn app analytics on or off."
     }
   },
   "nav": {
@@ -294,10 +294,10 @@
     "easterEgg": "Professional work for professional needs. Made by a professional with an undying love for the craft!"
   },
   "cookieNotice": {
-    "text": "We only use essential browser storage for sign-in and your preferences. We don't use tracking cookies.",
+    "text": "We use browser storage to remember your preferences and to count visits. We don't use advertising or tracking cookies.",
     "learnMore": "Learn more",
     "dismiss": "Got it",
-    "label": "Essential storage notice"
+    "label": "Storage notice"
   },
   "themeToggle": {
     "system": "System theme",

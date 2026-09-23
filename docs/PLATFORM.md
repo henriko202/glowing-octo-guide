@@ -586,8 +586,9 @@ deliberately **not** part of the DSR export (a transient bearer credential). See
 
 There is **no app `rateLimits` table**. Per‑user, per‑action fixed‑window counters live in the **
 `@convex-dev/rate-limiter`** component's own isolated tables (mounted in `convex.config.ts`, consumed through
-`lib/rateLimit.ts`). Keys are `(action, userId)` — plus the anonymous OAuth‑start dimensions (`oauthStart` on the
-`global` key, `oauthStartClient` per client, §7); each caller's window is passed inline. See **§11 — Rate limiting**.
+`lib/rateLimit.ts`). Keys are `(action, userId)` — plus the anonymous OAuth‑start and landing‑beacon dimensions
+(`oauthStart`/`landingEvent` on the `global` key, `oauthStartClient`/`landingEventClient` per client bucket, §7);
+each caller's window is passed inline. See **§11 — Rate limiting**.
 Erasure clears a user's counters via `resetUserRateLimits` (see **§14 — Privacy & Compliance**).
 
 #### `appSettings` — singleton global settings
@@ -928,12 +929,14 @@ range. No separate `by_day` index: the compound index's day prefix serves the ra
 One row per **(UTC day, visitor key)**. The key is
 `hex(HMAC‑SHA256(secret, "landing-visitor:" + day + ":" + ip + ":" + ua)).slice(0, 32)`, computed **server‑side in the
 HTTP action** (`convex/lib/landingVisitorKey.ts`) from the first `x-forwarded-for` hop and the `user-agent` header —
-never a raw IP or user‑agent (the hash is the only visitor‑derived mutation argument, so Convex logs never see
-either), and never anything the browser sent. The five boolean flags mark which events the visitor became unique for
+never a raw IP or user‑agent (besides the hash, the only visitor‑derived mutation argument is the IP the rate-limit
+mutation reduces to a bucket without storing it), and never anything the browser sent. The five boolean flags mark which
+events the visitor became unique for
 that day, so a
 visitor who clicked hero and pricing counts once under **each** event but never twice for one. Uniqueness deliberately
-resets at the UTC day boundary, and the `prune landing visitors` cron deletes rows older than ~2 days
-([§12](#12-admin--moderation), [§13](#13-scheduled-jobs-crons)) — only the integer aggregates in `landingMetrics`
+resets at the UTC day boundary, and the daily `prune landing visitors` cron deletes every row from before the current
+UTC day, so none outlives 48 hours ([§12](#12-admin--moderation), [§13](#13-scheduled-jobs-crons)) — only the integer
+aggregates in `landingMetrics`
 survive. `secret` is `LANDING_METRICS_SECRET || UNSUBSCRIBE_SECRET` (an empty value counts as unset); with no secret (or
 no IP) there is no key, totals still count and uniques do not ([§16](#16-environment-variables)).
 
@@ -1118,9 +1121,12 @@ The `plan` value is validated against the allowed tier list (`starter|growth|pro
 `browserNonce`, stores it on the same row, and sets it as an `HttpOnly; Secure; SameSite=Lax` cookie
 (`oauth_nonce_<state>`, 10‑min `Max‑Age`, namespaced per state so concurrent logins don't clobber each other); the
 callback requires the matching `oauth_nonce_<state>` cookie and clears it. Every OAuth redirect carries
-`Cache-Control: no-store`. The route is rate‑limited **per client (60/hour, best-effort `x-forwarded-for` key) with a
-global 1800/hour backstop** (`checkOAuthStartBudget`) because its caller is anonymous; the global limit is what
-actually bounds `oauthStates` growth. The browser‑nonce cookie mechanism is unchanged; what changed is token delivery:
+`Cache-Control: no-store`. The route is rate‑limited **per client (60/hour) with a global 1800/hour backstop**
+(`checkOAuthStartBudget`) because its caller is anonymous; the global limit is what actually bounds `oauthStates`
+growth. The per-client key is `clientBucket()` of the best-effort `x-forwarded-for` value, one of 4096 FNV-1a buckets
+and never the IP itself: the rate-limiter component keeps one row per key until a manual reset, so an IP key would
+store every caller's address indefinitely. The browser‑nonce cookie mechanism is unchanged; what changed is token
+delivery:
 the callback no longer creates a session — it mints a single‑use, 2‑minute **login code** bound to the stored challenge,
 and only the browser that holds the verifier can redeem it (below).
 
@@ -3848,9 +3854,10 @@ rate limit on `commentOnPost`, `reactToPost`, `generateComment`, and `profile_re
 unconditionally skip the check for admins. **`submitPost` is the exception:** its rate‑limit, weekly‑limit, and
 ownership bypass apply **only under the dev‑gated admin override** (`ALLOW_ADMIN_SHARE_ANY_POST` — see
 [§10 — Manual post submission](#manual-post-submission-postssubmitpost-action)). In production that var is unset, so an
-admin submits posts under exactly the same limits as everyone else. The anonymous OAuth start route is the only
-non‑per‑user case: `enforceOAuthStartBudget` applies a 60/hour limit per client key (best‑effort `x-forwarded-for`)
-alongside a global 1800/hour backstop ([§7](#7-authentication--identity)).
+admin submits posts under exactly the same limits as everyone else. The anonymous OAuth start route and the landing
+event beacon are the only non‑per‑user cases: `enforceOAuthStartBudget` (60/hour) and `enforceLandingEventBudget`
+(240/hour) limit each client bucket (`clientBucket` of the best‑effort `x-forwarded-for`, never the IP itself),
+alongside global backstops of 1800/hour and 6000/hour ([§7](#7-authentication--identity)).
 
 ---
 
@@ -4186,17 +4193,20 @@ totals.
 `new Date().toISOString().slice(0, 10)` and upserts the `(day, event)` row with the compound index + `.unique()`, so
 concurrent beacons can never insert duplicate day rows. The optional `visitorKey` is the
 `hex(HMAC‑SHA256(secret, "landing-visitor:" + day + ":" + ip + ":" + ua)).slice(0, 32)` computed in `http.ts` from the
-first `x-forwarded-for` hop and the `user-agent` header; the raw IP/UA never become mutation arguments. With it, the
+first `x-forwarded-for` hop and the `user-agent` header; the raw IP/UA are never arguments of this mutation (the IP
+reaches only the rate-limit mutation, which stores just its bucket). With it, the
 same transaction reads `landingVisitors` via `by_day_and_visitor_key`: absent ⇒ insert the row with the event's flag
 true and the other four false (`becameUnique`), present with the flag false ⇒ patch it true (`becameUnique`), present
 with the flag true ⇒ not unique. `count` always increments; `uniqueCount` increments only when `becameUnique`.
 Concurrent same‑visitor beacons are settled by Convex's serializable isolation — no manual dedup retry logic.
 `secret` is `landingVisitorSecret()` (`LANDING_METRICS_SECRET || UNSUBSCRIBE_SECRET`, empty counts as unset); with no
-secret or no IP the key is omitted, totals still count and uniques do not. Raw rows are pruned to today + yesterday by
+secret or no IP the key is omitted, totals still count and uniques do not. Raw rows are pruned to today's by
 `pruneLandingVisitors` (`shouldContinueVisitorPurge` reschedules self‑chaining 200‑row batches, mirroring the session
-purges), so the hash is retained at most ~2 days. The beacon route is anonymous, so it is bounded by
-`lib/rateLimit.enforceLandingEventBudget` — **240/hour per best-effort client** (`x-forwarded-for`, forgeable) and
-**6000/hour global** — mirroring the OAuth-start budget; neither limit is in `RATE_LIMIT_ACTIONS` (that list exists
+purges), so with the daily cron the hash is retained at most 48 hours, the "deleted within two days" the public privacy
+and cookie pages promise. The beacon route is anonymous, so it is bounded by
+`lib/rateLimit.enforceLandingEventBudget` — **240/hour per best-effort client bucket** (`clientBucket` of the
+forgeable `x-forwarded-for`, one of 4096 buckets, so the limiter never stores an IP) and **6000/hour global** —
+mirroring the OAuth-start budget; neither limit is in `RATE_LIMIT_ACTIONS` (that list exists
 for per-user erasure and the beacon has no user). See [§5](#5-data-model) for the tables,
 [§15](#15-frontend--landing-site-landing) for the transport and privacy stance, and
 [§14](#14-frontend--authenticated-app-app) for the tab.
@@ -4407,7 +4417,7 @@ time (`crons.interval`).
 | `cleanup expired sessions`     | every **6h**        | `sessions.deleteExpiredSessions`                   | Purge expired sessions in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `cleanup expired oauth states` | every **1h**        | `sessions.deleteExpiredOAuthStates`                | Purge expired CSRF nonces in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `cleanup expired auth codes`   | every **1h**        | `sessions.deleteExpiredAuthCodes`                  | Purge expired 2‑minute login codes in self‑rescheduling 200‑row batches until none remain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `prune landing visitors`       | every **24h**       | `landingMetrics.pruneLandingVisitors`              | Delete `landingVisitors` rows whose `day` is older than yesterday (UTC) (self‑rescheduling 200‑row batches via `shouldContinueVisitorPurge`), so the daily‑rotated IP+UA hash is retained at most ~2 days; only the integer aggregates in `landingMetrics` survive.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `prune landing visitors`       | every **24h**       | `landingMetrics.pruneLandingVisitors`              | Delete `landingVisitors` rows whose `day` is before today (UTC) (self‑rescheduling 200‑row batches via `shouldContinueVisitorPurge`), so the daily‑rotated IP+UA hash is retained at most 48 hours; only the integer aggregates in `landingMetrics` survive.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `process account deletions`    | every **24h**       | `privacy/deletion.processAccountDeletions`         | Hard-delete accounts past their 30-day deletion grace window (cascade + Stripe cancel + completion email). Reads due accounts via `by_deletion_and_last_login`; processes **one account per run** in bounded cascade passes, self-rescheduling until the due-set is empty.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `refresh LinkedIn tokens`      | every **6h**        | `linkedin/tokenRefresh.refreshExpiringTokens`      | Renews tokens entering their pre-expiry window (`tokenExpiresAt` in `[now, now+7d)` **and** a refresh token on file) via `linkedin.oauth.refreshAccessToken` + `linkedin.auth.updateTokens`. Reads via `by_token_expiry`, **cursor-paginated** (≤100/page, mirrors `migrations/backfillFeedFields.ts`'s pattern) rather than a single `.take(100)` snapshot — the cursor is captured before any refresh attempt and advances every run regardless of per-user outcome, so a full 6h tick pages through the **entire** pre-expiry window even if rows near the front keep failing. Each user's refresh is try/caught independently (one `invalid_grant` skips that user, never aborts the batch or stalls the cursor). **Runs more often than `enforce data retention` below on purpose** — see ordering note. Best-effort/mostly dormant in practice: see [§7](#7-authentication--identity). |
 | `enforce data retention`       | every **24h**       | `privacy/retention.enforceDataRetention`           | Null expired LinkedIn tokens; expire/purge old export files + audit logs (>24mo); purge notifications older than **180 days**; flag dormant accounts (24mo, non-subscribers) for deletion. Indexed reads; batched, self-rescheduling on the token/audit/notification sweeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -4856,6 +4866,13 @@ Declarative `react-router-dom` routes. The session token lives in **`sessionStor
 sibling of `<Routes>` resets `window.scrollTo(0, 0)` on every pathname change (skipped when the URL carries an in-page
 `#anchor`) — the declarative router doesn't restore scroll on its own, and the app uses a page-scroll model (the window
 is the scroller; see AppShell), so without it a scrolled feed would carry its scroll into the next page.
+
+`<AnalyticsConsentGate>` (rendered by `RequireAuth` inside `AppShell`) drives both consent-gated analytics tools from
+the member's live `analytics` consent: PostHog, and DataFast in cookie mode ([§17](#17-security-posture)
+Observability). It also sends one DataFast pageview per `pathname` change, carrying `origin + pathname` only (never the
+query or fragment); until consent has started DataFast, that call does nothing. `signOut()` (`lib/session.ts`) stops
+DataFast and deletes its `datafast_*` cookies before it leaves for the landing, so the next member on a shared browser
+starts as a new visitor.
 
 | Path             | Page                |                                                                           Guarded                                                                            |
 |------------------|---------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------:|
@@ -5788,7 +5805,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -6362,7 +6379,7 @@ Every URL carries a locale prefix. The canonical forms are:
 | `/<lang>/linkedin-ssi` | LinkedIn SSI guide — the informational page for `what is LinkedIn SSI` / `Social Selling Index` queries. Content lives in `app/[lang]/linkedin-ssi/content/{en,pt,es}.ts` (one typed `GuideContent` object per locale, `en` canonical); `Guide.tsx` renders it and `StructuredData.tsx` emits `Article` + `BreadcrumbList` + `FAQPage`. Linked from `SSIExplainer`, the sitemap, and `/llms.txt`. |
 | `/<lang>/privacy`      | Privacy Policy — **required for LinkedIn app review**; `noindex, follow` (see the legal-pages note above).                                                                                                                                                                                                                                                                                        |
 | `/<lang>/terms`        | Terms of Service — **required for LinkedIn app review**; `noindex, follow`.                                                                                                                                                                                                                                                                                                                       |
-| `/<lang>/cookies`      | Cookie & Storage Policy (`CookiesPage`) — documents essential-only storage (no tracking cookies); linked from `Footer`; `noindex, follow`.                                                                                                                                                                                                                                                        |
+| `/<lang>/cookies`      | Cookie & Storage Policy (`CookiesPage`) — lists every cookie and browser storage item by purpose: necessary, error monitoring, cookieless website statistics, and consent-gated app analytics; linked from `Footer`; `noindex, follow`.                                                                                                                                                           |
 
 A bare `/` (or any path without a locale prefix) is 307-redirected by middleware to the detected locale (see middleware
 section above). Static generation covers all 5 route types × 3 locales = **15 pages**, plus `ƒ Middleware`, plus the
@@ -6530,18 +6547,64 @@ they had already re-accepted. Bump **four** places together: the constant plus `
 comment in `en.tsx` now names the source of truth. Wiring a cross-package import for one string would mean a workspace
 dependency, a `tsconfig` change and a Next build change, which costs more than the copy it removes.
 
-⚠️ **Still deferred, and now the closest thing to a launch blocker on this page:** `/privacy` §4 lists six
-sub-processors and **omits Sentry and PostHog**. That omission is correct while both SDKs sit inert without prod keys,
-and the public-copy update plus a second `POLICY_VERSION` bump are recorded as launch-time steps in
-`docs/compliance/SUBPROCESSORS.md` ("Human action required"). Setting the prod `VITE_` keys in Cloudflare and leaving
-this copy alone would make the policy wrong on the day traffic starts.
+The deferral this section used to end on (`/privacy` §4 omitting Sentry, PostHog and DataFast, and a `CookieNotice`
+and `/cookies` page that claimed essential storage only) was closed on 2026‑09‑23; see the next section.
+
+### Privacy and cookie policies: analytics and monitoring disclosures (2026‑09‑23)
+
+The public copy now describes every tool that runs, in en/pt/es, so setting the production keys no longer makes a
+policy page wrong. **`POLICY_VERSION` bumped `2026-09-08` → `2026-09-23`** (the constant plus the three `/privacy`
+literals), which covers [§17](#17-security-posture) launch-checklist items 5 and 6.3 with one re-prompt.
+
+- **`/privacy` §2** gained three paragraphs. *Error reports*: Sentry receives the message, page, browser and OS, with
+  cookies, headers and account details stripped before send, plus Session Replay on 10% of app sessions and every
+  session with an error (all text masked, media blocked). *Website visit statistics*: DataFast on the landing without
+  cookies (invite code stripped, a visitor code that rotates daily), the first-party funnel counter with its
+  IP+UA hash deleted within two days, and Cloudflare Web Analytics on both sites. *App usage analytics (only with your
+  consent)*: PostHog and
+  DataFast, keyed to the internal member id, never the name, email, posts or payment details.
+- **§3** names Sentry and the cookieless website statistics under legitimate interests, and PostHog and DataFast under
+  consent. **§4** lists Sentry, PostHog and DataFast and adds Web Analytics to the Cloudflare line. **§5** adds that
+  DataFast is a Singapore company running mostly outside the EU (US included) and that PostHog stores in the EU. **§8**
+  (CCPA categories) adds error reports, website page views and consented app usage. **§10** is rewritten around browser
+  storage and links to `/cookies`.
+- **`/cookies`** is now a full inventory in five sections. *Needed for the site and app*: the `lang`/`theme` cookies and
+  their storage copies, `sessionToken`, `oauthVerifier`/`oauthCode`, the backend's `oauth_nonce_<state>` cookie,
+  `signedOut`, `chosenPlan`/`chosenInterval`, `motdDismissed`, `ref`, `trialStarted`, `cookieNoticeDismissed` and
+  PostHog's `__ph_opt_in_out_<token>` flag. *Error monitoring*: `sentryReplaySession`. *Website statistics without
+  cookies*: DataFast's `datafast_visitor_id`, `datafast_session_id` and `datafast_session_start` in `sessionStorage` and
+  `datafast_event_queue` in `localStorage`, Cloudflare Web Analytics, and the funnel counter. *App analytics, only with
+  your consent*: the five `datafast_*` cookies with their lifetimes and `ph_<token>_posthog`. *Your choices*. The page
+  component now takes `lang` so it can link to `/privacy`.
+- **`CookieNotice`** now reads "We use browser storage to remember your preferences and to count visits. We don't use
+  advertising or tracking cookies." (label "Storage notice"), and the `/cookies` meta description names the inventory
+  and the analytics toggle. In the app, the consent prompt's intro and the `analytics` toggle name PostHog, DataFast and
+  their cookies (`privacy.consentPrompt.intro`, `privacy.consent.analytics`).
+
+Writing the inventory from the SDK and backend sources turned up six places where the code did not do what the copy
+says, all fixed in the same change. Four are in PostHog ([§17](#17-security-posture) Observability): it wrote its
+`ph_*` cookie before consent, autocapture sent clicked-element text and attributes, sign-out never reset it, and
+`$current_url` carried the `/unsubscribe?token=` digest token and `?ref=` invite codes. The fifth is backend: the
+anonymous rate limits (landing beacon and OAuth start) keyed their per-client row on the raw `x-forwarded-for` IP, and
+the rate-limiter component keeps a row per key until a manual reset, so every visitor's IP stayed in Convex
+indefinitely, which contradicts "only the daily totals remain". They now key on `clientBucket()`, one of 4096 buckets
+([§7](#7-authentication--identity)). Rows written before the fix need a one-off purge after deploy (§17 launch
+checklist). The sixth is the funnel counter's own prune: its cutoff was yesterday, so a visitor hash written just after
+midnight UTC could live about 72 hours, past the "deleted within two days" the copy promises. The cutoff is now today,
+so with the daily cron no row outlives 48 hours ([§13](#13-scheduled-jobs-crons)).
+
+⚠️ **Left for legal review, not decided in code:** Sentry Replay and `sentryReplaySession` run without consent, on the
+necessary/security basis. The copy discloses both, but whether a replay is strictly necessary under ePrivacy Art. 5 (3)
+is a lawyer's call; the code-side alternatives are `replaysSessionSampleRate: 0` or gating Replay on the analytics
+consent. The same review covers the landing's cookieless DataFast storage without a banner (a legitimate-interest
+assessment), the DataFast transfer to Singapore and the US, and the policy pages' draft status.
 
 ### CookieNotice (Phase 3b)
 
 `CookieNotice` is a **client component** rendered in `landing/app/[lang]/layout.tsx`. It displays a dismissible
-first-visit banner informing visitors that the site uses only essential storage (no tracking). Dismissal is persisted
-in **
-`localStorage`** (key `cookieNoticeDismissed`). The component uses **`useSyncExternalStore`** with a no-op server
+first-visit banner saying the site uses browser storage to remember preferences and count visits, with no advertising
+or tracking cookies, and links to `/cookies`. Dismissal is persisted in **`localStorage`** (key
+`cookieNoticeDismissed`). The component uses **`useSyncExternalStore`** with a no-op server
 snapshot so it hydrates safely without an SSR/client mismatch — the notice is invisible on the server render and appears
 only after hydration confirms the key is absent. The banner is **not** shown to returning visitors (key already set) and
 disappears without page reload on dismiss. The notice is **fixed to the bottom of the viewport** so it stays visible
@@ -6688,7 +6751,7 @@ response is `204` with `Cache-Control: no-store` and `Access-Control-Allow-Origi
 the 400. `next.config.js` needs no change: its CSP already allows `https://*.convex.site` in `connect-src`.
 
 **Privacy stance.** No cookie, no client‑side identifier, and no stored raw IP or User‑Agent: the only visitor‑derived
-value is a daily‑rotated HMAC of IP+UA kept at most ~2 days by the `prune landing visitors` cron
+value is a daily‑rotated HMAC of IP+UA kept at most 48 hours by the `prune landing visitors` cron
 ([§13](#13-scheduled-jobs-crons)), after which only integer aggregates survive. Uniqueness deliberately resets each UTC
 day, so the admin **Landing** tab's window figure is the sum of daily uniques, not distinct people
 ([§14](#14-frontend--authenticated-app-app)). With no secret configured the hash is never computed and the tab says so.
@@ -6703,9 +6766,28 @@ flowchart LR
     RB -->|yes| VK["landingVisitorKey<br/>HMAC(secret, day:ip:ua) → 32 hex"]
     RB -->|no| DROP["dropped — beacon still answers 204"]
     VK --> REC["landingMetrics.recordLandingEvent<br/>count + 1 · uniqueCount + 1 on first sighting"]
-    REC --> LV["landingVisitors row (day, key)<br/>flags per event · pruned after ~2 days"]
+    REC --> LV["landingVisitors row (day, key)<br/>flags per event · pruned after its day, ≤ 48 h"]
     REC --> ADMIN["landingMetrics.getMetrics (admin-only)<br/>Landing tab: uniques · totals · placements"]
 ```
+
+### Web analytics (DataFast, cookieless)
+
+`components/DataFast.tsx` is a client component that renders nothing, mounted in `app/[lang]/layout.tsx` next to
+`CookieNotice`. It runs only in a production build (`NODE_ENV === 'production'`) with `NEXT_PUBLIC_DATAFAST_WEBSITE_ID`
+set, and the SDK itself is a no-op on localhost, so `next dev` and local builds send nothing. The bundled `datafast` SDK
+is initialized once per page load in **cookieless** mode (`cookieless: true`, `maxQueueSize: 1`, auto-capture off). It
+sets no cookie and shows no banner: it keeps the visitor id the server returns, the session id and the session start in
+`sessionStorage` and its send queue in `localStorage`, and DataFast's server hashes IP + user agent into that
+daily-rotating visitor id. All four keys are listed on `/cookies`. Every `usePathname()` change sends one
+`trackScreen(pathname, { href })`. The href comes from the pure `landingPageviewHref`, which drops the `ref` invite code
+and the fragment and keeps `utm_*`, `source` and `via`. An invite code identifies a member, which is also why the app's
+`invite_copied` event carries no props. The SDK also reports `document.referrer` with each page load's first pageview,
+so `next.config.js` sets `Referrer-Policy: strict-origin`: a same-origin page load from `/en?ref=…` then carries only
+the origin. The DataFast `domain` is `NEXT_PUBLIC_COOKIE_DOMAIN` without its leading dot (`linkintothessi.com`), so
+landing and app events share one DataFast website. There are no custom goals: a CTA click leaves the page before the SDK
+could send it (no `keepalive`), so clicks stay with the first-party beacon above. `next.config.js` allows
+`https://datafa.st` in `connect-src`. The app side, the consent model and the launch steps are in
+[§17](#17-security-posture) Observability.
 
 ### Styling
 
@@ -6772,7 +6854,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `OPENROUTER_MODEL`               | – (default `google/gemma-4-26b-a4b-it`) | `convex/ai/openrouter.ts`                                                    | Optional model slug override. Provider routing (ZDR + no-data-collection pin governs selection, no price-floor suffix) is enforced in code, not via env. Blank ⇒ falls back to this valid, verified-live default (not broken — see [§11A](#11a-ai-reaction--comment-assistance) for the DeepInfra/Google zero-data-retention caveat: Google logs Gemma prompts/responses for abuse-monitoring independent of DeepInfra's ZDR commitment).                                                                                                                                                                              |
 | `OPENROUTER_SITE_URL` / `…_NAME` |              – (optional)               | `convex/ai/openrouter.ts`                                                    | Optional attribution (HTTP‑Referer / X‑Title) for OpenRouter's public rankings. Unset ⇒ not sent.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `UNSUBSCRIBE_SECRET`             |       – (digest no‑ops if unset)        | `http.ts`, `users.ts`, `jobs/digest.ts`                                      | HMAC-SHA256 key for the stateless digest unsubscribe tokens (`lib/unsubscribeToken.ts`). **Unset ⇒ the digest sweep logs and sends nothing** — no digest goes out without a working opt-out — and the public endpoints (`POST /unsubscribe/digest`, `users.unsubscribeByToken`) answer `unavailable`. Set it in the Convex dashboard before enabling the digest.                                                                                                                                                                                                                                                       |
-| `LANDING_METRICS_SECRET`         |        – (uniques off if unset)         | `landingMetrics.ts`, `http.ts`                                               | HMAC-SHA256 key for the landing beacon's daily-rotated visitor keys (`landingVisitorSecret()` — unique counts only). **Unset ⇒ falls back to `UNSUBSCRIBE_SECRET`; with both unset, unique counting is off while the `count` totals still record.** The hash is computed server-side from IP+UA, kept at most ~2 days and then pruned; raw IP/User-Agent are never stored ([§5](#5-data-model), [§15](#15-frontend--landing-site-landing)).                                                                                                                                                                            |
+| `LANDING_METRICS_SECRET`         |        – (uniques off if unset)         | `landingMetrics.ts`, `http.ts`                                               | HMAC-SHA256 key for the landing beacon's daily-rotated visitor keys (`landingVisitorSecret()` — unique counts only). **Unset ⇒ falls back to `UNSUBSCRIBE_SECRET`; with both unset, unique counting is off while the `count` totals still record.** The hash is computed server-side from IP+UA, kept at most 48 hours and then pruned; raw IP/User-Agent are never stored ([§5](#5-data-model), [§15](#15-frontend--landing-site-landing)).                                                                                                                                                                           |
 | `INCLUDE_DIGEST_ADDRESS`         |      – (default keeps the address)      | `lib/digest.ts`, `jobs/digest.ts`, `dev.ts`                                  | CAN-SPAM postal address line in the digest footer: unset or any value other than `'false'` keeps the controller's fiscal address; `'false'` omits it. Production leaves it unset.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 > **Stripe component/SDK versions (plan 023, 2026-09-10).** `@convex-dev/stripe` `^0.1.6` + `stripe` `^22.2.1`
@@ -6832,7 +6914,7 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 | `VITE_CONVEX_URL`                     |                       ✓                        | `main.tsx`                            | `.convex.cloud` URL for `ConvexReactClient` (data transport). **Left as the placeholder ⇒ every query/mutation/action fails — the app cannot reach the backend at all.**                               |
 | `VITE_CONVEX_SITE`                    |                       ✓                        | `lib/session.ts`, `lib/oauthStart.ts` | `.convex.site` base for the `/auth/linkedin` PKCE sign‑in redirect (`oauthStart.ts` appends `?vc=<challenge>`). **Left as the placeholder ⇒ sign-in redirects to a dead host and OAuth cannot start.** |
 | `VITE_LANDING_URL`                    |       – (default `http://localhost:3000`)       | `lib/session.ts`                      | Marketing/landing site URL; **sign‑out redirects here** (separate Next.js origin).                                                                                                                     |
-| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`                      | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                                 |
+| `VITE_COOKIE_DOMAIN`                  | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`                      | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev). Also DataFast's `domain` (dot stripped), which scopes its cookies.              |
 | `VITE_STRIPE_STARTER_PRICE_ID`        |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Monthly price id for Starter checkout. Must match `STRIPE_STARTER_PRICE_ID` in Convex.                                                                                                                 |
 | `VITE_STRIPE_GROWTH_PRICE_ID`         |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Monthly price id for Growth checkout. Must match `STRIPE_GROWTH_PRICE_ID` in Convex.                                                                                                                   |
 | `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                                                             |
@@ -6842,15 +6924,17 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 | `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`             | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`.                    |
 | `VITE_POSTHOG_KEY`                    |      – (prod only; unset ⇒ analytics off)       | `observability/analytics.ts`          | PostHog project key for product analytics. Unset ⇒ `initPostHog()` no‑ops. Capture is **also** gated on the user's `analytics` consent (opt‑out by default).                                           |
 | `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts`          | PostHog ingestion host. Defaults to EU Cloud; set `https://us.i.posthog.com` for US Cloud.                                                                                                             |
+| `VITE_DATAFAST_WEBSITE_ID`            |       – (prod only; unset ⇒ DataFast off)       | `observability/datafast.ts`           | Public DataFast website id, shared with the landing. Starts only once the member grants `analytics` consent (cookie mode); withdrawal or sign-out stops it and deletes its cookies.                    |
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
 
-| Variable                    |                    Required                     | Consumed in      | Purpose                                                                                                                                                                                                                                                                                                                                                                |
-|-----------------------------|:-----------------------------------------------:|------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `NEXT_PUBLIC_APP_URL`       |       – (default `http://localhost:5173`)       | `lib/links.ts`   | App base URL; every landing CTA targets `${NEXT_PUBLIC_APP_URL}/auth/start`, and the static `/auth.md` discovery document publishes that same URL at build time. The `.example` ships the canonical prod URL (`https://www.app.linkintothessi.com`).                                                                                                                   |
-| `NEXT_PUBLIC_SITE_URL`      |  – (default `https://www.linkintothessi.com`)   | `lib/site.ts`    | Canonical public origin of the landing site; drives absolute canonical/OpenGraph URLs, hreflang alternates, the sitemap, and JSON-LD. Set per preview deployment if needed.                                                                                                                                                                                            |
-| `NEXT_PUBLIC_CONVEX_SITE`   |           – (beacon no-ops if unset)            | `lib/metrics.ts` | `.convex.site` base for the cookieless funnel beacon (`POST /landing/event`, [§15](#15-frontend--landing-site-landing)). **Unset ⇒ `trackLandingEvent` is a no-op** — no funnel counts are recorded, and no error is surfaced. CTAs do **not** use it: they target `${NEXT_PUBLIC_APP_URL}/auth/start`, which bounces to Convex's OAuth start with the PKCE challenge. |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts` | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev).                                                                                                                                                                                                                                                 |
+| Variable                          |                    Required                     | Consumed in               | Purpose                                                                                                                                                                                                                                                                                                                                                                |
+|-----------------------------------|:-----------------------------------------------:|---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NEXT_PUBLIC_APP_URL`             |       – (default `http://localhost:5173`)       | `lib/links.ts`            | App base URL; every landing CTA targets `${NEXT_PUBLIC_APP_URL}/auth/start`, and the static `/auth.md` discovery document publishes that same URL at build time. The `.example` ships the canonical prod URL (`https://www.app.linkintothessi.com`).                                                                                                                   |
+| `NEXT_PUBLIC_SITE_URL`            |  – (default `https://www.linkintothessi.com`)   | `lib/site.ts`             | Canonical public origin of the landing site; drives absolute canonical/OpenGraph URLs, hreflang alternates, the sitemap, and JSON-LD. Set per preview deployment if needed.                                                                                                                                                                                            |
+| `NEXT_PUBLIC_CONVEX_SITE`         |           – (beacon no-ops if unset)            | `lib/metrics.ts`          | `.convex.site` base for the cookieless funnel beacon (`POST /landing/event`, [§15](#15-frontend--landing-site-landing)). **Unset ⇒ `trackLandingEvent` is a no-op** — no funnel counts are recorded, and no error is surfaced. CTAs do **not** use it: they target `${NEXT_PUBLIC_APP_URL}/auth/start`, which bounces to Convex's OAuth start with the PKCE challenge. |
+| `NEXT_PUBLIC_COOKIE_DOMAIN`       | – (unset in dev; `.linkintothessi.com` in prod) | `lib/cookies.ts`          | Cookie `Domain` attribute for cross-site `theme`/`lang` cookies. Unset = host-only cookie (no cross-site sync in dev). Also DataFast's `domain` (dot stripped).                                                                                                                                                                                                        |
+| `NEXT_PUBLIC_DATAFAST_WEBSITE_ID` |       – (prod only; unset ⇒ DataFast off)       | `components/DataFast.tsx` | Public DataFast website id, the same one the app uses. Cookieless: every visitor, no cookie, no banner. Inert under `next dev` and on localhost even when set, so it only matters in the production Cloudflare build ([§15](#15-frontend--landing-site-landing) Web analytics).                                                                                        |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
 > default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the
@@ -6881,7 +6965,8 @@ The codebase follows a consistent, defensible security model:
   concurrent logins in one browser don't overwrite each other. The start route **requires** `?vc=<challenge>` (a 400
   otherwise) and stores it on the same row, so the callback's login code is bound to the verifier that stays in the
   initiating browser. `/auth/linkedin` is rate‑limited at **60/hour per
-  client** (best‑effort `x-forwarded-for`) plus a **global 1800/hour backstop** (`checkOAuthStartBudget`; anonymous
+  client bucket** (`clientBucket` of the best‑effort `x-forwarded-for`, never the IP) plus a **global 1800/hour
+  backstop** (`checkOAuthStartBudget`; anonymous
   callers have no per‑user key) to bound `oauthStates` growth, and every OAuth redirect sets `Cache-Control: no-store`
   so the code‑bearing success 302 is never cacheable.
 - **Sessions:** random UUID, **15‑day sliding TTL** (`SESSION_TTL_MS` — see [§7](#7-authentication--identity)), stored
@@ -6937,8 +7022,9 @@ The codebase follows a consistent, defensible security model:
   auto‑scrape on identifier change). **Admins are exempt** from every rate limit. The billing surface is rate-limited
   too — checkout 10/h, featured-post purchase 10/h, portal 20/h, cancel-flow 10/h, plan-switch 10/h, downgrade undo
   20/h, resume 10/h — and the deletion cycle is bounded at request 3/day, cancel 10/h; these billing and deletion
-  limits are **not** admin-exempt. The anonymous OAuth start route is bounded separately — per client 60/h (best-effort
-  `x-forwarded-for`) plus a global 1800/h backstop ([§7](#7-authentication--identity)).
+  limits are **not** admin-exempt. The anonymous OAuth start route is bounded separately — per client bucket 60/h (a
+  bucket of the best-effort `x-forwarded-for`, never the IP) plus a global 1800/h backstop
+  ([§7](#7-authentication--identity)).
 - **Privilege escalation guarded:** `isAdmin` is **DB‑edit only** — excluded from every write path (`upsertUser`, etc.).
   Admin endpoints re‑check `assertAdmin` on the server‑resolved user, never on a client‑supplied id. `banUser` cannot
   self‑ban (always leaves ≥ 1 admin).
@@ -6956,11 +7042,13 @@ The codebase follows a consistent, defensible security model:
   at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the quoted **SHA-256 hashes** of the two pre-paint
   inline scripts — the OAuth `#code=…` capture and the theme guard (no `'unsafe-inline'`) — plus the third-party
   scripts it loads (Cloudflare's beacon and
-  `https://*.posthog.com`); `connect-src` allows Convex `.cloud`/`.site`, Stripe, `https://*.posthog.com`, and
-  `https://*.sentry.io`; `worker-src`/`child-src` allow `blob:` workers (Sentry Replay compresses off the main thread);
+  `https://*.posthog.com`); `connect-src` allows Convex `.cloud`/`.site`, Stripe, `https://*.posthog.com`,
+  `https://*.sentry.io`, and `https://datafa.st` (DataFast pageviews; the SDK is bundled, so no `script-src` entry);
+  `worker-src`/`child-src` allow `blob:` workers (Sentry Replay compresses off the main thread);
   `frame-src` allows `https://www.linkedin.com`. The **landing** sets its CSP via
   `next.config.js` `headers()` with `script-src 'self' 'unsafe-inline'` (it renders only static copy, so the pages stay
-  prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data). Both CSPs also allow
+  prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data); its `connect-src`
+  allows Convex `.cloud`/`.site` and `https://datafa.st` (cookieless DataFast pageviews). Both CSPs also allow
   Cloudflare's analytics beacon (`https://static.cloudflareinsights.com/beacon.min.js`) — the zone's Web Analytics
   automatic setup injects it into proxied HTML responses, and the beacon POSTs to same-origin `/cdn-cgi/rum` (covered by
   `connect-src 'self'`). In **dev only**
@@ -6970,8 +7058,10 @@ The codebase follows a consistent, defensible security model:
   `next/font/google` (served from `'self'`), so no external font/style host is whitelisted. Both retain
   `style-src 'unsafe-inline'` (Radix + inline styles), and both add
   `frame-ancestors 'none'`, `Strict-Transport-Security` (HSTS, 2y + preload), `X-Content-Type-Options: nosniff`,
-  `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`. The old `<meta>` CSP was removed from
-  `app/index.html` (a `<meta>` CSP cannot set `frame-ancestors`/HSTS — that needs HTTP headers).
+  `Referrer-Policy` (app `strict-origin-when-cross-origin`; landing `strict-origin`, so a same-origin page load never
+  carries the `?ref=` invite code in `document.referrer`, which DataFast reports), and `Permissions-Policy`. The old
+  `<meta>` CSP was removed from `app/index.html` (a `<meta>` CSP cannot set `frame-ancestors`/HSTS — that needs HTTP
+  headers).
 - **Preference cookies are `Secure` over HTTPS.** The cross-site `theme`/`lang` cookies
   ([§14B](#14b-cross-site-theme--language-persistence)) append `; Secure` whenever they are written over HTTPS
   (`location.protocol === 'https:'`), on top of `Path=/`, `SameSite=Lax` and the scoped `Domain`; dev over
@@ -6983,9 +7073,10 @@ The codebase follows a consistent, defensible security model:
 
 ### Observability & Error Monitoring
 
-Three layers: a zero‑dependency dev log tail, prod error monitoring (Sentry), and consent‑gated product analytics
-(PostHog). **All three are inert in dev** — the SDKs no‑op unless their prod keys are set — and the backend log redactor
-(`scrubError`) runs everywhere regardless. (This supersedes the earlier "B05 minimal" posture: the
+Three layers: a zero‑dependency dev log tail, prod error monitoring (Sentry), and analytics: consent‑gated PostHog,
+plus DataFast web analytics (consent‑gated in the app, cookieless on the landing). **All three are inert in dev** — the
+SDKs no‑op unless their prod keys are set — and the backend log redactor (`scrubError`) runs everywhere regardless.
+(This supersedes the earlier "B05 minimal" posture: the
 `@convex-dev/sentinel` component is still **not published to npm** (registry 404), so instead of that component we use
 the Sentry + PostHog SDKs directly, wired to respect the existing consent model.)
 
@@ -7015,12 +7106,19 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   same redaction applies to what Convex forwards.
 - **Product analytics — PostHog (`posthog-js`), consent‑gated:** `initPostHog()`
   (`app/src/lib/observability/analytics.ts`) is a **no‑op unless PROD and `VITE_POSTHOG_KEY` are set**, and initialises
-  **opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — **no session replay**).
+  **opted‑out** (`opt_out_capturing_by_default`, `disable_session_recording` — **no session replay**) and
+  **unpersisted** (`opt_out_persistence_by_default`: no `ph_*` cookie or storage while opted out, only PostHog's
+  `__ph_opt_in_out_<token>` yes/no flag). Autocapture runs with `mask_all_text` + `mask_all_element_attributes`, so a
+  click never carries a post snippet or a member name, and `mask_personal_data_properties` +
+  `custom_personal_data_properties: ['token', 'ref']` mask ad click ids, the `/unsubscribe?token=` digest token and
+  `?ref=` invite codes in `$current_url` (PostHog leaves `$referrer` unmasked). `analytics.test.ts` pins all three.
   `<AnalyticsConsentGate>` (mounted in the authenticated shell in `App.tsx`) reads the signed‑in user's live `analytics`
   consent (`privacy.consent.getConsents`) and calls `syncAnalyticsConsent(userId, consents)`: `shouldCaptureAnalytics`
   (pure, unit‑tested) opts capture **in + `identify(user._id)`** only when the user granted `analytics` consent, and
-  opts **out + `reset()`** on withdrawal or sign‑out. Users are identified by their **opaque Convex `_id` only** — no
-  name/email. EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`).
+  opts **out + `reset()`** on withdrawal. The gate unmounts on sign‑out before it could react, so `signOut()`
+  (`app/src/lib/session.ts`) calls `syncAnalyticsConsent(undefined, null)` itself before redirecting; that is what
+  clears the opt‑in and the `ph_*` cookie. Users are identified by their **opaque Convex `_id` only** — no name/email.
+  EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`).
 - **The complete event list.** Every product event goes through the one `captureEvent(name, props)` helper, so all of
   them inherit the consent gate above and every one is a **no‑op until `initPostHog` has run** (i.e. silent in dev and
   in prod without a key). Props are ids and enum‑ish strings only — never a name, email or post body. As of
@@ -7122,6 +7220,31 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   refusers PostHog never sees — and it works with no analytics key configured at all. The events above answer _why_ a
   step leaked; the panel answers _how many_.
 
+- **Web analytics — DataFast (`datafast` npm SDK, bundled), one DataFast website for both sites:**
+    - **App — cookie mode, consent-gated:** `app/src/lib/observability/datafast.ts`.
+        - `syncAnalyticsConsent` (above) drives DataFast next to PostHog, and runs its DataFast half even without a
+          PostHog key.
+        - Consents still loading (`undefined`) ⇒ DataFast is left alone, so a page load never deletes the cookies and
+          mints a new visitor before the query resolves.
+        - Granted ⇒ `startDataFast(user._id)`. It is a **no-op unless PROD and `VITE_DATAFAST_WEBSITE_ID` are set**,
+          and idempotent (module-level promise). It runs `initDataFast({ websiteId, domain, maxQueueSize: 1 })` with
+          auto-capture off, sends one pageview for the current path, then calls `identify(user._id)` with no traits.
+        - Withdrawn, or no consent record ⇒ `stopDataFast()`. It deletes the five `datafast_*` cookies at once (the
+          SDK's `deleteCookie`). Once a pending start settles, it calls `shutdown()` and deletes them again, because
+          an init in flight may have just written them. It never calls `optOut()`, whose persistent `datafast_ignore`
+          flag would block a later re-grant.
+        - `AnalyticsConsentGate` calls `trackDataFastPageview(pathname)` on every route change (a no-op until
+          started), and `signOut()` (`lib/session.ts`) calls `stopDataFast()` before the redirect.
+        - Every href is `location.origin + pathname`, so `/auth/success#session=…` and `/unsubscribe?token=…` never
+          leave the browser.
+        - The `domain` is `VITE_COOKIE_DOMAIN` without its leading dot (`linkintothessi.com`), so the cookies live on
+          `.linkintothessi.com`.
+    - **Landing — cookieless, every visitor:** `landing/components/DataFast.tsx`; see
+      [§15](#15-frontend--landing-site-landing) Web analytics.
+    - **Both:** silent in dev, on localhost (the SDK returns a no-op client there) and until the website ids are set.
+      Under an ad blocker, the requests to `https://datafa.st` fail quietly and the numbers undercount. There are no
+      custom goals, no Stripe metadata and no backend code; the launch steps are in the checklist below.
+
 - **Backend `console.error` redaction (`scrubError`):** the backend catch seams route their logged context through
   `convex/lib/scrubError.ts`, a pure, dependency‑free helper (no Convex function, no codegen). It **default‑denies**
   any key name containing `token`/`access`/`refresh`/`secret`/`authorization`/`email`/`apikey` (case‑insensitive
@@ -7150,15 +7273,20 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   increment, and records nothing else about the caller — no cookie, no client-side identifier, no raw IP or
   user-agent. When a secret is configured (`LANDING_METRICS_SECRET` falling back to `UNSUBSCRIBE_SECRET`; an empty
   value counts as unset) it also derives a
-  daily-rotated HMAC-SHA256 of IP+User-Agent for per-event dedup (`landingVisitors`), retained at most ~2 days and
-  then pruned ([§13](#13-scheduled-jobs-crons)); the raw pair never becomes a mutation argument or a log line. Being
+  daily-rotated HMAC-SHA256 of IP+User-Agent for per-event dedup (`landingVisitors`), retained at most 48 hours and
+  then pruned ([§13](#13-scheduled-jobs-crons)). The user-agent never leaves the HTTP action, the raw IP reaches only
+  the rate-limit mutation (which stores just its bucket), and neither becomes a log line. Being
   anonymous, it is bounded by `lib/rateLimit.enforceLandingEventBudget` (6000/hour global, plus a best-effort
-  240/hour per `x-forwarded-for`), so it cannot grow `landingMetrics` unboundedly.
+  240/hour per bucket of the `x-forwarded-for` value, which stores no IP), so it cannot grow `landingMetrics`
+  unboundedly.
 
 ```mermaid
 flowchart TD
     subgraph Dev["Dev — native, no sub-processor"]
         D1["pnpm watch:errors / :prod"] --> D2["npx convex logs — live failure + console.error tail"]
+    end
+    subgraph Landing["landing/ — prod build only, every visitor, cookieless"]
+        L1["DataFast component, on each pathname"] --> L2["trackScreen: href minus ref and fragment"]
     end
     subgraph App["app/ — prod only, SDKs inert without keys"]
         A1["window.onerror / unhandledrejection"] --> S1["Sentry.init (beforeSend: scrubError, no PII)"]
@@ -7166,6 +7294,11 @@ flowchart TD
         A3["AnalyticsConsentGate reads analytics consent"] --> P1{"analytics consent?"}
         P1 -- granted --> P2["PostHog opt_in + identify(user._id)"]
         P1 -- withdrawn/none --> P3["PostHog opt_out + reset"]
+        P1 -- granted --> F1["startDataFast: cookie mode, pageview, identify(user._id)"]
+        P1 -- withdrawn/none --> F2["stopDataFast: shutdown + delete datafast_* cookies"]
+        A4["signOut()"] --> F2
+        A4 --> P3
+        A5["route change"] --> F3["trackDataFastPageview: origin + pathname, once started"]
     end
     subgraph Backend["convex/ — server"]
         B1["console.error catch seams"] --> B2["scrubError redact + 500-char cap"]
@@ -7175,6 +7308,9 @@ flowchart TD
     S1 --> SENTRY["Sentry (US or EU)"]
     B4 --> SENTRY
     P2 --> POSTHOG["PostHog (EU Cloud default)"]
+    L2 --> DATAFAST["DataFast (datafa.st)"]
+    F1 --> DATAFAST
+    F3 --> DATAFAST
 ```
 
 **Enabling Sentry on the backend (runbook).** In the **Convex Dashboard**, select the deployment (prod first) →
@@ -7186,10 +7322,33 @@ exceptions to Sentry. Repeat for the dev deployment if you also want dev backend
 1. Create the Sentry project (s) and the PostHog project (prefer EU region/cloud); execute both DPAs.
 2. Set `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` in the app's **Cloudflare** build env; redeploy.
 3. Wire the backend Sentry DSN via the Exception Reporting runbook above.
-4. In PostHog: enable IP discard/anonymization; confirm session replay is off.
-5. **Compliance:** bump `POLICY_VERSION` (`convex/lib/policy.ts`) to re‑prompt users (adding a sub‑processor is a
-   material change), and update the public **Privacy Policy** (§2/§4/§10) and **Cookie & Storage Policy** (en/pt/es) to
-   disclose Sentry (necessary/security) + PostHog (consent‑gated analytics). See `docs/compliance/SUBPROCESSORS.md`.
+4. In PostHog: enable IP discard/anonymization; confirm session replay is off. In Sentry: turn on **Prevent Storing of
+   IP Addresses** (Project Settings → Security & Privacy), since Session Replay bypasses `beforeSend`.
+5. **Compliance — done in the repo on 2026‑09‑23:** `POLICY_VERSION` is `2026-09-23`, and the Privacy Policy, the
+   Cookie & Storage Policy and the consent copy (en/pt/es) disclose Sentry, PostHog, DataFast, Cloudflare Web Analytics
+   and the first-party funnel counter ([§15](#15-frontend--landing-site-landing), "Privacy and cookie policies:
+   analytics and monitoring disclosures"). What remains is the deploy order: **ship Convex and the app back to back.**
+   The app compiles `POLICY_VERSION` in and `acknowledgePolicy` stamps the backend's copy, so while the two differ,
+   `PolicyUpdateScreen` comes back after every acknowledgement (for every member if the app ships first, for new
+   sign-ups if Convex does). Ship the landing in the same window so `/privacy` shows the version members accept.
+   Then purge the rate-limit rows written before the per-client key became a bucket (they hold raw visitor IPs):
+   `npx convex run --component rateLimiter lib:clearAll --prod`. It deletes every row, which only restarts each
+   limit's current window (hourly and daily ones alike).
+6. **DataFast:**
+    1. Sign DataFast's DPA at `datafa.st/dpa`, taking the **cookie** variant (the app sets cookies).
+    2. In DataFast's Site Settings, confirm the website domain is `linkintothessi.com` and keep the cookieless/privacy
+       toggle **off**: the landing flags its own events cookieless, and "off" lets the app's `identify` persist.
+    3. **Done in the repo on 2026‑09‑23**, with item 5: the Privacy Policy, the Cookie & Storage Policy, the
+       `CookieNotice` text and the `/cookies` meta description (en/pt/es) disclose DataFast, under the same
+       `POLICY_VERSION` bump.
+    4. Set `NEXT_PUBLIC_DATAFAST_WEBSITE_ID` on the landing Worker and `VITE_DATAFAST_WEBSITE_ID` on the app Worker
+       (`dfid_8IrKZ1PONPjcOv8mSg4o2`; Cloudflare build env, production only), then redeploy both.
+    5. In DataFast's realtime view, check that a landing visit and a consenting member's app pageviews (under their
+       `_id`) arrive. If landing events are missing (cookieless events refused on a cookie-mode website), give the
+       landing its own DataFast website and swap its env var; no code change.
+    6. Connecting Stripe (Site Settings → Revenue) is a separate decision. It gives DataFast read access to every paying
+       member's Stripe payment and customer records, emails included, whatever their in-app consent, so extend
+       `SUBPROCESSORS.md` and the Privacy Policy first.
 
 > **Open security‑relevant gaps / hardening backlog:** the LinkedIn token‑refresh flow (`linkedin/tokenRefresh`,
 > §19) is dormant at the current Standard‑tier OAuth (no `refresh_token` is issued), so tokens still
@@ -7205,14 +7364,14 @@ exceptions to Sentry. Repeat for the dev deployment if you also want dev backend
 The `docs/compliance/` folder contains six **DRAFT** documents (pending legal review) that accompany the technical
 controls described in [§13B](#13b-privacy--compliance):
 
-| File                                                    | Contents                                                                                                  |
-|---------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| [`DATA-INVENTORY.md`](compliance/DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — GDPR Art. 30                                                     |
-| [`SUBPROCESSORS.md`](compliance/SUBPROCESSORS.md)       | Sub-processor list (Convex, Stripe, LinkedIn, Resend, OpenRouter, Sentry, PostHog; Apify hard-gate noted) |
-| [`RETENTION-POLICY.md`](compliance/RETENTION-POLICY.md) | Retention windows per data category and automated-enforcement references                                  |
-| [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md)     | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA)                                        |
-| [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook (72-hour notification)                                     |
-| [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37)                                          |
+| File                                                    | Contents                                                                                                 |
+|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| [`DATA-INVENTORY.md`](compliance/DATA-INVENTORY.md)     | Record of Processing Activities (ROPA) — GDPR Art. 30                                                    |
+| [`SUBPROCESSORS.md`](compliance/SUBPROCESSORS.md)       | Sub-processor list (Convex, Stripe, LinkedIn, Cloudflare, Resend, OpenRouter, Sentry, PostHog, DataFast) |
+| [`RETENTION-POLICY.md`](compliance/RETENTION-POLICY.md) | Retention windows per data category and automated-enforcement references                                 |
+| [`GAP-ASSESSMENT.md`](compliance/GAP-ASSESSMENT.md)     | Multi-framework gap assessment (GDPR / UK GDPR / LGPD / CCPA-CPRA)                                       |
+| [`BREACH-RUNBOOK.md`](compliance/BREACH-RUNBOOK.md)     | Personal data breach incident-response runbook (72-hour notification)                                    |
+| [`DPA-TEMPLATE.md`](compliance/DPA-TEMPLATE.md)         | Data Processing Agreement template (GDPR Art. 28 / LGPD Art. 37)                                         |
 
 **R24 digest compliance.** The 3-day activity digest is processed under **legitimate interest** with a self-service
 right to object (Settings → Emails, or the one-click unsubscribe carried by every digest) and is disclosed in the
@@ -7452,7 +7611,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                                                                                                                                                                                                                                                                                              | [§11B Search & Command Palette](#11b-search--command-palette)                                                                                                                                                                                                                                                                            |
 | Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [§12](#12-admin--moderation)                                                                                                                                                                                                                                                                                                             |
 | Survival panel (`lib/survival.ts`, `jobs/survivalSnapshot.ts`, `schema.ts` `survivalSnapshots`, `crons.ts`, `admin.survivalMetrics`, `app/src/components/SurvivalTab.tsx`)                                                                                                                                                                                                                                                                                                                                                          | [§12](#12-admin--moderation), [§13](#13-scheduled-jobs-crons), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                |
-| Landing funnel metrics (`convex/landingMetrics.ts`, `schema.ts` `landingMetrics` + `landingVisitors` + prune cron, `lib/landingVisitorKey.ts`, `http.ts` `/landing/event`, `lib/rateLimit.ts` landing budget, `landing/lib/metrics.ts`, `TrialLink` placements + `Pricing.tsx` observer, `app/src/components/LandingTab.tsx`, AdminPage Landing tab)                                                                                                                                                                                | [§5](#5-data-model), [§6](#6-backend-architecture--conventions), [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app), [§13](#13-scheduled-jobs-crons), [§15](#15-frontend--landing-site-landing), [§16](#16-environment-variables), [§17](#17-security-posture)                                                     |
+| Landing funnel metrics (`convex/landingMetrics.ts`, `schema.ts` `landingMetrics` + `landingVisitors` + prune cron, `lib/landingVisitorKey.ts`, `http.ts` `/landing/event`, `lib/rateLimit.ts` landing budget, `landing/lib/metrics.ts`, `TrialLink` placements + `Pricing.tsx` observer, `app/src/components/LandingTab.tsx`, AdminPage Landing tab)                                                                                                                                                                                | [§5](#5-data-model), [§6](#6-backend-architecture--conventions), [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app), [§13](#13-scheduled-jobs-crons), [§15](#15-frontend--landing-site-landing), [§16](#16-environment-variables), [§17](#17-security-posture), `docs/compliance/` (ROPA Activity 18)              |
 | Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                                                                                                                                                                                                                                                                                                    | [§12A](#12a-feedback)                                                                                                                                                                                                                                                                                                                    |
 | MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                                                                                                                                                                                                                                                                                               | [§12B](#12b-message-of-the-day-motd)                                                                                                                                                                                                                                                                                                     |
 | App UI (`app/src/**`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                                               |
@@ -7462,6 +7621,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Landing SEO/robots/sitemap/structured data (`landing/lib/site.ts`, `landing/lib/seo.ts`, `landing/lib/aiFiles.ts`, `landing/lib/discovery.ts`, `landing/next.config.js` `Link` header, `landing/app/robots.txt/route.ts`, `landing/app/sitemap.ts`, `landing/app/[lang]/linkedin-ssi/*`, `landing/app/{llms.txt,llms-full.txt,pricing.md,auth.md,openapi.json}/route.ts`, `landing/app/.well-known/api-catalog/route.ts`, `landing/components/{StructuredData,Positioning}.tsx`, `landing/i18n/dictionaries/*`, `landing/public/*`) | [§15](#15-frontend--landing-site-landing) "SEO & AI discoverability"                                                                                                                                                                                                                                                                     |
 | Any `process.env` / `import.meta.env` usage                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | [§16 Environment Variables](#16-environment-variables)                                                                                                                                                                                                                                                                                   |
 | Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                                                                                                                                                                                                                                                                                                                                    | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                 |
+| Consent-gated analytics — PostHog + DataFast (`app/src/lib/observability/analytics.ts`, `app/src/lib/observability/datafast.ts`, `app/src/components/AnalyticsConsentGate.tsx`, `app/src/lib/session.ts` `signOut`, `landing/components/DataFast.tsx`, both CSPs' `connect-src`)                                                                                                                                                                                                                                                    | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app), [§15](#15-frontend--landing-site-landing), [§16](#16-environment-variables), `docs/compliance/` (SUBPROCESSORS, DATA-INVENTORY Activity 17, GAP-ASSESSMENT)                                                                    |
 | Tooling/tests/deploy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | [§18](#18-configuration-tooling--testing)                                                                                                                                                                                                                                                                                                |
 | Resolving a stale item / removing dead code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | [§19](#19-known-discrepancies-dead-code--roadmap)                                                                                                                                                                                                                                                                                        |
 
@@ -7469,6 +7629,43 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑23 (analytics and monitoring disclosures). **The public policies now describe every tool that
+runs, and the code now does what they say.** `POLICY_VERSION` `2026-09-08` → `2026-09-23` (the constant plus the three
+`/privacy` literals). `/privacy`, `/cookies`, the `CookieNotice` and the app's consent copy (en/pt/es) disclose Sentry
+with Session Replay, PostHog, DataFast, Cloudflare Web Analytics and the first-party landing funnel counter, and
+`/cookies` is now a full browser-storage inventory (§15, "Privacy and cookie policies: analytics and monitoring
+disclosures"). Six code fixes make the copy true. PostHog no longer writes `ph_*` storage before consent (
+`opt_out_persistence_by_default`), masks autocaptured element text and attributes, masks the `token` and `ref` URL
+parameters, and resets on `signOut()` (§17). The anonymous rate limits (OAuth start, landing beacon) key on
+`clientBucket()`, one of 4096 FNV-1a buckets, instead of the raw IP the component kept until a manual reset (§5, §7,
+§11). The `prune landing visitors` cutoff is now today instead of yesterday, so no visitor hash outlives 48 hours (§12,
+§13, §15, §16). Launch steps left are external: DPAs, the PostHog and Sentry IP settings (the §17 checklist now names
+Sentry's "Prevent Storing of IP Addresses"), production env vars, Convex and the app shipped back to back, and one
+`npx convex run --component rateLimiter lib:clearAll --prod` after deploy for the rows keyed by raw IPs. Compliance:
+ROPA
+Activity 18 (landing funnel counter) with its mapping row, disclosure dates on Activities 14 and 17 and an
+anonymous-rate-limit note on Activity 11; SUBPROCESSORS (Convex, Cloudflare Web Analytics, Sentry Replay, PostHog
+masking, rewritten human actions); RETENTION-POLICY (rate-limit row, funnel counter, browser-storage lifetimes);
+GAP-ASSESSMENT (matrix rows, item 12); README (DPA list). Gates: convex 762/762, integration 111/111, app 663/663,
+landing 75/75, typecheck and lint clean. Sections updated: §5, §7, §11, §12, §13, §15, §16, §17, §21._
+
+_Last updated: 2026‑09‑23 (DataFast web analytics). **DataFast now measures the landing for every visitor, cookieless,
+and the app for members who granted analytics consent.** Client SDK only (`datafast@3.0.18`), one DataFast website (
+`linkintothessi.com`) for both sites, and no backend code: no Stripe metadata, no REST API, no new Convex env var. The
+landing's `components/DataFast.tsx` sends one cookieless pageview per pathname, with the `ref` invite code and the
+fragment stripped (`landingPageviewHref`). In the app, `syncAnalyticsConsent` now drives DataFast next to PostHog.
+Granted ⇒ `startDataFast` (cookie mode, a first pageview, then `identify(user._id)` with no traits). Withdrawn or no
+record ⇒ `stopDataFast` (`shutdown()` plus deleting the five `datafast_*` cookies; never `optOut()`, whose persistent
+flag would block a later re-grant). Still loading ⇒ untouched, so a page load never mints a new visitor.
+`AnalyticsConsentGate` sends a pageview per route change (`origin + pathname`, never the query or fragment), and
+`signOut()` stops DataFast before the redirect. Both CSPs allow `https://datafa.st` in `connect-src`. The landing's
+`Referrer-Policy` is now `strict-origin` (was `strict-origin-when-cross-origin`): the SDK reports `document.referrer`
+with each page load's first pageview, and a same-origin load from `/en?ref=…` would otherwise hand DataFast the invite
+code. Everything stays inert until `VITE_DATAFAST_WEBSITE_ID` and `NEXT_PUBLIC_DATAFAST_WEBSITE_ID` are set in the
+production Cloudflare builds. The DPA, the public policy copy, the `CookieNotice` text and the `POLICY_VERSION` bump are
+launch steps (§17 launch checklist). Compliance: a SUBPROCESSORS row, ROPA Activity 17, and the GAP-ASSESSMENT ROPA and
+cookies rows. Sections updated: §14, §15, §16, §17, §21._
 
 _Last updated: 2026‑09‑22 (landing copy rewrite). **Every visible landing string was rewritten in plain language, and
 the superlatives are gone.** The owner asked for copy that is easier to read, free of AI-sounding prose, and friendlier

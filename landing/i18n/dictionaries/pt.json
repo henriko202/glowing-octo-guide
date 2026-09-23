@@ -37,7 +37,7 @@
     },
     "cookies": {
       "title": "Link Into The SSI · Política de Cookies e Armazenamento",
-      "description": "O Link Into The SSI usa apenas o armazenamento essencial do navegador para login e suas preferências. Não usamos cookies de rastreamento nem de publicidade."
+      "description": "Cada cookie e item de armazenamento do navegador que o Link Into The SSI usa, para que serve cada um e como ativar ou desativar as análises do aplicativo."
     }
   },
   "nav": {
@@ -299,10 +299,10 @@
     "easterEgg": ""
   },
   "cookieNotice": {
-    "text": "Usamos só o armazenamento essencial do navegador para login e suas preferências. Não usamos cookies de rastreamento.",
+    "text": "Usamos o armazenamento do navegador para lembrar suas preferências e contar visitas. Não usamos cookies de publicidade nem de rastreamento.",
     "learnMore": "Saiba mais",
     "dismiss": "Entendi",
-    "label": "Aviso de armazenamento essencial"
+    "label": "Aviso de armazenamento"
   },
   "themeToggle": {
     "system": "Tema do sistema",

@@ -229,8 +229,9 @@ async function handleUnsubscribe(ctx: ActionCtx, token: string): Promise<Respons
 // ─── Landing funnel beacon ───────────────────────────────────────────────────
 // Cookieless, first-party: the landing POSTs `{"event":"<name>"}` as text/plain (a CORS-safelisted
 // content type, so no preflight) with keepalive. The only visitor-derived value stored is a
-// daily-rotated HMAC of IP+UA (`landingVisitors`, pruned after ~2 days); no cookie and no
-// client-side identifier ever exists, and raw IP/UA never leaves this handler.
+// daily-rotated HMAC of IP+UA (`landingVisitors`, deleted within 48h); no cookie and no client-side
+// identifier ever exists. The UA never leaves this handler, and the raw IP only reaches the
+// rate-limit mutation, which stores just its bucket.
 http.route({
   path: '/landing/event',
   method: 'POST',

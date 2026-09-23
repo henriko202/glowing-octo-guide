@@ -43,7 +43,7 @@ const PLACEMENT_LABEL: Record<LandingPlacement, string> = {
 }
 
 // Admin-only, English-only like the other admin tabs. Uniques are daily-rotated, cookieless
-// aggregates: no cookie and no client-side identifier, and the server-side hash exists ~2 days at
+// aggregates: no cookie and no client-side identifier, and the server-side hash exists 48h at
 // most, so the window figure is the sum of daily uniques rather than distinct people.
 export default function LandingTab({ sessionToken, isAdmin }: Props) {
   const [days, setDays] = useState<Days>(28)
@@ -169,8 +169,8 @@ export default function LandingTab({ sessionToken, isAdmin }: Props) {
       </Table>
 
       <p className="text-muted-foreground mt-3 text-xs">
-        Window: since {metrics.sinceDay} UTC (last {days} days). Uniques reset each UTC day — cookieless, with no stored
-        identifier — so the window figure sums daily uniques.
+        Window: since {metrics.sinceDay} UTC (last {days} days). Uniques reset each UTC day — cookieless, with no
+        cross-day identifier — so the window figure sums daily uniques.
       </p>
     </div>
   )

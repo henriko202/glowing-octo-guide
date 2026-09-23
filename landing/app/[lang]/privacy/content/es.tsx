@@ -9,7 +9,7 @@ export default function Es({ lang }: { lang: Locale }) {
           <strong className="text-cream">Última actualización:</strong> Septiembre 2026
         </p>
         {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts — see the note in en.tsx. */}
-        <p>Policy version: 2026-09-08</p>
+        <p>Policy version: 2026-09-23</p>
 
         {/* 1. Quienes somos */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Quiénes Somos</h2>
@@ -73,6 +73,32 @@ export default function Es({ lang }: { lang: Locale }) {
           rendimiento.
         </p>
         <p>
+          <strong className="text-cream">Informes de errores.</strong> Cuando algo falla en la aplicación, Sentry recibe
+          un informe con el mensaje de error, la página, su navegador y su sistema operativo. Eliminamos las cookies,
+          los encabezados de la solicitud y los datos de la cuenta antes de enviar el informe. Sentry también graba la
+          pantalla en el 10% de las sesiones de la aplicación y en toda sesión con un error. Estas grabaciones ocultan
+          todo el texto y bloquean las imágenes, así que muestran el diseño de la página y sus clics, no lo que usted
+          lee o escribe.
+        </p>
+        <p>
+          <strong className="text-cream">Estadísticas de visitas al sitio web.</strong> En nuestro sitio web, DataFast
+          cuenta las visitas sin cookies. Recibe la página que usted ve (sin ningún código de invitación), el sitio
+          desde el que llegó, su navegador, su dispositivo y su país. Para distinguir a los visitantes usa un código
+          derivado de su dirección IP y su navegador que cambia cada día, por lo que no puede relacionar sus visitas de
+          días distintos. También contamos, en nuestros propios servidores, cuántos visitantes ven nuestros precios y
+          hacen clic en nuestros botones de registro. Para contar a cada visitante una vez al día, guardamos un código
+          derivado de su dirección IP y su navegador que cambia cada día y se elimina en un plazo de dos días; después
+          solo quedan los totales diarios. Cloudflare Web Analytics mide la carga de las páginas en el sitio web y en la
+          aplicación, sin cookies.
+        </p>
+        <p>
+          <strong className="text-cream">Análisis de uso de la aplicación (solo con su consentimiento).</strong> Si
+          activa los análisis en <strong className="text-cream">Configuración &rarr; Privacidad y datos</strong>,
+          PostHog y DataFast registran las páginas que visita en la aplicación, y PostHog también registra qué funciones
+          usa. Ambos vinculan estos datos a su ID interno de miembro. No les enviamos su nombre, correo electrónico,
+          publicaciones ni datos de pago.
+        </p>
+        <p>
           <strong className="text-cream">Sin raspado de datos.</strong> No realizamos raspado de datos de LinkedIn ni de
           ningún otro sitio web de terceros. Recibimos datos de su propio uso de nuestra plataforma y del inicio de
           sesión con LinkedIn OpenID Connect, que devuelve su ID de miembro, nombre, foto de perfil y correo
@@ -92,17 +118,19 @@ export default function Es({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Intereses legítimos (Art. 6(1)(f) GDPR).</strong> Optimización de la calidad
           del feed, prevención de abuso, garantía de seguridad de la plataforma y mantenimiento de estadísticas
-          agregadas y no identificables sobre el rendimiento del servicio. También nos basamos en intereses legítimos
-          para enviar un resumen de actividad cada 3 días por correo electrónico, y puede oponerse en cualquier momento
-          desde el enlace de cancelación del propio correo o en Configuración &rarr; Correos. Los miembros conectados
-          también pueden ver el ranking del sitio de quienes más publican e interactúan, y puede optar por no aparecer
-          en él en cualquier momento en Configuración &rarr; Correos.
+          agregadas y no identificables sobre el rendimiento del servicio. Esto incluye el monitoreo de errores en la
+          aplicación (Sentry) y las estadísticas de visitas sin cookies de nuestro sitio web (DataFast y Cloudflare Web
+          Analytics). También nos basamos en intereses legítimos para enviar un resumen de actividad cada 3 días por
+          correo electrónico, y puede oponerse en cualquier momento desde el enlace de cancelación del propio correo o
+          en Configuración &rarr; Correos. Los miembros conectados también pueden ver el ranking del sitio de quienes
+          más publican e interactúan, y puede optar por no aparecer en él en cualquier momento en Configuración &rarr;
+          Correos.
         </p>
         <p>
           <strong className="text-cream">Consentimiento (Art. 6(1)(a) GDPR).</strong> Las comunicaciones de marketing y
-          los análisis opcionales se procesan únicamente con su consentimiento explícito. Ambos están{' '}
-          <strong className="text-cream">desactivados por defecto</strong> y pueden modificarse en cualquier momento en{' '}
-          <strong className="text-cream">Configuración &rarr; Privacidad &amp; Datos</strong>.
+          los análisis opcionales de la aplicación (PostHog y DataFast) se procesan únicamente con su consentimiento
+          explícito. Ambos están <strong className="text-cream">desactivados por defecto</strong> y pueden modificarse
+          en cualquier momento en <strong className="text-cream">Configuración &rarr; Privacidad y datos</strong>.
         </p>
         <p>
           <strong className="text-cream">Obligación legal (Art. 6(1)(c) GDPR).</strong> Conservación de registros de
@@ -125,7 +153,8 @@ export default function Es({ lang }: { lang: Locale }) {
           </li>
           <li>
             <strong className="text-cream">Cloudflare</strong> &mdash; alojamiento del sitio de presentación y de la
-            aplicación, además de DNS, CDN y protección contra DDoS.
+            aplicación, además de DNS, CDN, protección contra DDoS y estadísticas de visitas sin cookies (Cloudflare Web
+            Analytics).
           </li>
           <li>
             <strong className="text-cream">Resend</strong> &mdash; entrega de correos electrónicos transaccionales.
@@ -135,6 +164,18 @@ export default function Es({ lang }: { lang: Locale }) {
             reacción y borradores de comentarios a partir del contenido de sus publicaciones públicas, incluidas las
             imágenes. OpenRouter enruta únicamente a proveedores de inferencia con retención cero de datos (los prompts
             no se almacenan ni se utilizan para entrenamiento).
+          </li>
+          <li>
+            <strong className="text-cream">Sentry</strong> &mdash; monitoreo de errores de la aplicación, incluidas
+            grabaciones de pantalla con todo el texto oculto.
+          </li>
+          <li>
+            <strong className="text-cream">PostHog</strong> &mdash; análisis de producto en la aplicación, solo si usted
+            activa los análisis. PostHog almacena estos datos en la UE.
+          </li>
+          <li>
+            <strong className="text-cream">DataFast</strong> &mdash; estadísticas de visitas sin cookies en nuestro
+            sitio web y, solo si usted activa los análisis, las páginas vistas en la aplicación.
           </li>
         </ul>
         <p>
@@ -160,10 +201,12 @@ export default function Es({ lang }: { lang: Locale }) {
         {/* 5. Transferencias internacionales */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">5. Transferencias Internacionales</h2>
         <p>
-          Nuestros subencargados están ubicados principalmente en los Estados Unidos. Cuando los datos se transfieren
-          fuera del Espacio Económico Europeo o del Reino Unido, utilizamos las Cláusulas Contractuales Estándar (SCCs)
-          de la Comisión Europea como mecanismo de transferencia para cada procesador. Una copia de las salvaguardas de
-          transferencia aplicables está disponible previa solicitud contactando{' '}
+          Nuestros subencargados están ubicados principalmente en los Estados Unidos. DataFast es una empresa de
+          Singapur que opera principalmente en servidores fuera de la UE, incluidos los Estados Unidos. PostHog almacena
+          los datos de análisis de la aplicación en la UE. Cuando los datos se transfieren fuera del Espacio Económico
+          Europeo o del Reino Unido, utilizamos las Cláusulas Contractuales Estándar (SCCs) de la Comisión Europea como
+          mecanismo de transferencia para cada procesador. Una copia de las salvaguardas de transferencia aplicables
+          está disponible previa solicitud contactando{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
@@ -236,7 +279,7 @@ export default function Es({ lang }: { lang: Locale }) {
         </ul>
         <p>
           <strong className="text-cream">Cómo ejercer sus derechos.</strong> La forma más rápida es a través de{' '}
-          <strong className="text-cream">Configuración &rarr; Privacidad &amp; Datos</strong>, donde puede exportar sus
+          <strong className="text-cream">Configuración &rarr; Privacidad y datos</strong>, donde puede exportar sus
           datos, eliminar su cuenta y gestionar los consentimientos. También puede contactarnos en{' '}
           <a
             href="mailto:contact@linkintothessi.com"
@@ -254,7 +297,8 @@ export default function Es({ lang }: { lang: Locale }) {
         <p>
           <strong className="text-cream">Categorías recopiladas.</strong> Identificadores (nombre, correo electrónico,
           ID de LinkedIn, dirección IP); información profesional o relacionada con el empleo (título, sector); actividad
-          en Internet o en red (registros de sesión); información comercial (estado de suscripción vía Stripe).
+          en Internet o en red (registros de sesión, informes de errores, páginas vistas en nuestro sitio web y, si
+          activa los análisis, cómo usa la aplicación); información comercial (estado de suscripción vía Stripe).
         </p>
         <p>
           <strong className="text-cream">Sin venta ni compartición.</strong> No vendemos información personal. No
@@ -273,8 +317,8 @@ export default function Es({ lang }: { lang: Locale }) {
         </p>
         <p>
           Para enviar una solicitud de privacidad de California, use{' '}
-          <strong className="text-cream">Configuración &rarr; Privacidad &amp; Datos</strong> o envíe un correo
-          electrónico a{' '}
+          <strong className="text-cream">Configuración &rarr; Privacidad y datos</strong> o envíe un correo electrónico
+          a{' '}
           <a
             href="mailto:contact@linkintothessi.com"
             className="text-gold-text hover:underline"
@@ -305,9 +349,13 @@ export default function Es({ lang }: { lang: Locale }) {
         {/* 10. Cookies y almacenamiento */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">10. Cookies &amp; Almacenamiento</h2>
         <p>
-          Utilizamos únicamente almacenamiento de navegador <strong className="text-cream">esencial</strong> (un token
-          de sesión para mantenerle conectado y sus preferencias). No utilizamos cookies de publicidad, rastreo entre
-          sitios ni análisis no esenciales. Para más detalles consulte nuestra{' '}
+          Usamos el almacenamiento del navegador para mantenerle conectado y recordar sus elecciones, como el idioma y
+          el tema. Nuestro sitio web cuenta las visitas con DataFast, que usa el almacenamiento del navegador en lugar
+          de cookies, y la aplicación guarda un registro temporal de Sentry en el almacenamiento de sesión para
+          monitorear errores. En la aplicación, DataFast y PostHog solo establecen cookies de análisis si usted activa
+          los análisis en <strong className="text-cream">Configuración &rarr; Privacidad y datos</strong>, y las
+          eliminamos cuando los desactiva o cierra sesión. No utilizamos cookies de publicidad ni de rastreo entre
+          sitios. La lista completa está en nuestra{' '}
           <a
             href={`/${lang}/cookies`}
             className="text-gold-text hover:underline"

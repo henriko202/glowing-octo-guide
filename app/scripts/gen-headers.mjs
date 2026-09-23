@@ -9,6 +9,7 @@
 // injects its beacon into HTML responses; PostHog loads asset/config scripts and posts
 // events; Sentry posts errors, traces, and replay chunks (Session Replay compresses in a
 // blob WebWorker). The beacon posts to same-origin /cdn-cgi/rum, covered by connect-src 'self'.
+// DataFast posts pageviews to datafa.st; its SDK is bundled, so it needs no script-src entry.
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -42,7 +43,7 @@ export function buildHeadersContent(scriptHashes) {
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' https: data:`,
     `frame-src https://www.linkedin.com`,
-    `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://*.sentry.io`,
+    `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://*.sentry.io https://datafa.st`,
     `worker-src 'self' blob:`,
     `child-src 'self' blob:`,
     `object-src 'none'`,
