@@ -55,7 +55,10 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
           lang={lang}
         />
         <Proof dict={dict.proof} />
-        <SSIExplainer dict={dict.ssiExplainer} />
+        <SSIExplainer
+          dict={dict.ssiExplainer}
+          lang={lang}
+        />
         <FAQ dict={dict.faq} />
         <FinalCTA
           dict={dict.finalCta}

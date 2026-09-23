@@ -20,7 +20,7 @@ export default function StructuredData({ dict, lang }: { dict: Dictionary; lang:
       '@id': ORG_ID,
       name: SITE_NAME,
       alternateName: ALT_NAMES,
-      slogan: dict.positioning.headline,
+      slogan: `${dict.hero.headlineLine1} ${dict.hero.headlineLine2}`,
       url: SITE_URL,
       logo: `${SITE_URL}${LOGO_PATH}`,
       email: CONTACT_EMAIL,

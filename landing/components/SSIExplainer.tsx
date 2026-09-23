@@ -1,8 +1,10 @@
+import Link from 'next/link'
 import type { Dictionary } from '@/i18n/getDictionary'
+import type { Locale } from '@/i18n/config'
 
 const SSI_SOURCE_URL = 'https://business.linkedin.com/sales-solutions/social-selling'
 
-export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'] }) {
+export default function SSIExplainer({ dict, lang }: { dict: Dictionary['ssiExplainer']; lang: Locale }) {
   return (
     <section
       id="what-is-ssi"
@@ -52,6 +54,14 @@ export default function SSIExplainer({ dict }: { dict: Dictionary['ssiExplainer'
           >
             {dict.sourceLabel}
           </a>
+        </p>
+        <p className="mt-4 text-center">
+          <Link
+            href={`/${lang}/linkedin-ssi`}
+            className="inline-flex min-h-11 items-center text-sm font-medium text-gold-text underline underline-offset-4 hover:text-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+          >
+            {dict.guideLink}
+          </Link>
         </p>
       </div>
     </section>

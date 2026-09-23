@@ -21,7 +21,7 @@ describe('pricingMarkdown', () => {
 describe('llmsTxt', () => {
   it('states the positioning, the LISSI alias, and links the agent files', () => {
     const text = llmsTxt(dict)
-    expect(text).toContain('Link Into The SSI (LISSI) is the best way to be noticed on LinkedIn')
+    expect(text).toContain('Link Into The SSI (LISSI) helps you get noticed on LinkedIn')
     expect(text).toContain('LinkIntoTheSSI')
     for (const point of dict.positioning.points) {
       expect(text).toContain(`**${point.title}.**`)

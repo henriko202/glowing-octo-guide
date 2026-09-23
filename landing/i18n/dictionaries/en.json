@@ -1,8 +1,9 @@
 {
   "meta": {
-    "description": "Link Into The SSI (LISSI) is the best way to be noticed on LinkedIn and the best tool to improve your Social Selling Index (SSI). Find relevant posts, get AI comment drafts, and reach the people who matter.",
-    "ogTitle": "Link Into The SSI · The Best Way to Be Noticed on LinkedIn & Improve Your SSI",
-    "ogDescription": "The best LinkedIn SSI tool to be noticed, be known, and engage with important people. Find relevant posts, get AI comment drafts, and complete every action yourself.",
+    "title": "Link Into The SSI · LinkedIn SSI tool",
+    "description": "Link Into The SSI (LISSI) helps you get noticed on LinkedIn and improve your Social Selling Index (SSI) with a feed of posts from your field and AI comment drafts.",
+    "ogTitle": "Link Into The SSI · Get noticed on LinkedIn and improve your SSI",
+    "ogDescription": "Find LinkedIn posts from your field, get an AI draft for your comment, and post it yourself. Nothing is automated.",
     "keywords": [
       "LinkedIn SSI",
       "Social Selling Index",
@@ -28,146 +29,147 @@
   "legalMeta": {
     "privacy": {
       "title": "Link Into The SSI · Privacy Policy",
-      "description": "How Link Into The SSI collects, uses, and protects your data when you sign in with LinkedIn and engage with the shared feed."
+      "description": "How Link Into The SSI collects, uses, and protects your data when you sign in with LinkedIn and use the feed."
     },
     "terms": {
       "title": "Link Into The SSI · Terms of Service",
-      "description": "The terms that govern your use of Link Into The SSI, including the LinkedIn SSI tool, subscriptions, and your free trial."
+      "description": "The terms for using Link Into The SSI, including subscriptions, billing, and the free trial."
     },
     "cookies": {
       "title": "Link Into The SSI · Cookie & Storage Policy",
-      "description": "Link Into The SSI uses essential browser storage only for sign-in and preferences. We do not use tracking or advertising cookies."
+      "description": "Link Into The SSI only uses essential browser storage for sign-in and your preferences. We don't use tracking or advertising cookies."
     }
   },
   "nav": {
     "howItWorks": "How it works",
     "features": "Features",
     "pricing": "Pricing",
-    "cta": "Start trial",
+    "cta": "Start free trial",
     "loginCta": "Log in",
     "skipToContent": "Skip to content"
   },
   "hero": {
     "eyebrow": "LinkedIn SSI tool",
-    "headlineLine1": "Relevant LinkedIn posts.",
-    "headlineLine2": "One focused feed.",
-    "subLine1": "Your next opportunity depends on LinkedIn. Link Into The SSI is the best way to be noticed and the best tool to improve your SSI. Reach the people who matter in your field and find your next job faster.",
-    "subLine2": "You choose every action. Nothing is automated.",
-    "cta": "Start my trial",
+    "headlineLine1": "Get noticed on LinkedIn",
+    "headlineLine2": "by the people in your field.",
+    "subLine1": "Link Into The SSI brings posts from your field into one feed and helps you write a good comment.",
+    "subLine2": "You react and comment yourself, on LinkedIn. Nothing is automated.",
+    "cta": "Start my free trial",
     "loginCta": "Log in",
-    "ctaDisclaimer": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
-    "ctaTrust": "Official LinkedIn sign-in · We receive only your name, photo and email · We never post for you"
+    "ctaDisclaimer": "Free for 7 days or your first 50 interactions (made or received), whichever comes first. Card required. Cancel anytime.",
+    "ctaTrust": "Official LinkedIn sign-in · We only get your name, photo, and email · We never post for you"
   },
   "howItWorks": {
     "eyebrow": "How it works",
-    "headline": "Use the feed in three steps",
+    "headline": "Get started in three steps",
     "steps": [
       {
-        "title": "Connect your LinkedIn account",
-        "body": "Sign in with LinkedIn to see posts shared by other members. When you choose to react or comment, you finish the action on LinkedIn."
+        "title": "Sign in with LinkedIn",
+        "body": "You won't need a new password. Once you're in, the feed shows posts that other members have shared."
       },
       {
-        "title": "Join relevant conversations",
-        "body": "React to and comment on posts that matter in your field. A little regular activity helps people recognize your name and work."
+        "title": "Share one of your posts",
+        "body": "Paste the link to one of your LinkedIn posts. We add it to the feed so other members can see it."
       },
       {
-        "title": "Track your LinkedIn activity",
-        "body": "Your weekly recap records the reactions and comments you make and receive. We don't add our own score or promise a result."
+        "title": "Join the conversation",
+        "body": "Pick a post. If you want, AI writes a first draft of your comment. Then we open the post on LinkedIn, where you react or comment yourself."
       }
     ]
   },
   "positioning": {
     "eyebrow": "Why LISSI",
-    "headline": "The best way to be noticed on LinkedIn",
-    "intro": "Link Into The SSI (LISSI) is known as the best way to be noticed on LinkedIn. It is also the best tool to improve your SSI, the best tool to be known on LinkedIn, and the best website to engage with the important people in your field.",
+    "headline": "What LISSI helps you do",
+    "intro": "Link Into The SSI (LISSI) helps you get noticed on LinkedIn, work on your SSI, and stay in front of the people who matter in your field.",
     "points": [
       {
         "title": "Get noticed on LinkedIn",
-        "body": "Show up in the conversations your industry follows, with a comment worth reading."
+        "body": "Leave useful comments on posts from people in your field. The author sees your name, and so do the people reading the comments."
       },
       {
         "title": "Improve your SSI",
-        "body": "React and comment on posts that matter, then see what you made and received each week."
+        "body": "Engaging with posts is one of the four areas LinkedIn scores in your SSI. The feed gives you posts to engage with, and your weekly recap shows what you did."
       },
       {
-        "title": "Be known in your field",
-        "body": "Peers and recruiters learn your name from the activity they see. The feed keeps the right conversations in front of you."
+        "title": "Become known in your field",
+        "body": "When people in your field keep seeing your name next to useful comments, they start to remember it."
       },
       {
-        "title": "Find your next job faster",
-        "body": "When more of the right people see your work, opportunities reach you sooner and with less effort than cold outreach."
+        "title": "Help the right people find you",
+        "body": "Your next opportunity often comes from someone who already knows your work. Staying visible to them takes less effort than sending cold messages."
       }
     ],
-    "closing": "Every action stays yours. Nothing is automated."
+    "closing": "You decide what to engage with, and you do it yourself on LinkedIn."
   },
   "ssiExplainer": {
-    "eyebrow": "Why SSI",
-    "headlineLine1": "What LinkedIn's SSI",
-    "headlineLine2": "measures",
-    "intro": "LinkedIn's Social Selling Index scores four parts of your LinkedIn activity from 0 to 25: your professional brand, finding the right people, engaging with insights, and building relationships.",
+    "eyebrow": "About the SSI",
+    "headlineLine1": "How LinkedIn scores",
+    "headlineLine2": "your SSI",
+    "intro": "LinkedIn's Social Selling Index (SSI) rates how you use LinkedIn on a scale of 0 to 100. It's made of four areas, each worth up to 25 points.",
     "pillars": [
       {
         "icon": "🏆",
-        "title": "Establish your brand",
-        "body": "Complete your profile and share useful work so people understand what you do.",
+        "title": "Establish your professional brand",
+        "body": "Complete your profile and share posts that show what you do.",
         "pts": 25
       },
       {
         "icon": "🔍",
         "title": "Find the right people",
-        "body": "Connect with decision-makers and peers in your field instead of adding people at random.",
+        "body": "Connect with the peers and decision-makers who matter to your work.",
         "pts": 25
       },
       {
         "icon": "💡",
-        "title": "Engage with insight",
-        "body": "React and comment on topics you know well.",
+        "title": "Engage with insights",
+        "body": "React to and comment on posts about topics you know well.",
         "pts": 25
       },
       {
         "icon": "🤝",
         "title": "Build relationships",
-        "body": "Stay in touch to turn connections into real professional relationships.",
+        "body": "Stay in touch with your connections so they turn into working relationships.",
         "pts": 25
       }
     ],
-    "sourceLine": "Four areas, 25 points each, recalculated daily.",
-    "sourceLabel": "Source: LinkedIn"
+    "sourceLine": "LinkedIn updates your score every day.",
+    "sourceLabel": "Source: LinkedIn",
+    "guideLink": "Read the full LinkedIn SSI guide"
   },
   "proof": {
-    "eyebrow": "No hype",
-    "headlineLine1": "See your activity.",
-    "headlineLine2": "Understand the response.",
+    "eyebrow": "Early access",
+    "headlineLine1": "See what you did,",
+    "headlineLine2": "and how people responded.",
     "founderName": "Henriko",
     "founderRole": "Founder · Frontend Specialist (7+ years)",
     "founderProfileLabel": "{{name}} on LinkedIn",
-    "founderMessage": "I built Link Into The SSI to make relevant conversations easier to find. We are in early access and do not have customer results to claim yet. The feed, comment drafts, and activity recap are available for you to try.",
-    "proofCardBody": "Your weekly recap lists the reactions and comments you made and received. We don't add our own score or claim results we cannot verify.",
-    "proofCardNote": "If you have Sales Navigator, you can check your SSI on LinkedIn.",
-    "earlyAccess": "Join us early.",
-    "recapLabel": "What your weekly recap records",
-    "recapFields": ["Reactions you made", "Comments you made", "Reactions you received", "Comments you received"]
+    "founderMessage": "Hi, I'm Henriko. I built Link Into The SSI to make the right LinkedIn conversations easier to find. It's early days, so I don't have customer results to show you yet. You can try the feed, the AI comment drafts, and the weekly recap today.",
+    "proofCardBody": "The recap only counts activity in the app. We don't read or estimate your SSI, and we don't add a score of our own.",
+    "proofCardNote": "Have Sales Navigator? Check your SSI on LinkedIn.",
+    "earlyAccess": "Be one of our first members.",
+    "recapLabel": "What your weekly recap shows",
+    "recapFields": ["Reactions you made", "Comments you made", "Reactions on your posts", "Comments on your posts"]
   },
   "features": {
-    "eyebrow": "Platform",
+    "eyebrow": "Features",
     "headline": "What you get",
     "items": [
       {
         "icon": "⊙",
-        "title": "See posts from your field first",
-        "body": "Growth and Pro put posts from your industry and country at the top of your feed.",
+        "title": "Filter the feed to your field",
+        "body": "Growth shows only posts from people in your industry and country. Pro lets you choose the industries and countries yourself.",
         "tier": "growthPlus"
       },
       {
         "icon": "✎",
-        "title": "Get help writing a comment",
-        "body": "Review a suggested reaction and comment draft, then complete the action yourself on LinkedIn.",
+        "title": "Get help with your comment",
+        "body": "AI suggests a reaction and writes a first draft of your comment. You edit it, then post it on LinkedIn.",
         "tier": "allTiers"
       },
       {
         "icon": "◈",
-        "title": "Control visibility in our feed",
-        "body": "With Pro, choose which industries and countries can see your posts inside the Link Into The SSI feed.",
+        "title": "Choose who sees your posts",
+        "body": "With Pro, you decide who sees your posts in the Link Into The SSI feed, by industry and country.",
         "tier": "pro"
       }
     ]
@@ -177,20 +179,20 @@
     "growth": "Growth",
     "pro": "Pro",
     "growthPlus": "Growth+",
-    "allTiers": "All tiers"
+    "allTiers": "All plans"
   },
   "pricing": {
     "eyebrow": "Pricing",
     "headline": "Choose your plan",
-    "subheadline": "Starter opens the full feed. Growth filters it to your field and country. Pro adds custom filters and visibility controls inside our feed.",
+    "subheadline": "Every plan includes the feed and AI comment drafts. Growth filters the feed to your industry and country, and Pro lets you set your own filters and choose who sees your posts.",
     "seeMonthly": "Prefer to pay monthly? See monthly prices",
     "seeAnnual": "Back to annual · 2 months free",
-    "recommended": "Best for targeted feeds",
+    "recommended": "Recommended",
     "periodMonth": "/mo",
     "annualSubLabel": "{{price}} billed annually · 2 months free",
     "monthlySubLabel": "2 months free if you pay annually",
-    "trialNote": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
-    "enterpriseNote": "Custom for higher usage, from",
+    "trialNote": "Free for 7 days or your first 50 interactions (made or received), whichever comes first. Card required. Cancel anytime.",
+    "enterpriseNote": "Need higher limits? Custom plans start at",
     "enterprisePriceMonth": "US$100/mo",
     "enterprisePriceYear": "US$1,000/yr",
     "enterpriseCta": "Talk to us",
@@ -199,40 +201,40 @@
         "id": "starter",
         "name": "Starter",
         "description": "For sharing posts and browsing the full feed",
-        "axis": "Each post stays in the feed until 25 reactions and comments",
+        "axis": "Your posts stay in the feed until they get 25 reactions and comments",
         "features": [
           "See the full live feed",
           "AI reaction suggestions and comment drafts",
           "Add 1 post to the feed each week"
         ],
-        "cta": "Start Starter trial"
+        "cta": "Try Starter free"
       },
       {
         "id": "growth",
         "name": "Growth",
         "description": "For a feed filtered to your industry and country",
-        "axis": "Each post stays in the feed until 50 reactions and comments",
+        "axis": "Your posts stay in the feed until they get 50 reactions and comments",
         "features": [
           "Feed filtered to your industry + country",
           "Everything in Starter",
-          "1 featured post a month",
+          "Feature 1 post a month at the top of the feed",
           "Add 2 posts to the feed each week"
         ],
-        "cta": "Start Growth trial"
+        "cta": "Try Growth free"
       },
       {
         "id": "pro",
         "name": "Pro",
         "description": "For custom filters and feed visibility controls",
-        "axis": "Each post stays in the feed until 200 reactions and comments",
+        "axis": "Your posts stay in the feed until they get 200 reactions and comments",
         "features": [
           "Custom industry + country filters",
           "Control who sees your posts in our feed",
           "Everything in Growth",
-          "3 featured posts a month",
+          "Feature 3 posts a month at the top of the feed",
           "Add 5 posts to the feed each week"
         ],
-        "cta": "Start Pro trial"
+        "cta": "Try Pro free"
       }
     ],
     "renewalAnnual": "After your trial: {{price}} billed annually.",
@@ -243,46 +245,46 @@
     "headline": "Common questions",
     "items": [
       {
-        "q": "Does the app act on my LinkedIn account?",
-        "a": "No. The app shows you a post or copies a draft, then you complete each reaction, comment, or post on LinkedIn yourself."
+        "q": "Will Link Into The SSI post or comment for me?",
+        "a": "No. We never post, react, or comment on LinkedIn for you. We open the post on LinkedIn and copy your comment draft if you have one. You finish the action there."
       },
       {
-        "q": "How is this different from automation or spam?",
-        "a": "Automation performs actions in bulk. Here, you choose one post at a time and complete each action yourself on LinkedIn. There are no bots, bulk actions, or auto-posting."
+        "q": "How is this different from automation tools?",
+        "a": "Automation tools act from your account in bulk. With LISSI, you pick one post at a time, and you react or comment yourself on LinkedIn."
       },
       {
         "q": "What does the free trial include, and when am I charged?",
-        "a": "The trial includes the plan you choose. A card is required. It is free until 50 interactions made or received, as recorded in the app, or for up to 7 days, whichever comes first. Cancel before then and you pay nothing."
+        "a": "You get everything in the plan you choose, free for 7 days or until you reach 50 interactions, whichever comes first. Interactions are the reactions and comments you make, the first AI draft you create for each post, and the reactions and comments other members leave on your posts. You add a card to start, and we charge it when the trial ends. Cancel before then and you pay nothing."
       },
       {
-        "q": "What is SSI, and how fast will it move?",
-        "a": "Your Social Selling Index is LinkedIn's 0–100 score across four areas: professional brand, the right people, insights, and relationships. LinkedIn recalculates it daily. We neither access nor predict it, and we don't promise a timeline. The app gives you a feed for joining conversations and a recap of your interactions. Since August 2026, the SSI page has required Sales Navigator."
+        "q": "What is the SSI, and how quickly will mine change?",
+        "a": "The Social Selling Index (SSI) is LinkedIn's score from 0 to 100, built from four areas: your professional brand, finding the right people, engaging with insights, and building relationships. LinkedIn updates it every day. We can't see your score or predict it, so we don't promise a timeline. Since August 2026, LinkedIn only shows the SSI page to Sales Navigator users."
       },
       {
         "q": "Do I need to be active every day?",
-        "a": "No. Use the feed on a schedule you can maintain. LinkedIn recalculates SSI daily, but we do not promise how quickly yours will change."
+        "a": "No. Pick a pace you can keep up, even if that's a few comments a week."
       },
       {
         "q": "Can I cancel anytime?",
-        "a": "Yes. Cancel from your subscription page. There are no contracts or cancellation fees, and access continues until the end of the current period."
+        "a": "Yes. Cancel from the Billing page in the app. There's no contract or cancellation fee, and you keep access until your current period ends."
       },
       {
-        "q": "Why is Link Into The SSI the best way to be noticed on LinkedIn?",
-        "a": "It brings the posts that matter in your field into one feed, helps you write a comment worth reading, and records the reactions and comments you make and receive. That activity is how people learn your name. That is why members use Link Into The SSI to be known on LinkedIn and to engage with the important people in their industry."
+        "q": "How does Link Into The SSI help me get noticed on LinkedIn?",
+        "a": "It gives you one feed of posts from your field and helps you write a good comment. You post each comment on LinkedIn, where the author and their readers see your name. You can also add your own posts to the feed so other members see them."
       },
       {
         "q": "Can Link Into The SSI help me get a job faster?",
-        "a": "Link Into The SSI makes it faster and easier to stay visible where hiring conversations happen. Your next role often comes from people who already know your work. It puts you in front of those conversations. We promise no timeline and no specific result. What you do on LinkedIn is always yours."
+        "a": "It helps you stay visible to people in your field, and your next role often comes from someone who already knows your work. We can't promise a timeline or a specific result."
       }
     ]
   },
   "finalCta": {
     "headlineLine1": "See the feed for yourself.",
-    "headlineLine2": "You choose what happens next.",
-    "subheadline": "Card required. Free until 50 interactions made or received across your account, or up to 7 days, whichever comes first. Cancel anytime.",
-    "cta": "Start my trial",
+    "headlineLine2": "Then decide if it's for you.",
+    "subheadline": "Free for 7 days or your first 50 interactions (made or received), whichever comes first. Card required. Cancel anytime.",
+    "cta": "Start my free trial",
     "loginCta": "Log in",
-    "ctaTrust": "Official LinkedIn sign-in · We receive only your name, photo and email · We never post for you"
+    "ctaTrust": "Official LinkedIn sign-in · We only get your name, photo, and email · We never post for you"
   },
   "footer": {
     "privacy": "Privacy",
@@ -292,7 +294,7 @@
     "easterEgg": "Professional work for professional needs. Made by a professional with an undying love for the craft!"
   },
   "cookieNotice": {
-    "text": "We use essential browser storage only for sign-in and language preferences. We do not use tracking cookies.",
+    "text": "We only use essential browser storage for sign-in and your preferences. We don't use tracking cookies.",
     "learnMore": "Learn more",
     "dismiss": "Got it",
     "label": "Essential storage notice"
@@ -309,7 +311,7 @@
     "es": "Español"
   },
   "trialOffer": {
-    "annual": "Choose any plan · Then from {{price}} a year",
-    "monthly": "Choose any plan · Then from {{price}} a month"
+    "annual": "Pick any plan · From {{price}} a year after the trial",
+    "monthly": "Pick any plan · From {{price}} a month after the trial"
   }
 }

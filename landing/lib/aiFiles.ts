@@ -20,9 +20,9 @@ const WHAT_IT_DOES = [
 ]
 
 const IN_SHORT =
-  '> Link Into The SSI (LISSI) is the best way to be noticed on LinkedIn. Find relevant posts in one focused feed, ' +
-  'get AI-drafted comment suggestions, improve your Social Selling Index (SSI), and engage with the important ' +
-  'people in your field. You complete every reaction, comment, and post on LinkedIn yourself. Nothing is automated.'
+  '> Link Into The SSI (LISSI) helps you get noticed on LinkedIn and improve your Social Selling Index (SSI). ' +
+  'It puts posts from your field in one feed and drafts comments with AI. You make every reaction, comment, and ' +
+  'post on LinkedIn yourself. Nothing is automated.'
 
 const ALIASES =
   'Link Into The SSI (also written "LISSI" or "LinkIntoTheSSI") is for professionals who want a more relevant ' +
@@ -91,7 +91,7 @@ function keyPages() {
     `[Why Link Into The SSI](${SITE_URL}/en#why-lissi)`,
     `[Pricing](${SITE_URL}/en#pricing)`,
     `[How it works](${SITE_URL}/en#how-it-works)`,
-    `[What LinkedIn's SSI measures](${SITE_URL}/en#what-is-ssi)`,
+    `[What is LinkedIn SSI (guide)](${SITE_URL}/en/linkedin-ssi)`,
     `[FAQ](${SITE_URL}/en#faq)`,
     `[Pricing file (pricing.md)](${SITE_URL}/pricing.md)`
   ]

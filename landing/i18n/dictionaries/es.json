@@ -1,8 +1,9 @@
 {
   "meta": {
-    "description": "Link Into The SSI (LISSI) es la mejor manera de que te noten en LinkedIn y la mejor herramienta para mejorar tu Social Selling Index (SSI). Encuentra publicaciones relevantes, recibe borradores de comentarios con IA y llega a las personas que importan.",
-    "ogTitle": "Link Into The SSI · La mejor manera de que te noten en LinkedIn y mejorar tu SSI",
-    "ogDescription": "La mejor herramienta de SSI de LinkedIn para que te noten, te conozcan y conectes con personas importantes. Encuentra publicaciones relevantes, recibe borradores de comentarios con IA y completa cada acción tú mismo.",
+    "title": "Link Into The SSI · Herramienta de SSI de LinkedIn",
+    "description": "Link Into The SSI (LISSI) te ayuda a que te noten en LinkedIn y a mejorar tu Social Selling Index (SSI) con un feed de publicaciones de tu sector y borradores de comentarios con IA.",
+    "ogTitle": "Link Into The SSI · Haz que te noten en LinkedIn y mejora tu SSI",
+    "ogDescription": "Encuentra publicaciones de tu sector en LinkedIn, recibe un borrador con IA para tu comentario y publícalo tú mismo. Nada está automatizado.",
     "keywords": [
       "SSI de LinkedIn",
       "Social Selling Index",
@@ -28,151 +29,152 @@
   "legalMeta": {
     "privacy": {
       "title": "Link Into The SSI · Política de Privacidad",
-      "description": "Cómo Link Into The SSI recopila, usa y protege tus datos al iniciar sesión con LinkedIn e interactuar con el feed compartido."
+      "description": "Cómo Link Into The SSI recopila, usa y protege tus datos cuando inicias sesión con LinkedIn y usas el feed."
     },
     "terms": {
       "title": "Link Into The SSI · Términos del Servicio",
-      "description": "Los términos que rigen tu uso de Link Into The SSI, incluida la herramienta de SSI de LinkedIn, las suscripciones y la prueba gratuita."
+      "description": "Los términos para usar Link Into The SSI, incluidas las suscripciones, la facturación y la prueba gratuita."
     },
     "cookies": {
       "title": "Link Into The SSI · Política de Cookies y Almacenamiento",
-      "description": "Link Into The SSI usa solo almacenamiento esencial del navegador para el inicio de sesión y las preferencias. No usamos cookies de rastreo ni publicidad."
+      "description": "Link Into The SSI solo usa el almacenamiento esencial del navegador para el inicio de sesión y tus preferencias. No usamos cookies de rastreo ni de publicidad."
     }
   },
   "nav": {
     "howItWorks": "Cómo funciona",
     "features": "Funciones",
     "pricing": "Planes",
-    "cta": "Empezar prueba",
+    "cta": "Empezar prueba gratis",
     "loginCta": "Iniciar sesión",
     "skipToContent": "Saltar al contenido"
   },
   "hero": {
     "eyebrow": "Herramienta de SSI de LinkedIn",
-    "headlineLine1": "Publicaciones relevantes de LinkedIn.",
-    "headlineLine2": "En un solo feed.",
-    "subLine1": "Tu próxima oportunidad depende de LinkedIn. Link Into The SSI es la mejor manera de que te noten y la mejor herramienta para mejorar tu SSI. Llega a las personas que importan en tu sector y encuentra tu próximo empleo más rápido.",
-    "subLine2": "Tú decides cada acción. Nada está automatizado.",
-    "cta": "Empezar mi prueba",
+    "headlineLine1": "Haz que te noten en LinkedIn",
+    "headlineLine2": "las personas de tu sector.",
+    "subLine1": "Link Into The SSI reúne publicaciones de tu sector en un solo feed y te ayuda a escribir un buen comentario.",
+    "subLine2": "Reaccionas y comentas tú mismo, en LinkedIn. Nada está automatizado.",
+    "cta": "Empezar mi prueba gratis",
     "loginCta": "Iniciar sesión",
-    "ctaDisclaimer": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
-    "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos en tu nombre"
+    "ctaDisclaimer": "Gratis por 7 días o hasta tus primeras 50 interacciones (hechas o recibidas), lo que ocurra primero. Se requiere tarjeta. Cancela cuando quieras.",
+    "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos por ti"
   },
   "howItWorks": {
     "eyebrow": "Cómo funciona",
-    "headline": "Usa el feed en tres pasos",
+    "headline": "Empieza en tres pasos",
     "steps": [
       {
-        "title": "Conecta tu cuenta de LinkedIn",
-        "body": "Inicia sesión con LinkedIn para ver publicaciones de otros miembros. Cuando reacciones o comentes, completarás la acción en LinkedIn."
+        "title": "Inicia sesión con LinkedIn",
+        "body": "No necesitas crear otra contraseña. Una vez dentro, el feed te muestra las publicaciones que compartieron otros miembros."
       },
       {
-        "title": "Participa en conversaciones relevantes",
-        "body": "Reacciona y comenta en publicaciones importantes para tu sector. Un poco de actividad frecuente ayuda a que las personas reconozcan tu nombre y trabajo."
+        "title": "Comparte una publicación tuya",
+        "body": "Pega el enlace de una de tus publicaciones de LinkedIn. La agregamos al feed para que otros miembros la vean."
       },
       {
-        "title": "Consulta tu actividad en LinkedIn",
-        "body": "Tu resumen semanal registra las reacciones y los comentarios que realizas y recibes. No creamos una puntuación ni prometemos resultados."
+        "title": "Participa en la conversación",
+        "body": "Elige una publicación. Si quieres, la IA escribe un primer borrador de tu comentario. Luego abrimos la publicación en LinkedIn, donde reaccionas o comentas tú mismo."
       }
     ]
   },
   "positioning": {
     "eyebrow": "Por qué LISSI",
-    "headline": "La mejor manera de que te noten en LinkedIn",
-    "intro": "Link Into The SSI (LISSI) es conocido como la mejor manera de que te noten en LinkedIn. También es la mejor herramienta para mejorar tu SSI, la mejor herramienta para que te conozcan en LinkedIn y el mejor sitio para conectar con las personas importantes de tu sector.",
+    "headline": "Lo que LISSI te ayuda a hacer",
+    "intro": "Link Into The SSI (LISSI) te ayuda a que te noten en LinkedIn, a mejorar tu SSI y a seguir en el radar de las personas que importan en tu sector.",
     "points": [
       {
         "title": "Que te noten en LinkedIn",
-        "body": "Aparece en las conversaciones que tu sector sigue, con un comentario que vale la pena leer."
+        "body": "Deja comentarios útiles en publicaciones de personas de tu sector. El autor ve tu nombre, y también quienes leen los comentarios."
       },
       {
         "title": "Mejora tu SSI",
-        "body": "Reacciona y comenta en las publicaciones que importan, y revisa lo que hiciste y recibiste cada semana."
+        "body": "Interactuar con publicaciones es una de las cuatro áreas que LinkedIn evalúa en el SSI. El feed te da publicaciones para interactuar, y el resumen semanal muestra lo que hiciste."
       },
       {
         "title": "Que te conozcan en tu sector",
-        "body": "Colegas y reclutadores conocen tu nombre por la actividad que ven. El feed mantiene las conversaciones correctas frente a ti."
+        "body": "Cuando las personas de tu sector ven tu nombre una y otra vez junto a comentarios útiles, empiezan a recordarte."
       },
       {
-        "title": "Encuentra tu próximo empleo más rápido",
-        "body": "Cuando más personas indicadas ven tu trabajo, las oportunidades te llegan antes y con menos esfuerzo que escribir en frío."
+        "title": "Ayuda a las personas indicadas a encontrarte",
+        "body": "Tu próxima oportunidad suele venir de alguien que ya conoce tu trabajo. Seguir visible para esas personas cuesta menos esfuerzo que escribirles a desconocidos."
       }
     ],
-    "closing": "Cada acción es tuya. Nada está automatizado."
+    "closing": "Tú eliges con qué interactuar, y lo haces tú mismo en LinkedIn."
   },
   "ssiExplainer": {
-    "eyebrow": "Por qué el SSI",
-    "headlineLine1": "Qué mide",
-    "headlineLine2": "el SSI de LinkedIn",
-    "intro": "El Social Selling Index de LinkedIn puntúa cuatro partes de tu actividad de 0 a 25: marca profesional, búsqueda de las personas indicadas, interacción con información y construcción de relaciones.",
+    "eyebrow": "Sobre el SSI",
+    "headlineLine1": "Cómo LinkedIn calcula",
+    "headlineLine2": "tu SSI",
+    "intro": "El Social Selling Index (SSI) de LinkedIn mide cómo usas LinkedIn en una escala de 0 a 100. Suma cuatro áreas, y cada una vale hasta 25 puntos.",
     "pillars": [
       {
         "icon": "🏆",
-        "title": "Establece tu marca",
-        "body": "Completa tu perfil y comparte trabajo útil para que las personas entiendan lo que haces.",
+        "title": "Establece tu marca profesional",
+        "body": "Completa tu perfil y publica contenido que muestre lo que haces.",
         "pts": 25
       },
       {
         "icon": "🔍",
-        "title": "Encuentra a las personas correctas",
-        "body": "Conecta con quienes toman decisiones y con colegas de tu sector, en lugar de agregar contactos al azar.",
+        "title": "Encuentra a las personas indicadas",
+        "body": "Conecta con colegas y personas que toman decisiones en tu sector.",
         "pts": 25
       },
       {
         "icon": "💡",
-        "title": "Interactúa con relevancia",
-        "body": "Reacciona y comenta sobre temas que conoces bien.",
+        "title": "Interactúa con contenido relevante",
+        "body": "Reacciona y comenta publicaciones sobre temas que dominas.",
         "pts": 25
       },
       {
         "icon": "🤝",
         "title": "Construye relaciones",
-        "body": "Mantén el contacto para convertir conexiones en relaciones profesionales reales.",
+        "body": "Mantén el contacto con tus conexiones para que se conviertan en relaciones de trabajo.",
         "pts": 25
       }
     ],
-    "sourceLine": "Cuatro áreas, 25 puntos cada una, recalculadas a diario.",
-    "sourceLabel": "Fuente: LinkedIn"
+    "sourceLine": "LinkedIn actualiza tu puntuación todos los días.",
+    "sourceLabel": "Fuente: LinkedIn",
+    "guideLink": "Lee la guía completa del SSI de LinkedIn"
   },
   "proof": {
-    "eyebrow": "Sin exageraciones",
-    "headlineLine1": "Revisa tu actividad.",
-    "headlineLine2": "Entiende la respuesta.",
+    "eyebrow": "Acceso anticipado",
+    "headlineLine1": "Mira lo que hiciste",
+    "headlineLine2": "y cómo respondieron las personas.",
     "founderName": "Henriko",
     "founderRole": "Fundador · Especialista en Frontend (7+ años)",
     "founderProfileLabel": "{{name}} en LinkedIn",
-    "founderMessage": "Creé Link Into The SSI para facilitar la búsqueda de conversaciones relevantes. Estamos en acceso anticipado y todavía no tenemos resultados de clientes que mostrar. El feed, los borradores de comentarios y el resumen de actividad ya están disponibles para que los pruebes.",
-    "proofCardBody": "Tu resumen semanal muestra las reacciones y los comentarios que hiciste y recibiste. No añadimos una puntuación propia ni afirmamos resultados que no podemos verificar.",
-    "proofCardNote": "Si tienes Sales Navigator, puedes consultar tu SSI en LinkedIn.",
-    "earlyAccess": "Acompáñanos desde el comienzo.",
-    "recapLabel": "Lo que registra tu resumen semanal",
+    "founderMessage": "Hola, soy Henriko. Creé Link Into The SSI para que sea más fácil encontrar las conversaciones indicadas en LinkedIn. Todavía estamos empezando, así que aún no tengo resultados de clientes para mostrarte. Ya puedes probar el feed, los borradores de comentarios con IA y el resumen semanal.",
+    "proofCardBody": "El resumen solo cuenta la actividad dentro de la app. No leemos ni estimamos tu SSI, y no agregamos una puntuación propia.",
+    "proofCardNote": "¿Tienes Sales Navigator? Consulta tu SSI en LinkedIn.",
+    "earlyAccess": "Sé uno de nuestros primeros miembros.",
+    "recapLabel": "Lo que muestra tu resumen semanal",
     "recapFields": [
       "Reacciones que hiciste",
       "Comentarios que hiciste",
-      "Reacciones que recibiste",
-      "Comentarios que recibiste"
+      "Reacciones en tus publicaciones",
+      "Comentarios en tus publicaciones"
     ]
   },
   "features": {
-    "eyebrow": "Plataforma",
+    "eyebrow": "Funciones",
     "headline": "Lo que obtienes",
     "items": [
       {
         "icon": "⊙",
-        "title": "Ve primero las publicaciones de tu sector",
-        "body": "Growth y Pro colocan las publicaciones de tu sector y país al inicio del feed.",
+        "title": "Filtra el feed por tu sector",
+        "body": "Growth muestra solo publicaciones de personas de tu sector y tu país. Con Pro, tú eliges los sectores y países.",
         "tier": "growthPlus"
       },
       {
         "icon": "✎",
-        "title": "Recibe ayuda para escribir un comentario",
-        "body": "Revisa una reacción sugerida y un borrador de comentario, y luego completa la acción en LinkedIn.",
+        "title": "Ayuda para escribir tu comentario",
+        "body": "La IA sugiere una reacción y escribe un primer borrador de tu comentario. Tú lo editas y lo publicas en LinkedIn.",
         "tier": "allTiers"
       },
       {
         "icon": "◈",
-        "title": "Controla la visibilidad en nuestro feed",
-        "body": "Con Pro, elige qué sectores y países pueden ver tus publicaciones dentro del feed de Link Into The SSI.",
+        "title": "Elige quién ve tus publicaciones",
+        "body": "Con Pro, decides quién ve tus publicaciones en el feed de Link Into The SSI, por sector y país.",
         "tier": "pro"
       }
     ]
@@ -187,15 +189,15 @@
   "pricing": {
     "eyebrow": "Planes",
     "headline": "Elige tu plan",
-    "subheadline": "Starter abre el feed completo. Growth lo filtra por sector y país. Pro añade filtros personalizados y controles de visibilidad en nuestro feed.",
+    "subheadline": "Todos los planes incluyen el feed y los borradores de comentarios con IA. Growth filtra el feed por tu sector y país, y Pro te permite crear tus propios filtros y elegir quién ve tus publicaciones.",
     "seeMonthly": "¿Prefieres pagar por mes? Ver precios mensuales",
     "seeAnnual": "Volver al plan anual · 2 meses gratis",
-    "recommended": "Mejor para un feed dirigido",
+    "recommended": "Recomendado",
     "periodMonth": "/mes",
     "annualSubLabel": "{{price}} facturado anualmente · 2 meses gratis",
     "monthlySubLabel": "2 meses gratis si pagas anualmente",
-    "trialNote": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
-    "enterpriseNote": "Custom para un mayor volumen de uso, desde",
+    "trialNote": "Gratis por 7 días o hasta tus primeras 50 interacciones (hechas o recibidas), lo que ocurra primero. Se requiere tarjeta. Cancela cuando quieras.",
+    "enterpriseNote": "¿Necesitas límites más altos? Planes Custom desde",
     "enterprisePriceMonth": "U$100/mes",
     "enterprisePriceYear": "U$1,000/año",
     "enterpriseCta": "Contáctanos",
@@ -204,40 +206,40 @@
         "id": "starter",
         "name": "Starter",
         "description": "Para compartir publicaciones y navegar por el feed completo",
-        "axis": "Cada publicación permanece en el feed hasta alcanzar 25 reacciones y comentarios",
+        "axis": "Tus publicaciones permanecen en el feed hasta recibir 25 reacciones y comentarios",
         "features": [
           "Accede al feed completo en vivo",
           "Sugerencias de reacción y borradores de comentarios con IA",
           "Agrega 1 publicación al feed por semana"
         ],
-        "cta": "Empezar prueba Starter"
+        "cta": "Prueba Starter gratis"
       },
       {
         "id": "growth",
         "name": "Growth",
         "description": "Para un feed filtrado por sector y país",
-        "axis": "Cada publicación permanece en el feed hasta alcanzar 50 reacciones y comentarios",
+        "axis": "Tus publicaciones permanecen en el feed hasta recibir 50 reacciones y comentarios",
         "features": [
           "Feed filtrado por sector + país",
           "Todo lo de Starter",
-          "1 publicación destacada al mes",
+          "Destaca 1 publicación al mes en la parte superior del feed",
           "Agrega 2 publicaciones al feed por semana"
         ],
-        "cta": "Empezar prueba Growth"
+        "cta": "Prueba Growth gratis"
       },
       {
         "id": "pro",
         "name": "Pro",
         "description": "Para filtros personalizados y controles de visibilidad en el feed",
-        "axis": "Cada publicación permanece en el feed hasta alcanzar 200 reacciones y comentarios",
+        "axis": "Tus publicaciones permanecen en el feed hasta recibir 200 reacciones y comentarios",
         "features": [
           "Filtros personalizados de sector + país",
           "Controla quién ve tus publicaciones en nuestro feed",
           "Todo lo de Growth",
-          "3 publicaciones destacadas al mes",
+          "Destaca 3 publicaciones al mes en la parte superior del feed",
           "Agrega 5 publicaciones al feed por semana"
         ],
-        "cta": "Empezar prueba Pro"
+        "cta": "Prueba Pro gratis"
       }
     ],
     "renewalAnnual": "Después de la prueba: {{price}} facturados anualmente.",
@@ -248,46 +250,46 @@
     "headline": "Preguntas frecuentes",
     "items": [
       {
-        "q": "¿La app realiza acciones en mi cuenta de LinkedIn?",
-        "a": "No. La app muestra una publicación o copia un borrador, y tú completas cada reacción, comentario o publicación en LinkedIn."
+        "q": "¿Link Into The SSI publica o comenta por mí?",
+        "a": "No. Nunca publicamos, reaccionamos ni comentamos en LinkedIn por ti. Abrimos la publicación en LinkedIn y copiamos tu borrador de comentario, si tienes uno. Tú completas la acción allí."
       },
       {
-        "q": "¿En qué se diferencia de la automatización o el spam?",
-        "a": "La automatización ejecuta acciones masivas. Aquí eliges una publicación a la vez y completas cada acción en LinkedIn. No hay bots, acciones masivas ni publicación automática."
+        "q": "¿En qué se diferencia de las herramientas de automatización?",
+        "a": "Las herramientas de automatización hacen acciones masivas desde tu cuenta. Con LISSI, eliges una publicación a la vez y reaccionas o comentas tú mismo en LinkedIn."
       },
       {
-        "q": "¿Qué incluye el período gratis y cuándo se me cobra?",
-        "a": "La prueba incluye el plan que elijas. Se requiere una tarjeta. Es gratis hasta 50 interacciones realizadas o recibidas, registradas en la app, o por hasta 7 días, lo que ocurra primero. Cancela antes y no pagas nada."
+        "q": "¿Qué incluye la prueba gratis y cuándo se me cobra?",
+        "a": "Tienes todo lo del plan que elijas, gratis por 7 días o hasta llegar a 50 interacciones, lo que ocurra primero. Cuentan como interacciones las reacciones y los comentarios que haces, el primer borrador con IA que generas para cada publicación y las reacciones y los comentarios que otros miembros dejan en tus publicaciones. Registras una tarjeta para empezar y te cobramos cuando termina la prueba. Si cancelas antes, no pagas nada."
       },
       {
-        "q": "¿Qué es el SSI y qué tan rápido cambiará?",
-        "a": "Tu Social Selling Index es la puntuación de LinkedIn en cuatro áreas: marca profesional, personas indicadas, información y relaciones. LinkedIn la recalcula a diario. No la consultamos ni la predecimos, y no prometemos plazos. Te damos un feed para participar en conversaciones y un resumen de tus interacciones. Desde agosto de 2026, la página del SSI es una función de Sales Navigator; los miembros gratuitos y Premium ya no pueden verla."
+        "q": "¿Qué es el SSI y qué tan rápido cambiará el mío?",
+        "a": "El Social Selling Index (SSI) es la puntuación de 0 a 100 de LinkedIn, formada por cuatro áreas: marca profesional, personas indicadas, interacción con contenido y relaciones. LinkedIn la actualiza todos los días. No podemos ver ni predecir tu puntuación, así que no prometemos plazos. Desde agosto de 2026, LinkedIn solo muestra la página del SSI a quienes usan Sales Navigator."
       },
       {
         "q": "¿Necesito estar activo todos los días?",
-        "a": "No. Usa el feed con una frecuencia que puedas mantener. LinkedIn recalcula el SSI a diario, pero no prometemos cuánto tardará el tuyo en cambiar."
+        "a": "No. Elige un ritmo que puedas mantener, aunque sean unos pocos comentarios por semana."
       },
       {
         "q": "¿Puedo cancelar cuando quiera?",
-        "a": "Sí. Cancela desde la página de suscripción. No hay contratos ni cargos por cancelación, y el acceso continúa hasta el final del período actual."
+        "a": "Sí. Cancela desde la página Suscripción en la app. No hay contratos ni cargos por cancelación, y mantienes el acceso hasta que termine tu período actual."
       },
       {
-        "q": "¿Por qué Link Into The SSI es la mejor manera de que te noten en LinkedIn?",
-        "a": "Reúne en un solo feed las publicaciones que importan en tu sector, te ayuda a escribir un comentario que valga la pena leer y registra las reacciones y los comentarios que haces y recibes. Esa actividad es como las personas conocen tu nombre. Por eso los miembros usan Link Into The SSI para ser conocidos en LinkedIn y conectar con las personas importantes de su sector."
+        "q": "¿Cómo me ayuda Link Into The SSI a que me noten en LinkedIn?",
+        "a": "Reúne en un solo feed publicaciones de tu sector y te ayuda a escribir un buen comentario. Publicas cada comentario en LinkedIn, donde el autor y sus lectores ven tu nombre. También puedes agregar tus publicaciones al feed para que otros miembros las vean."
       },
       {
         "q": "¿Link Into The SSI puede ayudarme a conseguir trabajo más rápido?",
-        "a": "Link Into The SSI hace más rápido y más fácil mantenerte visible donde ocurren las conversaciones de contratación. Tu próxima oportunidad suele venir de quienes ya conocen tu trabajo. Te pone en esas conversaciones. No prometemos plazos ni un resultado específico. Lo que haces en LinkedIn es siempre tuyo."
+        "a": "Te ayuda a seguir visible para las personas de tu sector, y tu próximo trabajo suele venir de alguien que ya conoce lo que haces. No prometemos plazos ni un resultado específico."
       }
     ]
   },
   "finalCta": {
     "headlineLine1": "Prueba el feed.",
-    "headlineLine2": "Tú decides el siguiente paso.",
-    "subheadline": "Tarjeta requerida. Gratis hasta 50 interacciones realizadas o recibidas en tu cuenta, o por hasta 7 días, lo que ocurra primero. Cancela cuando quieras.",
-    "cta": "Empezar mi prueba",
+    "headlineLine2": "Después, decide si es para ti.",
+    "subheadline": "Gratis por 7 días o hasta tus primeras 50 interacciones (hechas o recibidas), lo que ocurra primero. Se requiere tarjeta. Cancela cuando quieras.",
+    "cta": "Empezar mi prueba gratis",
     "loginCta": "Iniciar sesión",
-    "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos en tu nombre"
+    "ctaTrust": "Inicio de sesión oficial de LinkedIn · Solo recibimos tu nombre, foto y correo · Nunca publicamos por ti"
   },
   "footer": {
     "privacy": "Privacidad",
@@ -297,7 +299,7 @@
     "easterEgg": ""
   },
   "cookieNotice": {
-    "text": "Solo usamos el almacenamiento esencial del navegador para el inicio de sesión y el idioma. No usamos cookies de rastreo.",
+    "text": "Solo usamos el almacenamiento esencial del navegador para el inicio de sesión y tus preferencias. No usamos cookies de rastreo.",
     "learnMore": "Más información",
     "dismiss": "Entendido",
     "label": "Aviso de almacenamiento esencial"
@@ -314,7 +316,7 @@
     "es": "Español"
   },
   "trialOffer": {
-    "annual": "Elige cualquier plan · Después, desde {{price}} al año",
-    "monthly": "Elige cualquier plan · Después, desde {{price}} al mes"
+    "annual": "Elige cualquier plan · Desde {{price}} al año después de la prueba",
+    "monthly": "Elige cualquier plan · Desde {{price}} al mes después de la prueba"
   }
 }

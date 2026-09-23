@@ -4,15 +4,22 @@ import { homeMetadata, pageMetadata } from './seo'
 import { OG_LOCALE, SITE_NAME } from './site'
 
 describe('homeMetadata', () => {
-  const meta = { description: 'd', keywords: ['k'], ogTitle: 'Rich title', ogDescription: 'ogd' }
+  const meta = {
+    title: 'Brand · Keyword',
+    description: 'd',
+    keywords: ['k'],
+    ogTitle: 'Rich title',
+    ogDescription: 'ogd'
+  }
 
-  it('keeps the document title on the brand and the rich title in og/twitter', () => {
+  it('keeps the keyword title in the document and the rich title in og/twitter', () => {
     const metadata = homeMetadata({ lang: 'pt', meta })
-    expect(metadata.title).toBe(SITE_NAME)
+    expect(metadata.title).toBe('Brand · Keyword')
     expect(metadata.openGraph?.title).toBe('Rich title')
     expect(metadata.twitter?.title).toBe('Rich title')
     expect(metadata.alternates?.canonical).toBe('/pt')
     expect(metadata.alternates?.languages).toMatchObject({ 'x-default': '/en' })
+    expect(metadata.robots).toMatchObject({ index: true, follow: true })
   })
 })
 
@@ -41,5 +48,21 @@ describe('pageMetadata', () => {
   it('keeps x-default on the default locale', () => {
     const metadata = pageMetadata({ lang: 'pt', path: '/terms', ogTitle: 'T', description: 'D' })
     expect(metadata.alternates?.languages).toMatchObject({ 'x-default': `/${i18n.defaultLocale}/terms` })
+  })
+
+  it('keeps child pages out of the index unless they opt in', () => {
+    const legal = pageMetadata({ lang: 'en', path: '/privacy', ogTitle: 'P', description: 'D' })
+    expect(legal.robots).toMatchObject({ index: false, follow: true })
+
+    const indexable = pageMetadata({
+      lang: 'en',
+      path: '/linkedin-ssi',
+      title: 'What is LinkedIn SSI?',
+      ogTitle: 'GI',
+      description: 'D',
+      index: true
+    })
+    expect(indexable.title).toBe('What is LinkedIn SSI?')
+    expect(indexable.robots).toMatchObject({ index: true, follow: true })
   })
 })
