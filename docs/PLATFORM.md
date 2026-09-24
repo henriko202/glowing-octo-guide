@@ -1387,8 +1387,9 @@ is also what the server's `NOTHING_TO_BUY` keys on), or a tier whose row carries
    the caller's — one answer, no ownership leak), `ALREADY_PURCHASED`, `NOTHING_TO_BUY` (a tier with no cap bonus —
    contact).
 4. `getOrCreateCustomer` → `checkout.sessions.create({ mode: 'payment', customer, line_items: [featured price × 1],
-metadata: { kind: 'featured_post', convexUserId, postId }, locale, success_url: /my-posts?featured=paid&post=<id>,
-cancel_url: /my-posts })` → `{ url }`.
+metadata: { kind: 'featured_post', convexUserId, postId, ...datafastMetadata(...) }, locale,
+success_url: /my-posts?featured=paid&post=<id>, cancel_url: /my-posts })` → `{ url }`. The DataFast keys are present
+   only under the member's live `analytics` consent — see §17 "Web analytics".
 
 **Fulfilment — `checkout.session.completed` → `posts.applyPurchasedFeature`:**
 `lib/featuredPurchase.isFeaturedPostCheckout`
@@ -1420,11 +1421,11 @@ sequenceDiagram
     participant S as Stripe Checkout
     participant W as http.ts checkout.session.completed
     participant F as posts.applyPurchasedFeature
-    M ->> A: { sessionToken, postId } (featured_purchase_started {source})
+    M ->> A: { sessionToken, postId, datafast_* } (featured_purchase_started {source})
     A ->> A: assertCanEngage · FEATURED_POST_PRICE_ID
     A ->> P: { postId, userId }
     P -->> A: null | ConvexError(POST_NOT_FOUND | ALREADY_PURCHASED | NOTHING_TO_BUY)
-    A ->> S: sessions.create(mode payment, metadata kind=featured_post, postId)
+    A ->> S: sessions.create(mode payment, metadata kind=featured_post, postId, datafast_* when consented)
     S -->> M: hosted Checkout → pays $5
     S -->> M: success_url /my-posts?featured=paid&post=id ("Confirming your payment…")
     S ->> W: checkout.session.completed
@@ -1483,6 +1484,15 @@ Key checkout parameters:
   unit-tested. `days` is the trial length actually granted, so an invited member reads "after 14 days" on the same
   screen where they are about to enter a card. Never "may end early" — the rule is a fact, not a hedge — and Stripe caps
   the field at 1200 characters.
+- `metadata.datafast_visitor_id` / `datafast_session_id` — DataFast revenue attribution
+  (`datafa.st/docs/stripe-checkout-api`). The client's `datafastAttribution()` (`lib/observability/datafast.ts`) reads
+  the two first-party analytics cookies and the two pages spread them into this action's args
+  (`billingNode.datafastMetadata` length-caps them at 100 chars each); **session-level** metadata, because DataFast's
+  Stripe integration reads the Checkout Session, not our webhook, and it never touches the subscription's own
+  `metadata.convexUserId`. Both keys are **optional and usually absent**: the cookies exist only while the member's
+  `analytics` consent stands, and `stopDataFast` deletes them on withdrawal or sign-out, so an empty metadata object is
+  the normal no-consent checkout. Nothing reads the keys back — the member sees no change. Attribution begins only once
+  Stripe is connected inside DataFast, which stays a compliance-gated dashboard step (§17 launch checklist item 6).
 
 #### One live subscription, one trial
 
@@ -1527,14 +1537,14 @@ sequenceDiagram
     participant SC as Stripe component
     participant S as Stripe Checkout
     A ->> A: captureEvent('checkout_started', { plan, interval })
-    A ->> B: createCheckoutSession(priceId, sessionToken, locale)
+    A ->> B: createCheckoutSession(priceId, sessionToken, locale, datafast_* when consented)
     B ->> B: validate priceId ∈ ALLOWED_PRICE_IDS
     B ->> B: requireAuthAction(sessionToken)
     B ->> DB: internal.billing.listUserSubscriptions(userId)
     B -->> A: findLiveSubscription? → ConvexError ALREADY_SUBSCRIBED (client opens the portal)
     B ->> B: trial = trialEligible(rows.length); days = trialDaysFor(user); billingLocale = resolveBillingLocale(...)
 B ->> SC: getOrCreateCustomer(userId, email, name)
-B ->> S: checkout.sessions.create(trial? days, card-required, promo-codes, locale, custom_text)
+B ->> S: checkout.sessions.create(trial? days, card-required, promo-codes, locale, custom_text, metadata datafast_*)
 B ->> DB: setStripeCustomerId (if unset) + users.setLanguageFromCheckout (if changed)
 B -->> A: { url }
 A ->> S: window.location = url
@@ -5805,7 +5815,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                                  | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -7239,11 +7249,20 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
           leave the browser.
         - The `domain` is `VITE_COOKIE_DOMAIN` without its leading dot (`linkintothessi.com`), so the cookies live on
           `.linkintothessi.com`.
+        - **Stripe revenue attribution** (`datafa.st/docs/stripe-checkout-api`): `datafastAttribution()` reads the
+          visitor and session cookies at Checkout time, and `BillingPage` / `MyPostsPage` spread the result into
+          `billingNode.createCheckoutSession` / `purchaseFeaturedPost`. The actions stamp
+          `metadata.datafast_visitor_id` / `datafast_session_id` on the Checkout Session (§8 "Key checkout
+          parameters"). Presence is the consent check — the cookies exist only while consent stands, and
+          `stopDataFast` deletes them on withdrawal or sign-out, so a checkout without them is the normal
+          no-consent case. An expired 30-minute session can leave the visitor id alone; the survivor is still sent.
+          Attribution itself starts only once Stripe is connected in DataFast (launch checklist item 6).
     - **Landing — cookieless, every visitor:** `landing/components/DataFast.tsx`; see
       [§15](#15-frontend--landing-site-landing) Web analytics.
     - **Both:** silent in dev, on localhost (the SDK returns a no-op client there) and until the website ids are set.
       Under an ad blocker, the requests to `https://datafa.st` fail quietly and the numbers undercount. There are no
-      custom goals, no Stripe metadata and no backend code; the launch steps are in the checklist below.
+      custom goals and no REST API; the one backend touch is the two Checkout metadata keys above, and the launch
+      steps are in the checklist below.
 
 - **Backend `console.error` redaction (`scrubError`):** the backend catch seams route their logged context through
   `convex/lib/scrubError.ts`, a pure, dependency‑free helper (no Convex function, no codegen). It **default‑denies**
@@ -7299,6 +7318,8 @@ flowchart TD
         A4["signOut()"] --> F2
         A4 --> P3
         A5["route change"] --> F3["trackDataFastPageview: origin + pathname, once started"]
+        A6["BillingPage / MyPostsPage checkout click"] --> F4["datafastAttribution: visitor + session cookie ids"]
+        F4 --> S2["Stripe Checkout session metadata (datafast_visitor_id / datafast_session_id)"]
     end
     subgraph Backend["convex/ — server"]
         B1["console.error catch seams"] --> B2["scrubError redact + 500-char cap"]
@@ -7311,6 +7332,7 @@ flowchart TD
     L2 --> DATAFAST["DataFast (datafa.st)"]
     F1 --> DATAFAST
     F3 --> DATAFAST
+    S2 -. "read by DataFast only once Stripe is connected" .-> DATAFAST
 ```
 
 **Enabling Sentry on the backend (runbook).** In the **Convex Dashboard**, select the deployment (prod first) →
@@ -7346,8 +7368,10 @@ exceptions to Sentry. Repeat for the dev deployment if you also want dev backend
     5. In DataFast's realtime view, check that a landing visit and a consenting member's app pageviews (under their
        `_id`) arrive. If landing events are missing (cookieless events refused on a cookie-mode website), give the
        landing its own DataFast website and swap its env var; no code change.
-    6. Connecting Stripe (Site Settings → Revenue) is a separate decision. It gives DataFast read access to every paying
-       member's Stripe payment and customer records, emails included, whatever their in-app consent, so extend
+    6. Connecting Stripe (Site Settings → Revenue) is a separate decision. The code side is ready — every Checkout
+       Session already carries `datafast_visitor_id` / `datafast_session_id` when the member consented (the
+       "Stripe revenue attribution" bullet above) — but connecting gives DataFast read access to every paying member's
+       Stripe payment and customer records, emails included, whatever their in-app consent, so extend
        `SUBPROCESSORS.md` and the Privacy Policy first.
 
 > **Open security‑relevant gaps / hardening backlog:** the LinkedIn token‑refresh flow (`linkedin/tokenRefresh`,
@@ -7629,6 +7653,19 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑24 (DataFast revenue attribution). **Every Checkout Session can now carry DataFast's visitor
+and session ids in its `metadata`, so a connected DataFast can tie a payment to the member's journey.** The new
+`datafastAttribution()` (`app/src/lib/observability/datafast.ts`) reads the two consent-written cookies (`getCookie`;
+`undefined` when neither exists) and `BillingPage` / `MyPostsPage` spread it into `createCheckoutSession` /
+`purchaseFeaturedPost`. The actions merge the ids through `datafastMetadata()` (new, `convex/billingNode.ts`) as
+session-level `metadata.datafast_visitor_id` / `datafast_session_id`, length-capped at 100 chars each; the existing
+`subscription_data.metadata.convexUserId` and the featured-post `metadata.kind` filter are untouched. No consent, no
+cookie, no key — the no-consent checkout sends an empty metadata object, exactly as before. Nothing reads the ids
+back and no member-visible behavior changed; actual attribution starts only when Stripe is connected inside DataFast,
+which remains a compliance-gated dashboard step (item 6 of the §17 launch checklist). Tests: three
+`datafastAttribution` cases in `app/src/lib/observability/datafast.test.ts`, plus one cookie-flow case in each page
+test. Sections updated: §8, §17._
 
 _Last updated: 2026‑09‑23 (analytics and monitoring disclosures). **The public policies now describe every tool that
 runs, and the code now does what they say.** `POLICY_VERSION` `2026-09-08` → `2026-09-23` (the constant plus the three

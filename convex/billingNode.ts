@@ -29,12 +29,33 @@ function stripe(): Stripe {
   return new Stripe(key)
 }
 
+/**
+ * DataFast revenue attribution (datafa.st/docs/stripe-checkout-api): the two first-party analytics
+ * cookie ids on the Checkout Session's metadata, which a connected DataFast reads to tie the
+ * payment to the member's journey. Optional on purpose — the cookies exist only while the member's
+ * `analytics` consent stands, so an empty object is the normal no-consent checkout, not an error.
+ * Client-supplied values are length-capped (the ids are 36–37 chars) to stay far inside Stripe's
+ * 500-char metadata limit, where a too-long value would fail the checkout call itself.
+ */
+function datafastMetadata(visitorId?: string, sessionId?: string): Record<string, string> {
+  const metadata: Record<string, string> = {}
+  if (visitorId) metadata.datafast_visitor_id = visitorId.slice(0, 100)
+  if (sessionId) metadata.datafast_session_id = sessionId.slice(0, 100)
+  return metadata
+}
+
 // Card-required trial checkout (7 days, 14 for an invited member — lib/trialMilestone.trialDaysFor).
 // The component's createCheckoutSession can't set a trial / card-collection / promo codes, so we
 // call the Stripe SDK directly here. The component still owns the customer record and webhook sync.
 export const createCheckoutSession = action({
-  args: { priceId: v.string(), sessionToken: v.string(), locale: v.optional(v.string()) },
-  handler: async (ctx, { priceId, sessionToken, locale }) => {
+  args: {
+    priceId: v.string(),
+    sessionToken: v.string(),
+    locale: v.optional(v.string()),
+    datafastVisitorId: v.optional(v.string()),
+    datafastSessionId: v.optional(v.string())
+  },
+  handler: async (ctx, { priceId, sessionToken, locale, datafastVisitorId, datafastSessionId }) => {
     if (!ALLOWED_PRICE_IDS.has(priceId)) throw new ConvexError('Invalid price ID')
 
     const user = await requireAuthAction(ctx, sessionToken)
@@ -73,6 +94,9 @@ export const createCheckoutSession = action({
       mode: 'subscription',
       customer: customer.customerId,
       line_items: [{ price: priceId, quantity: 1 }],
+      // Session-level (not subscription_data): the keys are for DataFast's Stripe integration,
+      // which reads the Checkout Session, not our own webhook — see datafastMetadata above.
+      metadata: datafastMetadata(datafastVisitorId, datafastSessionId),
       subscription_data: {
         ...(trial ? { trial_period_days: trialDays } : {}),
         metadata: { convexUserId: user._id }
@@ -113,8 +137,16 @@ export const createCheckoutSession = action({
 // webhook (http.ts → posts.applyPurchasedFeature). The server allows any eligible post at any
 // time — the UI decides where to offer it (upgrade first, add-on second).
 export const purchaseFeaturedPost = action({
-  args: { sessionToken: v.string(), postId: v.id('posts') },
-  handler: async (ctx, { sessionToken, postId }): Promise<{ url: string | null }> => {
+  args: {
+    sessionToken: v.string(),
+    postId: v.id('posts'),
+    datafastVisitorId: v.optional(v.string()),
+    datafastSessionId: v.optional(v.string())
+  },
+  handler: async (
+    ctx,
+    { sessionToken, postId, datafastVisitorId, datafastSessionId }
+  ): Promise<{ url: string | null }> => {
     const user = await requireAuthAction(ctx, sessionToken)
     if (!user) throw new ConvexError('User not found')
     await ctx.runMutation(internal.lib.rateLimit.checkAndIncrement, {
@@ -148,8 +180,13 @@ export const purchaseFeaturedPost = action({
       payment_method_types: ['card'],
       // Three strings, nothing personal: the webhook keys on `kind` and fulfils by `postId`;
       // convexUserId is for support lookups in the Stripe Dashboard (the author comes from the
-      // post at fulfilment, never from here).
-      metadata: { kind: 'featured_post', convexUserId: user._id, postId },
+      // post at fulfilment, never from here). The DataFast ids are added only under consent.
+      metadata: {
+        kind: 'featured_post',
+        convexUserId: user._id,
+        postId,
+        ...datafastMetadata(datafastVisitorId, datafastSessionId)
+      },
       locale: stripeCheckoutLocale(billingLocale),
       success_url: `${appUrl}/my-posts?featured=paid&post=${postId}`,
       cancel_url: `${appUrl}/my-posts`

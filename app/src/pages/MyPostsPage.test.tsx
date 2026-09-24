@@ -7,6 +7,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import MyPostsPage from './MyPostsPage'
 import { toast } from '@/components/ui/toast'
 import { captureEvent } from '@/lib/observability/analytics'
+import { datafastAttribution } from '@/lib/observability/datafast'
 
 // Mock the Convex API module so each query/action has a stable, identifiable
 // reference. This lets the useQuery mock dispatch by *which* query was asked
@@ -48,6 +49,9 @@ vi.mock('convex/react', () => ({
 }))
 vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
+// DataFast revenue attribution is unit-tested in observability/datafast.test.ts; here it only has
+// to prove the checkout action receives whatever it returns.
+vi.mock('@/lib/observability/datafast', () => ({ datafastAttribution: vi.fn(() => undefined) }))
 
 // The page strips its one-shot params; this shows what is left in the URL.
 function SearchProbe() {
@@ -76,6 +80,7 @@ beforeEach(() => {
   mockActions = {}
   vi.mocked(toast).mockClear()
   vi.mocked(captureEvent).mockClear()
+  vi.mocked(datafastAttribution).mockReturnValue(undefined)
   mockQueryReturns = {
     // subscriptionStatus: 'active' keeps UpgradeAtLimit's useCardGate() ungated here — its
     // own gated-member branch is covered by UpgradeAtLimit.test.tsx (F2), not this page's tests.
@@ -687,6 +692,24 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
       expect(mockActions['billingNode.purchaseFeaturedPost']).toHaveBeenCalledWith({
         sessionToken: 'tok',
         postId: 'p2'
+      })
+    )
+  })
+
+  // DataFast revenue attribution (datafa.st/docs/stripe-checkout-api): the analytics cookies ride
+  // along only while consent stands — datafastAttribution returns undefined otherwise, and the
+  // call above pins that no-consent shape.
+  it('passes the DataFast cookies to the featured-post Checkout when they exist', async () => {
+    vi.mocked(datafastAttribution).mockReturnValue({ datafastVisitorId: 'v1', datafastSessionId: 's1' })
+    mockQueryReturns['posts.getMyPosts'] = [{ ...unfeatured, interactionLimitReached: true }]
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: /feature for US\$5/i }))
+    await waitFor(() =>
+      expect(mockActions['billingNode.purchaseFeaturedPost']).toHaveBeenCalledWith({
+        sessionToken: 'tok',
+        postId: 'p2',
+        datafastVisitorId: 'v1',
+        datafastSessionId: 's1'
       })
     )
   })

@@ -23,6 +23,7 @@ import { friendlyError, mapLimitError } from '@/lib/errors'
 import { timeAgo } from '@/lib/relativeDay'
 import { toast } from '@/components/ui/toast'
 import { captureEvent } from '@/lib/observability/analytics'
+import { datafastAttribution } from '@/lib/observability/datafast'
 import { useCardGate } from '@/hooks/useCardGate'
 import { FEATURED_POST_PRICE, usdLabel } from '@/lib/planPrices'
 import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
@@ -257,7 +258,11 @@ export default function MyPostsPage() {
     setBuyingPostId(post._id)
     captureEvent('featured_purchase_started', { source })
     try {
-      const { url } = await purchaseFeaturedPost({ sessionToken, postId: post._id })
+      const { url } = await purchaseFeaturedPost({
+        sessionToken,
+        postId: post._id,
+        ...datafastAttribution()
+      })
       if (!url) throw new Error('NO_CHECKOUT_URL')
       // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
       window.location.href = url

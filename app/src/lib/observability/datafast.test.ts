@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const sdk = vi.hoisted(() => ({ initDataFast: vi.fn(), deleteCookie: vi.fn() }))
+const sdk = vi.hoisted(() => ({ initDataFast: vi.fn(), deleteCookie: vi.fn(), getCookie: vi.fn() }))
 vi.mock('datafast', () => sdk)
 
 const client = { trackScreen: vi.fn(), identify: vi.fn(), shutdown: vi.fn() }
@@ -98,6 +98,27 @@ describe('stopDataFast', () => {
     startDataFast('user_1')
     await vi.waitFor(() => expect(client.identify).toHaveBeenCalledTimes(2))
     expect(sdk.initDataFast).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('datafastAttribution', () => {
+  it('returns undefined when neither cookie exists (no consent — the normal checkout)', async () => {
+    const { datafastAttribution } = await load()
+    sdk.getCookie.mockReturnValue(null)
+    expect(datafastAttribution()).toBeUndefined()
+  })
+
+  it('returns both ids when both cookies exist', async () => {
+    const { datafastAttribution } = await load()
+    sdk.getCookie.mockImplementation((name: string) => (name === 'datafast_visitor_id' ? 'v1' : 's1'))
+    expect(datafastAttribution()).toEqual({ datafastVisitorId: 'v1', datafastSessionId: 's1' })
+    expect(sdk.getCookie.mock.calls).toEqual([['datafast_visitor_id'], ['datafast_session_id']])
+  })
+
+  it('sends the one id that survived an expired session instead of dropping attribution', async () => {
+    const { datafastAttribution } = await load()
+    sdk.getCookie.mockImplementation((name: string) => (name === 'datafast_session_id' ? 's1' : null))
+    expect(datafastAttribution()).toEqual({ datafastSessionId: 's1' })
   })
 })
 

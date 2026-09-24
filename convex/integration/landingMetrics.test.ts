@@ -236,7 +236,7 @@ describe('getMetrics', () => {
   })
 })
 
-describe('pruneLandingVisitors', ;() => {
+describe('pruneLandingVisitors', () => {
   // The public privacy and cookie pages promise the hash is deleted within two days. A row only dedupes within its
   // own UTC day, so every earlier day goes: with the daily cron, no row outlives 48 hours.
   test('keeps only today and deletes every earlier day', async () => {

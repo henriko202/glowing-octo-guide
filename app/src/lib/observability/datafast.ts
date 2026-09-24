@@ -1,7 +1,9 @@
 // Web analytics (DataFast), cookie mode. ANALYTICS purpose — strictly consent-gated: started only by
 // syncAnalyticsConsent for a signed-in member who granted `analytics` consent, stopped on withdrawal or sign-out.
 // Pageviews carry origin + pathname only, never the query or fragment (/auth/success#…, /unsubscribe?token=…).
-import { type DataFastWeb, deleteCookie, initDataFast } from 'datafast'
+// datafastAttribution() also reads the visitor/session cookies at Checkout time for Stripe revenue
+// attribution (convex/billingNode.ts), under the same consent — see the function's comment.
+import { type DataFastWeb, deleteCookie, getCookie, initDataFast } from 'datafast'
 
 // The five cookies DataFast's cookie mode writes on `.<domain>`. shutdown() leaves them behind.
 const COOKIES = [
@@ -54,4 +56,21 @@ export function stopDataFast(): void {
 /** Send a pageview for a route change. A no-op until startDataFast has run. */
 export function trackDataFastPageview(pathname: string): void {
   void started?.then(client => client.trackScreen(pathname, { href: pageHref(pathname) }))
+}
+
+/**
+ * The two cookie values Stripe Checkout metadata carries for DataFast revenue attribution
+ * (datafa.st/docs/stripe-checkout-api). Presence is itself the consent check: the cookies are
+ * written only by `startDataFast` (consent granted) and `stopDataFast` deletes them on withdrawal
+ * or sign-out. Returns `undefined` when neither exists — the expected no-consent case, not an
+ * error. An expired session (30 min) can leave the visitor id alone; send what survived.
+ */
+export function datafastAttribution(): { datafastVisitorId?: string; datafastSessionId?: string } | undefined {
+  const visitorId = getCookie('datafast_visitor_id')
+  const sessionId = getCookie('datafast_session_id')
+  if (!visitorId && !sessionId) return undefined
+  return {
+    ...(visitorId ? { datafastVisitorId: visitorId } : {}),
+    ...(sessionId ? { datafastSessionId: sessionId } : {})
+  }
 }

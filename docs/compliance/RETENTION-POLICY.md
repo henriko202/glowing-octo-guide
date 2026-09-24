@@ -77,6 +77,9 @@ shortest workable window [bracketed — record the configured periods]. What the
   `sessionStorage`, cleared when the tab closes.
 - **DataFast, both sites:** `datafast_event_queue` in `localStorage` holds events not yet sent and empties once they are
   sent.
+- **DataFast ids at payment** (only after `analytics` consent): the visitor and session ids also ride in the Stripe
+  Checkout Session metadata when the member subscribes or buys a featured slot (Activity 6), where Stripe retains them
+  under its own retention policy.
 - **Cloudflare Web Analytics:** stores nothing in the browser.
 
 ---

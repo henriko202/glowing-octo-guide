@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { captureEvent } from '@/lib/observability/analytics'
+import { datafastAttribution } from '@/lib/observability/datafast'
 import BillingPage from './BillingPage'
 
 // PLAN_PRICE_IDS is read from import.meta.env at BillingPage module scope, and the real values
@@ -71,6 +72,9 @@ vi.mock('@/lib/useQueryOnce', () => ({
   useQueryOnce: vi.fn((ref: string) => ({ data: mockQueryReturns[ref], error: null }))
 }))
 vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
+// DataFast revenue attribution is unit-tested in observability/datafast.test.ts; here it only has
+// to prove the checkout action receives whatever it returns (undefined without cookies).
+vi.mock('@/lib/observability/datafast', () => ({ datafastAttribution: vi.fn(() => undefined) }))
 
 // useSearchParams is mocked (not the real router) so tests can assert the setter was called and
 // drive the query string directly, the same mockSetSearchParams pattern as AdminPage.test.tsx:59.
@@ -163,6 +167,7 @@ beforeEach(() => {
   mockSwitch.mockClear()
   mockUndo.mockClear()
   vi.mocked(captureEvent).mockClear()
+  vi.mocked(datafastAttribution).mockReturnValue(undefined)
   mockSetSearchParams.mockClear()
   mockSearchParams = new URLSearchParams()
   mockQueryReturns = {
@@ -192,6 +197,23 @@ describe('plan click routing (R01)', () => {
       })
     )
     expect(mockPortal).not.toHaveBeenCalled()
+  })
+
+  // DataFast revenue attribution (datafa.st/docs/stripe-checkout-api): the analytics cookies ride
+  // into Checkout's metadata while consent stands — the first test above pins the no-cookie shape.
+  it('passes the DataFast cookies to checkout when they exist', async () => {
+    vi.mocked(datafastAttribution).mockReturnValue({ datafastVisitorId: 'v1', datafastSessionId: 's1' })
+    renderPage()
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0])
+    await waitFor(() =>
+      expect(mockCheckout).toHaveBeenCalledWith({
+        priceId: 'price_growth_year',
+        sessionToken: 'tok',
+        locale: 'en',
+        datafastVisitorId: 'v1',
+        datafastSessionId: 's1'
+      })
+    )
   })
 
   // A trial runs on the plan it started on (product rule, 2026-09-09): no tier change and no interval

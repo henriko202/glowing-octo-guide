@@ -16,6 +16,7 @@ import { SUPPORT_EMAIL } from '@/lib/support'
 import { friendlyError } from '@/lib/errors'
 import { captureException } from '@/lib/observability/sentry'
 import { captureEvent } from '@/lib/observability/analytics'
+import { datafastAttribution } from '@/lib/observability/datafast'
 import { formatPriceLabel } from '../../../convex/lib/billingEmails'
 import { resolveBillingLocale } from '../../../convex/lib/checkoutCopy'
 import { canEngage } from '../../../convex/lib/access'
@@ -308,7 +309,14 @@ export default function BillingPage() {
       if (!sessionToken) throw new Error(t('auth.notSignedIn'))
       // R18: the card-entry step, so the survival panel can tell a card-gate leak from an activation leak.
       captureEvent('checkout_started', { plan: planId, interval: billingInterval })
-      const result = await createCheckout({ priceId, sessionToken, locale: i18n.language.slice(0, 2) })
+      // The DataFast cookies ride into the Checkout metadata for revenue attribution — absent when
+      // the member never granted analytics consent, which is the normal case.
+      const result = await createCheckout({
+        priceId,
+        sessionToken,
+        locale: i18n.language.slice(0, 2),
+        ...datafastAttribution()
+      })
       if (result?.url) {
         // Consume the landing's choice so a later visit in this tab does not re-nudge.
         sessionStorage.removeItem('chosenPlan')
