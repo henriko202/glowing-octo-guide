@@ -49,10 +49,10 @@
     "skipToContent": "Skip to content"
   },
   "hero": {
-    "eyebrow": "LinkedIn SSI tool",
+    "eyebrow": "Good at your work, but few people see it?",
     "headlineLine1": "Get noticed on LinkedIn",
     "headlineLine2": "by the people in your field.",
-    "subLine1": "Link Into The SSI brings posts from your field into one feed and helps you write a good comment.",
+    "subLine1": "See posts from your field in one place, comment with help from AI, and show your own posts to other members.",
     "subLine2": "You react and comment yourself, on LinkedIn. Nothing is automated.",
     "cta": "Start my free trial",
     "loginCta": "Log in",
@@ -69,18 +69,18 @@
       },
       {
         "title": "Share one of your posts",
-        "body": "Paste the link to one of your LinkedIn posts. We add it to the feed so other members can see it."
+        "body": "Paste the link to one of your LinkedIn posts. We add it to the feed so other members can see it. Don't have one yet? You can skip this step."
       },
       {
-        "title": "Join the conversation",
+        "title": "Comment with help from AI",
         "body": "Pick a post. If you want, AI writes a first draft of your comment. Then we open the post on LinkedIn, where you react or comment yourself."
       }
     ]
   },
   "positioning": {
-    "eyebrow": "Why LISSI",
-    "headline": "What LISSI helps you do",
-    "intro": "Link Into The SSI (LISSI) helps you get noticed on LinkedIn, work on your SSI, and stay in front of the people who matter in your field.",
+    "eyebrow": "Why it helps",
+    "headline": "What changes for you",
+    "intro": "Link Into The SSI (LISSI) helps the people in your field see your name. You comment on their posts and show your own posts to other members.",
     "points": [
       {
         "title": "Get noticed on LinkedIn",
@@ -88,7 +88,7 @@
       },
       {
         "title": "Improve your SSI",
-        "body": "Engaging with posts is one of the four areas LinkedIn scores in your SSI. The feed gives you posts to engage with, and your weekly recap shows what you did."
+        "body": "The SSI is a score from 0 to 100 that LinkedIn gives you for how you use it. Reacting and commenting count toward one of its four parts. The feed gives you posts for that, and your weekly recap shows what you did."
       },
       {
         "title": "Become known in your field",
@@ -96,10 +96,10 @@
       },
       {
         "title": "Help the right people find you",
-        "body": "Your next opportunity often comes from someone who already knows your work. Staying visible to them takes less effort than sending cold messages."
+        "body": "Your next opportunity often comes from someone who already knows your work. Staying visible to them takes less effort than messaging strangers."
       }
     ],
-    "closing": "You decide what to engage with, and you do it yourself on LinkedIn."
+    "closing": "You pick the posts, and you react or comment yourself on LinkedIn."
   },
   "ssiExplainer": {
     "eyebrow": "About the SSI",
@@ -184,7 +184,7 @@
   "pricing": {
     "eyebrow": "Pricing",
     "headline": "Choose your plan",
-    "subheadline": "Every plan includes the feed and AI comment drafts. Growth filters the feed to your industry and country, and Pro lets you set your own filters and choose who sees your posts.",
+    "subheadline": "Every plan has the feed and AI help with your comments. Growth filters the feed to your industry and country. Pro lets you pick your own filters and who sees your posts.",
     "seeMonthly": "Prefer to pay monthly? See monthly prices",
     "seeAnnual": "Back to annual · 2 months free",
     "recommended": "Recommended",
@@ -200,11 +200,11 @@
       {
         "id": "starter",
         "name": "Starter",
-        "description": "For sharing posts and browsing the full feed",
-        "axis": "Your posts stay in the feed until they get 25 reactions and comments",
+        "description": "To see the full feed and share your posts",
+        "axis": "Each of your posts stays in the feed until it gets 25 reactions and comments",
         "features": [
           "See the full live feed",
-          "AI reaction suggestions and comment drafts",
+          "AI suggests reactions and drafts your comments",
           "Add 1 post to the feed each week"
         ],
         "cta": "Try Starter free"
@@ -212,10 +212,10 @@
       {
         "id": "growth",
         "name": "Growth",
-        "description": "For a feed filtered to your industry and country",
-        "axis": "Your posts stay in the feed until they get 50 reactions and comments",
+        "description": "To see only posts from your industry and country",
+        "axis": "Each of your posts stays in the feed until it gets 50 reactions and comments",
         "features": [
-          "Feed filtered to your industry + country",
+          "A feed with only posts from your industry and country",
           "Everything in Starter",
           "Feature 1 post a month at the top of the feed",
           "Add 2 posts to the feed each week"
@@ -225,11 +225,11 @@
       {
         "id": "pro",
         "name": "Pro",
-        "description": "For custom filters and feed visibility controls",
-        "axis": "Your posts stay in the feed until they get 200 reactions and comments",
+        "description": "To pick your filters and who sees your posts",
+        "axis": "Each of your posts stays in the feed until it gets 200 reactions and comments",
         "features": [
-          "Custom industry + country filters",
-          "Control who sees your posts in our feed",
+          "Pick the industries and countries in your feed",
+          "Decide who sees your posts in our feed",
           "Everything in Growth",
           "Feature 3 posts a month at the top of the feed",
           "Add 5 posts to the feed each week"
@@ -246,15 +246,15 @@
     "items": [
       {
         "q": "Will Link Into The SSI post or comment for me?",
-        "a": "No. We never post, react, or comment on LinkedIn for you. We open the post on LinkedIn and copy your comment draft if you have one. You finish the action there."
+        "a": "No. We never post, react, or comment on LinkedIn for you. We open the post on LinkedIn and copy your comment draft if you have one. You react or comment there yourself."
       },
       {
         "q": "How is this different from automation tools?",
-        "a": "Automation tools act from your account in bulk. With LISSI, you pick one post at a time, and you react or comment yourself on LinkedIn."
+        "a": "Automation tools react and comment in bulk from your account. Here, you pick one post at a time, and you react or comment yourself on LinkedIn."
       },
       {
         "q": "What does the free trial include, and when am I charged?",
-        "a": "You get everything in the plan you choose, free for 7 days or until you reach 50 interactions, whichever comes first. Interactions are the reactions and comments you make, the first AI draft you create for each post, and the reactions and comments other members leave on your posts. You add a card to start, and we charge it when the trial ends. Cancel before then and you pay nothing."
+        "a": "You get everything in the plan you choose, free for 7 days or until you reach 50 interactions, whichever comes first. An interaction is a reaction or comment you make or receive in the app. The first AI draft you create for each post counts too. You add a card to start, and we charge it when the trial ends. Cancel before then and you pay nothing."
       },
       {
         "q": "What is the SSI, and how quickly will mine change?",

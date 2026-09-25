@@ -33,8 +33,8 @@
     "profile": "Perfil y ajustes",
     "openSidebar": "Abrir navegación",
     "skipToContent": "Saltar al contenido",
-    "trialGoal": "Tu plan {{plan}} empieza cuando llegues a {{threshold}} interacciones o el {{date}}.",
-    "trialGoalNoDate": "Tu plan {{plan}} empieza cuando llegues a {{threshold}} interacciones.",
+    "trialGoal": "Tu prueba gratis termina cuando llegues a {{threshold}} interacciones o el {{date}}. Después empieza tu plan {{plan}}.",
+    "trialGoalNoDate": "Tu prueba gratis termina cuando llegues a {{threshold}} interacciones. Después empieza tu plan {{plan}}.",
     "trialStartsAt": "Tu plan empieza en {{threshold}} interacciones o el {{date}}.",
     "trialNearEnd": "Faltan {{remaining}} interacciones para que empiece tu plan {{plan}}.",
     "trialMadeReceived": "hechas {{made}} · recibidas {{received}}",
@@ -43,15 +43,15 @@
   },
   "onboarding": {
     "firstPost": {
-      "title": "Comparte tu mejor publicación reciente",
-      "intro": "Agrega una de tus publicaciones de LinkedIn para que aparezca en el feed y otras personas puedan interactuar. Puedes agregar más cuando quieras.",
-      "skip": "Lo haré más tarde"
+      "title": "Agrega una publicación tuya de LinkedIn",
+      "intro": "Entra al feed, donde otros miembros pueden verla, reaccionar y comentar. Sirve cualquier publicación tuya, y puedes agregar más después.",
+      "skip": "Omitir por ahora"
     }
   },
   "feed": {
     "title": "Tu feed",
     "loading": "Cargando feed...",
-    "emptyTitle": "Tu feed se llena a medida que los miembros publican",
+    "emptyTitle": "El feed está vacío por ahora",
     "emptyBody": "Las publicaciones de los miembros aparecen aquí a medida que las comparten. La tuya puede ser la primera.",
     "emptyBodyPosted": "Todavía no hay otras publicaciones. Invita a un colega de tu sector o vuelve más tarde.",
     "emptyCta": "Comparte tu primera publicación",
@@ -63,17 +63,17 @@
     "comments_one": "{{count}} comentario",
     "comments_other": "{{count}} comentarios",
     "cardGate": "Añade un método de pago en la página de Suscripción para empezar a interactuar.",
-    "cardGateTitle": "Muestra tus publicaciones en el feed y contabiliza interacciones",
-    "cardGateBody": "Durante la prueba, tus publicaciones aparecen en el feed, y las reacciones y los comentarios se suman a tu total de interacciones.",
+    "cardGateTitle": "Haz que te noten en LinkedIn",
+    "cardGateBody": "Con la prueba gratis, reaccionas, comentas con ayuda de la IA y muestras tus publicaciones a otros miembros.",
     "cardGateCta": "Empezar prueba gratis",
     "cardGateLater": "Ahora no",
-    "cardGateCost": "Tarjeta requerida. Gratis hasta {{threshold}} interacciones realizadas o recibidas, registradas en la app, o por hasta {{days}} días, lo que ocurra primero. Después empieza tu plan. Cancela cuando quieras.",
-    "hiddenPostBanner": "Tu primera publicación está guardada y oculta hasta que inicies tu prueba.",
+    "cardGateCost": "Gratis por {{days}} días o hasta tus primeras {{threshold}} interacciones en la app (hechas o recibidas), lo que ocurra primero. Se requiere tarjeta. Después empieza tu plan. Cancela cuando quieras.",
+    "hiddenPostBanner": "Tu publicación está guardada. Entra al feed en cuanto empieces tu prueba gratis.",
     "cardGateBodyPastDue": "Tu último pago no se procesó. Actualiza tu método de pago para que tus publicaciones vuelvan a aparecer en el feed.",
     "cardGatePastDueCta": "Actualizar método de pago",
     "hiddenPostBannerPastDue": "Tu publicación está oculta hasta que actualices tu método de pago.",
-    "cardGateBodyNoTrial": "Tus publicaciones aparecen en el feed, y las reacciones y los comentarios se suman a tu total de interacciones.",
-    "hiddenPostBannerNoTrial": "Tu primera publicación está guardada y oculta hasta que te suscribas.",
+    "cardGateBodyNoTrial": "Con un plan, reaccionas, comentas con ayuda de la IA y muestras tus publicaciones a otros miembros.",
+    "hiddenPostBannerNoTrial": "Tu publicación está guardada. Entra al feed en cuanto te suscribas.",
     "cardGatePriceNoTrial": "El plan {{plan}} cuesta {{monthly}} o {{annual}}.",
     "viewOnLinkedIn": "Ver en LinkedIn ↗",
     "emptyFiltered": "Ninguna publicación coincide con tu filtro. Ajústalo o bórralo para ver más.",
@@ -93,7 +93,7 @@
       "title": "Primeros pasos",
       "signedIn": "Iniciaste sesión con LinkedIn",
       "firstPost": "Comparte una publicación",
-      "reactTwice": "Reacciona o genera un comentario en dos publicaciones"
+      "reactTwice": "Reacciona o comenta en 2 publicaciones (el borrador con IA también cuenta)"
     },
     "filter": {
       "toggle": "Filtrar feed",
@@ -153,7 +153,7 @@
   "composer": {
     "shareLabel": "Compartir una publicación",
     "placeholder": "https://www.linkedin.com/posts/your-name_…",
-    "hint": "Pega la URL de tu publicación de LinkedIn",
+    "hint": "Pega el enlace de tu publicación de LinkedIn",
     "submitting": "Enviando…",
     "submit": "Agregar publicación →",
     "submitError": "No se pudo agregar la publicación. Inténtalo de nuevo."
@@ -277,10 +277,10 @@
     "trialProgress": "{{combined}} / {{threshold}} interacciones",
     "trialNoSwitch": "No disponible durante tu período de prueba",
     "whatYouLlMiss": "Starter incluye 25 interacciones por publicación y 1 publicación por semana, en lugar de 50 y 2 en Growth, y no incluye filtros por sector.",
-    "newUserLead": "Growth filtra el feed por sector y país y aumenta los límites de tus publicaciones.",
-    "newUserTrialNote": "Tarjeta requerida. Gratis hasta {{threshold}} interacciones realizadas o recibidas, registradas en la app, o por hasta {{days}} días, lo que ocurra primero. Cancela cuando quieras.",
+    "newUserLead": "Con Growth, ves solo publicaciones de tu sector y país, y puedes compartir más publicaciones tuyas.",
+    "newUserTrialNote": "Gratis por {{days}} días o hasta tus primeras {{threshold}} interacciones en la app (hechas o recibidas), lo que ocurra primero. Se requiere tarjeta. Cancela cuando quieras.",
     "noTrialNote": "Ya usaste tu prueba gratuita. El cobro comienza cuando te suscribas. Cancela cuando quieras.",
-    "recommended": "Mejor para un feed dirigido",
+    "recommended": "Recomendado",
     "selected": "Tu elección",
     "annual": "Anual · 2 meses gratis",
     "monthly": "Mensual",
@@ -288,7 +288,7 @@
     "portalFailed": "No se pudo abrir el portal: {{error}}",
     "customPrice": "Personalizado",
     "switchPlan": "Cambiar a {{plan}}",
-    "startTrialCta": "Empezar prueba de {{plan}}",
+    "startTrialCta": "Prueba {{plan}} gratis",
     "noTrialCta": "Suscribirse a {{plan}}",
     "seeAllPlans": "Ver todos los planes",
     "hideAllPlans": "Ocultar los otros planes",
@@ -303,8 +303,8 @@
     "successBody": "Tu prueba gratuita de {{plan}} ya está activa.",
     "successBodyActive": "Tu plan {{plan}} ya está activo.",
     "successPostLive": "Tu primera publicación ya está en el feed.",
-    "successOutcome": "Abre el feed y participa en tu primera conversación relevante en LinkedIn.",
-    "successCta": "Encontrar publicación",
+    "successOutcome": "Ahora elige una publicación en el feed y deja tu primer comentario en LinkedIn.",
+    "successCta": "Ir al feed",
     "successStay": "Quedarme aquí",
     "activating": "Activando tu prueba…",
     "activatingPlan": "Activando tu plan…",
@@ -344,31 +344,31 @@
     "plans": {
       "starter": {
         "name": "Starter",
-        "description": "Para compartir publicaciones y navegar por el feed completo",
+        "description": "Para ver el feed completo y compartir tus publicaciones",
         "features": [
-          "Las publicaciones permanecen en el feed hasta 25 reacciones y comentarios",
+          "Cada publicación sigue en el feed hasta recibir 25 reacciones y comentarios",
           "Accede al feed completo en vivo",
-          "Borradores de comentarios y sugerencias de reacción con IA",
+          "La IA sugiere reacciones y escribe borradores de comentarios",
           "1 publicación en el feed por semana"
         ]
       },
       "growth": {
         "name": "Growth",
-        "description": "Para un feed filtrado por sector y país",
+        "description": "Para ver solo publicaciones de tu sector y país",
         "features": [
-          "Las publicaciones permanecen en el feed hasta 50 reacciones y comentarios",
-          "Feed filtrado por sector + país",
+          "Cada publicación sigue en el feed hasta recibir 50 reacciones y comentarios",
+          "Feed solo con publicaciones de tu sector y país",
           "Todo lo de Starter",
           "2 publicaciones en el feed por semana"
         ]
       },
       "pro": {
         "name": "Pro",
-        "description": "Para filtros personalizados y controles de visibilidad en el feed",
+        "description": "Para elegir tus filtros y quién ve tus publicaciones",
         "features": [
-          "Las publicaciones permanecen en el feed hasta 200 reacciones y comentarios",
-          "Filtros personalizados de sector + país",
-          "Controla quién ve tus publicaciones en el feed compartido",
+          "Cada publicación sigue en el feed hasta recibir 200 reacciones y comentarios",
+          "Elige los sectores y países de tu feed",
+          "Decide quién ve tus publicaciones en el feed compartido",
           "Todo lo de Growth",
           "5 publicaciones en el feed por semana"
         ]
@@ -425,11 +425,11 @@
   "privacy": {
     "title": "Privacidad y datos",
     "consentPrompt": {
-      "title": "Configura tus preferencias",
-      "intro": "Antes de continuar, elige cómo podemos contactarte y si podemos medir cómo usas la aplicación. Son opcionales y están desactivadas por defecto — puedes cambiarlas cuando quieras en Configuración → Privacidad y datos.",
+      "title": "Dos opciones rápidas",
+      "intro": "Marca solo lo que quieras. Las dos empiezan sin marcar, y puedes cambiarlas cuando quieras en Configuración → Privacidad y datos.",
       "save": "Guardar y continuar",
-      "note": "El procesamiento de servicio, seguridad y obligaciones legales ocurre independientemente de estas opciones.",
-      "digestNote": "El resumen de actividad está activado por defecto y puede desactivarse en Configuración > Correos."
+      "note": "Aunque las dos estén sin marcar, usamos tus datos para que la app funcione, por seguridad y para cumplir la ley.",
+      "digestNote": "El correo con el resumen de actividad cada 3 días ya viene activado. Puedes desactivarlo en Configuración > Correos."
     },
     "consent": {
       "title": "Preferencias de comunicación y analítica",

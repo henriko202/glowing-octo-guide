@@ -37,8 +37,8 @@ export default function CardGateDialog({
   const [searchParams] = useSearchParams()
   const plan = resolveTargetPlan(searchParams)
   // A past_due member already has a card and already had a trial — "start your trial" copy is
-  // wrong for them (F5); they need to fix a failed payment, not sign up. The title's "your post
-  // goes live" framing still holds (their post is hidden too), so only body + CTA branch.
+  // wrong for them (F5); they need to fix a failed payment, not sign up. The title's result-first
+  // "get noticed" framing still holds for them, so only body + CTA branch.
   // `canTrial` is the second, quieter version of the same lie: a member on 'none' *with* rows gets
   // no trial at checkout either, so their body, CTA and cost line all swap too.
   const { status, me, canTrial } = useCardGate()

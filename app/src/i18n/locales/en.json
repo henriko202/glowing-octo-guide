@@ -33,8 +33,8 @@
     "profile": "Profile & settings",
     "openSidebar": "Open navigation",
     "skipToContent": "Skip to content",
-    "trialGoal": "Your {{plan}} plan starts when you reach {{threshold}} interactions or on {{date}}.",
-    "trialGoalNoDate": "Your {{plan}} plan starts when you reach {{threshold}} interactions.",
+    "trialGoal": "Your free trial ends when you reach {{threshold}} interactions or on {{date}}. Then your {{plan}} plan starts.",
+    "trialGoalNoDate": "Your free trial ends when you reach {{threshold}} interactions. Then your {{plan}} plan starts.",
     "trialStartsAt": "Your plan starts at {{threshold}} interactions or on {{date}}.",
     "trialNearEnd": "{{remaining}} interactions left until your {{plan}} plan starts.",
     "trialMadeReceived": "made {{made}} · received {{received}}",
@@ -43,17 +43,17 @@
   },
   "onboarding": {
     "firstPost": {
-      "title": "Share your best recent post",
-      "intro": "Add one of your LinkedIn posts so it appears in the feed and others can interact with it. You can add more anytime.",
-      "skip": "I'll do this later"
+      "title": "Add one of your LinkedIn posts",
+      "intro": "It goes into the feed, where other members can see it, react, and comment. Any of your posts works, and you can add more later.",
+      "skip": "Skip for now"
     }
   },
   "feed": {
     "title": "Your Feed",
     "loading": "Loading feed...",
-    "emptyTitle": "Your feed fills as members post",
+    "emptyTitle": "The feed is empty for now",
     "emptyBody": "Members' posts show up here as they share them. Yours can be the first.",
-    "emptyBodyPosted": "No other posts are available yet. Invite a colleague from your industry or check back later.",
+    "emptyBodyPosted": "No other posts yet. Invite a colleague from your field, or check back later.",
     "emptyCta": "Share your first post",
     "postAdded": "Post added to the feed.",
     "loadMore": "Load more",
@@ -63,17 +63,17 @@
     "comments_one": "{{count}} comment",
     "comments_other": "{{count}} comments",
     "cardGate": "Add a payment method on the Billing page to start engaging.",
-    "cardGateTitle": "Show your posts in the feed and count interactions",
-    "cardGateBody": "During your trial, your posts appear in the feed, and reactions and comments count toward your interaction total.",
+    "cardGateTitle": "Get noticed on LinkedIn",
+    "cardGateBody": "With a free trial, you can react, comment with help from AI, and show your posts to other members.",
     "cardGateCta": "Start free trial",
     "cardGateLater": "Not now",
-    "cardGateCost": "Card required. Free until {{threshold}} interactions made or received, as recorded in the app, or for up to {{days}} days, whichever comes first. Then your plan starts. Cancel anytime.",
-    "hiddenPostBanner": "Your first post is saved and hidden until you start your trial.",
+    "cardGateCost": "Free for {{days}} days or your first {{threshold}} interactions in the app (made or received), whichever comes first. Card required. Then your plan starts. Cancel anytime.",
+    "hiddenPostBanner": "Your post is saved. It goes into the feed as soon as you start your free trial.",
     "cardGateBodyPastDue": "Your last payment didn't go through. Update your payment method to get your posts back in the feed.",
     "cardGatePastDueCta": "Update payment method",
     "hiddenPostBannerPastDue": "Your post is hidden until you update your payment method.",
-    "cardGateBodyNoTrial": "Your posts appear in the feed, and reactions and comments count toward your interaction total.",
-    "hiddenPostBannerNoTrial": "Your first post is saved and hidden until you subscribe.",
+    "cardGateBodyNoTrial": "With a plan, you can react, comment with help from AI, and show your posts to other members.",
+    "hiddenPostBannerNoTrial": "Your post is saved. It goes into the feed as soon as you subscribe.",
     "cardGatePriceNoTrial": "The {{plan}} plan is {{monthly}} or {{annual}}.",
     "viewOnLinkedIn": "View on LinkedIn ↗",
     "emptyFiltered": "No posts match your filter yet. Adjust it or clear it to see more.",
@@ -93,7 +93,7 @@
       "title": "Getting started",
       "signedIn": "Signed in with LinkedIn",
       "firstPost": "Share a post",
-      "reactTwice": "React to or generate a comment on two posts"
+      "reactTwice": "React or comment on 2 posts (an AI draft counts too)"
     },
     "filter": {
       "toggle": "Filter feed",
@@ -153,7 +153,7 @@
   "composer": {
     "shareLabel": "Share a post",
     "placeholder": "https://www.linkedin.com/posts/your-name_…",
-    "hint": "Paste your LinkedIn post URL",
+    "hint": "Paste the link to your LinkedIn post",
     "submitting": "Submitting…",
     "submit": "Add post →",
     "submitError": "Couldn't add the post. Try again."
@@ -277,10 +277,10 @@
     "trialProgress": "{{combined}} / {{threshold}} interactions",
     "trialNoSwitch": "Unavailable during your trial",
     "whatYouLlMiss": "Starter includes 25 interactions per post and 1 post per week, instead of 50 and 2 on Growth, and doesn't include industry filtering.",
-    "newUserLead": "Growth filters the feed to your industry and country and raises your post limits.",
-    "newUserTrialNote": "Card required. Free until {{threshold}} interactions made or received, as recorded in the app, or for up to {{days}} days, whichever comes first. Cancel anytime.",
+    "newUserLead": "With Growth, you see only posts from your industry and country, and you can share more posts.",
+    "newUserTrialNote": "Free for {{days}} days or your first {{threshold}} interactions in the app (made or received), whichever comes first. Card required. Cancel anytime.",
     "noTrialNote": "You've already used your free trial. Billing starts when you subscribe. Cancel anytime.",
-    "recommended": "Best for targeted feeds",
+    "recommended": "Recommended",
     "selected": "Your choice",
     "annual": "Annual · 2 months free",
     "monthly": "Monthly",
@@ -288,7 +288,7 @@
     "portalFailed": "Failed to open portal: {{error}}",
     "customPrice": "Custom",
     "switchPlan": "Switch to {{plan}}",
-    "startTrialCta": "Start {{plan}} trial",
+    "startTrialCta": "Try {{plan}} free",
     "noTrialCta": "Subscribe to {{plan}}",
     "seeAllPlans": "See all plans",
     "hideAllPlans": "Hide other plans",
@@ -300,11 +300,11 @@
     "duplicateCanceledNotice": "A duplicate subscription was created by mistake and we cancelled it right away. You were not charged for it.",
     "dismiss": "Dismiss",
     "successTitle": "You're all set.",
-    "successBody": "Your {{plan}} trial is live.",
+    "successBody": "Your free {{plan}} trial has started.",
     "successBodyActive": "Your {{plan}} plan is live.",
     "successPostLive": "Your first post is now in the feed.",
-    "successOutcome": "Open the feed and join your first relevant LinkedIn conversation.",
-    "successCta": "Find a post",
+    "successOutcome": "Now pick a post in the feed and leave your first comment on LinkedIn.",
+    "successCta": "Go to the feed",
     "successStay": "Stay here",
     "activating": "Activating your trial…",
     "activatingPlan": "Activating your plan…",
@@ -344,31 +344,31 @@
     "plans": {
       "starter": {
         "name": "Starter",
-        "description": "For sharing posts and browsing the full feed",
+        "description": "To see the full feed and share your posts",
         "features": [
-          "Posts stay in the feed until 25 reactions and comments",
+          "Each post stays in the feed until it gets 25 reactions and comments",
           "See the full live feed",
-          "AI comment drafts and reaction suggestions",
+          "AI suggests reactions and drafts your comments",
           "1 post in the feed per week"
         ]
       },
       "growth": {
         "name": "Growth",
-        "description": "For a feed filtered to your industry and country",
+        "description": "To see only posts from your industry and country",
         "features": [
-          "Posts stay in the feed until 50 reactions and comments",
-          "Feed filtered to your industry + country",
+          "Each post stays in the feed until it gets 50 reactions and comments",
+          "A feed with only posts from your industry and country",
           "Everything in Starter",
           "2 posts in the feed per week"
         ]
       },
       "pro": {
         "name": "Pro",
-        "description": "For custom filters and feed visibility controls",
+        "description": "To pick your filters and who sees your posts",
         "features": [
-          "Posts stay in the feed until 200 reactions and comments",
-          "Custom industry + country filters",
-          "Control who sees your posts in the shared feed",
+          "Each post stays in the feed until it gets 200 reactions and comments",
+          "Pick the industries and countries in your feed",
+          "Decide who sees your posts in the shared feed",
           "Everything in Growth",
           "5 posts in the feed per week"
         ]
@@ -425,11 +425,11 @@
   "privacy": {
     "title": "Privacy & Data",
     "consentPrompt": {
-      "title": "Set your preferences",
-      "intro": "Before you continue, choose how we may contact you and whether we may measure how you use the app. These are optional and off by default — you can change them anytime in Settings → Privacy & Data.",
+      "title": "Two quick choices",
+      "intro": "Check only what you want. Both start unchecked, and you can change them anytime in Settings → Privacy & Data.",
       "save": "Save & continue",
-      "note": "Service, security, and legal processing happens regardless of these choices.",
-      "digestNote": "The activity digest is on by default and can be turned off in Settings > Emails."
+      "note": "Even with both unchecked, we still use your data to run the app, for security, and to follow the law.",
+      "digestNote": "The 3-day activity digest email is already on. You can turn it off in Settings > Emails."
     },
     "consent": {
       "title": "Communication & analytics preferences",

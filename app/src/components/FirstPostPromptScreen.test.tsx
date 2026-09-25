@@ -29,13 +29,13 @@ describe('FirstPostPromptScreen', () => {
 
   it('shows the first-post prompt and the composer', () => {
     render(<FirstPostPromptScreen />)
-    expect(screen.getByText(/share your best recent post/i)).toBeInTheDocument()
+    expect(screen.getByText(/add one of your linkedin posts/i)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/linkedin\.com\/posts/i)).toBeInTheDocument()
   })
 
   it('fires the dismiss mutation when the user skips', async () => {
     render(<FirstPostPromptScreen />)
-    fireEvent.click(screen.getByRole('button', { name: /i'll do this later/i }))
+    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }))
     await waitFor(() => expect(mockDismiss).toHaveBeenCalledOnce())
   })
 

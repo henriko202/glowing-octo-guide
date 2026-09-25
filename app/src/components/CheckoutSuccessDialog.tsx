@@ -19,7 +19,7 @@ import { captureEvent } from '@/lib/observability/analytics'
  * renders once told to open. `showPostLive` is the member's hidden-post state captured BEFORE the
  * webhook flip — by the time this opens the post is no longer hidden, so the caller must latch it.
  * `isTrial` picks the body: a first checkout lands on `trialing`, a canceled member re-subscribing
- * lands on `active` (no second trial) — "your trial is live" would be a lie for them.
+ * lands on `active` (no second trial) — "your free trial has started" would be a lie for them.
  */
 export default function CheckoutSuccessDialog({
   open,

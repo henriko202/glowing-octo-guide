@@ -49,11 +49,11 @@
     "skipToContent": "Saltar al contenido"
   },
   "hero": {
-    "eyebrow": "Herramienta de SSI de LinkedIn",
+    "eyebrow": "¿Haces un buen trabajo, pero poca gente lo ve?",
     "headlineLine1": "Haz que te noten en LinkedIn",
     "headlineLine2": "las personas de tu sector.",
-    "subLine1": "Link Into The SSI reúne publicaciones de tu sector en un solo feed y te ayuda a escribir un buen comentario.",
-    "subLine2": "Reaccionas y comentas tú mismo, en LinkedIn. Nada está automatizado.",
+    "subLine1": "Ve publicaciones de tu sector en un solo lugar, comenta con ayuda de la IA y muestra las tuyas a otros miembros.",
+    "subLine2": "Reaccionas y comentas tú mismo, en LinkedIn. Nada es automático.",
     "cta": "Empezar mi prueba gratis",
     "loginCta": "Iniciar sesión",
     "ctaDisclaimer": "Gratis por 7 días o hasta tus primeras 50 interacciones (hechas o recibidas), lo que ocurra primero. Se requiere tarjeta. Cancela cuando quieras.",
@@ -69,18 +69,18 @@
       },
       {
         "title": "Comparte una publicación tuya",
-        "body": "Pega el enlace de una de tus publicaciones de LinkedIn. La agregamos al feed para que otros miembros la vean."
+        "body": "Pega el enlace de una de tus publicaciones de LinkedIn. La agregamos al feed para que otros miembros la vean. ¿Todavía no tienes una? Puedes saltar este paso."
       },
       {
-        "title": "Participa en la conversación",
+        "title": "Comenta con ayuda de la IA",
         "body": "Elige una publicación. Si quieres, la IA escribe un primer borrador de tu comentario. Luego abrimos la publicación en LinkedIn, donde reaccionas o comentas tú mismo."
       }
     ]
   },
   "positioning": {
-    "eyebrow": "Por qué LISSI",
-    "headline": "Lo que LISSI te ayuda a hacer",
-    "intro": "Link Into The SSI (LISSI) te ayuda a que te noten en LinkedIn, a mejorar tu SSI y a seguir en el radar de las personas que importan en tu sector.",
+    "eyebrow": "Por qué ayuda",
+    "headline": "Lo que cambia para ti",
+    "intro": "Link Into The SSI (LISSI) ayuda a que las personas de tu sector vean tu nombre. Comentas sus publicaciones y muestras las tuyas a otros miembros.",
     "points": [
       {
         "title": "Que te noten en LinkedIn",
@@ -88,7 +88,7 @@
       },
       {
         "title": "Mejora tu SSI",
-        "body": "Interactuar con publicaciones es una de las cuatro áreas que LinkedIn evalúa en el SSI. El feed te da publicaciones para interactuar, y el resumen semanal muestra lo que hiciste."
+        "body": "El SSI es una puntuación de 0 a 100 que LinkedIn te da por cómo usas la red. Reaccionar y comentar cuenta para una de sus cuatro partes. El feed te da publicaciones para eso, y el resumen semanal muestra lo que hiciste."
       },
       {
         "title": "Que te conozcan en tu sector",
@@ -99,7 +99,7 @@
         "body": "Tu próxima oportunidad suele venir de alguien que ya conoce tu trabajo. Seguir visible para esas personas cuesta menos esfuerzo que escribirles a desconocidos."
       }
     ],
-    "closing": "Tú eliges con qué interactuar, y lo haces tú mismo en LinkedIn."
+    "closing": "Tú eliges las publicaciones y reaccionas o comentas tú mismo, en LinkedIn."
   },
   "ssiExplainer": {
     "eyebrow": "Sobre el SSI",
@@ -189,7 +189,7 @@
   "pricing": {
     "eyebrow": "Planes",
     "headline": "Elige tu plan",
-    "subheadline": "Todos los planes incluyen el feed y los borradores de comentarios con IA. Growth filtra el feed por tu sector y país, y Pro te permite crear tus propios filtros y elegir quién ve tus publicaciones.",
+    "subheadline": "Todos los planes tienen el feed y la ayuda de la IA para comentar. Growth filtra el feed por tu sector y país. Pro te deja elegir tus propios filtros y quién ve tus publicaciones.",
     "seeMonthly": "¿Prefieres pagar por mes? Ver precios mensuales",
     "seeAnnual": "Volver al plan anual · 2 meses gratis",
     "recommended": "Recomendado",
@@ -205,11 +205,11 @@
       {
         "id": "starter",
         "name": "Starter",
-        "description": "Para compartir publicaciones y navegar por el feed completo",
-        "axis": "Tus publicaciones permanecen en el feed hasta recibir 25 reacciones y comentarios",
+        "description": "Para ver el feed completo y compartir tus publicaciones",
+        "axis": "Cada publicación tuya sigue en el feed hasta recibir 25 reacciones y comentarios",
         "features": [
           "Accede al feed completo en vivo",
-          "Sugerencias de reacción y borradores de comentarios con IA",
+          "La IA sugiere reacciones y escribe borradores de comentarios",
           "Agrega 1 publicación al feed por semana"
         ],
         "cta": "Prueba Starter gratis"
@@ -217,10 +217,10 @@
       {
         "id": "growth",
         "name": "Growth",
-        "description": "Para un feed filtrado por sector y país",
-        "axis": "Tus publicaciones permanecen en el feed hasta recibir 50 reacciones y comentarios",
+        "description": "Para ver solo publicaciones de tu sector y país",
+        "axis": "Cada publicación tuya sigue en el feed hasta recibir 50 reacciones y comentarios",
         "features": [
-          "Feed filtrado por sector + país",
+          "Feed solo con publicaciones de tu sector y país",
           "Todo lo de Starter",
           "Destaca 1 publicación al mes en la parte superior del feed",
           "Agrega 2 publicaciones al feed por semana"
@@ -230,11 +230,11 @@
       {
         "id": "pro",
         "name": "Pro",
-        "description": "Para filtros personalizados y controles de visibilidad en el feed",
-        "axis": "Tus publicaciones permanecen en el feed hasta recibir 200 reacciones y comentarios",
+        "description": "Para elegir tus filtros y quién ve tus publicaciones",
+        "axis": "Cada publicación tuya sigue en el feed hasta recibir 200 reacciones y comentarios",
         "features": [
-          "Filtros personalizados de sector + país",
-          "Controla quién ve tus publicaciones en nuestro feed",
+          "Elige los sectores y países de tu feed",
+          "Decide quién ve tus publicaciones en nuestro feed",
           "Todo lo de Growth",
           "Destaca 3 publicaciones al mes en la parte superior del feed",
           "Agrega 5 publicaciones al feed por semana"
@@ -251,15 +251,15 @@
     "items": [
       {
         "q": "¿Link Into The SSI publica o comenta por mí?",
-        "a": "No. Nunca publicamos, reaccionamos ni comentamos en LinkedIn por ti. Abrimos la publicación en LinkedIn y copiamos tu borrador de comentario, si tienes uno. Tú completas la acción allí."
+        "a": "No. Nunca publicamos, reaccionamos ni comentamos en LinkedIn por ti. Abrimos la publicación en LinkedIn y copiamos tu borrador de comentario, si tienes uno. Tú mismo reaccionas o comentas allí."
       },
       {
         "q": "¿En qué se diferencia de las herramientas de automatización?",
-        "a": "Las herramientas de automatización hacen acciones masivas desde tu cuenta. Con LISSI, eliges una publicación a la vez y reaccionas o comentas tú mismo en LinkedIn."
+        "a": "Las herramientas de automatización reaccionan y comentan en masa desde tu cuenta. Aquí, eliges una publicación a la vez y reaccionas o comentas tú mismo en LinkedIn."
       },
       {
         "q": "¿Qué incluye la prueba gratis y cuándo se me cobra?",
-        "a": "Tienes todo lo del plan que elijas, gratis por 7 días o hasta llegar a 50 interacciones, lo que ocurra primero. Cuentan como interacciones las reacciones y los comentarios que haces, el primer borrador con IA que generas para cada publicación y las reacciones y los comentarios que otros miembros dejan en tus publicaciones. Registras una tarjeta para empezar y te cobramos cuando termina la prueba. Si cancelas antes, no pagas nada."
+        "a": "Tienes todo lo del plan que elijas, gratis por 7 días o hasta llegar a 50 interacciones, lo que ocurra primero. Cuenta como interacción cada reacción o comentario que haces o recibes en la app. El primer borrador con IA que generas para cada publicación también cuenta. Registras una tarjeta para empezar y te cobramos cuando termina la prueba. Si cancelas antes, no pagas nada."
       },
       {
         "q": "¿Qué es el SSI y qué tan rápido cambiará el mío?",

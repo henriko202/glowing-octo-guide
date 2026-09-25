@@ -561,7 +561,7 @@ describe('checkout-return celebration (R07)', () => {
 
   // A canceled member re-subscribing sits on `canceled` (not `none`) until the webhook lands, and
   // the repeat-trial guard (billingNode.ts) lands them on `active`, never `trialing`. So: no
-  // premature "your trial is live" dialog while still canceled, the activating copy says "plan"
+  // premature "your free trial has started" dialog while still canceled, the activating copy says "plan"
   // (they get no trial), and the real dialog names the plan — never a trial, never a first post
   // going live (a canceled member's posts were never hidden).
   it('treats a canceled re-subscriber as activating, then celebrates the plan (not a trial) once active', () => {

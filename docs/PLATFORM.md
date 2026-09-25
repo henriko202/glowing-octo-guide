@@ -1208,7 +1208,7 @@ flowchart TD
 | `users.getOrCreateInviteCode`                                                            | mutation (public)                      | **R19** — returns the member's `inviteCode`, minting it on the first call (Settings › Invite). Idempotent afterwards; codes are never reissued. On a `by_invite_code` collision it retries once, then throws `ConvexError('INVITE_CODE_RETRY')`.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `users.getInviteSummary`                                                                 | query (public)                         | **R19** — `{ inviteCode: string \| null; joined: number }`, or `null` when unauthenticated. `inviteCode` is `null` until the mutation above mints it. `joined` counts members carrying the code via `by_referred_by_code` with `.take(101)`, so the read is bounded and the UI can render "100+" past the ceiling.                                                                                                                                                                                                                                                                                                                                      |
 | `users.setDerivedPublicIdentifier`                                                       | mutation (internal)                    | Set‑once: fills `linkedinPublicIdentifier` from a name‑verified post's author profile URL; triggers the budget‑guarded Apify profile scrape. Called by `posts.submitPost`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `users.dismissFirstPostPrompt`                                                           | mutation (public)                      | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("I'll do this later").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `users.dismissFirstPostPrompt`                                                           | mutation (public)                      | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("Skip for now").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `users.markFirstPostPrompted`                                                            | mutation (internal)                    | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `users.updateProfile`                                                                    | mutation (public)                      | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at `MAX_HEADLINE_LENGTH` (65) chars — rejected if longer; empty string clears any of them.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `users.setPostVisibility`                                                                | mutation (public)                      | **Pro/Contact only** (checked server-side — throws otherwise). Sets `defaultVisibilityIndustries`/`defaultVisibilityCountries`; each entry validated against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values), countries upper-cased. Empty arrays are valid (⇒ everyone). Applies to future posts only — see [§11](#11-feed--engagement).                                                                                                                                                                                                                                                                                     |
@@ -1476,7 +1476,14 @@ Key checkout parameters:
   trial), so it cannot discount a later annual switch; a `repeating` window discounts any invoice created inside it —
   a prorated annual one included, which is a free year (proven and fixed 2026-09-18, §8). A plan change with a
   discount still attached is detached by the webhook guard (`lib/discountGuard`), and a trialing member cannot switch
-  plans at all (trial portal configuration, §8).
+  plans at all (trial portal configuration, §8). **Coupons are create-only for their terms** (proven 2026-09-18:
+  updating a coupon rejects `applies_to`, `percent_off` and `duration` as unknown parameters; only `name`/`metadata`
+  edit). To widen the promo later — e.g. Starter-only → Starter+Growth — create a **new** coupon with the wider
+  `applies_to` and a new promotion code; a deactivated code frees its string, so the customer-facing code can stay
+  the same (deactivate old, create new). Existing subscriptions keep the discount they already redeemed, and the app
+  never names the coupon (only `allow_promotion_codes`), so this is a Stripe-side operation with no code change.
+  `max_redemptions` and `first_time_transaction` are create-only too — changing them is the same re-issue, and a new
+  code restarts its redemption count.
 - `locale: stripeCheckoutLocale(billingLocale)` (`lib/checkoutCopy.ts`) — the hosted page renders in the member's own
   language. Stripe's codes are not ours: our `pt` maps onto Stripe's `pt-BR`.
 - `custom_text.submit.message: checkoutSubmitMessage(billingLocale, { trial, days })` — the early-charge rule, stated
@@ -5289,9 +5296,9 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
           holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead`
           when
           the plan came from the URL or the stash and `billing.newUserLead` otherwise. A chosen plan is labelled **"Your
-          choice"**; the Growth fallback is labelled **"Best for targeted feeds"**. Every pre-card CTA says "Start
-          {{plan}} trial" without promising a fixed duration — **unless the member has no trial left**, see the next
-          bullet.
+          choice"**; the Growth fallback is labelled **"Recommended"**. Every pre-card CTA says "Try {{plan}} free"
+          (the landing's plan-card wording) without promising a fixed duration — **unless the member has no trial
+          left**, see the next bullet.
           `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
           a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle and
           the
@@ -5300,10 +5307,9 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
           `const trialDays = me?.trialDays ?? TRIAL_PERIOD_DAYS` —
           the server's own answer (`getMe` → `toSafeMe.trialDays`, itself `trialDaysFor(user)`, §8), with the 7-day
           constant only as the pre-load fallback. The disclosure interpolates it as an upper bound alongside
-          `TRIAL_INTERACTION_THRESHOLD`: card required; free until 50 interactions made or received, as recorded in the
-          app,
-          or for up to
-          `{{days}}` days, whichever comes first. CTA and chosen-plan labels omit duration rather than implying the full
+          `TRIAL_INTERACTION_THRESHOLD`, in the same shape as the landing's `pricing.trialNote`: free for `{{days}}`
+          days or your first 50 interactions in the app (made or received), whichever comes first; card required;
+          cancel anytime. CTA and chosen-plan labels omit duration rather than implying the full
           period is guaranteed. Directly under the pre-card lead, an invited member also gets the gift line
           `billing.giftFrom` — "{{name}} invited you, so your trial can last up to {{days}} days instead of {{base}}
           days" —
@@ -5334,7 +5340,8 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
               button two clicks later, so the page and the checkout never contradict each other. `billing.newUserLead`
               needs
               no
-              twin: "select a plan below" is true either way. The default is optimistic (`!== false`) because `me` is
+              twin: it says what Growth does (only posts from your industry and country, more posts of your own), not
+              anything about a trial, so it is true either way. The default is optimistic (`!== false`) because `me` is
               `undefined` for one render and the majority case is a genuinely new visitor. - **Reused by
               `UpgradeAtLimit` (R08).** The shared `UpgradeAtLimit` component ([§9](#9-plan-limits-system),
               [§14](#14-frontend--authenticated-app-app)) links a starter/growth member at a cap straight to
@@ -5400,17 +5407,20 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
               `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the
               status
               becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
-              `billing.successBody` ("your {{plan}} trial is live") when trialing, `billing.successBodyActive` ("your
+              `billing.successBody` ("your free {{plan}} trial has started") when trialing,
+              `billing.successBodyActive` ("your
               {{plan}}
               plan is live") when active; then `billing.successPostLive` only for a trialing member who already had a
               post (reusing FeedPage's `useOwnPostState`, R04, latched before the flip — a re‑subscriber's posts were
               never
-              hidden); then `billing.successOutcome`, which sends the member to their first relevant conversation
-              without
-              promising a LinkedIn result; then the plan's own use-case description. A card holder who arrives via an
+              hidden); then `billing.successOutcome` ("Now pick a post in the feed and leave your first comment on
+              LinkedIn"), which names the first step without
+              promising a LinkedIn result; then the plan's own use-case description. The button is
+              `billing.successCta` ("Go to the feed"). A card holder who arrives via an
               upgrade-at-the-limit link (`?plan=` in the URL, R08) sees **"Your choice"** on that plan. A no-card
               visitor
-              with no explicit choice sees Growth's objective **"Best for targeted feeds"** rationale. Neither badge
+              with no explicit choice sees **"Recommended"** on Growth; the card's description gives the reason. Neither
+              badge
               appears
               on the plan the member already holds or on an unselected plan. - **Cancel, downgrade and resume (R09 —
               see [§8](#8-subscriptions--billing) for the backend).** The
@@ -5664,8 +5674,8 @@ cross-reference: §13B for the append-only backend),
 `api.privacy.consent.acknowledgePolicy` then `window.location.reload()`; ensures every existing user re-accepts after a
 policy update before reaching the app — see the `RequireAuth` interception order above and §13B),
 `ConsentPromptScreen` (first-login full-screen prompt shown by `RequireAuth` when
-`me.consentPromptedAt` is unset; presents **Communication & analytics preferences** — marketing and analytics toggles,
-both **OFF by default** — and a "Save & continue" button that calls
+`me.consentPromptedAt` is unset; presents **Communication & analytics preferences** under a plain "Two quick choices"
+heading — marketing and analytics checkboxes, both **OFF by default** — and a "Save & continue" button that calls
 `api.privacy.consent.completeConsentPrompt({ sessionToken, marketing, analytics })` then
 `window.location.reload()`; below those toggles two note lines explain that service/security/legal processing happens
 regardless of the choices and — R24 — that the **3-day activity digest is on by default** and can be turned off in
@@ -5675,7 +5685,8 @@ interception order above and §13B),
 `FirstPostPromptScreen` (first-login full-screen **skippable** onboarding step shown by `RequireAuth` when
 `me.firstPostPromptedAt` is unset — shown to every new member immediately after the consent gate; presents the shared
 `PostComposer` under a
-"Share your best recent post" heading, plus an "I'll do this later" link. Submitting a post calls
+"Add one of your LinkedIn posts" heading (the intro says any of your posts works, so nobody stalls hunting for their
+best one), plus a "Skip for now" link. Submitting a post calls
 `api.posts.submitPost` — which stamps `firstPostPromptedAt` server-side via `users.markFirstPostPrompted` and creates
 the post hidden for a no-card member (`postCreatedHidden`); the screen no longer branches on card status — **everyone
 reloads straight into the feed** (R04: the card ask arrives after the product, not instead of it), where a card-less
@@ -5784,16 +5795,19 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   real accessible name and stay clickable; a tap calls `onGated` instead of `onReact`/`onComment`/navigating (see the
   `PostCard` bullet above). A dead click was considered worse than a dialog.
 - `onGated` opens a shared **`CardGateDialog`** (`app/src/components/CardGateDialog.tsx`, `feed.cardGateTitle`/
-  `cardGateBody` copy — leads with the result, never billing mechanics). Its `source` prop
+  `cardGateBody` copy — leads with the result, never billing mechanics: "Get noticed on LinkedIn", then what the trial
+  lets you do: react, comment with help from AI, and show your posts to other members. The title is shared by the
+  trial, no-trial and `past_due` variants, so it names only the result; the body also renders inline in
+  `UpgradeAtLimit`, so it reads on its own). Its `source` prop
   (`GateSource = 'react' | 'comment' | 'linkedin' | 'aiDraft'`; each `PostCard` control reports its own source —
   `'aiDraft'` is reserved for `CommentBox`'s AI-draft control, which is structurally unreachable while gated and
   untouched by R04) only tags the `card_gate_opened` PostHog event, not the copy. Its
   primary CTA is `feed.cardGateCta` ("Start free trial") — **never** "Add a payment method" — linking to
   `/billing?plan={{resolveTargetPlan()}}` and firing `card_gate_cta_clicked`; a secondary "Not now" closes it.
   (`captureEvent`, consent-gated, no-op pre-init.) Under the footer, one muted line says what the CTA costs
-  (`feed.cardGateCost` — card required; free until `{{threshold}}` interactions made or received, as recorded in the
-  app, or for up to
-  `{{days}}` days, whichever comes first; then the selected plan starts; cancel anytime — the
+  (`feed.cardGateCost` — free for `{{days}}` days or your first `{{threshold}}` interactions in the app, made or
+  received, whichever comes first; card required; then the selected plan starts; cancel anytime — the landing
+  `pricing.trialNote` order, the
   threshold interpolated from `TRIAL_INTERACTION_THRESHOLD`, never typed into the copy; R04's "the line under it says
   what it costs"). Covered by `app/src/components/CardGateDialog.test.tsx` (event fired once with the tap source, CTA
   href + cost line, `past_due` swap with no cost line, `trialEligible: false` swap with no trial promise at all).
@@ -5815,7 +5829,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                                  | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -5950,7 +5964,7 @@ app, or up to the
 member's `trialDays`, whichever comes first. Pricing describes the observable cap consequence (when a post leaves the
 feed), scopes visibility controls to the shared feed, and uses `US$` on client-side fallback labels in English (`U$` in
 pt/es). Explicit plan
-choices use `billing.selected`; only the unchosen Growth fallback uses the reasoned `billing.recommended`. The
+choices use `billing.selected`; only the unchosen Growth fallback uses `billing.recommended`. The
 cancellation downsell gained `billing.cancel.alternativeNoDate` so both dated and no-date states disclose Starter's
 price, current limits, timing, and lost filter before **Schedule Starter**. These two new keys exist in all three
 locales with identical placeholders.
@@ -5967,6 +5981,22 @@ cartão". Privacy copy uses LGPD vocabulary ("tratamento de dados") and "ficam d
 comportamental de contexto cruzado". Dollar labels render as `U$` in pt/es across the landing cards, the app fallbacks
 and the billing emails (en keeps `$`/`US$`). Value-only: no key, leaf, or placeholder changed, and the legal
 `[PLACEHOLDER]` tokens stay verbatim.
+
+**Plain-language copy standard (2026-09-25):** the first-run and money surfaces were rewritten for a tired reader who
+skims. That covers the consent prompt, `FirstPostPromptScreen`, the empty feed and its checklist, the card gate and its
+banner, the sidebar trial card, and the Billing page with its success dialog. The rule: everyday words, short
+sentences, the result first and the conditions after. Examples: `onboarding.firstPost.title` is "Add one of your
+LinkedIn posts" (was "Share your best recent post", which sent people hunting for their best one);
+`feed.checklist.reactTwice` is "React or comment on 2 posts (an AI draft counts too)", which keeps the 2026‑09‑11 AI
+draft mention; `shell.trialGoal` says the free trial ends first and the
+plan starts after; the consent prompt says in plain words what still happens when both boxes stay unchecked. Every
+trial disclosure (`feed.cardGateCost`, `billing.newUserTrialNote`) follows the landing `pricing.trialNote` order:
+length and interaction count first, then "Card required", then "Cancel anytime". `billing.startTrialCta` is "Try
+{{plan}} free" and `billing.recommended` is "Recommended", both as on the landing, and the plan cards reuse the
+landing's plain lines ("Each post stays in the feed until it gets 50 reactions and comments"). Claims did not grow:
+Growth still _filters_ by industry and country, and Pro's visibility control stays scoped to the shared feed. pt-BR and
+neutral Latin-American Spanish were written natively with the same meaning. Value-only: no key, leaf, or placeholder
+changed. The landing got the same pass ([§15](#15-frontend--landing-site-landing)).
 
 **Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and confirmation copy used
 by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
@@ -6181,10 +6211,12 @@ consequences bind the page:
    so a visitor can understand the product and its cost before learning LinkedIn's scoring terminology. Its intro
    lists the four scored areas without claiming that SSI controls search ranking or profile discovery.
 2. The hero **headline** stays outcome-focused ("Get noticed on LinkedIn by the people in your field"), because
-   "raise your SSI" is solution-aware copy for an audience that isn't. A small **"LinkedIn SSI tool" eyebrow** above
-   the headline names the product category for on-page search. `subLine1` says what the product does (posts from your
-   field in one feed, help writing a good comment); the full SSI explanation stays below the product explanation in
-   `SSIExplainer`.
+   "raise your SSI" is solution-aware copy for an audience that isn't. Since 2026‑09‑25 the small eyebrow above the
+   headline asks the pain as a question ("Good at your work, but few people see it?"), so a visitor who is only
+   skimming recognizes themselves before reading on. The category term "LinkedIn SSI tool" left the visible hero; it
+   stays in `meta.title`, `meta.keywords` and the JSON-LD. `subLine1` says what the product does in three plain verbs
+   (see posts from your field in one place, comment with help from AI, show your own posts to other members); the full
+   SSI explanation stays below the product explanation in `SSIExplainer`.
 
 ### Locale routing (Plan 2 — i18n)
 
@@ -6401,19 +6433,23 @@ Pricing is a section of the Home page (`Pricing` component), not a standalone ro
 `app/[lang]/layout.tsx` renders `<CookieNotice>` (see below) and contains the no-flash theme script. **Notable section
 content** (encodes the business rules):
 
-- `Hero` retains the centered headline and CTA layout. It renders a `hero.eyebrow` label ("LinkedIn SSI tool" /
-  localized) above the H1 so the primary keyword is visible on-page as well as in the metadata. The H1 is the outcome (
+- `Hero` retains the centered headline and CTA layout. It renders a `hero.eyebrow` label above the H1: the pain as a
+  question ("Good at your work, but few people see it?" / localized) since 2026‑09‑25; before that it was the "LinkedIn
+  SSI tool" keyword, which now lives only in the metadata. The H1 is the outcome (
   "Get noticed on LinkedIn / by the people in your field."); `subLine1` says what the product does and `subLine2`
   that the member acts on LinkedIn themselves.
   It names a plan-agnostic offer ("Pick any plan", the interval's Starter price as the from-floor) alongside the
   shared trial disclosure. It contains no sample post or simulated product interface.
-- `Positioning` (`/en#why-lissi`) is the extractable answer block for the positioning: an H2 ("What LISSI helps you
-  do" / localized) plus four cards (get noticed, improve your SSI, become known in your field, help the right people
-  find you) and the closing "You decide what to engage with, and you do it yourself on LinkedIn." It is composed from
+- `Positioning` (`/en#why-lissi`) is the extractable answer block for the positioning: an H2 ("What changes for you"
+  / localized, under the eyebrow "Why it helps") plus four cards (get noticed, improve your SSI, become known in your
+  field, help the right people find you) and the closing "You pick the posts, and you react or comment yourself on
+  LinkedIn." The SSI card explains the score in one line (0 to 100, from LinkedIn) before saying what the feed and
+  the weekly recap do for it. It is composed from
   `dict.positioning` and mirrored into `/llms.txt` and `/llms-full.txt`. Since 2026‑09‑22 the JSON-LD
   `Organization.slogan` is built from the two hero headline lines instead of this H2, which is now a section label.
-- `HowItWorks` mirrors the app's Getting started checklist: sign in with LinkedIn, share one of your posts, join the
-  conversation (an optional AI draft, then the reaction or comment on LinkedIn). `Features` presents the three shipped
+- `HowItWorks` mirrors the app's Getting started checklist: sign in with LinkedIn, share one of your posts (skippable,
+  as in the app's `FirstPostPromptScreen`), "Comment with help from AI" (an optional AI draft, then the reaction or
+  comment on LinkedIn). `Features` presents the three shipped
   capabilities with their plan labels. The Growth card describes a **filter** ("Growth shows only posts from people in
   your industry and country"), matching `convex/feed.ts`; until 2026‑09‑22 it claimed Growth put those posts "at the
   top" of the feed. The redundant standalone pain section was removed to bring pricing closer to the product
@@ -7653,6 +7689,28 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑25 (plain-language copy pass). **The landing and the app's first-run copy now read for a tired
+visitor who skims: everyday words, short sentences, the result first and the conditions after.** Landing (
+`landing/i18n/dictionaries/{en,pt,es}.json`): the hero eyebrow asks the pain as a question ("Good at your work, but
+few people see it?") instead of showing the "LinkedIn SSI tool" keyword, which stays in `meta.title`, `meta.keywords`
+and the JSON-LD; `hero.subLine1` names three plain actions; `positioning` becomes "Why it helps" / "What changes for
+you", explains the SSI in one line (a 0 to 100 score from LinkedIn) and closes on "You pick the posts, and you react
+or comment yourself on LinkedIn."; HowItWorks step 2 says the post can be skipped and step 3 is "Comment with help
+from AI"; the plan descriptions and features drop jargon ("Pick the industries and countries in your feed"); the FAQ
+answers on automation and on what counts as an interaction use shorter sentences. App (
+`app/src/i18n/locales/{en,pt,es}.json`): the consent prompt, `FirstPostPromptScreen`, the empty feed and its
+checklist, the card gate and its banner, the sidebar trial card, and the Billing page with its success dialog (see the
+§14 i18n "Plain-language copy standard"). Every trial disclosure now follows the landing `pricing.trialNote` order,
+`billing.startTrialCta` is the landing's "Try {{plan}} free", and `billing.recommended` is "Recommended" instead of
+"Best for targeted feeds". Claims did not grow: Growth still filters, and Pro's visibility control stays scoped to the
+shared feed. The trial-disclosure trio, legal pages, easter eggs, plan names and `meta.keywords` are untouched, and no
+key, leaf or placeholder changed in either dictionary set (recursive walk compared with `HEAD`). Two code comments
+that quoted the old copy (`CardGateDialog.tsx`, `CheckoutSuccessDialog.tsx`) follow it. Tests: the string pins in the
+`FirstPostPromptScreen`, `CardGateDialog`, `EmptyFeed` and `FeedPage` tests (and one `BillingPage` test comment)
+follow the new copy; app **668/668**, landing **75/75**, `tsc --noEmit` and `eslint app --max-warnings 0` clean.
+Sections updated: §7, §14,
+§15, §21._
 
 _Last updated: 2026‑09‑24 (DataFast revenue attribution). **Every Checkout Session can now carry DataFast's visitor
 and session ids in its `metadata`, so a connected DataFast can tie a payment to the member's journey.** The new

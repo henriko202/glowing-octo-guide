@@ -100,7 +100,7 @@ describe('EmptyFeed', () => {
       />
     )
     expect(screen.queryByRole('button', { name: /share your first post/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/no other posts are available yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/no other posts yet/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /invite a peer/i })).toHaveAttribute('href', '/settings#invite')
   })
 
@@ -138,12 +138,12 @@ describe('EmptyFeed', () => {
         made={0}
       />
     )
-    expect(screen.getByText(/saved and hidden/i)).toBeInTheDocument()
+    expect(screen.getByText(/as soon as you start your free trial/i)).toBeInTheDocument()
     expect(screen.queryByTestId('activation-checklist')).not.toBeInTheDocument()
   })
 
-  // The banner's own no-trial twin: `hiddenPostBannerNoTrial` says the post is hidden until they
-  // subscribe, not "until you start your trial" — a member on 'none' with subscription rows on file
+  // The banner's own no-trial twin: `hiddenPostBannerNoTrial` says the post goes into the feed once
+  // they subscribe, not "once you start your free trial" — a member on 'none' with subscription rows on file
   // (Stripe incomplete/paused, or an admin reset) has no trial to start.
   it('drops the trial promise from the banner when the member has no trial left', () => {
     vi.mocked(useQuery).mockReturnValue({ subscriptionStatus: 'none', trialEligible: false } as never)
@@ -154,7 +154,7 @@ describe('EmptyFeed', () => {
         made={0}
       />
     )
-    expect(screen.getByText(/hidden until you subscribe/i)).toBeInTheDocument()
+    expect(screen.getByText(/as soon as you subscribe/i)).toBeInTheDocument()
     expect(screen.getByText(/the growth plan is US\$15\/mo or US\$150\/yr/i)).toBeInTheDocument()
     expect(screen.queryByText(/trial/i)).not.toBeInTheDocument()
   })
@@ -186,7 +186,7 @@ describe('EmptyFeed', () => {
         caughtUp
       />
     )
-    expect(screen.getByText(/saved and hidden/i)).toBeInTheDocument()
+    expect(screen.getByText(/as soon as you start your free trial/i)).toBeInTheDocument()
     expect(screen.queryByText(/you.re caught up/i)).not.toBeInTheDocument()
   })
 })

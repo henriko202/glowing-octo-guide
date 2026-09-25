@@ -95,7 +95,7 @@ afterEach(() => {
 describe('FeedPage empty states (R05)', () => {
   it('renders EmptyFeed on an empty unfiltered feed', () => {
     renderPage()
-    expect(screen.getByText(/your feed fills as members post/i)).toBeInTheDocument()
+    expect(screen.getByText(/the feed is empty for now/i)).toBeInTheDocument()
     expect(screen.queryByText(/no posts match your filter/i)).not.toBeInTheDocument()
   })
 
@@ -110,7 +110,7 @@ describe('FeedPage empty states (R05)', () => {
     expect(
       screen.getByText(/no posts match your filter yet\. adjust it or clear it to see more\./i)
     ).toBeInTheDocument()
-    expect(screen.queryByText(/your feed fills as members post/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/the feed is empty for now/i)).not.toBeInTheDocument()
   })
 
   // assertCanSubmitPost (convex/lib/access.ts) blocks only past_due: the feed composer stays
@@ -200,14 +200,14 @@ describe('FeedPage feed hygiene (R21)', () => {
     mockPaginated = { results: [], status: 'CanLoadMore', loadMore: vi.fn() }
     renderPage()
     expect(mockPaginated.loadMore).toHaveBeenCalledWith(20)
-    expect(screen.queryByText(/your feed fills as members post/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/the feed is empty for now/i)).not.toBeInTheDocument()
   })
 
   it('shows the caught-up state when the feed is exhausted and the member interacted recently', () => {
     mockQueryReturns['feed.getCaughtUp'] = { caughtUp: true }
     renderPage()
     expect(screen.getByText(/you.re caught up/i)).toBeInTheDocument()
-    expect(screen.queryByText(/your feed fills as members post/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/the feed is empty for now/i)).not.toBeInTheDocument()
   })
 
   // The budget covers one run of empty pages. Left un-reset, a session that burned all five once

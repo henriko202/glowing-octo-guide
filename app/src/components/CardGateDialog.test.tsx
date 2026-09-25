@@ -46,9 +46,7 @@ describe('CardGateDialog', () => {
     renderDialog('?plan=pro')
     expect(screen.getByRole('link', { name: /start free trial/i })).toHaveAttribute('href', '/billing?plan=pro')
     expect(
-      screen.getByText(
-        new RegExp(`free until ${TRIAL_INTERACTION_THRESHOLD} interactions made or received.*7 days`, 'i')
-      )
+      screen.getByText(new RegExp(`free for 7 days or your first ${TRIAL_INTERACTION_THRESHOLD} interactions`, 'i'))
     ).toBeInTheDocument()
   })
 
@@ -67,9 +65,7 @@ describe('CardGateDialog', () => {
     renderDialog('?plan=pro')
     expect(screen.getByRole('link', { name: /start free trial/i })).toBeInTheDocument()
     expect(
-      screen.getByText(
-        new RegExp(`free until ${TRIAL_INTERACTION_THRESHOLD} interactions made or received.*14 days`, 'i')
-      )
+      screen.getByText(new RegExp(`free for 14 days or your first ${TRIAL_INTERACTION_THRESHOLD} interactions`, 'i'))
     ).toBeInTheDocument()
   })
 
