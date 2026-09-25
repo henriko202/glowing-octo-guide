@@ -453,7 +453,6 @@ export default function SettingsPage() {
         </div>
         {profileError && <p className="text-destructive mt-2 mb-0 text-xs">{profileError}</p>}
         {refreshError && <p className="text-destructive mt-2 mb-0 text-xs">{refreshError}</p>}
-        <p className="text-muted-foreground mt-2 mb-0 text-xs">{t('settings.profileNote')}</p>
       </section>
 
       <section className="border-border bg-card mb-4 rounded-xl border p-5">
