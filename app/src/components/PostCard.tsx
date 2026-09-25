@@ -2,8 +2,9 @@ import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { Check, Clock, Loader2, MessageSquare, MessageSquareCheck } from 'lucide-react'
 import type { Id } from '../../../convex/_generated/dataModel'
-import { REACTIONS, type Reaction } from '../../../convex/lib/reactions'
+import { type Reaction, REACTIONS } from '../../../convex/lib/reactions'
 import type { FeedViewerState } from '../../../convex/lib/feedHygiene'
+import { industryLabel } from '../../../convex/lib/profileOptions'
 import type { GateSource } from './CardGateDialog'
 import LinkedInEmbed from './LinkedInEmbed'
 import { Avatar } from '@/components/ui/avatar'
@@ -115,6 +116,7 @@ export default function PostCard({
   const doneLabel =
     done?.reacted && done.commented ? 'feed.doneBoth' : done?.reacted ? 'feed.doneReacted' : 'feed.doneCommented'
   const reaction = REACTIONS.find(r => r.value === (post.suggestedReaction ?? 'LIKE')) ?? REACTIONS[0]
+  const authorSubtitle = post.author?.headline ?? (post.author?.industry && industryLabel(post.author.industry))
 
   return (
     <div className="border-border bg-card overflow-hidden rounded-xl border font-sans">
@@ -146,9 +148,7 @@ export default function PostCard({
             </span>
             <div>
               <p className="text-foreground m-0 text-sm font-semibold">{post.author.name}</p>
-              {(post.author.headline ?? post.author.industry) && (
-                <p className="text-muted-foreground m-0 text-xs">{post.author.headline ?? post.author.industry}</p>
-              )}
+              {authorSubtitle && <p className="text-muted-foreground m-0 text-xs">{authorSubtitle}</p>}
             </div>
           </div>
         )}

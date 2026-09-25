@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCommentPrompt, buildReactionPrompt } from './prompts'
+import { buildCommentPrompt, buildIndustryPrompt, buildReactionPrompt } from './prompts'
 import type { ChatMessage } from './openrouter'
 
 function textOf(msg: ChatMessage): string {
@@ -45,6 +45,15 @@ describe('buildReactionPrompt', () => {
       article: { imageUrls: ['https://img/2.png'] }
     })[1]
     expect(imagesOf(user)).toEqual(['https://img/1.png', 'https://img/2.png'])
+  })
+})
+
+describe('buildIndustryPrompt', () => {
+  it('lists every industry as code: label, allows NONE, and sends only the post text', () => {
+    const [system, user] = buildIndustryPrompt('Shipped our new billing API today.')
+    expect(system.content).toContain('4: Software Development')
+    expect(system.content).toContain('NONE')
+    expect(user.content).toBe('Post:\nShipped our new billing API today.\n\nIndustry code:')
   })
 })
 

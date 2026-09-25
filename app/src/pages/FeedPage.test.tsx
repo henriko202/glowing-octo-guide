@@ -285,6 +285,28 @@ describe('FeedPage composer', () => {
   })
 })
 
+// Growth filters by the viewer's own industry + country, filled automatically when empty, so the
+// feed names them and links to Settings, where they change.
+describe('FeedPage Growth filter line', () => {
+  it('names the industry and country the feed shows, with a link to change them', () => {
+    mockQueryReturns['users.getMe'] = { tier: 'growth', subscriptionStatus: 'active', industry: '4', country: 'BR' }
+    renderPage()
+    expect(screen.getByText(/showing posts from: software development · brazil/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Change' })).toHaveAttribute('href', '/settings')
+  })
+
+  it('says every industry and country while neither is set', () => {
+    mockQueryReturns['users.getMe'] = { tier: 'growth', subscriptionStatus: 'active' }
+    renderPage()
+    expect(screen.getByText(/showing posts from: every industry and country/i)).toBeInTheDocument()
+  })
+
+  it('is not shown to a Starter member, whose feed is not filtered', () => {
+    renderPage()
+    expect(screen.queryByText(/showing posts from/i)).not.toBeInTheDocument()
+  })
+})
+
 describe('FeedPage weekly top medals', () => {
   it('passes the medal to the card of a top-three poster and none to the rest', () => {
     mockPaginated = {

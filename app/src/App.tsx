@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from './convex'
 import i18n from './i18n'
 import { pickSeedLanguage } from './i18n/seedLanguage'
@@ -36,7 +36,21 @@ import { Toaster } from './components/ui/toast'
 import DevUserSwitcher from './components/DevUserSwitcher'
 import DevEmailTools from './components/DevEmailTools'
 import { POLICY_VERSION } from '../../convex/lib/policy'
-import { LANDING_URL, isSignedOut } from './lib/session'
+import { isSignedOut, LANDING_URL } from './lib/session'
+import { guessCountry } from './lib/guessCountry'
+
+// Fills an empty country from the browser (lib/guessCountry.ts). Rendered only past every gate in
+// RequireAuth, so it runs after the policy and consent screens. The mutation only fills an EMPTY
+// country and stops once the member saved their profile, so a repeat call is harmless.
+function CountryGuess({ sessionToken, needed }: { sessionToken?: string; needed: boolean }) {
+  const fill = useMutation(api.users.fillGuessedCountry)
+  useEffect(() => {
+    if (!needed || !sessionToken) return
+    const country = guessCountry()
+    if (country) void fill({ sessionToken, country }).catch(() => {})
+  }, [needed, sessionToken, fill])
+  return null
+}
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
@@ -90,6 +104,10 @@ function RequireAuth({ children }: { children: ReactNode }) {
       <AnalyticsConsentGate
         userId={me._id}
         sessionToken={sessionToken}
+      />
+      <CountryGuess
+        sessionToken={sessionToken}
+        needed={!me.country && !me.profileEditedAt}
       />
       <Motd />
       <ReconnectBanner />

@@ -10,8 +10,8 @@ import { type ApifyFlags, isApifyProfileScrapeEnabled } from './lib/apify'
 import { checkRateLimit, tryConsumeRateLimit } from './lib/rateLimit'
 import { isNearThreshold, TRIAL_INTERACTION_THRESHOLD, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { firstName, generateInviteCode } from './lib/invite'
-import { writeAuditLog, type AuditDb } from './lib/audit'
-import { disableDigest, type DigestOptOutDb } from './lib/digestOptOut'
+import { type AuditDb, writeAuditLog } from './lib/audit'
+import { type DigestOptOutDb, disableDigest } from './lib/digestOptOut'
 import { verifyUnsubscribeToken } from './lib/unsubscribeToken'
 import { POLICY_VERSION } from './lib/policy'
 
@@ -122,9 +122,13 @@ export interface UpdateProfileArgs {
   headline?: string
 }
 
-/** Validates + patches industry, country, and headline. Empty/whitespace clears the field. */
+/**
+ * Validates + patches industry, country, and headline. Empty/whitespace clears the field. Saving
+ * industry or country stamps `profileEditedAt`, which stops the automatic guesses for good.
+ */
 export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args: UpdateProfileArgs): Promise<void> {
   const patch: Record<string, unknown> = {}
+  if (args.industry !== undefined || args.country !== undefined) patch.profileEditedAt = Date.now()
   if (args.industry !== undefined) {
     if (args.industry !== '' && !isValidIndustry(args.industry)) throw new ConvexError('Invalid industry')
     patch.industry = args.industry === '' ? undefined : args.industry
@@ -140,6 +144,24 @@ export async function updateProfileHandler(db: PatchOnlyDb, userId: string, args
     patch.headline = trimmed === '' ? undefined : trimmed
   }
   if (Object.keys(patch).length > 0) await db.patch(userId, patch)
+}
+
+/**
+ * Fills an EMPTY industry/country with an automatic guess (the AI industry, the browser country).
+ * Never overwrites a value, never writes once the member saved the profile form (`profileEditedAt`),
+ * and drops a guess that is not a real code.
+ */
+export async function fillGuessedProfileHandler(
+  db: PatchOnlyDb,
+  user: { _id: string; industry?: string; country?: string; profileEditedAt?: number },
+  guess: { industry?: string; country?: string }
+): Promise<void> {
+  if (user.profileEditedAt) return
+  const patch: Record<string, unknown> = {}
+  if (guess.industry && !user.industry && isValidIndustry(guess.industry)) patch.industry = guess.industry
+  const country = guess.country?.toUpperCase()
+  if (country && !user.country && isValidCountry(country)) patch.country = country
+  if (Object.keys(patch).length > 0) await db.patch(user._id, patch)
 }
 
 /** Guard for the refresh mutation. Throws a user-facing message; never leaks the flag. */
@@ -446,6 +468,27 @@ export const updateProfile = mutation({
       user._id,
       { industry, country, headline }
     )
+  }
+})
+
+// Public: the app sends the country it guessed from the browser (app/src/lib/guessCountry.ts) once
+// the member is past the sign-in gates. Fill-when-empty only (fillGuessedProfileHandler), so it can
+// never write anything the member could not already set in Settings.
+export const fillGuessedCountry = mutation({
+  args: { sessionToken: v.string(), country: v.string() },
+  handler: async (ctx, { sessionToken, country }) => {
+    const user = await requireAuth(ctx, sessionToken)
+    await fillGuessedProfileHandler(ctx.db as unknown as PatchOnlyDb, user, { country })
+  }
+})
+
+// Internal: ai/industry.guessIndustry writes its guess here. Re-reads the member inside the
+// mutation, so a Settings save that landed while the model was answering still wins.
+export const fillGuessedIndustry = internalMutation({
+  args: { userId: v.id('users'), industry: v.string() },
+  handler: async (ctx, { userId, industry }) => {
+    const user = await ctx.db.get(userId)
+    if (user) await fillGuessedProfileHandler(ctx.db as unknown as PatchOnlyDb, user, { industry })
   }
 })
 

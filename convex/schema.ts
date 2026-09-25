@@ -11,6 +11,11 @@ export default defineSchema({
     profilePictureUrl: v.optional(v.string()),
     industry: v.optional(v.string()),
     country: v.optional(v.string()),
+    // Stamped by users.updateProfile (the Settings save). While absent, the automatic guesses may
+    // fill an EMPTY industry (ai/industry.guessIndustry, from the member's own post) or country
+    // (users.fillGuessedCountry, from the browser time zone). Once set, the guesses never write again,
+    // so a field the member cleared stays cleared.
+    profileEditedAt: v.optional(v.number()),
     // Scraped LinkedIn profile location, e.g. "Curitiba, Paraná, Brazil". Read-only display
     // (set only by the profile scrape). Distinct from `country` (geographic ISO alpha-2 code).
     location: v.optional(v.string()),

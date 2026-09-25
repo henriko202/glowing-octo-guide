@@ -121,15 +121,16 @@ describe('PostCard', () => {
     expect(screen.getByRole('link', { name: /view on linkedin/i })).toHaveAttribute('href', sourceUrl)
   })
 
-  it('falls back to the author industry when there is no headline', () => {
+  // The stored value is a LinkedIn industry code; the card shows its label, never the raw number.
+  it('falls back to the author industry label when there is no headline', () => {
     render(
       <PostCard
-        post={{ ...mockPost, author: { name: 'Léo Martins', industry: 'Fintech' } }}
+        post={{ ...mockPost, author: { name: 'Léo Martins', industry: '4' } }}
         onComment={() => {}}
         onReact={() => {}}
       />
     )
-    expect(screen.getByText('Fintech')).toBeInTheDocument()
+    expect(screen.getByText('Software Development')).toBeInTheDocument()
   })
 
   it('calls onGated with source "react" instead of onReact when the member is card-gated', () => {

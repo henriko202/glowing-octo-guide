@@ -766,6 +766,21 @@ export function isValidIndustry(code: string): boolean {
   return typeof code === 'string' && code.length > 0 && INDUSTRY_CODE_SET.has(code)
 }
 
+/**
+ * Reads an industry code out of a model reply ("4", "Code: 4", "NONE"). Returns undefined for
+ * NONE or anything that is not a real code, so a bad reply never becomes a profile value.
+ */
+export function parseIndustryCode(raw: string): string | undefined {
+  if (/\bnone\b/i.test(raw)) return undefined
+  const code = raw.match(/\d+/)?.[0]
+  return code !== undefined && isValidIndustry(code) ? code : undefined
+}
+
+/** UI helper: English display label for an industry code (falls back to the code). */
+export function industryLabel(code: string): string {
+  return INDUSTRIES.find(i => i.code === code)?.label ?? code
+}
+
 /** UI helper: localized country display name for a code (falls back to the code). */
 export function countryLabel(code: string, locale = 'en'): string {
   try {

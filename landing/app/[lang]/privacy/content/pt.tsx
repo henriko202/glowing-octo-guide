@@ -9,7 +9,7 @@ export default function Pt({ lang }: { lang: Locale }) {
           <strong className="text-cream">Última atualização:</strong> setembro de 2026
         </p>
         {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts — see the note in en.tsx. */}
-        <p>Policy version: 2026-09-23</p>
+        <p>Policy version: 2026-09-25</p>
 
         {/* 1. Quem somos */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Quem Somos</h2>
@@ -46,8 +46,11 @@ export default function Pt({ lang }: { lang: Locale }) {
           fluxo OpenID Connect do LinkedIn.
         </p>
         <p>
-          <strong className="text-cream">Atributos do perfil que você define.</strong> Você pode opcionalmente informar
-          seu setor e país nas configurações do perfil.
+          <strong className="text-cream">Setor e país.</strong> Seu perfil tem um setor e um país, que os filtros do
+          feed usam. Se estiverem vazios, nós os preenchemos para você: a IA sugere seu setor a partir do texto de uma
+          publicação que você envia, e seu país vem do fuso horário do seu dispositivo ou, na falta dele, do idioma do
+          seu navegador. Você pode alterar ou apagar os dois a qualquer momento em Configurações e, depois que você os
+          salva ali, paramos de preenchê-los.
         </p>
         <p>
           <strong className="text-cream">Publicações que você envia.</strong> Armazenamos as publicações que você envia
@@ -114,11 +117,13 @@ export default function Pt({ lang }: { lang: Locale }) {
           <strong className="text-cream">Interesses legítimos (Art. 6(1)(f) GDPR).</strong> Otimização da qualidade do
           feed, prevenção de abuso, garantia de segurança da plataforma e manutenção de estatísticas agregadas e não
           identificáveis sobre o desempenho do serviço. Isso inclui o monitoramento de erros no aplicativo (Sentry) e as
-          estatísticas de visitas sem cookies do nosso site (DataFast e Cloudflare Web Analytics). Também nos baseamos
-          em interesses legítimos para enviar um resumo de atividade a cada 3 dias por e-mail, e você pode opor-se a
-          qualquer momento pelo link de cancelamento no próprio e-mail ou em Configurações &rarr; Emails. Membros
-          conectados também podem ver o ranking do site dos que mais publicam e mais interagem, e você pode optar por
-          não aparecer nele a qualquer momento em Configurações &rarr; Emails.
+          estatísticas de visitas sem cookies do nosso site (DataFast e Cloudflare Web Analytics). Inclui ainda o
+          preenchimento do setor e do país do seu perfil quando estão vazios, para que os filtros do feed funcionem, e
+          você pode alterá-los ou apagá-los a qualquer momento. Também nos baseamos em interesses legítimos para enviar
+          um resumo de atividade a cada 3 dias por e-mail, e você pode opor-se a qualquer momento pelo link de
+          cancelamento no próprio e-mail ou em Configurações &rarr; Emails. Membros conectados também podem ver o
+          ranking do site dos que mais publicam e mais interagem, e você pode optar por não aparecer nele a qualquer
+          momento em Configurações &rarr; Emails.
         </p>
         <p>
           <strong className="text-cream">Consentimento (Art. 6(1)(a) GDPR).</strong> Comunicações de marketing e
@@ -155,9 +160,10 @@ export default function Pt({ lang }: { lang: Locale }) {
           </li>
           <li>
             <strong className="text-cream">OpenRouter (inferência de IA)</strong> &mdash; geração de sugestões de reação
-            e rascunhos de comentários a partir do conteúdo das suas publicações públicas, incluindo imagens. O
-            OpenRouter encaminha apenas para provedores de inferência com retenção zero de dados (os prompts não são
-            armazenados nem usados para treinamento).
+            e rascunhos de comentários a partir do conteúdo das suas publicações públicas, incluindo imagens, e sugestão
+            do seu setor a partir do texto de uma publicação que você envia. O OpenRouter encaminha apenas para
+            provedores de inferência com retenção zero de dados (os prompts não são armazenados nem usados para
+            treinamento).
           </li>
           <li>
             <strong className="text-cream">Sentry</strong> &mdash; monitoramento de erros do aplicativo, incluindo
@@ -286,9 +292,10 @@ export default function Pt({ lang }: { lang: Locale }) {
         </h2>
         <p>
           <strong className="text-cream">Categorias coletadas.</strong> Identificadores (nome, e-mail, ID do LinkedIn,
-          endereço IP); informações profissionais ou relacionadas ao emprego (título, setor); atividade na Internet ou
-          em rede (logs de sessão, relatórios de erro, páginas vistas no nosso site e, se você ativar as análises, como
-          você usa o aplicativo); informações comerciais (status de assinatura via Stripe).
+          endereço IP); informações profissionais ou relacionadas ao emprego (título, setor); inferências (o setor e o
+          país que preenchemos no seu perfil); atividade na Internet ou em rede (logs de sessão, relatórios de erro,
+          páginas vistas no nosso site e, se você ativar as análises, como você usa o aplicativo); informações
+          comerciais (status de assinatura via Stripe).
         </p>
         <p>
           <strong className="text-cream">Sem venda ou compartilhamento.</strong> Não vendemos informações pessoais. Não

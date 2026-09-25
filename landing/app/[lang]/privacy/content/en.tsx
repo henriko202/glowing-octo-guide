@@ -11,7 +11,7 @@ export default function En({ lang }: { lang: Locale }) {
         {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts, which drives the in-app re-consent
             prompt. The landing site has no convex dependency, so this string is a manual copy: bump it in
             en/pt/es whenever you bump the constant, or the page under-reports a policy members re-accepted. */}
-        <p>Policy version: 2026-09-23</p>
+        <p>Policy version: 2026-09-25</p>
 
         {/* 1. Who we are */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Who We Are</h2>
@@ -46,8 +46,11 @@ export default function En({ lang }: { lang: Locale }) {
           OpenID Connect flow.
         </p>
         <p>
-          <strong className="text-cream">Profile attributes you set.</strong> You may voluntarily provide your industry
-          and country in your profile settings.
+          <strong className="text-cream">Industry and country.</strong> Your profile has an industry and a country,
+          which the feed filters use. If they are empty, we fill them in for you: AI suggests your industry from the
+          text of a post you submit, and your country comes from your device&rsquo;s time zone or, failing that, your
+          browser language. You can change or clear both at any time in Settings, and once you save them there, we stop
+          filling them in.
         </p>
         <p>
           <strong className="text-cream">Posts you submit.</strong> We store the posts you submit to the shared feed
@@ -110,10 +113,12 @@ export default function En({ lang }: { lang: Locale }) {
           <strong className="text-cream">Legitimate interests (Art. 6(1)(f) GDPR).</strong> Optimising feed quality,
           preventing abuse, ensuring platform security, and maintaining aggregate, non-identifiable analytics about
           service performance. This covers error monitoring in the app (Sentry) and the cookieless visit statistics on
-          our website (DataFast and Cloudflare Web Analytics). We also rely on legitimate interests to send a 3-day
-          activity digest by email, and you can object at any time from the unsubscribe link in the email or in Settings
-          &rarr; Emails. Signed-in members can also see the site-wide ranking of the most active posters and
-          interactors, and you can opt out of appearing in it at any time in Settings &rarr; Emails.
+          our website (DataFast and Cloudflare Web Analytics). It also covers filling in an empty industry and country
+          on your profile so the feed filters work, which you can change or clear at any time. We also rely on
+          legitimate interests to send a 3-day activity digest by email, and you can object at any time from the
+          unsubscribe link in the email or in Settings &rarr; Emails. Signed-in members can also see the site-wide
+          ranking of the most active posters and interactors, and you can opt out of appearing in it at any time in
+          Settings &rarr; Emails.
         </p>
         <p>
           <strong className="text-cream">Consent (Art. 6(1)(a) GDPR).</strong> Marketing communications and optional app
@@ -149,8 +154,9 @@ export default function En({ lang }: { lang: Locale }) {
           </li>
           <li>
             <strong className="text-cream">OpenRouter (AI inference)</strong> &mdash; generating reaction suggestions
-            and draft comments from your public post content, including its images. OpenRouter routes only to inference
-            providers with zero data retention (prompts are not stored or used for training).
+            and draft comments from your public post content, including its images, and suggesting your industry from
+            the text of a post you submit. OpenRouter routes only to inference providers with zero data retention
+            (prompts are not stored or used for training).
           </li>
           <li>
             <strong className="text-cream">Sentry</strong> &mdash; error monitoring for the app, including screen
@@ -274,9 +280,10 @@ export default function En({ lang }: { lang: Locale }) {
         </h2>
         <p>
           <strong className="text-cream">Categories collected.</strong> Identifiers (name, email, LinkedIn ID, IP
-          address); professional or employment-related information (headline, industry); Internet or network activity
-          (session logs, error reports, pages viewed on our website, and, if you turn on analytics, how you use the
-          app); commercial information (subscription status via Stripe).
+          address); professional or employment-related information (headline, industry); inferences (the industry and
+          country we fill in for your profile); Internet or network activity (session logs, error reports, pages viewed
+          on our website, and, if you turn on analytics, how you use the app); commercial information (subscription
+          status via Stripe).
         </p>
         <p>
           <strong className="text-cream">No sale or sharing.</strong> We do not sell personal information. We do not

@@ -478,6 +478,13 @@ export const submitPost = action({
     // Failure (incl. missing OPENROUTER_API_KEY) leaves the post at its default LIKE.
     await ctx.scheduler.runAfter(0, internal.ai.reactions.predictReaction, { postId })
 
+    // Best-effort, async: guess the member's industry from their own post while they have none, so
+    // the Growth filter works without a Settings visit. Not under the admin override (the post may
+    // not be theirs), and never after they saved the profile form themselves.
+    if (!adminShareOverride && !user.industry && !user.profileEditedAt) {
+      await ctx.scheduler.runAfter(0, internal.ai.industry.guessIndustry, { userId: user._id, postId })
+    }
+
     return { postId }
   }
 })

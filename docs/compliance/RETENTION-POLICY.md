@@ -1,6 +1,6 @@
 > **DRAFT — requires legal review.**
 >
-> Last updated: 2026-09-23
+> Last updated: 2026-09-25
 
 # Data Retention Policy
 
@@ -43,8 +43,11 @@ or business justification for that period, and the enforcement mechanism. It sho
 ### AI features — OpenRouter
 
 `posts.suggestedReaction` and `users.commentLanguage` follow the account lifecycle: retained for the life of the account
-and removed in the account-deletion cascade (they are part of the `posts` / `users` records above). Prompts sent to the
-inference provider are **not stored** by Link Into The SSI. The generated comment draft is stored on the requesting
+and removed in the account-deletion cascade (they are part of the `posts` / `users` records above). The industry
+suggestion (ROPA Activity 13 (c)) stores nothing of its own: its only output is the `users.industry` code it fills while
+that field is empty, which, like the `users.profileEditedAt` stamp that stops the automatic fill, is part of the `users`
+record (life of the account, included in the DSR export, deleted in the cascade). Prompts sent to the inference provider
+are **not stored** by Link Into The SSI. The generated comment draft is stored on the requesting
 user's own rows (`userPostState.commentDraft`, reloaded by the comment box; the **first** draft for a post also lands in
 that user's `userInteractions` log as an `ai_draft` entry) and follows the account lifecycle: retained for the life of
 the account, included in the DSR export, deleted in the account-deletion cascade. Inference runs via **OpenRouter**,

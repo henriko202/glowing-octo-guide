@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { updateProfileHandler, assertCanRefresh, MAX_HEADLINE_LENGTH } from './users'
+import { describe, expect, it } from 'vitest'
+import { assertCanRefresh, fillGuessedProfileHandler, MAX_HEADLINE_LENGTH, updateProfileHandler } from './users'
 
 function createMockDb() {
   const patches: any[] = []
@@ -15,7 +15,14 @@ describe('updateProfileHandler', () => {
   it('patches valid industry + country (country uppercased)', async () => {
     const db = createMockDb()
     await updateProfileHandler(db as any, 'u1', { industry: '41', country: 'br' })
-    expect(db._patches[0].data).toEqual({ industry: '41', country: 'BR' })
+    expect(db._patches[0].data).toEqual({ industry: '41', country: 'BR', profileEditedAt: expect.any(Number) })
+  })
+
+  // The marker is what stops the automatic guesses: a field the member cleared must stay cleared.
+  it('stamps profileEditedAt when industry or country is saved, even as a clear', async () => {
+    const db = createMockDb()
+    await updateProfileHandler(db as any, 'u1', { country: '' })
+    expect(db._patches[0].data.profileEditedAt).toEqual(expect.any(Number))
   })
 
   it('rejects an unknown industry code', async () => {
@@ -61,6 +68,36 @@ describe('updateProfileHandler', () => {
     await expect(
       updateProfileHandler(db as any, 'u1', { headline: 'x'.repeat(MAX_HEADLINE_LENGTH + 1) })
     ).rejects.toThrow(/headline/i)
+    expect(db._patches).toHaveLength(0)
+  })
+})
+
+describe('fillGuessedProfileHandler', () => {
+  it('fills an empty industry and an empty country (country uppercased)', async () => {
+    const db = createMockDb()
+    await fillGuessedProfileHandler(db as any, { _id: 'u1' }, { industry: '4', country: 'br' })
+    expect(db._patches).toEqual([{ id: 'u1', data: { industry: '4', country: 'BR' } }])
+  })
+
+  it('never overwrites a value the member already has', async () => {
+    const db = createMockDb()
+    await fillGuessedProfileHandler(
+      db as any,
+      { _id: 'u1', industry: '96', country: 'PT' },
+      { industry: '4', country: 'BR' }
+    )
+    expect(db._patches).toHaveLength(0)
+  })
+
+  it('never writes once the member saved the profile form', async () => {
+    const db = createMockDb()
+    await fillGuessedProfileHandler(db as any, { _id: 'u1', profileEditedAt: 1 }, { industry: '4', country: 'BR' })
+    expect(db._patches).toHaveLength(0)
+  })
+
+  it('drops a guess that is not a real code', async () => {
+    const db = createMockDb()
+    await fillGuessedProfileHandler(db as any, { _id: 'u1' }, { industry: '99999', country: 'ZZ' })
     expect(db._patches).toHaveLength(0)
   })
 })

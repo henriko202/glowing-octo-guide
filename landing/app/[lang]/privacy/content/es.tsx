@@ -9,7 +9,7 @@ export default function Es({ lang }: { lang: Locale }) {
           <strong className="text-cream">Última actualización:</strong> Septiembre 2026
         </p>
         {/* Source of truth is POLICY_VERSION in convex/lib/policy.ts — see the note in en.tsx. */}
-        <p>Policy version: 2026-09-23</p>
+        <p>Policy version: 2026-09-25</p>
 
         {/* 1. Quienes somos */}
         <h2 className="mt-10 mb-3 font-display text-xl font-semibold text-cream">1. Quiénes Somos</h2>
@@ -46,8 +46,11 @@ export default function Es({ lang }: { lang: Locale }) {
           electrónico a través del flujo OpenID Connect de LinkedIn.
         </p>
         <p>
-          <strong className="text-cream">Atributos de perfil que usted define.</strong> Puede proporcionar
-          voluntariamente su sector y país en la configuración de su perfil.
+          <strong className="text-cream">Sector y país.</strong> Su perfil tiene un sector y un país, que usan los
+          filtros del feed. Si están vacíos, los completamos por usted: la IA sugiere su sector a partir del texto de
+          una publicación que envía, y su país se toma de la zona horaria de su dispositivo o, si no es posible, del
+          idioma de su navegador. Puede cambiarlos o borrarlos en cualquier momento en Configuración y, una vez que los
+          guarda allí, dejamos de completarlos.
         </p>
         <p>
           <strong className="text-cream">Publicaciones que usted envía.</strong> Almacenamos las publicaciones que envía
@@ -120,11 +123,12 @@ export default function Es({ lang }: { lang: Locale }) {
           del feed, prevención de abuso, garantía de seguridad de la plataforma y mantenimiento de estadísticas
           agregadas y no identificables sobre el rendimiento del servicio. Esto incluye el monitoreo de errores en la
           aplicación (Sentry) y las estadísticas de visitas sin cookies de nuestro sitio web (DataFast y Cloudflare Web
-          Analytics). También nos basamos en intereses legítimos para enviar un resumen de actividad cada 3 días por
-          correo electrónico, y puede oponerse en cualquier momento desde el enlace de cancelación del propio correo o
-          en Configuración &rarr; Correos. Los miembros conectados también pueden ver el ranking del sitio de quienes
-          más publican e interactúan, y puede optar por no aparecer en él en cualquier momento en Configuración &rarr;
-          Correos.
+          Analytics). Incluye además completar el sector y el país de su perfil cuando están vacíos, para que los
+          filtros del feed funcionen, y puede cambiarlos o borrarlos en cualquier momento. También nos basamos en
+          intereses legítimos para enviar un resumen de actividad cada 3 días por correo electrónico, y puede oponerse
+          en cualquier momento desde el enlace de cancelación del propio correo o en Configuración &rarr; Correos. Los
+          miembros conectados también pueden ver el ranking del sitio de quienes más publican e interactúan, y puede
+          optar por no aparecer en él en cualquier momento en Configuración &rarr; Correos.
         </p>
         <p>
           <strong className="text-cream">Consentimiento (Art. 6(1)(a) GDPR).</strong> Las comunicaciones de marketing y
@@ -162,8 +166,9 @@ export default function Es({ lang }: { lang: Locale }) {
           <li>
             <strong className="text-cream">OpenRouter (inferencia de IA)</strong> &mdash; generación de sugerencias de
             reacción y borradores de comentarios a partir del contenido de sus publicaciones públicas, incluidas las
-            imágenes. OpenRouter enruta únicamente a proveedores de inferencia con retención cero de datos (los prompts
-            no se almacenan ni se utilizan para entrenamiento).
+            imágenes, y sugerencia de su sector a partir del texto de una publicación que envía. OpenRouter enruta
+            únicamente a proveedores de inferencia con retención cero de datos (los prompts no se almacenan ni se
+            utilizan para entrenamiento).
           </li>
           <li>
             <strong className="text-cream">Sentry</strong> &mdash; monitoreo de errores de la aplicación, incluidas
@@ -296,9 +301,10 @@ export default function Es({ lang }: { lang: Locale }) {
         </h2>
         <p>
           <strong className="text-cream">Categorías recopiladas.</strong> Identificadores (nombre, correo electrónico,
-          ID de LinkedIn, dirección IP); información profesional o relacionada con el empleo (título, sector); actividad
-          en Internet o en red (registros de sesión, informes de errores, páginas vistas en nuestro sitio web y, si
-          activa los análisis, cómo usa la aplicación); información comercial (estado de suscripción vía Stripe).
+          ID de LinkedIn, dirección IP); información profesional o relacionada con el empleo (título, sector);
+          inferencias (el sector y el país que completamos en su perfil); actividad en Internet o en red (registros de
+          sesión, informes de errores, páginas vistas en nuestro sitio web y, si activa los análisis, cómo usa la
+          aplicación); información comercial (estado de suscripción vía Stripe).
         </p>
         <p>
           <strong className="text-cream">Sin venta ni compartición.</strong> No vendemos información personal. No

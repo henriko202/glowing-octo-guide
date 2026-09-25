@@ -1,6 +1,6 @@
 > **DRAFT — requires legal review.**
 >
-> Last updated: 2026-09-23
+> Last updated: 2026-09-25
 
 # Privacy & Compliance Documentation — Link Into The SSI
 
@@ -116,10 +116,12 @@ compliance docs in sync.
 
 The AI reaction/comment feature is **live in production**: prompts go to **OpenRouter** (US), which routes each request
 to a downstream provider it selects, constrained in code to **zero data retention** + **no training** (cheapest
-qualifying provider; e.g. DeepInfra — provider + region **not pinned**). Remaining human/legal: execute OpenRouter's
-DPA,
-confirm the ZDR / no-training terms flow down to its providers, and assess the transfer position given the non-pinned
-region (add region constraints if needed). See `SUBPROCESSORS.md`, ROPA Activity 13, and GAP-ASSESSMENT item 10.
+qualifying provider; e.g. DeepInfra — provider + region **not pinned**). Since 2026-09-25 the same route also fills an
+empty profile industry from the text of the member's own submitted post (ROPA Activity 13 (c); the country fill uses the
+browser time zone, no AI). Remaining human/legal: execute OpenRouter's DPA, confirm the ZDR / no-training terms flow
+down to its providers, assess the transfer position given the non-pinned region (add region constraints if needed), and
+review the basis for the automatic industry/country fill (GAP-ASSESSMENT item 13). See `SUBPROCESSORS.md`, ROPA
+Activity 13, and GAP-ASSESSMENT items 10 and 13.
 
 ## Cross-references
 

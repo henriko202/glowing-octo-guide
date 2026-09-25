@@ -2,6 +2,7 @@
 // PURE prompt builders — no Convex/server imports, so they unit-test directly.
 import { type ChatMessage, type ContentPart } from './openrouter'
 import { AUTO_LANGUAGE, languageLabel } from '../lib/languages'
+import { INDUSTRIES } from '../lib/profileOptions'
 
 // Safety net for the article body (real LinkedIn articles are far smaller; this only guards against
 // a pathological page). The post content itself is LinkedIn-bounded, so it is sent whole.
@@ -73,6 +74,18 @@ export function buildReactionPrompt(post: ReactionPromptPost): ChatMessage[] {
   if (images.length) text += `\n\n(The post's image(s) are attached.)`
   text += `\n\nMost fitting reaction:`
   return [{ role: 'system', content: REACTION_SYSTEM }, userMessage(text, images)]
+}
+
+const INDUSTRY_SYSTEM = `You read a LinkedIn post and pick the industry its AUTHOR works in, from LinkedIn's industry list below. Judge where the author works, which can differ from the post's topic (a recruiter posting about software jobs works in Staffing and Recruiting). Reply with ONLY the numeric code, nothing else. If the post gives no clear sign of the author's industry, reply NONE.
+
+${INDUSTRIES.map(i => `${i.code}: ${i.label}`).join('\n')}`
+
+/** Asks for the industry code of the person who WROTE the post (the member's own, verified post). */
+export function buildIndustryPrompt(content: string): ChatMessage[] {
+  return [
+    { role: 'system', content: INDUSTRY_SYSTEM },
+    { role: 'user', content: `Post:\n${content}\n\nIndustry code:` }
+  ]
 }
 
 export function buildCommentPrompt(post: CommentPromptPost, language: string): ChatMessage[] {

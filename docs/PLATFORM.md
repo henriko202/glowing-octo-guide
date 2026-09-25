@@ -29,6 +29,7 @@
 11. [Feed & Engagement](#11-feed--engagement)
     11A. [AI Reaction & Comment Assistance](#11a-ai-reaction--comment-assistance)
     11B. [Search & Command Palette](#11b-search--command-palette)
+    11C. [Profile Auto-fill (Industry & Country)](#11c-profile-auto-fill-industry--country)
 12. [Admin & Moderation](#12-admin--moderation)
     12A. [Feedback](#12a-feedback)
     12B. [Message of the Day (MOTD)](#12b-message-of-the-day-motd)
@@ -386,6 +387,7 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `profilePictureUrl`           | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `industry`                    | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                                                 |
 | `country`                     | string                                                 |  –  | Drives feed targeting (Growth/Pro).                                                                                                                                                                                                                                                                                                                                                                                 |
+| `profileEditedAt`             | number                                                 |  –  | Stamped by `users.updateProfile` (the Settings save) when the call carries `industry` or `country`. While absent, the auto-fills may write an **empty** `industry` (AI, from the member's own post) or `country` (browser time zone or language) via `users.fillGuessedProfileHandler`: valid codes only, never overwrites; once set, neither fill writes again. [§11C](#11c-profile-auto-fill-industry--country)   |
 | `location`                    | string                                                 |  –  | Scraped LinkedIn display location (e.g. "Curitiba, Paraná, Brazil"). Read-only (profile scrape only).                                                                                                                                                                                                                                                                                                               |
 | `primaryLocale`               | string                                                 |  –  | Scraped LinkedIn primary-locale **language** (e.g. "en"). Seeds the UI i18n language; not user-editable.                                                                                                                                                                                                                                                                                                            |
 | `language`                    | string                                                 |  –  | UI language the member last chose (`'en'`/`'pt'`/`'es'`). The app persists every change through `users.setLanguage` (`app/src/hooks/useLanguageSync.ts`); `billingNode.createCheckoutSession` keeps a backstop write via `internal.users.setLanguageFromCheckout`. Read by the billing mailers. Distinct from `primaryLocale`. See [§8](#8-subscriptions--billing).                                                 |
@@ -1211,6 +1213,8 @@ flowchart TD
 | `users.dismissFirstPostPrompt`                                                           | mutation (public)                      | Set‑once stamp of `firstPostPromptedAt` when the user **skips** the first‑post onboarding step ("Skip for now").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `users.markFirstPostPrompted`                                                            | mutation (internal)                    | Set‑once stamp of `firstPostPromptedAt`; called by `posts.submitPost` after a post persists, so posting from the gate **or** the normal composer clears the onboarding step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `users.updateProfile`                                                                    | mutation (public)                      | User edits their own `industry`/`country`/`headline`. `industry`/`country` validate against canonical lists; `headline` is free text, trimmed, capped at `MAX_HEADLINE_LENGTH` (65) chars — rejected if longer; empty string clears any of them.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `users.fillGuessedCountry`                                                               | mutation (public)                      | Fills an **empty** `country` with the browser's guess (`app/src/lib/guessCountry.ts`: the ICU country of the time zone, else the first language tag with a region), sent by `App.tsx`'s `CountryGuess` (rendered past every `RequireAuth` gate) while `!me.country && !me.profileEditedAt`. Shares `fillGuessedProfileHandler` with the industry fill: valid codes only (upper-cased), never overwrites, no-op once `profileEditedAt` is set; `updateProfile` stamps that field whenever the Settings save carries `industry` or `country`. See [§11C](#11c-profile-auto-fill-industry--country).                                                       |
+| `users.fillGuessedIndustry`                                                              | internalMutation                       | Called by `ai/industry.guessIndustry` (scheduled by `posts.submitPost` when the submitter has no `industry` and no `profileEditedAt`, never under the admin share-override) with the code `parseIndustryCode` pulled from the model's reply (`NONE` or an unknown code ⇒ nothing is written). Same `fillGuessedProfileHandler` rules as `fillGuessedCountry`: fills an **empty** `industry` only, re-checks `profileEditedAt` in its own transaction (a Settings save that lands while the AI call is in flight wins), and never overwrites.                                                                                                            |
 | `users.setPostVisibility`                                                                | mutation (public)                      | **Pro/Contact only** (checked server-side — throws otherwise). Sets `defaultVisibilityIndustries`/`defaultVisibilityCountries`; each entry validated against the canonical `INDUSTRIES`/`COUNTRY_CODES` lists (rejects unknown values), countries upper-cased. Empty arrays are valid (⇒ everyone). Applies to future posts only — see [§11](#11-feed--engagement).                                                                                                                                                                                                                                                                                     |
 | `users.setFeedFilter`                                                                    | mutation (public)                      | **Pro/Contact only** (checked server-side — throws otherwise). Sets the viewer's own feed filter `feedFilterIndustries`/`feedFilterCountries`; same validation as `setPostVisibility` (canonical lists, countries upper-cased). Empty arrays clear the filter. `feed.getFeed` reads these off the viewer doc, so saving re-filters the feed reactively — see [§11](#11-feed--engagement).                                                                                                                                                                                                                                                               |
 | `users.refreshProfileFromLinkedIn`                                                       | mutation (public)                      | User-triggered profile re-scrape; requires a public identifier; **throws when the profile-scrape flag is off**; rate-limited 2/day; schedules the scrape action.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -3373,7 +3377,11 @@ drift that drops or adds a field fails return validation at runtime instead of r
 The viewer's tier sets the filter via `buildFeedFilter`:
 
 - **starter:** no filters.
-- **growth:** auto‑filter to the viewer's **own** `industry` + `country`.
+- **growth:** auto‑filter to the viewer's **own** `industry` + `country`; an empty one isn't filtered, and an author
+  without the filtered field is left out. Both can be filled automatically
+  ([§11C](#11c-profile-auto-fill-industry--country)), so `FeedPage` says what the feed is filtered by: "Showing posts
+  from: Software Development · Brazil" (or "every industry and country" when both are empty) with a **Change** link to
+  `/settings`.
 - **pro / contact:** filter by the viewer's **saved preference** —
   `users.feedFilterIndustries` / `feedFilterCountries`, read straight off the viewer doc (no client‑supplied args). Each
   dimension ORs over its list; the two dimensions are **ANDed**; an empty/absent list means that dimension isn't
@@ -3881,7 +3889,8 @@ alongside global backstops of 1800/hour and 6000/hour ([§7](#7-authentication--
 ## 11A. AI Reaction & Comment Assistance
 
 OpenRouter (OpenAI-compatible) powers two assists: (1) predicting each submitted post's most-likely reaction, and (2)
-drafting comments on demand. The model is Google's open **Gemma**
+drafting comments on demand. The same seam also fills an empty profile industry from the member's own post
+([§11C](#11c-profile-auto-fill-industry--country)). The model is Google's open **Gemma**
 (`google/gemma-4-26b-a4b-it`), served via OpenRouter's privacy-constrained provider routing. All calls go through one
 seam —
 `convex/ai/openrouter.ts` `callOpenRouter(messages, { action })` — which mirrors `linkedin/client.ts`
@@ -4005,7 +4014,8 @@ overrides per-comment without writing back.
 
 ### Files
 
-`convex/ai/{openrouter,prompts,reactions,comments}.ts`, `convex/lib/{reactions,languages}.ts`,
+`convex/ai/{openrouter,prompts,reactions,comments,industry}.ts` (`industry.ts`:
+[§11C](#11c-profile-auto-fill-industry--country)), `convex/lib/{reactions,languages}.ts`,
 `posts.submitPost` (schedule hook), `jobs/syncPosts.ts` (`upsertPost`'s `{ postId, created }` signal),
 `jobs/syncPostsApify.ts` (schedule hook + `shouldPredictReaction` gate), `interactions.reactToPost` (enum fix),
 `users.{setCommentLanguage, getPublicAuthor}`, `getMe` (exposes `commentLanguage` via `toSafeMe`); frontend
@@ -4073,6 +4083,69 @@ non-functional top-bar search placeholder.
 > instead covered by the `convex-test` integration runner (`convex/vitest.integration.config.ts`, added by plan 025);
 > the
 > pure `toSearchPerson` projection stays unit-tested.
+
+---
+
+## 11C. Profile Auto-fill (Industry & Country)
+
+A Growth feed filters by the viewer's own `industry` and `country` ([§11](#11-feed--engagement)), and a filtered feed
+leaves out authors without the filtered field, so an empty profile field costs a member both ways. Most members never
+open Settings, so both fields fill themselves while empty, and the member can see and change them:
+
+- **Industry: AI, from the member's own post.** `posts.submitPost` schedules
+  `internal.ai.industry.guessIndustry({ userId, postId })` right after `predictReaction` when the submitter has no
+  `industry`, no `profileEditedAt`, and the admin share-override is off (under it the post may not be theirs). The
+  action reads the post's stored `content` (the ownership-verified text; nothing else about the member is sent) and
+  calls OpenRouter through the same ZDR seam as [§11A](#11a-ai-reaction--comment-assistance) with `buildIndustryPrompt`
+  (`ai/prompts.ts`: every `INDUSTRIES` entry as a `code: label` line, "the industry the AUTHOR works in", reply the code
+  or `NONE`). `parseIndustryCode` (`lib/profileOptions.ts`) takes the first number in the reply, keeps it only if it is
+  a valid code, and returns nothing for `NONE`; a valid code goes to `internal.users.fillGuessedIndustry`. Any failure
+  (including a missing `OPENROUTER_API_KEY`) is logged and swallowed: the industry stays empty, and the member's next
+  post tries again.
+- **Country: the browser, no AI and no third party.** `app/src/lib/guessCountry.ts` maps the browser's time zone to a
+  country through ICU's own tables: it builds a zone → country map once from
+  `new Intl.Locale('und-XX').getTimeZones()` for every code in `COUNTRY_CODES`, and first resolves the input through
+  `Intl.DateTimeFormat`, so an alias (`Asia/Kolkata`, `America/Argentina/Buenos_Aires`) matches ICU's canonical id
+  (`Asia/Calcutta`, `America/Buenos_Aires`). A zone with no country (`UTC`), or an engine without `getTimeZones`
+  (Firefox), falls back to the first `navigator.languages` tag with a valid region (`pt-BR` → `BR`; `es-419` has none).
+  `App.tsx`'s `CountryGuess`, rendered in the `AppShell` branch of `RequireAuth` (so after the policy, consent and
+  first-post gates), calls the public `users.fillGuessedCountry` while `!me.country && !me.profileEditedAt`.
+- **One rule for both writes.** `users.fillGuessedProfileHandler` (pure, unit-tested) returns early once
+  `profileEditedAt` is set, fills only an **empty** field, accepts only valid codes (the country upper-cased), and never
+  overwrites. `users.updateProfile` (the Settings save) stamps `profileEditedAt` whenever the call carries `industry` or
+  `country`, so a field the member cleared stays cleared, and a guess still in flight during the save loses.
+- **Visible and changeable.** The Growth feed states its filter with a **Change** link to Settings
+  ([§11](#11-feed--engagement)). `PostCard` and `UserMenu` show the industry **label** (`industryLabel`) as the
+  subtitle when there is no headline; they used to print the raw code. Labels are English in every locale, like the
+  Settings pickers.
+
+```mermaid
+flowchart TD
+    SUB["posts.submitPost (own, verified post)"] --> Q1{"no industry, no profileEditedAt,<br/>no admin override?"}
+    Q1 -->|no| SKIP["no guess"]
+    Q1 -->|yes| GI["scheduler.runAfter(0) → ai.industry.guessIndustry"]
+    GI --> OR["OpenRouter (ZDR): buildIndustryPrompt(post.content)"]
+    OR --> PARSE["parseIndustryCode(reply)"]
+    PARSE -->|NONE, invalid or error| EMPTY["industry stays empty"]
+    PARSE -->|valid code| FI["users.fillGuessedIndustry"]
+    SHELL["RequireAuth: AppShell branch"] --> Q2{"!me.country and !me.profileEditedAt?"}
+    Q2 -->|yes| GC["guessCountry(): time zone → ICU country, else language region"]
+    GC -->|country| FC["users.fillGuessedCountry"]
+    FI --> H["fillGuessedProfileHandler: stop if profileEditedAt; fill only empty fields with valid codes"]
+    FC --> H
+    H --> FEED["Growth feed: 'Showing posts from: …' + Change → /settings"]
+    FEED --> SET["Settings save → updateProfile stamps profileEditedAt → fills stop"]
+```
+
+**Compliance.** The AI fill is ROPA Activity 13 (c) (`docs/compliance/DATA-INVENTORY.md`): same legitimate-interest
+basis and OpenRouter ZDR route as the other AI assists, and only the post text is sent. The public `/privacy` discloses
+both fills, and `POLICY_VERSION` went to `2026-09-25` for them ([§15](#15-frontend--landing-site-landing)). Left for
+legal review: the basis for the inference, whether it is profiling (GDPR Art. 4 (4), LGPD Art. 20), and the CCPA
+"inferences" category (`GAP-ASSESSMENT.md` item 13).
+
+**Known limits.** The filter is an exact match on one industry code, so a niche code can leave a Growth feed thin
+(rolling codes up to their parent group is the upgrade path). On Firefox, which lacks `getTimeZones`, an `en-US`
+browser in Brazil is guessed `US` until the member changes it.
 
 ---
 
@@ -4891,6 +4964,9 @@ query or fragment); until consent has started DataFast, that call does nothing. 
 DataFast and deletes its `datafast_*` cookies before it leaves for the landing, so the next member on a shared browser
 starts as a new visitor.
 
+`<CountryGuess>` (next to it, `App.tsx`) fills an empty `country` from the browser's time zone or language while
+`!me.country && !me.profileEditedAt`; see [§11C](#11c-profile-auto-fill-industry--country).
+
 | Path             | Page                |                                                                           Guarded                                                                            |
 |------------------|---------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------:|
 | `/auth/start`    | `AuthStartPage`     |                               – (PKCE entry: generates verifier/challenge → `beginOAuthLogin` → Convex `/auth/linkedin?vc=…`)                                |
@@ -4924,7 +5000,8 @@ starts as a new visitor.
 7. **`!me.firstPostPromptedAt`** (every new member — the submitted first post is created hidden for a no-card member;
    **everyone lands on the feed** (R04), where a `CardGateBanner` names the hidden post and a card-less member's post
    is revealed the moment they add a card) → `<FirstPostPromptScreen>`
-8. **user ok** → `<AppShell>` (sidebar + top bar) + `<Motd/>` + **`<ReconnectBanner/>`** (persistent top‑of‑app banner,
+8. **user ok** → `<AppShell>` (sidebar + top bar) + `<AnalyticsConsentGate/>` + `<CountryGuess/>` (both render
+   nothing) + `<Motd/>` + **`<ReconnectBanner/>`** (persistent top‑of‑app banner,
    shown when `me.tokenExpiresAt` is null or within 7 days — the user‑facing counterpart to B01a's refresh cron;
    see [§7](#7-authentication--identity)) + the requested page
 
@@ -4941,7 +5018,7 @@ flowchart TD
     RA -->|" acknowledgedPolicyVersion ≠ POLICY_VERSION "| RECON["PolicyUpdateScreen → acknowledgePolicy → reload"]
     RA -->|" !consentPromptedAt "| CONSENT["ConsentPromptScreen → completeConsentPrompt → reload"]
     RA -->|" !firstPostPromptedAt "| FIRSTPOST["FirstPostPromptScreen → submitPost (hidden if no card) → reload into feed · or dismiss → reload"]
-    RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + Motd + ReconnectBanner + page → page issues Convex queries"]
+    RA -->|user ok| SHELL["AppShell (Sidebar + TopBar) + AnalyticsConsentGate + CountryGuess + Motd + ReconnectBanner + page → page issues Convex queries"]
 ```
 
 ### Gate screens & support contact
@@ -4968,7 +5045,9 @@ sync with the compliance docs and live support inbox.
   redeeming when the code or verifier is missing (a handed‑over code must not be burned for its owner), and on a
   redeem failure. A run‑once latch keeps the single‑use code from being redeemed twice under StrictMode.
 - **FeedPage** — `getFeed`; a `PostComposer` (calls `submitPost`; a successful add toasts `feed.postAdded`); for
-  **Pro/Contact** viewers (gated on `getMe.tier`)
+  **Growth** viewers a line naming the automatic filter (`feed.filter.showing`: the viewer's industry label ·
+  country name, or `feed.filter.everyone` when both are empty) with a `feed.filter.change` link to `/settings`
+  ([§11C](#11c-profile-auto-fill-industry--country)); for **Pro/Contact** viewers (gated on `getMe.tier`)
   a collapsible **`FeedFilterPanel`** — two `ChipMultiSelect` pickers (industries / countries) whose add/remove/clear
   each call `setFeedFilter`; the saved arrays come from `getMe`, so the feed re-filters reactively (no local state).
   When a filter hides everything, the empty state shows `feed.emptyFiltered` (a plain recovery line — adjust or clear
@@ -5722,7 +5801,8 @@ entry above and [§8](#8-subscriptions--billing)), plus the two LinkedIn‑embed
   with raw (un‑encoded) colons as LinkedIn requires; only bare/legacy ids fall back to wrapping as
   `activity`.
 - **`PostCard`** — the Feed's post renderer (**Option B layout**): an app‑owned header (Featured badge via
-  `feed.featured` + author avatar/name/headline) **above** a `LinkedInEmbed`, whose
+  `feed.featured` + author avatar/name/headline, or the author's industry label via `industryLabel` when there is no
+  headline) **above** a `LinkedInEmbed`, whose
   `footer` is the app's in‑app **Like/Comment bar** (`type="button"` actions calling `onReact` /
   `onComment`) overlaying the clipped native bar, plus a **View on LinkedIn ↗** link. That link is rendered **only when
   `post.sourceUrl` is present** and points **directly at `sourceUrl`** (the exact URL the user submitted) — there is no
@@ -5829,7 +5909,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                                    | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                                        | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -6645,6 +6725,24 @@ is a lawyer's call; the code-side alternatives are `replaysSessionSampleRate: 0`
 consent. The same review covers the landing's cookieless DataFast storage without a banner (a legitimate-interest
 assessment), the DataFast transfer to Singapore and the US, and the policy pages' draft status.
 
+### Privacy Policy: automatic industry and country fill (2026‑09‑25)
+
+The AI industry suggestion ([§11C](#11c-profile-auto-fill-industry--country)) is a new purpose on the OpenRouter route,
+so the copy names it before the code runs. **`POLICY_VERSION` bumped `2026-09-23` → `2026-09-25`** (the constant plus
+the three `/privacy` literals), so every member sees `PolicyUpdateScreen` once. In en/pt/es:
+
+- **§2** "Profile attributes you set" became **"Industry and country"**: the feed filters use them; while they are
+  empty, AI suggests the industry from the text of a post the member submits, and the country comes from the device's
+  time zone or, failing that, the browser language; both can be changed or cleared in Settings, and saving them there
+  stops the fill.
+- **§3** legitimate interests also cover filling in an empty industry and country so the feed filters work.
+- **§4** the OpenRouter line adds suggesting the industry from the text of a submitted post.
+- **§8** (CCPA categories) adds *inferences (the industry and country we fill in for your profile)*.
+
+Left for legal review with the rest of the policy: the legitimate-interest basis for the inference, whether it is
+profiling (GDPR Art. 4 (4), LGPD Art. 20), and the CCPA inferences category (`docs/compliance/GAP-ASSESSMENT.md`
+item 13).
+
 ### CookieNotice (Phase 3b)
 
 `CookieNotice` is a **client component** rendered in `landing/app/[lang]/layout.tsx`. It displays a dismissible
@@ -7382,10 +7480,12 @@ exceptions to Sentry. Repeat for the dev deployment if you also want dev backend
 3. Wire the backend Sentry DSN via the Exception Reporting runbook above.
 4. In PostHog: enable IP discard/anonymization; confirm session replay is off. In Sentry: turn on **Prevent Storing of
    IP Addresses** (Project Settings → Security & Privacy), since Session Replay bypasses `beforeSend`.
-5. **Compliance — done in the repo on 2026‑09‑23:** `POLICY_VERSION` is `2026-09-23`, and the Privacy Policy, the
-   Cookie & Storage Policy and the consent copy (en/pt/es) disclose Sentry, PostHog, DataFast, Cloudflare Web Analytics
-   and the first-party funnel counter ([§15](#15-frontend--landing-site-landing), "Privacy and cookie policies:
-   analytics and monitoring disclosures"). What remains is the deploy order: **ship Convex and the app back to back.**
+5. **Compliance — done in the repo on 2026‑09‑23:** the Privacy Policy, the Cookie & Storage Policy and the consent
+   copy (en/pt/es) disclose Sentry, PostHog, DataFast, Cloudflare Web Analytics and the first-party funnel counter
+   ([§15](#15-frontend--landing-site-landing), "Privacy and cookie policies: analytics and monitoring disclosures").
+   `POLICY_VERSION` is now `2026-09-25` (bumped again for the automatic industry/country fill,
+   [§11C](#11c-profile-auto-fill-industry--country)). What remains is the deploy order: **ship Convex and the app back
+   to back.**
    The app compiles `POLICY_VERSION` in and `acknowledgePolicy` stamps the backend's copy, so while the two differ,
    `PolicyUpdateScreen` comes back after every acknowledgement (for every member if the app ships first, for new
    sign-ups if Convex does). Ship the landing in the same window so `/privacy` shows the version members accept.
@@ -7667,6 +7767,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | 3-day activity digest & email preferences (`jobs/digest.ts`, `lib/digest.ts`, `lib/digestEmails.ts`, `lib/unsubscribeToken.ts`, `lib/digestOptOut.ts`, `http.ts` `/unsubscribe/digest`, `users.unsubscribeByToken` / `digestEmailsEnabled` / `lastDigestAt`, `EmailPreferences.tsx`, `UnsubscribePage.tsx`, `ConsentPromptScreen.tsx`)                                                                                                                                                                                              | [§5](#5-data-model), [§8](#8-subscriptions--billing) digest subsection, [§13](#13-scheduled-jobs-crons), [§14](#14-frontend--authenticated-app-app), [§16](#16-environment-variables) `UNSUBSCRIBE_SECRET`, [§17](#17-security-posture)                                                                                                  |
 | 24-hour feed hygiene (`lib/feedHygiene.ts`, `interactions.hidePost`, `feed.getCaughtUp`, `app/src/components/PostCard.tsx`, `app/src/pages/FeedPage.tsx` hide confirm, `EmptyFeed.tsx`)                                                                                                                                                                                                                                                                                                                                             | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
 | AI comment drafting (`convex/ai/*`, `interactions.saveCommentDraft` / `commentOnPost`, `CommentBox`, `PostCard` "View your comment", `HistoryPage` / `RecapPage` draft rows)                                                                                                                                                                                                                                                                                                                                                        | [§11A](#11a-ai-reaction--comment-assistance), [§11](#11-feed--engagement), [§5](#5-data-model), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                               |
+| Profile auto-fill (`convex/ai/industry.ts`, `ai/prompts.buildIndustryPrompt`, `lib/profileOptions.parseIndustryCode` / `industryLabel`, `users.fillGuessedCountry` / `fillGuessedIndustry` / `fillGuessedProfileHandler`, `updateProfile`'s `profileEditedAt`, `app/src/lib/guessCountry.ts`, `App.tsx` `CountryGuess`, `FeedPage` Growth filter line)                                                                                                                                                                              | [§11C](#11c-profile-auto-fill-industry--country), [§5](#5-data-model), [§7](#7-authentication--identity), [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app), [§15](#15-frontend--landing-site-landing) policy, `docs/compliance/` (ROPA Activity 13 (c), GAP-ASSESSMENT item 13)                                   |
 | Recap & History (`convex/lib/recap.ts`, `convex/lib/history.ts`, `interactions.getRecap` / `listMyInteractions`, `app/src/pages/RecapPage.tsx`, `app/src/pages/HistoryPage.tsx`)                                                                                                                                                                                                                                                                                                                                                    | [§11](#11-feed--engagement), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                  |
 | Search / command palette (`convex/search.ts`, `schema.ts` search indexes, `app/src/components/shell/CommandPalette.tsx`, `TopBar.tsx`, `AppShell.tsx`)                                                                                                                                                                                                                                                                                                                                                                              | [§11B Search & Command Palette](#11b-search--command-palette)                                                                                                                                                                                                                                                                            |
 | Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [§12](#12-admin--moderation)                                                                                                                                                                                                                                                                                                             |
@@ -7689,6 +7790,27 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑25 (profile auto-fill). **An empty industry or country now fills itself, and the Growth feed
+says what it filters by.** New [§11C](#11c-profile-auto-fill-industry--country). `posts.submitPost` schedules
+`ai/industry.guessIndustry` when the submitter has no `industry` and no `profileEditedAt` (never under the admin
+share-override): Gemma, through the OpenRouter ZDR seam, reads only that post's text (`buildIndustryPrompt`),
+`parseIndustryCode` keeps a valid code or nothing, and `users.fillGuessedIndustry` writes it. The browser supplies the
+country: `app/src/lib/guessCountry.ts` maps the time zone to a country through ICU's own zone tables (aliases resolved
+first) and falls back to the language region; `App.tsx`'s `CountryGuess` sends it to `users.fillGuessedCountry` past
+every `RequireAuth` gate. Both writes share `fillGuessedProfileHandler` (empty fields and valid codes only, never
+overwrites), and the new `users.profileEditedAt`, stamped by `updateProfile` whenever the Settings save carries
+`industry` or `country`, stops both for good. `FeedPage` shows Growth members "Showing posts from: … · …" with a
+**Change** link to `/settings` (`feed.filter.showing` / `everyone` / `change`, en/pt/es); `PostCard` and `UserMenu`
+show the industry label instead of the raw code when there is no headline. Policy: `POLICY_VERSION` `2026-09-23` →
+`2026-09-25` (the constant plus the three `/privacy` literals), and `/privacy` §2, §3, §4 and §8 disclose both fills (
+§15). Compliance: ROPA Activity 2 rows, Activity 13 (c), the LIA, the transfers table and the field mapping;
+SUBPROCESSORS (OpenRouter row, disclosure note); RETENTION-POLICY (AI section); GAP-ASSESSMENT (transparency row,
+items 10 and 12, new item 13 for the lawyer: the basis, profiling, the CCPA inferences category); README §8. Tests:
+`parseIndustryCode` / `industryLabel`, `buildIndustryPrompt`, `fillGuessedProfileHandler` and the `profileEditedAt`
+stamp (convex); `guessCountry`, the Growth filter line and the `PostCard` label (app). Gates: convex 771/771,
+integration 111/111, app 675/675, landing 75/75, typecheck, lint and `prettier --check .` clean. Sections updated: §5,
+§7, §11, §11A, §11C, §14, §15, §17, §21._
 
 _Last updated: 2026‑09‑25 (plain-language copy pass). **The landing and the app's first-run copy now read for a tired
 visitor who skims: everyday words, short sentences, the result first and the conditions after.** Landing (

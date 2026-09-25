@@ -105,7 +105,10 @@
       "remove": "Remove {{label}}",
       "clear": "Clear filters",
       "selectPlaceholder": "Select…",
-      "noResults": "No results."
+      "noResults": "No results.",
+      "showing": "Showing posts from: {{filter}}",
+      "everyone": "every industry and country",
+      "change": "Change"
     },
     "viewGeneratedComment": "View comment"
   },
@@ -204,7 +207,6 @@
     "saved": "Saved ✓",
     "refresh": "Refresh from LinkedIn",
     "refreshing": "Refreshing…",
-    "profileNote": "Edit your industry and country below.",
     "visibility": "Who can see your posts",
     "visibilityNote": "Limit visibility to people in the selected industries and countries. Leave empty to show your posts to everyone.",
     "feedFilter": "What you see in your feed",

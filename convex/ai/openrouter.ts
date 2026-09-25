@@ -2,10 +2,10 @@
 // Single seam for LLM chat calls via OpenRouter (OpenAI-compatible). Mirrors linkedin/client.ts:
 // owns auth + the log-real-error→throw-sanitized policy. Uses fetch() — NO "use node".
 //
-// PRIVACY: every request is pinned to DeepInfra's fp8 endpoint with NO fallback, and routed ONLY to
-// providers that do not retain prompts (`zdr`) and do not train on / store data (`data_collection:
-// "deny"`). These are compliance-critical and intentionally NOT env-overridable. See docs/compliance
-// + PLATFORM.md §11A.
+// PRIVACY: every request is routed ONLY to providers that do not retain prompts (`zdr`) and do not
+// train on / store data (`data_collection: "deny"`). OpenRouter picks the provider per request; the
+// provider and its region are not pinned. These are compliance-critical and intentionally NOT
+// env-overridable. See docs/compliance + PLATFORM.md §11A.
 // Content is either plain text or, for multimodal (vision) requests, an array of parts mixing
 // text with image_url parts (OpenAI-compatible). callOpenRouter just JSON-stringifies it.
 import { env } from '../_generated/server'

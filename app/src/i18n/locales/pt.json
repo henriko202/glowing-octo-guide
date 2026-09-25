@@ -105,7 +105,10 @@
       "remove": "Remover {{label}}",
       "clear": "Limpar filtros",
       "selectPlaceholder": "Selecionar…",
-      "noResults": "Sem resultados."
+      "noResults": "Sem resultados.",
+      "showing": "Mostrando publicações de: {{filter}}",
+      "everyone": "todos os setores e países",
+      "change": "Alterar"
     },
     "viewGeneratedComment": "Ver comentário"
   },
@@ -204,7 +207,6 @@
     "saved": "Salvo ✓",
     "refresh": "Atualizar do LinkedIn",
     "refreshing": "Atualizando…",
-    "profileNote": "Edite seu setor e país abaixo.",
     "visibility": "Quem pode ver suas publicações",
     "visibilityNote": "Limite a visibilidade a pessoas dos setores e países selecionados. Deixe vazio para mostrar suas publicações a todos.",
     "feedFilter": "O que você vê no seu feed",

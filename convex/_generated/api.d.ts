@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as ai_comments from "../ai/comments.js";
+import type * as ai_industry from "../ai/industry.js";
 import type * as ai_openrouter from "../ai/openrouter.js";
 import type * as ai_prompts from "../ai/prompts.js";
 import type * as ai_reactions from "../ai/reactions.js";
@@ -116,6 +117,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   "ai/comments": typeof ai_comments;
+  "ai/industry": typeof ai_industry;
   "ai/openrouter": typeof ai_openrouter;
   "ai/prompts": typeof ai_prompts;
   "ai/reactions": typeof ai_reactions;

@@ -4,8 +4,9 @@ import { useMutation, useQuery } from 'convex/react'
 import { ChevronsUpDown, LogOut, Settings as SettingsIcon } from 'lucide-react'
 import { api } from '../../convex'
 import { performSignOut } from '@/lib/session'
+import { industryLabel } from '../../../../convex/lib/profileOptions'
 import { Avatar } from '../ui/avatar'
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu'
 
 export default function UserMenu() {
   const { t } = useTranslation()
@@ -14,7 +15,7 @@ export default function UserMenu() {
   const me = useQuery(api.users.getMe, { sessionToken: sessionStorage.getItem('sessionToken') ?? undefined })
 
   const name = me?.name ?? t('nav.openMenu')
-  const subtitle = me?.headline ?? me?.industry
+  const subtitle = me?.headline ?? (me?.industry && industryLabel(me.industry))
 
   async function handleSignOut() {
     await performSignOut(logout, sessionStorage.getItem('sessionToken'))

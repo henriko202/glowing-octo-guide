@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useAction, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../convex'
@@ -24,6 +25,7 @@ import { useCardGate } from '@/hooks/useCardGate'
 import { friendlyError } from '@/lib/errors'
 import { captureEvent } from '@/lib/observability/analytics'
 import { INTERACTED_TTL_MS } from '../../../convex/lib/feedHygiene'
+import { countryLabel, industryLabel } from '../../../convex/lib/profileOptions'
 
 const FEED_PAGE_SIZE = 20
 // backlog/R21 — how many empty pages to auto-load before trusting that the feed is empty.
@@ -31,7 +33,7 @@ const FEED_PAGE_SIZE = 20
 const MAX_EMPTY_LOADS = 5
 
 export default function FeedPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const sessionToken = sessionStorage.getItem('sessionToken') ?? undefined
   const { gated, status: cardStatus } = useCardGate()
   // A failed payment blocks submission (convex/lib/access.ts: assertCanSubmitPost); the composer
@@ -83,10 +85,13 @@ export default function FeedPage() {
   // gate, F12) — EmptyFeed only ever renders when the feed is empty, so skip this query the rest of
   // the time instead of firing it on every feed page load (F14).
   const progress = useQuery(api.users.getTrialProgress, sessionToken && posts.length === 0 ? { sessionToken } : 'skip')
-  // Viewer profile — drives the Pro/Contact feed filter (tier gate + saved industries/countries).
+  // Viewer profile — drives the Pro/Contact feed filter (tier gate + saved industries/countries)
+  // and the Growth line (the viewer's own industry + country).
   const me = useQuery(api.users.getMe, { sessionToken }) as
     | {
         tier?: string
+        industry?: string
+        country?: string
         feedFilterIndustries?: string[]
         feedFilterCountries?: string[]
       }
@@ -105,6 +110,13 @@ export default function FeedPage() {
   // Hiding is destructive, so the card's hide control opens this confirmation first.
   const [hideTarget, setHideTarget] = useState<Id<'posts'> | null>(null)
   const [hiding, setHiding] = useState(false)
+  // Growth filters by the viewer's own industry + country (convex/feed.ts buildFeedFilter), which are
+  // filled automatically when empty, so the feed says which ones and links to where they change.
+  // Kept below the commentingOn useState: placed above it, the React Compiler lint rejects handleToggleComment's memo.
+  const growthFilter =
+    [me?.industry && industryLabel(me.industry), me?.country && countryLabel(me.country, i18n.language?.split('-')[0])]
+      .filter(Boolean)
+      .join(' · ') || t('feed.filter.everyone')
 
   async function handlePostSubmit(url: string) {
     if (!sessionToken) throw new Error(t('auth.notSignedIn'))
@@ -223,6 +235,18 @@ export default function FeedPage() {
         atLimit={pastDue}
         limitHint={pastDue ? <PaymentRequiredHint /> : undefined}
       />
+
+      {me?.tier === 'growth' && (
+        <p className="text-muted-foreground mb-4 text-sm">
+          {t('feed.filter.showing', { filter: growthFilter })}{' '}
+          <Link
+            to="/settings"
+            className="underline"
+          >
+            {t('feed.filter.change')}
+          </Link>
+        </p>
+      )}
 
       {canFilter && sessionToken && (
         <FeedFilterPanel
