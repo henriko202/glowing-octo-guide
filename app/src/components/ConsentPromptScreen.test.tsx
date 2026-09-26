@@ -1,17 +1,18 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import ConsentPromptScreen from './ConsentPromptScreen'
 
 const completeFn = vi.fn(async () => {})
 vi.mock('convex/react', () => ({ useMutation: () => completeFn }))
 vi.mock('../convex', () => ({ api: { privacy: { consent: { completeConsentPrompt: 'ref' } } } }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }))
 
-import ConsentPromptScreen from './ConsentPromptScreen'
-
 describe('ConsentPromptScreen', () => {
   beforeEach(() => {
     completeFn.mockClear()
     sessionStorage.setItem('sessionToken', 'tok')
+    // jsdom has no navigation; stub reload so the handler's refresh doesn't log "Not implemented".
+    Object.defineProperty(window, 'location', { configurable: true, value: { reload: vi.fn() } })
   })
 
   it('renders the marketing + analytics toggles (off by default)', () => {
@@ -29,8 +30,7 @@ describe('ConsentPromptScreen', () => {
     render(<ConsentPromptScreen />)
     fireEvent.click(screen.getByLabelText('privacy.consent.marketing'))
     fireEvent.click(screen.getByRole('button', { name: 'privacy.consentPrompt.save' }))
-    await waitFor(() =>
-      expect(completeFn).toHaveBeenCalledWith({ sessionToken: 'tok', marketing: true, analytics: false })
-    )
+    await waitFor(() => expect(window.location.reload).toHaveBeenCalledOnce())
+    expect(completeFn).toHaveBeenCalledWith({ sessionToken: 'tok', marketing: true, analytics: false })
   })
 })
