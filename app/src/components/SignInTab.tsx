@@ -107,81 +107,83 @@ export default function SignInTab({ sessionToken, isAdmin }: Props) {
     <div>
       {windowToggle}
 
-      <Table className="table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Step</TableHead>
-            <TableHead className="w-[90px] text-right">Total</TableHead>
-            <TableHead className="w-[90px] text-right">New</TableHead>
-            <TableHead className="w-[90px] text-right">Returning</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {funnel.map(([label, total, isNew, returning]) => (
-            <TableRow key={label}>
-              <th
-                scope="row"
-                className={ROW_HEADER}
-              >
-                {label}
-              </th>
-              <TableCell className="text-right tabular-nums">{total}</TableCell>
-              <TableCell className="text-right tabular-nums">{isNew ?? '–'}</TableCell>
-              <TableCell className="text-right tabular-nums">{returning ?? '–'}</TableCell>
+      <div className="flex flex-col gap-4">
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Step</TableHead>
+              <TableHead className="w-[90px] text-right">Total</TableHead>
+              <TableHead className="w-[90px] text-right">New</TableHead>
+              <TableHead className="w-[90px] text-right">Returning</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {funnel.map(([label, total, isNew, returning]) => (
+              <TableRow key={label}>
+                <th
+                  scope="row"
+                  className={ROW_HEADER}
+                >
+                  {label}
+                </th>
+                <TableCell className="text-right tabular-nums">{total}</TableCell>
+                <TableCell className="text-right tabular-nums">{isNew ?? '–'}</TableCell>
+                <TableCell className="text-right tabular-nums">{returning ?? '–'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
 
-      <Table className="mt-4 table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Why a sign-in stopped</TableHead>
-            <TableHead className="w-[90px] text-right">Count</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {FAILURE_LABEL.map(([event, label]) => (
-            <TableRow key={event}>
-              <th
-                scope="row"
-                className={ROW_HEADER}
-              >
-                {label}
-              </th>
-              <TableCell className="text-right tabular-nums">{totals[event]}</TableCell>
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Why a sign-in stopped</TableHead>
+              <TableHead className="w-[90px] text-right">Count</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {FAILURE_LABEL.map(([event, label]) => (
+              <TableRow key={event}>
+                <th
+                  scope="row"
+                  className={ROW_HEADER}
+                >
+                  {label}
+                </th>
+                <TableCell className="text-right tabular-nums">{totals[event]}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
 
-      <Table className="mt-4 table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[120px]">Day</TableHead>
-            <TableHead className="w-[90px] text-right">Sent</TableHead>
-            <TableHead className="w-[90px] text-right">Back</TableHead>
-            <TableHead className="w-[90px] text-right">Signed in</TableHead>
-            <TableHead className="w-[90px] text-right">Failed</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {signIns.daily.map(row => (
-            <TableRow key={row.day}>
-              <th
-                scope="row"
-                className={ROW_HEADER}
-              >
-                {row.day}
-              </th>
-              <TableCell className="text-right tabular-nums">{row.started}</TableCell>
-              <TableCell className="text-right tabular-nums">{row.linkedinOk}</TableCell>
-              <TableCell className="text-right tabular-nums">{row.signedIn}</TableCell>
-              <TableCell className="text-right tabular-nums">{row.failed}</TableCell>
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[120px]">Day</TableHead>
+              <TableHead className="w-[90px] text-right">Sent</TableHead>
+              <TableHead className="w-[90px] text-right">Back</TableHead>
+              <TableHead className="w-[90px] text-right">Signed in</TableHead>
+              <TableHead className="w-[90px] text-right">Failed</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {signIns.daily.map(row => (
+              <TableRow key={row.day}>
+                <th
+                  scope="row"
+                  className={ROW_HEADER}
+                >
+                  {row.day}
+                </th>
+                <TableCell className="text-right tabular-nums">{row.started}</TableCell>
+                <TableCell className="text-right tabular-nums">{row.linkedinOk}</TableCell>
+                <TableCell className="text-right tabular-nums">{row.signedIn}</TableCell>
+                <TableCell className="text-right tabular-nums">{row.failed}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <p className="text-muted-foreground mt-3 text-xs">
         Window: since {signIns.sinceDay} UTC (last {days} days). Sent to LinkedIn also counts the sign-ins the app
