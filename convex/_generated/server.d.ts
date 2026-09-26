@@ -10,16 +10,16 @@
 
 import {
   ActionBuilder,
-  HttpActionBuilder,
-  MutationBuilder,
-  QueryBuilder,
   GenericActionCtx,
-  GenericMutationCtx,
-  GenericQueryCtx,
   GenericDatabaseReader,
   GenericDatabaseWriter,
-} from "convex/server";
-import type { DataModel } from "./dataModel.js";
+  GenericMutationCtx,
+  GenericQueryCtx,
+  HttpActionBuilder,
+  MutationBuilder,
+  QueryBuilder
+} from 'convex/server'
+import type { DataModel } from './dataModel.js'
 
 /**
  * Typesafe environment variables.
@@ -187,4 +187,4 @@ export type DatabaseReader = GenericDatabaseReader<DataModel>;
  * your data in an inconsistent state. See [the Convex Guide](https://docs.convex.dev/understanding/convex-fundamentals/functions#atomicity-and-optimistic-concurrency-control)
  * for the guarantees Convex provides your functions.
  */
-export type DatabaseWriter = GenericDatabaseWriter<DataModel
+export type DatabaseWriter = GenericDatabaseWriter<DataModel>;
