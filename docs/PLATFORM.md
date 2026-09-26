@@ -6592,17 +6592,36 @@ hreflang → OpenGraph locale map.
 
 - `metadataBase` set to `SITE_URL`, so every relative canonical/OpenGraph URL below resolves to an absolute one.
 - `title` is `dict.meta.title` on the Home route (`Link Into The SSI · LinkedIn SSI tool`, localized), so the brand and
-  the primary keyword share the strongest on-page signal. `description` and `keywords` come from `dict.meta`; `keywords`
-  carries the SSI / LinkedIn search terms (`LinkedIn SSI`, `Social Selling Index`, `SSI score`, `LinkedIn SSI tool`,
-  `best LinkedIn SSI tool`, `increase SSI`,
-  `improve LinkedIn SSI`, `get noticed on LinkedIn`, `best way to be noticed on LinkedIn`, `be known on LinkedIn`,
-  `engage with important people on LinkedIn`, `find a job on LinkedIn`, `LISSI`, …) in each locale. The descriptions
-  state the positioning in plain terms (LISSI helps you get noticed on LinkedIn and improve your SSI), so AI engines
-  can extract it from the `description`, the visible `Positioning` section, the FAQ answers, and `/llms.txt`. **No
-  superlatives (2026‑09‑22):** the 2026‑09‑16 AEO pass had the visible copy, descriptions, `/llms.txt` and JSON-LD
-  call LISSI "the best way to be noticed on LinkedIn" and "the best tool to improve your SSI"; the owner dropped every
-  such claim in the landing copy rewrite. "Best …" now survives **only** in the hidden `meta.keywords` list, as a
-  search term. The product and legal copy still promise no score, no timeline, and no result.
+  the primary keyword share the strongest on-page signal. `description` and `keywords` come from `dict.meta`. The
+  descriptions state the positioning in plain terms (LISSI helps you get noticed on LinkedIn and improve your SSI), so
+  AI engines can extract it from the `description`, the visible `Positioning` section, the FAQ answers, and
+  `/llms.txt`. **No superlatives (2026‑09‑22):** the 2026‑09‑16 AEO pass had the visible copy, descriptions,
+  `/llms.txt` and JSON-LD call LISSI "the best way to be noticed on LinkedIn" and "the best tool to improve your SSI";
+  the owner dropped every such claim in the landing copy rewrite. "Best …" now survives **only** in the hidden
+  `meta.keywords` list, as a search term. The product and legal copy still promise no score, no timeline, and no
+  result.
+  - **`keywords` is the Home page's topic map** (curated 2026‑09‑26, 21 terms per locale). SSI terms: `LinkedIn SSI`,
+    `Social Selling Index`, `LinkedIn SSI score`, `LinkedIn SSI tool`, `best LinkedIn SSI tool`, `increase SSI`,
+    `improve LinkedIn SSI`. Outcomes: `get noticed on LinkedIn`, `best way to get noticed on LinkedIn`,
+    `be known on LinkedIn`, `LinkedIn visibility`, `LinkedIn personal branding`,
+    `engage with important people on LinkedIn`, `find a job on LinkedIn`, `LinkedIn networking`. Product terms:
+    `LinkedIn engagement`, `LinkedIn post feed`, `AI LinkedIn comment generator`, `social selling`, `LinkedIn growth`.
+    Alias: `LISSI`.
+  - **The tag alone ranks nothing.** Google ignores `<meta name="keywords">`, and Bing treats a stuffed one as a spam
+    hint. Engines and agents can also read the same array as JSON-LD `SoftwareApplication.keywords` (below). A term
+    only helps where the title, a heading, the body, the FAQ, or `/llms.txt` also covers it, so the list stays short
+    and true to the page.
+  - **pt/es use each market's search phrasing, not a translation of en:** `SSI do LinkedIn` / `SSI de LinkedIn`,
+    `aumentar o SSI do LinkedIn` / `aumentar el SSI de LinkedIn`, the score word the copy already uses (`nota de SSI` /
+    `puntuación de SSI`, the guide FAQ's wording), and `social selling` left in English, the way pt-BR and Spanish
+    sources write it.
+  - **Same length in all three locales:** `dictionaries.test.ts` walks into arrays, so every keyword index is a
+    translation path and an en-only addition fails the parity test.
+  - **Left out on purpose:** bare `SSI` and `LinkedIn` (ambiguous, and already inside every other term);
+    `LinkedIn Jobs` (LinkedIn's job board, which the app never touches; `find a job on LinkedIn`,
+    `LinkedIn networking`, and the "get a job faster" FAQ serve job seekers); anything implying the app shows your
+    SSI ("SSI checker", "SSI without Sales Navigator"); and engagement-pod terms, because LinkedIn's Professional
+    Community Policies prohibit engagement pods.
 - `alternates.canonical` self-references `/<lang>`, and `alternates.languages` lists the three `hreflang` alternate
   URLs (`/en/…`, `/pt/…`, `/es/…`) plus `x-default` → `/en/…`.
 - `openGraph` (type `website`, `siteName`, per-locale `ogTitle`/`ogDescription`, `locale` in `language_TERRITORY`
@@ -8114,6 +8133,28 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑26 (landing keywords). **The landing keyword lists use the words people actually search, and
+all three locales have 21 terms again.** An en-only addition (`better SSI`, `LinkedIn`, `LinkedIn Jobs`) had left en
+at 22 keywords against 19 in pt and es, so the dictionary parity test failed for pt and es. Against HEAD, en renames
+`SSI score` → `LinkedIn SSI score`, `best way to be noticed on LinkedIn` → `best way to get noticed on LinkedIn` (the
+phrase the Home copy uses) and `LinkedIn comment generator` → `AI LinkedIn comment generator`, adds
+`LinkedIn visibility`, `LinkedIn personal branding` and `LinkedIn networking`, and drops the bare `SSI`. pt and es get
+the same three additions and switch to native phrasing: `SSI do LinkedIn`, `nota de SSI` and
+`aumentar o SSI do LinkedIn` in pt, `puntuación de SSI` and `aumentar el SSI de LinkedIn` in es, and `social selling`
+in English in both, replacing `vendas sociais` / `ventas sociales`. Of the working-tree additions, `better SSI` and bare
+`LinkedIn` were too broad, and `LinkedIn Jobs` names LinkedIn's job board, which the app never touches;
+`LinkedIn networking` covers that intent. The tag itself ranks nothing: Google ignores `<meta name="keywords">`, and
+the list's only other reader is JSON-LD `SoftwareApplication.keywords`. Verbatim matches in the visible copy (the
+dictionary outside `meta`, plus the guide) go from 7/19 to 5/21 in en, 5/19 to 7/21 in pt and 6/19 to 7/21 in es. en
+loses two on purpose: bare `SSI` is gone, and `SSI score` became `LinkedIn SSI score`, the form competing guides use,
+while the guide FAQ still says "SSI score". pt's old `SSI LinkedIn` / `pontuação SSI` never matched the site's own
+wording. The new topic terms are covered in meaning, not verbatim ("stay visible", "Establish your professional
+brand", "Connect with the peers…"). No visible copy, title or description changed. Verified in the build: `/en`,
+`/pt` and `/es` each carry one keywords tag and one `SoftwareApplication.keywords` equal to the dictionary list, and
+the guide and legal pages carry none. Landing-only: no app or Convex change. Gates: landing 75/75, `next build`
+(types + lint) clean, `prettier --check` clean on the three dictionaries. Sections updated: §15 (keyword map and
+rules), §21._
 
 _Last updated: 2026‑09‑26 (Sign-in tab). **The sign-in funnel has its own admin tab, and a member who signs in again
 while already signed in now counts as signed in.** Prod showed the gap: on 2026‑09‑26 two landing clicks went to
