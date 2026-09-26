@@ -9,6 +9,7 @@ import FeedbackTab from '../components/FeedbackTab'
 import MotdTab from '../components/MotdTab'
 import SurvivalTab from '../components/SurvivalTab'
 import LandingTab from '../components/LandingTab'
+import SignInTab from '../components/SignInTab'
 import { Flash, useFlash } from '../components/useFlash'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
@@ -16,7 +17,16 @@ import { Button } from '../components/ui/button'
 import { Avatar } from '../components/ui/avatar'
 import { friendlyError } from '@/lib/errors'
 
-type TabValue = 'settings' | 'planLimits' | 'users' | 'feedback' | 'motd' | 'survival' | 'landing' | 'attention'
+type TabValue =
+  | 'settings'
+  | 'planLimits'
+  | 'users'
+  | 'feedback'
+  | 'motd'
+  | 'survival'
+  | 'landing'
+  | 'signIn'
+  | 'attention'
 
 // Churn reasons returned by admin.getChurnRisk. English hardcoded copy, per admin-page convention.
 type ChurnReason = 'received_no_reply' | 'silent_7d' | 'cooling'
@@ -166,15 +176,15 @@ export default function AdminPage() {
   })).filter(group => group.rows.length > 0)
 
   return (
-    <div className="mx-auto max-w-[640px] p-8 font-sans">
+    <div className="mx-auto max-w-[900px] p-8 font-sans">
       <PageHeader title="Admin Panel" />
 
       <Tabs
         value={tab}
         onValueChange={handleTabChange}
       >
-        {/* Eight triggers overflow a phone viewport; the list scrolls sideways instead of wrapping. */}
-        <TabsList className="overflow-x-auto">
+        {/* Nine triggers fit on one line at this width; on a phone the list scrolls sideways, and no label wraps. */}
+        <TabsList className="overflow-x-auto whitespace-nowrap">
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="planLimits">Plan Limits</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
@@ -182,6 +192,7 @@ export default function AdminPage() {
           <TabsTrigger value="motd">MOTD</TabsTrigger>
           <TabsTrigger value="survival">Survival</TabsTrigger>
           <TabsTrigger value="landing">Landing</TabsTrigger>
+          <TabsTrigger value="signIn">Sign-in</TabsTrigger>
           <TabsTrigger value="attention">Attention</TabsTrigger>
         </TabsList>
 
@@ -379,6 +390,14 @@ export default function AdminPage() {
         {/* Landing tab — cookieless landing funnel counters (convex/landingMetrics.ts) */}
         <TabsContent value="landing">
           <LandingTab
+            sessionToken={sessionToken}
+            isAdmin={isAdmin}
+          />
+        </TabsContent>
+
+        {/* Sign-in tab — the landing clicks followed through LinkedIn to a session (convex/authMetrics.ts) */}
+        <TabsContent value="signIn">
+          <SignInTab
             sessionToken={sessionToken}
             isAdmin={isAdmin}
           />

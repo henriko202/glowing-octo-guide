@@ -4538,8 +4538,8 @@ RELOGIN[Re-login rotates sessionToken] -. stored token no longer matches .-> SEL
 Answers one question: **did the people who clicked "Start trial" or "Log in" actually get in, and if not, where did
 they stop?** Every step of the LinkedIn sign-in ([§7](#7-authentication--identity)) and every reason one stopped is
 counted per UTC day in `authMetrics` ([§5](#5-data-model)). The counts carry no member, browser, IP or attempt id, and
-the backend writes every one of them: no sub-processor, no client-side reporting. They are read in the admin **Landing**
-tab's **Sign-in** section, right under the landing funnel ([§14](#14-frontend--authenticated-app-app)).
+the backend writes every one of them: no sub-processor, no client-side reporting. They are read in the admin **Sign-in**
+tab, whose first row is the landing CTA clicks of the same window ([§14](#14-frontend--authenticated-app-app)).
 
 ### Events
 
@@ -4589,8 +4589,14 @@ and returning members folded together, every failure reason folded into `failed`
 ### What the counters cannot tell
 
 - **The last hop has no failure event.** Between `/auth/success` and a session the app reports nothing, so a closed
-  tab, a code opened in another browser (no verifier) or a member who was already signed in shows only as the gap
-  between **Back from LinkedIn** and **Signed in**.
+  tab or a code opened in another browser (no verifier) shows only as the gap between **Back from LinkedIn** and
+  **Signed in**. A member who was already signed in is no longer part of that gap: since the 2026‑09‑26 change the
+  tab redeems the fresh code like any other, so the sign-in counts as `signed_in_returning`.
+- **Early days undercount.** Before that change reached the app, a tab that already held a session dropped the code
+  without redeeming it, so a member who signed in again from the landing counted as **Back from LinkedIn** only. The
+  counters themselves went live on 2026‑09‑26 (first `started` at 10:39 UTC), so the landing clicks of earlier days
+  have no sign-in rows at all and the first row exceeds **Sent to LinkedIn** until those days leave the window (the
+  7-day view from 2026‑10‑02, the 28-day view from 2026‑10‑23).
 - **`started` is not the landing clicks.** It also counts the sign-ins the app starts on its own (`RequireAuth`'s
   auto‑OAuth when a session expires, the `ReconnectBanner`), so it can exceed the landing CTA clicks. A start the rate
   limiter refused is not counted at all.
@@ -4615,15 +4621,16 @@ flowchart TD
     X -->|"createAuthCode"| OK["bump linkedin_ok_new / _returning"]
     OK --> SUC["/auth/success → redeemAuthCode(code, verifier)"]
     SUC -->|"verifier matches"| IN["bump signed_in_new / _returning → /feed"]
-    SUC -->|"already signed in"| FEED["/feed, nothing counted"]
     SUC -->|"no code or verifier, or redeem throws"| GAP["nothing counted<br/>(the Back minus Signed in gap)"]
+    GAP --> HAS{"tab already holds a session?"}
+    HAS -->|"yes: keeps it"| FEED["/feed"]
     DEN --> EPD["/auth/error?reason=denied"]
     LIE --> EPF["/auth/error?reason=failed"]
     NC --> EPF
     REJ --> EPF
     LC --> EPF
     ERR --> EPF
-    GAP --> EPF
+    HAS -->|"no"| EPF
 ```
 
 ---
@@ -5189,15 +5196,19 @@ sync with the compliance docs and live support inbox.
   Renders only a spinner.
 - **AuthSuccessPage** — the OAuth callback lands here with `#code`/`plan`/`interval`; the pre‑bundle inline script
   in `index.html` has already moved the code into `sessionStorage` (keys `oauthCode` / `chosenPlan` / `chosenInterval`)
-  and scrubbed the fragment before this page runs. That script captures a `#code=` **only on this route** and never
-  overwrites an existing stored token. The page redeems the code through `sessions.redeemAuthCode({ code, verifier })`
-  with the verifier this browser stored at `/auth/start`, stores the returned session token, drops the code/verifier,
-  clears the persistent `signedOut` marker (§7), and navigates to `/feed`. It fails closed to
-  `/auth/error?reason=failed` (`navigate(…, { replace: true })`) without redeeming when the code or verifier is missing
-  (a handed‑over code must not be burned for its owner), and on a redeem failure. A run‑once latch keeps the
-  single‑use code from being redeemed twice under StrictMode.
+  and scrubbed the fragment before this page runs. That script captures a `#code=` **only on this route**, also in a
+  tab that already holds a session (a member who signs in again from the landing). The page redeems the code through
+  `sessions.redeemAuthCode({ code, verifier })` with the verifier this browser stored at `/auth/start`, stores the
+  returned session token (replacing any older one), drops the code/verifier, clears the persistent `signedOut` marker
+  (§7), and navigates to `/feed`. Redeeming in a signed-in tab too is what lets the sign-in funnel count that sign-in
+  ([§12C](#12c-sign-in-funnel-metrics)). It never redeems when the code or verifier is missing (a handed‑over code must
+  not be burned for its owner). When the login cannot finish, missing code or verifier or a failed redeem, a tab that
+  already holds a session keeps it (clears `signedOut`, `/feed`); any other tab fails closed to
+  `/auth/error?reason=failed` (`navigate(…, { replace: true })`). A run‑once latch keeps the single‑use code from
+  being redeemed twice under StrictMode.
 - **AuthErrorPage** (`/auth/error`, **public** — outside `RequireAuth`) — where every failed sign-in lands: the OAuth
-  callback's failure redirects (§7) and `AuthSuccessPage`'s two failure paths. `?reason=denied` renders
+  callback's failure redirects (§7) and `AuthSuccessPage`'s two failure paths in a tab without a session.
+  `?reason=denied` renders
   `auth.error.deniedTitle` / `deniedBody` (the member canceled on LinkedIn, so nothing was shared); any other or no
   reason renders `failedTitle` / `failedBody`, which suggests opening the site in the usual browser rather than inside
   another app (the `lost_cookie` case, [§12C](#12c-sign-in-funnel-metrics)). Two buttons: **Try again**
@@ -5765,8 +5776,9 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
   return as a fallback. This is a **UX nicety only**: `checkIsAdmin` soft‑fails to
   `false` and every `api.admin.*` function independently enforces `assertAdmin` server‑side (§12), so a stale or
   bypassed client redirect can't grant access. `/admin` is **intentionally URL‑only** (see routing table above) — a
-  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. Eight tabs (the `TabsList` is
-  `overflow-x-auto`, so the row scrolls instead of wrapping on a narrow screen):
+  small internal surface, deliberately not added to `navItems.ts`/`Sidebar`. The page is `max-w-[900px]`, wide enough
+  for all nine tabs on one line; on a narrow screen the `TabsList` (`overflow-x-auto whitespace-nowrap`) scrolls
+  sideways, and no tab label wraps. Nine tabs:
   **Settings** (three Apify toggles: master kill-switch, post sync, and profile scrape + last‑sync status), **Plan
   Limits** (`PlanLimitsTab` — **read‑only**: tier defaults + every contact user's effective limits, with an "override"
   tag), **Users** (`UsersTab` — per‑user row actions:
@@ -5778,7 +5790,9 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
   (`archiveFeedback`), **Reopen** (`reopenFeedback`)), **MOTD** (`MotdTab` — authoring the in-app banner; see
   [§12B](#12b-message-of-the-day-motd)), **Survival** (`SurvivalTab`, **R18**), **Landing** (`LandingTab` — cookieless
   funnel counters over `landingMetrics.getMetrics`; see [§12](#12-admin--moderation) and
-  [§15](#15-frontend--landing-site-landing)), and **Attention** — the read-only
+  [§15](#15-frontend--landing-site-landing)), **Sign-in** (`SignInTab`, `/admin?tab=signIn` — the landing clicks
+  followed through LinkedIn to a session over `authMetrics.getMetrics`; see [§12C](#12c-sign-in-funnel-metrics)), and
+  **Attention** — the read-only
   churn attention list over `admin.getChurnRisk` ([§12](#12-admin--moderation)), grouped by reason in the fixed order
   `received_no_reply` → `silent_7d` → `cooling`, each row showing only the facts that exist, under the 20-row cap.
     - **Survival** (`/admin?tab=survival`) is the funnel panel: a 7-day / 28-day toggle over one
@@ -5907,9 +5921,11 @@ on file; calls `respondToFeedback`),
 `SurvivalTab` (R18 — the admin funnel table over `admin.survivalMetrics`; see the AdminPage entry above and
 [§12](#12-admin--moderation). Exports its `share(part, base)` helper so the zero-base case is testable on its own),
 `LandingTab` (the cookieless landing funnel counters over `landingMetrics.getMetrics`, 7/28-day toggle, unique
-headline figures, placement table with a Unique column, disabled-unique warning and empty state, then the
-`SignInSection` over `authMetrics.getMetrics` ([§12C](#12c-sign-in-funnel-metrics)); imports the same
+headline figures, placement table with a Unique column, disabled-unique warning and empty state; imports the same
 `share(part, base)` helper from `SurvivalTab` — see the AdminPage entry above and [§12](#12-admin--moderation)),
+`SignInTab` (the sign-in funnel over `authMetrics.getMetrics`, 7/28-day toggle: the funnel table with its New and
+Returning split, the stop reasons, the daily table and an empty state; also reads `landingMetrics.getMetrics` for the
+window's landing CTA clicks, the funnel's first row — see [§12C](#12c-sign-in-funnel-metrics)),
 `RowActionsMenu`, `LoadingSpinner`,
 `CancelDeletionScreen` (grace‑window full‑screen interstitial shown by `RequireAuth` when
 `me.deletionScheduledAt` is set; "Keep my account" button calls
@@ -6080,7 +6096,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                                              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                                                | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -7299,11 +7315,14 @@ The codebase follows a consistent, defensible security model:
   **both** the code and the verifier from the victim's own browser can log in — the same trust boundary as that browser
   session itself; the 2‑minute TTL and single‑use burn bound the window. A **pre‑bundle inline script
   in `app/index.html`** moves `code`/`plan`/`interval` into `sessionStorage` and scrubs the fragment from history
-  **before any bundle runs** (i.e. before Sentry/PostHog init) — and only on the `/auth/success` route, without ever
-  overwriting an existing stored `sessionToken`, so a crafted `#code=` link on any other path
-  cannot log the victim into the attacker's account. `AuthSuccessPage` redeems the code (failing closed to the public
-  `/auth/error` page when the verifier is missing, so a handed‑over code is never burned for its owner), clears the
-  explicit `signedOut` marker only when a session token was actually captured, then navigates to `/feed` — so neither
+  **before any bundle runs** (i.e. before Sentry/PostHog init) — and only on the `/auth/success` route, so a crafted
+  `#code=` link on any other path is ignored. A tab that already holds a session captures the code too (a member who
+  signs in again from the landing), and only the verifier that tab stored at `/auth/start` redeems it: a crafted link
+  cannot swap the victim's session for the attacker's account, because without that verifier the code is inert and the
+  tab keeps its own session. `AuthSuccessPage` redeems the code (never without the verifier, so a handed‑over code is
+  never burned for its owner; a login that cannot finish keeps a tab's existing session and sends any other tab to the
+  public `/auth/error` page), clears the explicit `signedOut` marker only when the tab ends up holding a session token,
+  then navigates to `/feed` — so neither
   credential can leak via server/proxy access logs, the `Referer` header, or an error/replay payload; Sentry
   additionally strips fragment‑bearing `request.url` values and runs the same scrubbing on transactions
   (`beforeSendTransaction`). `signOut` clears both the token and the `motdDismissed` memory that embeds it. `logout`
@@ -7618,7 +7637,7 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   240/hour per bucket of the `x-forwarded-for` value, which stores no IP), so it cannot grow `landingMetrics`
   unboundedly.
 - **Sign-in health — first-party counters, no sub-processor.** The OAuth callback and the sign-in mutations count
-  every step of the LinkedIn sign-in and every reason one stopped, per UTC day, in `authMetrics`; the admin **Landing**
+  every step of the LinkedIn sign-in and every reason one stopped, per UTC day, in `authMetrics`; the admin **Sign-in**
   tab shows them ([§12C](#12c-sign-in-funnel-metrics)). The callback is anonymous, so its writes are
   bounded: a failure counts only against a state we issued, once (`oauthStates.failure`), never consumes that state,
   and needs the rate-limited `/auth/linkedin` to have minted it; `error` counts only after a successful consume. The
@@ -7654,7 +7673,7 @@ flowchart TD
         B9["failed scheduled runs + cron jobs"] --> B10["half-hourly sweep (observability.reportFailedRuns)"]
         B10 --> B4
         B5["OAuth callback + sign-in mutations"] --> B6["authMetrics: counts per UTC day, no identifiers"]
-        B6 --> B7["admin Landing tab: Sign-in section"]
+        B6 --> B7["admin Sign-in tab"]
     end
     S1 --> SENTRY["Sentry (US region)"]
     B4 --> SENTRY
@@ -8076,7 +8095,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Admin/moderation (`admin.ts`, ban UI)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [§12](#12-admin--moderation)                                                                                                                                                                                                                                                                                                             |
 | Survival panel (`lib/survival.ts`, `jobs/survivalSnapshot.ts`, `schema.ts` `survivalSnapshots`, `crons.ts`, `admin.survivalMetrics`, `app/src/components/SurvivalTab.tsx`)                                                                                                                                                                                                                                                                                                                                                          | [§12](#12-admin--moderation), [§13](#13-scheduled-jobs-crons), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                |
 | Landing funnel metrics (`convex/landingMetrics.ts`, `schema.ts` `landingMetrics` + `landingVisitors` + prune cron, `lib/landingVisitorKey.ts`, `http.ts` `/landing/event`, `lib/rateLimit.ts` landing budget, `landing/lib/metrics.ts`, `TrialLink` placements + `Pricing.tsx` observer, `app/src/components/LandingTab.tsx`, AdminPage Landing tab)                                                                                                                                                                                | [§5](#5-data-model), [§6](#6-backend-architecture--conventions), [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app), [§13](#13-scheduled-jobs-crons), [§15](#15-frontend--landing-site-landing), [§16](#16-environment-variables), [§17](#17-security-posture), `docs/compliance/` (ROPA Activity 18)              |
-| Sign-in funnel (`convex/authMetrics.ts`, `lib/authMetrics.ts`, `schema.ts` `authMetrics` + `oauthStates.failure` + `authCodes.isNew`, the `http.ts` callback failure paths + `countSignInFailure`, the `sessions.createOAuthState` / `createAuthCode` / `redeemAuthCode` bumps, `upsertUser`'s `{ userId, isNew }` return (also read by `scripts/billing-scenarios.mjs`), `app/src/pages/AuthErrorPage.tsx`, `AuthSuccessPage` failure path, `LandingTab` `SignInSection`)                                                          | [§12C](#12c-sign-in-funnel-metrics), [§5](#5-data-model), [§7](#7-authentication--identity) (+ flow), [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app) routes + pages + admin + i18n, [§17](#17-security-posture), `docs/compliance/` (DATA-INVENTORY Activity 11 + field mapping, RETENTION-POLICY)             |
+| Sign-in funnel (`convex/authMetrics.ts`, `lib/authMetrics.ts`, `schema.ts` `authMetrics` + `oauthStates.failure` + `authCodes.isNew`, the `http.ts` callback failure paths + `countSignInFailure`, the `sessions.createOAuthState` / `createAuthCode` / `redeemAuthCode` bumps, `upsertUser`'s `{ userId, isNew }` return (also read by `scripts/billing-scenarios.mjs`), `app/src/pages/AuthErrorPage.tsx`, `app/index.html` capture, `AuthSuccessPage` redeem + failure paths, `SignInTab.tsx` + AdminPage Sign-in tab)           | [§12C](#12c-sign-in-funnel-metrics), [§5](#5-data-model), [§7](#7-authentication--identity) (+ flow), [§12](#12-admin--moderation), [§14](#14-frontend--authenticated-app-app) routes + pages + admin + i18n, [§17](#17-security-posture), `docs/compliance/` (DATA-INVENTORY Activity 11 + field mapping, RETENTION-POLICY)             |
 | Feedback (`convex/feedback/`, `app/src/components/Feedback*`, `app/src/components/RespondFeedbackModal.tsx`, admin Feedback tab)                                                                                                                                                                                                                                                                                                                                                                                                    | [§12A](#12a-feedback)                                                                                                                                                                                                                                                                                                                    |
 | MOTD (`convex/motd/`, `app/src/components/Motd*`, `app/src/components/MarkdownView*`, admin MOTD tab)                                                                                                                                                                                                                                                                                                                                                                                                                               | [§12B](#12b-message-of-the-day-motd)                                                                                                                                                                                                                                                                                                     |
 | App UI (`app/src/**`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                                                               |
@@ -8095,6 +8114,25 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑26 (Sign-in tab). **The sign-in funnel has its own admin tab, and a member who signs in again
+while already signed in now counts as signed in.** Prod showed the gap: on 2026‑09‑26 two landing clicks went to
+LinkedIn and came back (`started` 2, `linkedin_ok_returning` 2), but no `redeemAuthCode` call followed and no session
+was created. Both tabs already held a session, and the `index.html` capture script skipped the code whenever a
+`sessionToken` existed, so `AuthSuccessPage` went to `/feed` without redeeming: no `signed_in_*`, no failure, only the
+Back minus Signed in gap. The script now captures a `#code=` on `/auth/success` in every tab, and the page redeems it
+whenever the verifier is there, replacing the older token. A login that cannot finish keeps a signed-in tab's session (
+`/feed`) and sends any other tab to `/auth/error?reason=failed`, as before. PKCE still guards it: a crafted code
+without this tab's verifier is inert, and a failed redeem rolls back. The 18 landing clicks against 2 starts are not a
+bug: 16 of them came before the counters went live that morning, and they leave the window by 2026‑10‑02 (7 days) and
+2026‑10‑23 (28 days). The funnel moved from the Landing tab's Sign-in section into a new `SignInTab`
+(`/admin?tab=signIn`), and `LandingTab` is back to its pre-funnel version. The admin page is now `max-w-[900px]` (was
+640px) with a `whitespace-nowrap` tab list, so the nine tabs fit on one line, no label wraps, and a phone still
+scrolls the row sideways. App-only: no Convex deploy. Tests: `SignInTab`, the capture script run from `index.html`
+itself (`indexHtml.test.ts`), `AuthSuccessPage` (a signed-in tab redeems; a failed redeem keeps its session) and
+`AdminPage` (`?tab=signIn`). Gates: app 700/700, typecheck, lint and `prettier --check .` clean; no backend change.
+Sections updated: §12C (intro, blind spots, flow chart), §14 (AuthSuccessPage, AuthErrorPage, AdminPage tabs,
+components), §17 (sign-in health, session capture, flow chart), §21._
 
 _Last updated: 2026‑09‑26 (Sentry noise filter). **The browser no longer reports a dropped connection as an error.**
 When its WebSocket drops, the Convex client fails any action in flight with "Connection lost while action was in

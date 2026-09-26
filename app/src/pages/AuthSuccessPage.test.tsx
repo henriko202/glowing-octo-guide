@@ -34,12 +34,41 @@ describe('AuthSuccessPage', () => {
     vi.mocked(clearSignedOut).mockClear()
   })
 
-  it('navigates to the feed and clears signedOut when a session token already exists', () => {
+  it('keeps the session and clears signedOut when a signed-in tab has nothing to redeem', async () => {
     sessionStorage.setItem('sessionToken', 'tok-1')
     render(<AuthSuccessPage />)
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/feed', { replace: true }))
     expect(clearSignedOut).toHaveBeenCalledTimes(1)
-    expect(navigate).toHaveBeenCalledWith('/feed', { replace: true })
     expect(redeem).not.toHaveBeenCalled()
+  })
+
+  // A member who clicks sign-in on the landing while signed in: the fresh code is redeemed, so the funnel counts it.
+  it('redeems a fresh code even when the tab already holds a session', async () => {
+    sessionStorage.setItem('sessionToken', 'tok-old')
+    sessionStorage.setItem('oauthCode', 'code-1')
+    sessionStorage.setItem('oauthVerifier', 'verifier-1')
+    redeem.mockResolvedValue({ sessionToken: 'tok-new' })
+
+    render(<AuthSuccessPage />)
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/feed', { replace: true }))
+    expect(redeem).toHaveBeenCalledWith({ code: 'code-1', verifier: 'verifier-1' })
+    expect(sessionStorage.getItem('sessionToken')).toBe('tok-new')
+  })
+
+  it('keeps the session it already had instead of the error page when the redeem fails', async () => {
+    sessionStorage.setItem('sessionToken', 'tok-old')
+    sessionStorage.setItem('oauthCode', 'code-1')
+    sessionStorage.setItem('oauthVerifier', 'verifier-1')
+    redeem.mockRejectedValue(new Error('mismatch'))
+
+    render(<AuthSuccessPage />)
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/feed', { replace: true }))
+    expect(redeem).toHaveBeenCalledTimes(1)
+    expect(sessionStorage.getItem('sessionToken')).toBe('tok-old')
+    expect(sessionStorage.getItem('oauthCode')).toBeNull()
+    expect(sessionStorage.getItem('oauthVerifier')).toBeNull()
   })
 
   it('redeems the code with the stored verifier and stores the returned token', async () => {

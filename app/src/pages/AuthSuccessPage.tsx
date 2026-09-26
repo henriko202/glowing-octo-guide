@@ -6,7 +6,8 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { clearSignedOut } from '../lib/session'
 import { OAUTH_VERIFIER_KEY } from '../lib/oauthStart'
 
-// Both failures land on the sign-in error page (outside RequireAuth), which explains and lets the member retry.
+// Where a login that can't finish sends a tab without a session: the sign-in error page (outside RequireAuth), which
+// explains and lets the member retry.
 const ERROR_PAGE = '/auth/error?reason=failed'
 
 export default function AuthSuccessPage() {
@@ -21,14 +22,17 @@ export default function AuthSuccessPage() {
 
     // The code/verifier (and plan/interval) were moved into sessionStorage by the inline script in
     // index.html before any bundle ran, so the URL bar is already scrubbed here.
-    void (async () => {
-      // Already signed in: the capture script ignored the code, so nothing to redeem. Only clear
-      // the explicit sign-out marker when a session token exists — opening /auth/success directly
-      // must not erase a deliberate sign-out and let RequireAuth re-login via SSO.
-      if (sessionStorage.getItem('sessionToken')) {
-        clearSignedOut()
-        navigate('/feed', { replace: true })
-        return
+    void (;async () => {
+      // A login that can't finish: a tab already holding a session keeps it, anyone else gets the error page.
+      // Only clear the explicit sign-out marker when a session token exists — opening /auth/success
+      // directly must not erase a deliberate sign-out and let RequireAuth re-login via SSO.
+      const leave = () => {
+        if (sessionStorage.getItem('sessionToken')) {
+          clearSignedOut()
+          navigate('/feed', { replace: true })
+        } else {
+          navigate(ERROR_PAGE, { replace: true })
+        }
       }
 
       const code = sessionStorage.getItem('oauthCode')
@@ -38,10 +42,12 @@ export default function AuthSuccessPage() {
         // browser that started the login, and burning it here would deny that browser its session.
         sessionStorage.removeItem('oauthCode')
         sessionStorage.removeItem(OAUTH_VERIFIER_KEY)
-        navigate(ERROR_PAGE, { replace: true })
+        leave()
         return
       }
 
+      // Redeemed even when the tab already holds a session (a member who signed in again from the landing), so the
+      // sign-in funnel counts it (convex/authMetrics.ts) and a stale token is replaced without a second LinkedIn trip.
       try {
         const { sessionToken } = await redeem({ code, verifier })
         sessionStorage.setItem('sessionToken', sessionToken)
@@ -50,10 +56,10 @@ export default function AuthSuccessPage() {
         clearSignedOut()
         navigate('/feed', { replace: true })
       } catch {
-        // Expired, already used, or challenge mismatch — the member starts over from the error page.
+        // Expired, already used, or challenge mismatch.
         sessionStorage.removeItem('oauthCode')
         sessionStorage.removeItem(OAUTH_VERIFIER_KEY)
-        navigate(ERROR_PAGE, { replace: true })
+        leave()
       }
     })()
   }, [navigate, redeem])

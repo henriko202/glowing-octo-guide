@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi, beforeEach } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 import { useMutation, useQuery } from 'convex/react'
+import AdminPage from './AdminPage'
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(),
@@ -32,8 +33,6 @@ vi.mock('react-router-dom', async () => {
     }
   }
 })
-
-import AdminPage from './AdminPage'
 
 const SURVIVAL_FIXTURE = {
   days: 7,
@@ -155,6 +154,19 @@ describe('AdminPage tabs', () => {
     expect(screen.getByRole('tab', { name: /survival/i })).toBeInTheDocument()
     expect(screen.getByText(/paying by tier/i)).toBeInTheDocument()
     expect(screen.queryByText(/apify post sync/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the Sign-in tab and reads ?tab=signIn', () => {
+    vi.mocked(useQuery).mockImplementation((ref: unknown, ..._rest: unknown[]) => {
+      const name = getFunctionName(ref as Parameters<typeof getFunctionName>[0])
+      if (name === 'admin:checkIsAdmin') return true as never
+      if (name === 'authMetrics:getMetrics' || name === 'landingMetrics:getMetrics') return null as never
+      return [] as never
+    })
+    mockSearchParams.set('tab', 'signIn')
+    render(<AdminPage />)
+    expect(screen.getByRole('tab', { name: 'Sign-in' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('No sign-in attempts in the last 28 days.')).toBeInTheDocument()
   })
 })
 
