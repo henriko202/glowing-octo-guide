@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 import { articleValidator } from './lib/articleValidator'
+import { authMetricEventValidator, oauthFailureValidator } from './lib/authMetrics'
 import { reactionValidator } from './lib/reactions'
 
 export default defineSchema({
@@ -298,7 +299,10 @@ export default defineSchema({
     plan: v.optional(v.string()),
     interval: v.optional(v.string()),
     // backlog/R19 — the inviter's code from the landing's ?ref=, carried through the OAuth round-trip.
-    ref: v.optional(v.string())
+    ref: v.optional(v.string()),
+    // Why this attempt's callback failed, set once by authMetrics.recordOAuthFailure so a replayed
+    // callback cannot count the same attempt twice in the sign-in funnel.
+    failure: v.optional(oauthFailureValidator)
   })
     .index('by_state', ['state'])
     // Indexed range for the expired-OAuth-state cleanup cron — replaces a full-table .filter() scan.
@@ -314,7 +318,10 @@ export default defineSchema({
     challenge: v.string(),
     plan: v.optional(v.string()),
     interval: v.optional(v.string()),
-    expiresAt: v.number()
+    expiresAt: v.number(),
+    // Whether the callback created the account, so the redeem counts a new or a returning sign-in.
+    // Optional for deploy safety: a code minted before this field existed counts as returning.
+    isNew: v.optional(v.boolean())
   })
     .index('by_code', ['code'])
     // Indexed range for the expired-auth-code cleanup cron (mirrors oauthStates).
@@ -612,5 +619,15 @@ export default defineSchema({
     ctaClickNav: v.boolean(),
     ctaClickPricing: v.boolean(),
     ctaClickFinal: v.boolean()
-  }).index('by_day_and_visitor_key', ['day', 'visitorKey'])
+  }).index('by_day_and_visitor_key', ['day', 'visitorKey']),
+
+  // Sign-in funnel counters, one row per (UTC day, event): LinkedIn round-trips started, returned
+  // and redeemed, plus why the failed ones stopped. Written only through lib/authMetrics.bumpAuthMetric
+  // by the sign-in mutations; a row holds a count and nothing that identifies a member, a browser or
+  // an attempt. The compound index's day prefix serves the admin window range query.
+  authMetrics: defineTable({
+    day: v.string(),
+    event: authMetricEventValidator,
+    count: v.number()
+  }).index('by_day_and_event', ['day', 'event'])
 })

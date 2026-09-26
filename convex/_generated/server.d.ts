@@ -48,6 +48,7 @@ type Env = {
   readonly OPENROUTER_SITE_NAME: string | undefined;
   readonly OPENROUTER_SITE_URL: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
+  readonly SENTRY_DSN: string | undefined;
   readonly STRIPE_FEATURED_POST_PRICE_ID: string | undefined;
   readonly STRIPE_GROWTH_ANNUAL_PRICE_ID: string | undefined;
   readonly STRIPE_GROWTH_PRICE_ID: string | undefined;
@@ -186,4 +187,4 @@ export type DatabaseReader = GenericDatabaseReader<DataModel>;
  * your data in an inconsistent state. See [the Convex Guide](https://docs.convex.dev/understanding/convex-fundamentals/functions#atomicity-and-optimistic-concurrency-control)
  * for the guarantees Convex provides your functions.
  */
-export type DatabaseWriter = GenericDatabaseWriter<DataModel>;
+export type DatabaseWriter = GenericDatabaseWriter<DataModel

@@ -10,6 +10,7 @@ import SettingsPage from './pages/SettingsPage'
 import BillingPage from './pages/BillingPage'
 import AuthStartPage from './pages/AuthStartPage'
 import AuthSuccessPage from './pages/AuthSuccessPage'
+import AuthErrorPage from './pages/AuthErrorPage'
 import MyPostsPage from './pages/MyPostsPage'
 import RecapPage from './pages/RecapPage'
 import HistoryPage from './pages/HistoryPage'
@@ -132,6 +133,10 @@ export default function App() {
         <Route
           path="/auth/success"
           element={<AuthSuccessPage />}
+        />
+        <Route
+          path="/auth/error"
+          element={<AuthErrorPage />}
         />
         <Route
           path="/feed"

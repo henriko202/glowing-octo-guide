@@ -1,5 +1,6 @@
 import { ConvexError } from 'convex/values'
 import type { TFunction } from 'i18next'
+import { captureException } from './observability/sentry'
 
 /**
  * Turn a Convex/client error into a short, human-readable message.
@@ -23,6 +24,8 @@ export function friendlyError(err: unknown, fallback: string): string {
     return fallback
   }
 
+  // Anything else is a failure, not an answer: Sentry gets it with the request ID that finds it in the Convex logs.
+  captureException(err)
   if (!(err instanceof Error) || !err.message) return fallback
 
   let msg = err.message

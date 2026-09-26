@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConvexError } from 'convex/values'
 import { friendlyError, mapLimitError } from './errors'
+import { captureException } from './observability/sentry'
+
+vi.mock('./observability/sentry', () => ({ captureException: vi.fn() }))
 
 describe('friendlyError', () => {
   it('extracts the developer message from a framed Convex dev error', () => {
@@ -36,6 +39,23 @@ describe('friendlyError', () => {
         'Uncaught Error: PAYMENT_REQUIRED at handler (../convex/interactions.ts:20:11) Called by client'
     )
     expect(friendlyError(err, 'fallback').startsWith('PAYMENT_REQUIRED')).toBe(true)
+  })
+
+  describe('reporting', () => {
+    beforeEach(() => vi.mocked(captureException).mockClear())
+
+    // Production redacts a plain Error to "Server Error": the member sees the fallback, Sentry keeps the request ID.
+    it('reports an error the backend did not choose to throw', () => {
+      const err = new Error('[CONVEX A(ai/comments:generateComment)] [Request ID: abc] Server Error')
+      friendlyError(err, 'fallback')
+      expect(captureException).toHaveBeenCalledTimes(1)
+      expect(captureException).toHaveBeenCalledWith(err)
+    })
+
+    it('never reports a ConvexError, the answer the backend gives on purpose', () => {
+      friendlyError(new ConvexError('WEEKLY_LIMIT:2'), 'fallback')
+      expect(captureException).not.toHaveBeenCalled()
+    })
   })
 })
 

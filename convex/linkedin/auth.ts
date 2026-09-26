@@ -32,8 +32,12 @@ export interface UpsertUserArgs {
   referredByCode?: string
 }
 
-// Plain handler function — used by the registered mutation and testable in isolation
-export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Promise<string> {
+// Plain handler function — used by the registered mutation and testable in isolation. `isNew` tells the
+// sign-in funnel (convex/authMetrics.ts) a first sign-in from a returning one.
+export async function upsertUserHandler(
+  db: UpsertDb,
+  args: UpsertUserArgs
+): Promise<{ userId: string; isNew: boolean }> {
   const existing = await db
     .query('users')
     .withIndex('by_linkedin_id', q => q.eq('linkedinId', args.linkedinId))
@@ -55,7 +59,7 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     // Only touch it when a headline is actually provided. Same guard idiom as refreshToken below.
     if (args.headline !== undefined) patch.headline = args.headline
     await db.patch(existing._id, patch)
-    return existing._id
+    return { userId: existing._id, isNew: false }
   }
 
   // backlog/R19 — attribution is insert-only: an existing member who opens a friend's link is not
@@ -71,7 +75,7 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     if (inviter && !inviter.isBanned) referredByCode = args.referredByCode
   }
 
-  return await db.insert('users', {
+  const userId = await db.insert('users', {
     // SECURITY: isAdmin is intentionally excluded — only settable via direct DB edit
     linkedinId: args.linkedinId,
     name: args.name,
@@ -88,6 +92,7 @@ export async function upsertUserHandler(db: UpsertDb, args: UpsertUserArgs): Pro
     acknowledgedPolicyVersion: POLICY_VERSION,
     createdAt: Date.now()
   })
+  return { userId, isNew: true }
 }
 
 // Registered Convex internal mutation — delegates to the plain handler

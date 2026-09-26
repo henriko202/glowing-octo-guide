@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { upsertUserHandler, updateTokensHandler, type UpsertUserArgs } from './auth'
+import { describe, expect, it } from 'vitest'
+import { updateTokensHandler, type UpsertUserArgs, upsertUserHandler } from './auth'
 import { POLICY_VERSION } from '../lib/policy'
 
 // Minimal in-memory mock for Convex db context. `by_linkedin_id` answers with the existing user,
@@ -39,8 +39,8 @@ const BASE_ARGS: UpsertUserArgs = {
 describe('upsertUserHandler', () => {
   it('creates a new user with status none (trial begins only on card-add)', async () => {
     const db = createMockDb()
-    const id = await upsertUserHandler(db, BASE_ARGS)
-    expect(id).toBe('new-user-id')
+    const result = await upsertUserHandler(db, BASE_ARGS)
+    expect(result).toEqual({ userId: 'new-user-id', isNew: true })
     expect(db._inserts).toHaveLength(1)
     const inserted = db._inserts[0]
     expect(inserted.tier).toBe('starter')
@@ -52,8 +52,8 @@ describe('upsertUserHandler', () => {
   it('updates existing user tokens without changing tier', async () => {
     const existing = { _id: 'existing-id', linkedinId: 'li-123', tier: 'pro', subscriptionStatus: 'active' }
     const db = createMockDb(existing)
-    const id = await upsertUserHandler(db, { ...BASE_ARGS, accessToken: 'new-token' })
-    expect(id).toBe('existing-id')
+    const result = await upsertUserHandler(db, { ...BASE_ARGS, accessToken: 'new-token' })
+    expect(result).toEqual({ userId: 'existing-id', isNew: false })
     expect(db._patches).toHaveLength(1)
     expect(db._patches[0].data.linkedinAccessToken).toBe('new-token')
     expect(db._inserts).toHaveLength(0)

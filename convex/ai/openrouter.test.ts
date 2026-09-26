@@ -13,6 +13,7 @@ describe('callOpenRouter', () => {
     delete process.env.OPENROUTER_MODEL
     delete process.env.OPENROUTER_SITE_URL
     delete process.env.OPENROUTER_SITE_NAME
+    delete process.env.SENTRY_DSN
     vi.restoreAllMocks()
   })
 
@@ -84,5 +85,36 @@ describe('callOpenRouter', () => {
     await expect(callOpenRouter([{ role: 'user', content: 'x' }], { action: 'test' })).rejects.toThrow(
       /Failed to test/i
     )
+  })
+
+  describe('with Sentry configured', () => {
+    // The error body can echo the prompt (a member's post), so an event carries the action and status only.
+    const sentryBody = (fetchMock: ReturnType<typeof vi.fn>) =>
+      String(fetchMock.mock.calls.find(([url]) => String(url).includes('sentry.io'))?.[1]?.body)
+    const stubFetch = (openRouterReply: unknown) => {
+      process.env.SENTRY_DSN = 'https://abc123@o1.ingest.us.sentry.io/456'
+      const fetchMock = vi.fn(async (url: string) =>
+        url.includes('openrouter.ai') ? openRouterReply : new Response(null, { status: 200 })
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      return fetchMock
+    }
+
+    it('reports a refusal with the action and status, never the response body', async () => {
+      const fetchMock = stubFetch({ ok: false, status: 402, text: async () => 'post text echoed back' })
+
+      await expect(callOpenRouter([{ role: 'user', content: 'x' }], { action: 'predict reaction' })).rejects.toThrow()
+
+      expect(sentryBody(fetchMock)).toContain('OpenRouter predict reaction failed: 402')
+      expect(sentryBody(fetchMock)).not.toContain('post text echoed back')
+    })
+
+    it('reports an empty reply', async () => {
+      const fetchMock = stubFetch(okJson('   '))
+
+      await expect(callOpenRouter([{ role: 'user', content: 'x' }], { action: 'guess industry' })).rejects.toThrow()
+
+      expect(sentryBody(fetchMock)).toContain('OpenRouter guess industry: empty/invalid response')
+    })
   })
 })

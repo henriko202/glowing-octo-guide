@@ -361,7 +361,7 @@ async function run() {
       tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
     })
     if (!upserted.ok) fail(`could not create the probe member — is \`npx convex dev\` running?\n${upserted.error}`)
-    const userId = upserted.value
+    const userId = upserted.value.userId
     probeUserId = userId
     note(`probe member ${userId} (linkedinId ${PROBE_LINKEDIN_ID}, fresh for this run)`)
 
@@ -745,7 +745,7 @@ async function couponRun() {
       tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
     })
     if (!upserted.ok) fail(`could not create the probe member — is \`npx convex dev\` running?\n${upserted.error}`)
-    probeUserId = upserted.value
+    probeUserId = upserted.value.userId
     call('billing:setStripeCustomerId', { userId: probeUserId, stripeCustomerId: customer.id })
 
     // Checkout cannot drive a test-clock customer, so the coupon is attached the way a promotion
@@ -800,7 +800,7 @@ async function couponRun() {
     })
     if (!checkoutProbe.ok) fail(`could not create the checkout probe member:\n${checkoutProbe.error}`)
     const checkoutToken = crypto.randomUUID()
-    const minted = call('sessions:create', { token: checkoutToken, userId: checkoutProbe.value })
+    const minted = call('sessions:create', { token: checkoutToken, userId: checkoutProbe.value.userId })
     if (!minted.ok) fail(`could not mint the checkout probe session:\n${minted.error}`)
 
     for (const [label, priceId, wanted] of [
@@ -1004,7 +1004,7 @@ async function pastDueRun() {
       tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
     })
     if (!upserted.ok) fail(`could not create the probe member — is \`npx convex dev\` running?\n${upserted.error}`)
-    probeUserId = upserted.value
+    probeUserId = upserted.value.userId
     call('billing:setStripeCustomerId', { userId: probeUserId, stripeCustomerId: customer.id })
     const sessionToken = crypto.randomUUID()
     call('sessions:create', { token: sessionToken, userId: probeUserId })
@@ -1037,7 +1037,7 @@ async function pastDueRun() {
       tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
     })
     if (!upsertedB.ok) fail(`could not create the dunning probe member:\n${upsertedB.error}`)
-    probeUserIdB = upsertedB.value
+    probeUserIdB = upsertedB.value.userId
     call('billing:setStripeCustomerId', { userId: probeUserIdB, stripeCustomerId: customerB.id })
     const sessionTokenB = crypto.randomUUID()
     call('sessions:create', { token: sessionTokenB, userId: probeUserIdB })

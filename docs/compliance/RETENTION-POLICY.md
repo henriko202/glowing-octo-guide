@@ -62,6 +62,8 @@ of the visitor's IP address and user agent, used only to count each visitor once
 `prune landing visitors` cron deletes every row from before the current UTC day, so no row outlives 48 hours: the
 "deleted within two days" the public Privacy Policy and Cookie & Storage Policy promise. `landingMetrics` holds only
 per-day integer totals, which identify no one, and is kept. The counter stores nothing in the visitor's browser.
+The sign-in counters that follow those clicks through LinkedIn (`authMetrics`) are the same kind of per-day totals,
+keyed by day and step, never by a person, and are kept too.
 
 ### Analytics, error monitoring and browser storage
 

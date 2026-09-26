@@ -1,12 +1,12 @@
 // convex/http.ts
 import type { ActionCtx } from './_generated/server'
 import { env, httpAction } from './_generated/server'
-import { httpRouter } from 'convex/server'
+import { type GenericActionCtx, type GenericDataModel, httpRouter } from 'convex/server'
 import { ConvexError } from 'convex/values'
 import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type Stripe from 'stripe'
-import { registerRoutes } from '@convex-dev/stripe'
+import { registerRoutes, type StripeEventHandlers } from '@convex-dev/stripe'
 import { buildAuthUrl, exchangeCodeForTokens, fetchLinkedInUserInfo } from './linkedin/oauth.js'
 import { eventCreatedMs, invoiceSubscriptionId, syncArgs } from './stripe'
 import { scrubError } from './lib/scrubError'
@@ -17,10 +17,22 @@ import { isPkceChallenge } from './lib/pkce'
 import { verifyUnsubscribeToken } from './lib/unsubscribeToken'
 import { landingVisitorKey } from './lib/landingVisitorKey'
 import { isLandingEventName, landingVisitorSecret } from './landingMetrics'
+import type { OAuthFailureReason } from './lib/authMetrics'
+import { reportError, reportingThrows, type SentryTags } from './lib/sentry'
 
 const http = httpRouter()
 
 const NO_STORE = { 'Cache-Control': 'no-store', Pragma: 'no-cache' } as const
+
+function routeTags(req: Request): { route: string } {
+  return { route: `${req.method} ${new URL(req.url).pathname}` }
+}
+
+// Every route's handler: an error that escapes it reaches Sentry (lib/sentry.ts), then Convex answers the 500 it
+// always has. The two handlers that catch their own errors report them where they catch.
+function reportingHttpAction(handler: (ctx: ActionCtx, req: Request) => Promise<Response>) {
+  return httpAction(reportingThrows(routeTags, handler))
+}
 
 // The OAuth browser-nonce cookie is namespaced per `state`: a single fixed name lets a second login
 // overwrite the first's nonce, so concurrent logins in one browser would clobber each other.
@@ -44,12 +56,30 @@ function redirect(location: string, extraHeaders: Record<string, string> = {}): 
   return new Response(null, { status: 302, headers: { Location: location, ...NO_STORE, ...extraHeaders } })
 }
 
+// Sign-in funnel counters (convex/authMetrics.ts) are best effort: a failed write is logged and never changes where
+// the member lands. A failure before LinkedIn confirmed the member names its state, so it counts once per attempt
+// we issued; `error` follows a consumed state, which happens once per attempt.
+async function countSignInFailure(
+  ctx: ActionCtx,
+  state: string | null,
+  reason: OAuthFailureReason | 'error'
+): Promise<void> {
+  try {
+    if (reason === 'error') await ctx.runMutation(internal.authMetrics.recordOAuthError, {})
+    else if (state !== null && OAUTH_STATE_RE.test(state)) {
+      await ctx.runMutation(internal.authMetrics.recordOAuthFailure, { state, reason })
+    }
+  } catch (err) {
+    console.error('Sign-in metric write failed:', scrubError(err))
+  }
+}
+
 // ─── LinkedIn OAuth ──────────────────────────────────────────────────────────
 
 http.route({
   path: '/auth/linkedin',
   method: 'GET',
-  handler: httpAction(async (ctx, req) => {
+  handler: reportingHttpAction(async (ctx, req) => {
     const state = crypto.randomUUID()
     const browserNonce = crypto.randomUUID()
 
@@ -96,7 +126,7 @@ http.route({
 http.route({
   path: '/auth/linkedin/callback',
   method: 'GET',
-  handler: httpAction(async (ctx, req) => {
+  handler: reportingHttpAction(async (ctx, req) => {
     const appUrl = env.APP_URL ?? 'http://localhost:5173'
     // The nonce cookie is namespaced per state, so every callback exit clears the same cookie name.
     // State is read up front; the UUID guard keeps an attacker-supplied query value out of the
@@ -104,6 +134,11 @@ http.route({
     let state: string | null = null
     const clearNonce = (): Record<string, string> =>
       state !== null && OAUTH_STATE_RE.test(state) ? { 'Set-Cookie': clearNonceCookie(state) } : {}
+    // Every failure lands on the app's /auth/error page. It sits outside RequireAuth, which would restart the
+    // sign-in on its own and loop a member who just canceled back to LinkedIn.
+    const failedUrl = `${appUrl}/auth/error?reason=failed`
+    // Set once the state is consumed: only then does a thrown error count as `error` in the funnel.
+    let consumed = false
 
     try {
       const url = new URL(req.url)
@@ -115,12 +150,17 @@ http.route({
         // Log the error code only. `scrubError` redacts by key name and `error_description` is
         // caller-influenced free text, so the description is deliberately not logged.
         console.error('LinkedIn OAuth error param:', scrubError({ error }))
-        return redirect(`${appUrl}/?error=oauth_denied`, clearNonce())
+        // Only these two codes mean the member said no. Any other error (a scope LinkedIn stopped granting, a
+        // malformed request) fails every sign-in, so it must not hide among the cancels.
+        const canceled = error === 'user_cancelled_login' || error === 'user_cancelled_authorize'
+        await countSignInFailure(ctx, state, canceled ? 'denied' : 'linkedin_error')
+        return redirect(canceled ? `${appUrl}/auth/error?reason=denied` : failedUrl, clearNonce())
       }
 
       if (!code) {
         console.error('LinkedIn callback: missing code parameter')
-        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
+        await countSignInFailure(ctx, state, 'rejected')
+        return redirect(failedUrl, clearNonce())
       }
 
       // CSRF: validate the state parameter against the value we stored on initiation, and require
@@ -128,12 +168,13 @@ http.route({
       // victim's browser into the attacker's account. If either is missing/expired/unknown — reject.
       if (!state || !OAUTH_STATE_RE.test(state)) {
         console.error('LinkedIn callback: missing state parameter')
-        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
+        return redirect(failedUrl, clearNonce())
       }
       const nonce = readCookie(req.headers.get('cookie'), nonceCookieName(state))
       if (!nonce) {
         console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
-        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
+        await countSignInFailure(ctx, state, 'lost_cookie')
+        return redirect(failedUrl, clearNonce())
       }
       const oauthState = await ctx.runMutation(internal.sessions.validateAndConsumeOAuthState, {
         state,
@@ -141,8 +182,10 @@ http.route({
       })
       if (!oauthState.valid) {
         console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
-        return redirect(`${appUrl}/?error=oauth_failed`, clearNonce())
+        await countSignInFailure(ctx, state, 'rejected')
+        return redirect(failedUrl, clearNonce())
       }
+      consumed = true
 
       const tokens = await exchangeCodeForTokens(code)
       const userInfo = await fetchLinkedInUserInfo(tokens.access_token)
@@ -153,7 +196,7 @@ http.route({
       // identity/vanity endpoints require Partner/MDP access we don't have. It is derived later,
       // set-once, from the author.url of a name-verified submitted post (posts.submitPost →
       // users.setDerivedPublicIdentifier). Ownership itself matches userInfo.name ↔ the post author name.
-      const userId = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
+      const { userId, isNew } = await ctx.runMutation(internal.linkedin.auth.upsertUser, {
         linkedinId: userInfo.sub,
         name: userInfo.name,
         headline: undefined, // OIDC userinfo doesn't include headline
@@ -174,7 +217,8 @@ http.route({
         userId: userId as Id<'users'>,
         challenge: oauthState.challenge,
         plan: oauthState.plan,
-        interval: oauthState.interval
+        interval: oauthState.interval,
+        isNew
       })
 
       // Append plan/interval to the success redirect when they were carried through OAuth.
@@ -187,7 +231,9 @@ http.route({
       // Log the real error server-side; send only a generic message to the client
       // to prevent leaking internal details (API responses, stack traces, etc.)
       console.error('OAuth callback error:', scrubError(err))
-      return redirect(`${appUrl}/?error=auth_failed`, clearNonce())
+      await reportError(ctx, err, routeTags(req))
+      if (consumed) await countSignInFailure(ctx, state, 'error')
+      return redirect(failedUrl, clearNonce())
     }
   })
 })
@@ -200,7 +246,7 @@ http.route({
 http.route({
   path: '/unsubscribe/digest',
   method: 'GET',
-  handler: httpAction(async (_ctx, req) => {
+  handler: reportingHttpAction(async (_ctx, req) => {
     const token = new URL(req.url).searchParams.get('token') ?? ''
     const appUrl = env.APP_URL ?? 'http://localhost:5173'
     return redirect(`${appUrl}/unsubscribe?token=${encodeURIComponent(token)}`)
@@ -210,7 +256,7 @@ http.route({
 http.route({
   path: '/unsubscribe/digest',
   method: 'POST',
-  handler: httpAction(async (ctx, req) => {
+  handler: reportingHttpAction(async (ctx, req) => {
     const token = new URL(req.url).searchParams.get('token') ?? ''
     return handleUnsubscribe(ctx, token)
   })
@@ -235,7 +281,7 @@ async function handleUnsubscribe(ctx: ActionCtx, token: string): Promise<Respons
 http.route({
   path: '/landing/event',
   method: 'POST',
-  handler: httpAction(async (ctx, req) => {
+  handler: reportingHttpAction(async (ctx, req) => {
     const headers = { ...NO_STORE, 'Access-Control-Allow-Origin': '*' }
     const body: unknown = await req.json().catch(() => null)
     const event = typeof body === 'object' && body !== null ? (body as { event?: unknown }).event : undefined
@@ -262,8 +308,11 @@ http.route({
       await ctx.runMutation(internal.landingMetrics.recordLandingEvent, { event, visitorKey })
     } catch (err) {
       // Fire-and-forget by contract: the beacon never surfaces an error to the visitor. A budget
-      // rejection is routine; anything else means the counter is silently not moving, so log it.
-      if (!(err instanceof ConvexError)) console.error('Landing event beacon failed:', scrubError(err))
+      // rejection is routine; anything else means the counter is silently not moving, so log and report it.
+      if (!(err instanceof ConvexError)) {
+        console.error('Landing event beacon failed:', scrubError(err))
+        await reportError(ctx, err, routeTags(req))
+      }
     }
     return new Response(null, { status: 204, headers })
   })
@@ -281,9 +330,23 @@ http.route({
 // stricter than the component's callback signature accepts).
 type StripeEvent = Stripe.Event
 
+function stripeTags(event: StripeEvent): SentryTags {
+  return { route: 'POST /stripe/webhook', stripe_event: event.type, stripe_event_id: event.id }
+}
+
+// One handler's shape, loosened to fit all of them: an event parameter of type `never` accepts any event type.
+type StripeHandler = (ctx: GenericActionCtx<GenericDataModel>, event: never) => Promise<void>
+
+// Wraps every event handler in reportingThrows: an error one throws reaches Sentry with the event's id (to resend it
+// from Stripe's dashboard once fixed), then the component answers Stripe with the 500 that makes Stripe retry.
+function reportingHandlers(handlers: StripeEventHandlers): StripeEventHandlers {
+  const entries = Object.entries(handlers as Record<string, StripeHandler>)
+  return Object.fromEntries(entries.map(([type, handler]) => [type, reportingThrows(stripeTags, handler)]))
+}
+
 registerRoutes(http, components.stripe, {
   webhookPath: '/stripe/webhook',
-  events: {
+  events: reportingHandlers({
     'customer.subscription.created': async (ctx, event: Stripe.CustomerSubscriptionCreatedEvent) => {
       // Two tabs, two checkouts: the checkout guard cannot see a second checkout completed between
       // session creation and Stripe confirming payment. syncUserSubscription decides, inside its own
@@ -344,7 +407,7 @@ registerRoutes(http, components.stripe, {
         paidAt: eventCreatedMs(event) ?? Date.now()
       })
     }
-  },
+  }),
   onEvent: async (_ctx, event: StripeEvent) => {
     // event.type/event.id are safe identifiers, but route through the scrub helper anyway so this
     // seam stays PII-safe if a future edit logs more of the event object.

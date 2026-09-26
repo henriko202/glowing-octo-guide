@@ -102,7 +102,11 @@ legal input, or business decisions before the privacy programme can be considere
     within 48 hours. **Still open (human):**
     - Sign the Sentry, PostHog and DataFast DPAs (item 6), then set the production keys in the Cloudflare build envs
       and deploy Convex and the app back to back (the app compiles the policy version in; a mismatch loops the
-      re-consent screen).
+      re-consent screen). Sentry's key went live on 2026-09-25 (US-region project), so confirm its DPA now. Checked
+      that day: the live app, Convex prod and the landing `/privacy` all carry policy version `2026-09-25`.
+    - Backend errors to Sentry: after the Convex deploy, `npx convex env set SENTRY_DSN <dsn> --prod` from the repo
+      root (`docs/PLATFORM.md` §17A). No copy change: the privacy policy's error-report paragraph already covers
+      them (same recipient and purpose; an error message plus technical tags, with no page, browser or stack).
     - Dashboards: PostHog IP discard on, session replay off; Sentry **Prevent Storing of IP Addresses** on; DataFast
       website domain `linkintothessi.com`.
     - Once after the deploy: `npx convex run --component rateLimiter lib:clearAll --prod` removes the rate-limit rows

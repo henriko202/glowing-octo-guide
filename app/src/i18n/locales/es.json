@@ -384,7 +384,15 @@
   },
   "auth": {
     "loading": "Cargando...",
-    "notSignedIn": "Sesión no iniciada"
+    "notSignedIn": "Sesión no iniciada",
+    "error": {
+      "deniedTitle": "Inicio de sesión cancelado",
+      "deniedBody": "Saliste de LinkedIn antes de terminar de iniciar sesión, así que no se compartió nada con nosotros. Puedes intentarlo de nuevo cuando quieras.",
+      "failedTitle": "No pudimos iniciar tu sesión",
+      "failedBody": "Algo salió mal al volver de LinkedIn. Si sigue pasando, abre el sitio en tu navegador habitual, no dentro de otra app.",
+      "tryAgain": "Intentar de nuevo",
+      "backToSite": "Volver al sitio"
+    }
   },
   "feedback": {
     "button": "Feedback",

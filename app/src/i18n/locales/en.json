@@ -384,7 +384,15 @@
   },
   "auth": {
     "loading": "Loading...",
-    "notSignedIn": "Not signed in"
+    "notSignedIn": "Not signed in",
+    "error": {
+      "deniedTitle": "Sign-in canceled",
+      "deniedBody": "You left LinkedIn before the sign-in finished, so nothing was shared with us. You can try again anytime.",
+      "failedTitle": "We couldn't sign you in",
+      "failedBody": "Something went wrong on the way back from LinkedIn. If it keeps happening, open this site in your usual browser, not inside another app.",
+      "tryAgain": "Try again",
+      "backToSite": "Back to the site"
+    }
   },
   "feedback": {
     "button": "Feedback",

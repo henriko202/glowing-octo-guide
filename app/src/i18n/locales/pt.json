@@ -384,7 +384,15 @@
   },
   "auth": {
     "loading": "Carregando...",
-    "notSignedIn": "Sessão não iniciada"
+    "notSignedIn": "Sessão não iniciada",
+    "error": {
+      "deniedTitle": "Login cancelado",
+      "deniedBody": "Você saiu do LinkedIn antes de concluir o login, então nada foi compartilhado com a gente. Pode tentar de novo quando quiser.",
+      "failedTitle": "Não conseguimos fazer seu login",
+      "failedBody": "Algo deu errado na volta do LinkedIn. Se continuar acontecendo, abra o site no seu navegador de sempre, e não dentro de outro app.",
+      "tryAgain": "Tentar de novo",
+      "backToSite": "Voltar ao site"
+    }
   },
   "feedback": {
     "button": "Feedback",

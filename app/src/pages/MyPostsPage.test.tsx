@@ -8,6 +8,7 @@ import MyPostsPage from './MyPostsPage'
 import { toast } from '@/components/ui/toast'
 import { captureEvent } from '@/lib/observability/analytics'
 import { datafastAttribution } from '@/lib/observability/datafast'
+import { captureException } from '@/lib/observability/sentry'
 
 // Mock the Convex API module so each query/action has a stable, identifiable
 // reference. This lets the useQuery mock dispatch by *which* query was asked
@@ -52,6 +53,7 @@ vi.mock('@/lib/observability/analytics', () => ({ captureEvent: vi.fn() }))
 // DataFast revenue attribution is unit-tested in observability/datafast.test.ts; here it only has
 // to prove the checkout action receives whatever it returns.
 vi.mock('@/lib/observability/datafast', () => ({ datafastAttribution: vi.fn(() => undefined) }))
+vi.mock('@/lib/observability/sentry', () => ({ captureException: vi.fn() }))
 
 // The page strips its one-shot params; this shows what is left in the URL.
 function SearchProbe() {
@@ -80,6 +82,7 @@ beforeEach(() => {
   mockActions = {}
   vi.mocked(toast).mockClear()
   vi.mocked(captureEvent).mockClear()
+  vi.mocked(captureException).mockClear()
   vi.mocked(datafastAttribution).mockReturnValue(undefined)
   mockQueryReturns = {
     // subscriptionStatus: 'active' keeps UpgradeAtLimit's useCardGate() ungated here — its
@@ -788,5 +791,18 @@ describe('MyPostsPage — featured post add-on (backlog/R17)', () => {
     await waitFor(() => expect(window.location.href).toBe('https://stripe.test/cs_1'))
     expect(successButton).toBeDisabled()
     Object.defineProperty(window, 'location', { value: originalLocation, writable: true, configurable: true })
+  })
+
+  // The UI prevents every failure above (F3), so each one that happens is a fault: Sentry hears about it, even a
+  // ConvexError code, which friendlyError leaves unreported elsewhere.
+  it('reports a failed purchase to Sentry', async () => {
+    const unset = new ConvexError('FEATURED_PRICE_UNSET')
+    mockActions['billingNode.purchaseFeaturedPost'] = vi.fn(async () => {
+      throw unset
+    })
+    mockQueryReturns['posts.getMyPosts'] = [{ ...unfeatured, interactionLimitReached: true }]
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: /feature for US\$5/i }))
+    await waitFor(() => expect(captureException).toHaveBeenCalledWith(unset))
   })
 })

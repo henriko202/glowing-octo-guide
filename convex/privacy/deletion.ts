@@ -7,7 +7,8 @@ import { internal } from '../_generated/api'
 import Stripe from 'stripe'
 import { resolveSession } from '../lib/auth'
 import { sendEmail } from '../lib/email'
-import { deletionScheduledEmail, deletionCompletedEmail } from './emails'
+import { reportError } from '../lib/sentry'
+import { deletionCompletedEmail, deletionScheduledEmail } from './emails'
 import { type AuditDb, writeAuditLog } from '../lib/audit'
 import { resolveBillingLocale } from '../lib/checkoutCopy'
 import { checkRateLimit, resetUserRateLimits } from '../lib/rateLimit'
@@ -227,6 +228,8 @@ export const onDeletionRequested = internalAction({
             await stripe.subscriptions.cancel(s.stripeSubscriptionId)
           } catch (err) {
             console.error('Stripe cancel failed for', s.stripeSubscriptionId, err instanceof Error ? err.message : err)
+            // A member who asked to be erased may still be billed: this one must not stay in the logs.
+            await reportError(ctx, err, { upstream: 'stripe' })
           }
         }
       }

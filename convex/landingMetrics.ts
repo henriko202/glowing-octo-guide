@@ -110,19 +110,16 @@ export function summarizeLandingMetrics(
   }
   const ctaClicks = PLACEMENTS.reduce((sum, placement) => sum + clicks[placement], 0)
   const uniqueCtaClickers = PLACEMENTS.reduce((sum, placement) => sum + uniqueClicks[placement], 0)
-  const sinceMs = Date.parse(window.sinceDay + 'T00:00:00Z')
-  const daily: LandingDailyMetrics[] = []
-  for (let offset = window.days - 1; offset >= 0; offset--) {
-    const day = new Date(sinceMs + offset * DAY_MS).toISOString().slice(0, 10)
+  const daily: LandingDailyMetrics[] = windowDays(window.sinceDay, window.days).map(day => {
     const row = dailyByDay.get(day)
-    daily.push({
+    return {
       day,
       pricingViews: row?.pricingViews ?? 0,
       uniquePricingViewers: row?.uniquePricingViewers ?? 0,
       ctaClicks: row?.ctaClicks ?? 0,
       uniqueCtaClickers: row?.uniqueCtaClickers ?? 0
-    })
-  }
+    }
+  })
   return {
     pricingViews,
     ctaClicks,
@@ -138,6 +135,14 @@ export function summarizeLandingMetrics(
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Every UTC day of a `days`-long window starting at `sinceDay`, newest first. Shared with authMetrics.ts. */
+export function windowDays(sinceDay: string, days: number): string[] {
+  const sinceMs = Date.parse(sinceDay + 'T00:00:00Z')
+  return Array.from({ length: days }, (_, index) =>
+    new Date(sinceMs + (days - 1 - index) * DAY_MS).toISOString().slice(0, 10)
+  )
+}
 
 // Internal because only the HTTP beacon writes. The day is derived server-side, so a caller can
 // never backdate or spread a count across days. `visitorKey` is the daily-rotated HMAC computed in

@@ -11,6 +11,7 @@
 import { env } from '../_generated/server'
 import { scrubError } from '../lib/scrubError'
 import { fetchWithTimeout } from '../lib/fetchWithTimeout'
+import { reportError } from '../lib/sentry'
 
 export type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
 export type ChatMessage = { role: 'system' | 'user'; content: string | ContentPart[] }
@@ -52,6 +53,8 @@ export async function callOpenRouter(messages: ChatMessage[], opts: { action: st
     // The response body can carry the request's post/article content back — scrub + cap it before
     // it reaches Convex's function logs.
     console.error(`OpenRouter ${opts.action} failed: ${res.status}`, scrubError(body))
+    // Sentry gets the status only (402 = out of credits, 429 = rate limited): never the body, which is post text.
+    await reportError(null, `OpenRouter ${opts.action} failed: ${res.status}`, { upstream: 'openrouter' })
     // Model-not-found is OpenRouter's documented 404 case: a permanent misconfig, not a transient
     // blip — throw a distinct message so it isn't mistaken for "try again".
     // ponytail: not matching 400s here — a 400 can also mean context-length-exceeded (realistic,
@@ -65,6 +68,7 @@ export async function callOpenRouter(messages: ChatMessage[], opts: { action: st
   const text = data?.choices?.[0]?.message?.content
   if (typeof text !== 'string' || !text.trim()) {
     console.error(`OpenRouter ${opts.action}: empty/invalid response`)
+    await reportError(null, `OpenRouter ${opts.action}: empty/invalid response`, { upstream: 'openrouter' })
     throw new Error(`Failed to ${opts.action}. Please try again.`)
   }
   return text

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sendEmail } from './email'
 
 describe('sendEmail', () => {
@@ -60,6 +60,25 @@ describe('sendEmail', () => {
     )
 
     await expect(sendEmail({ to: 'a@b.com', subject: 's', html: '<p>x</p>' })).rejects.toThrow('Failed to send email')
+  })
+
+  it('reports a Resend refusal to Sentry with its status, never the response body', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'key_123')
+    vi.stubEnv('EMAIL_FROM', 'noreply@linkintothessi.com')
+    vi.stubEnv('SENTRY_DSN', 'https://abc123@o1.ingest.us.sentry.io/456')
+    // Resend's error body can name the recipient, so only the status may leave.
+    const fetchMock = vi.fn(async (url: string, _opts: any) =>
+      url.startsWith('https://api.resend.com')
+        ? { ok: false, status: 422, text: async () => 'invalid recipient a@b.com' }
+        : { ok: true }
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(sendEmail({ to: 'a@b.com', subject: 's', html: '<p>x</p>' })).rejects.toThrow('Failed to send email')
+
+    const sentry = fetchMock.mock.calls.find(([url]) => url.includes('sentry.io'))
+    expect(sentry?.[1].body).toContain('Resend send failed: 422')
+    expect(sentry?.[1].body).not.toContain('a@b.com')
   })
 
   it('forwards replyTo to Resend as reply_to when provided', async () => {

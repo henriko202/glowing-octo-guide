@@ -38,7 +38,9 @@ const app = defineApp({
     UNSUBSCRIBE_SECRET: v.optional(v.string()),
     // HMAC key for daily-rotated landing visitor keys. Unset ⇒ falls back to UNSUBSCRIBE_SECRET;
     // both unset ⇒ unique counting is off while total counts still record.
-    LANDING_METRICS_SECRET: v.optional(v.string())
+    LANDING_METRICS_SECRET: v.optional(v.string()),
+    // Backend errors → Sentry (lib/sentry.ts). Set on prod only; unset ⇒ nothing is sent.
+    SENTRY_DSN: v.optional(v.string())
   }
 })
 app.use(stripe)

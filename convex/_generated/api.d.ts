@@ -8,111 +8,111 @@
  * @module
  */
 
-import type * as admin from "../admin.js";
-import type * as ai_comments from "../ai/comments.js";
-import type * as ai_industry from "../ai/industry.js";
-import type * as ai_openrouter from "../ai/openrouter.js";
-import type * as ai_prompts from "../ai/prompts.js";
-import type * as ai_reactions from "../ai/reactions.js";
-import type * as billing from "../billing.js";
-import type * as billingNode from "../billingNode.js";
-import type * as billingNotices from "../billingNotices.js";
-import type * as crons from "../crons.js";
-import type * as dev from "../dev.js";
-import type * as feed from "../feed.js";
-import type * as feedback_emails from "../feedback/emails.js";
-import type * as feedback_feedback from "../feedback/feedback.js";
-import type * as http from "../http.js";
-import type * as interactions from "../interactions.js";
-import type * as jobs_digest from "../jobs/digest.js";
-import type * as jobs_processQueue from "../jobs/processQueue.js";
-import type * as jobs_rankingSnapshot from "../jobs/rankingSnapshot.js";
-import type * as jobs_refreshFeedEngagement from "../jobs/refreshFeedEngagement.js";
-import type * as jobs_scrapeProfileApify from "../jobs/scrapeProfileApify.js";
-import type * as jobs_survivalSnapshot from "../jobs/survivalSnapshot.js";
-import type * as jobs_syncPosts from "../jobs/syncPosts.js";
-import type * as jobs_syncPostsApify from "../jobs/syncPostsApify.js";
-import type * as landingMetrics from "../landingMetrics.js";
-import type * as lib_access from "../lib/access.js";
-import type * as lib_apify from "../lib/apify.js";
-import type * as lib_articleValidator from "../lib/articleValidator.js";
-import type * as lib_audit from "../lib/audit.js";
-import type * as lib_auth from "../lib/auth.js";
-import type * as lib_billingEmails from "../lib/billingEmails.js";
-import type * as lib_checkoutCopy from "../lib/checkoutCopy.js";
-import type * as lib_concurrency from "../lib/concurrency.js";
-import type * as lib_cookies from "../lib/cookies.js";
-import type * as lib_digest from "../lib/digest.js";
-import type * as lib_digestEmails from "../lib/digestEmails.js";
-import type * as lib_digestOptOut from "../lib/digestOptOut.js";
-import type * as lib_discountGuard from "../lib/discountGuard.js";
-import type * as lib_downgrade from "../lib/downgrade.js";
-import type * as lib_email from "../lib/email.js";
-import type * as lib_emailLayout from "../lib/emailLayout.js";
-import type * as lib_featuredPurchase from "../lib/featuredPurchase.js";
-import type * as lib_feedHygiene from "../lib/feedHygiene.js";
-import type * as lib_feedRank from "../lib/feedRank.js";
-import type * as lib_fetchWithTimeout from "../lib/fetchWithTimeout.js";
-import type * as lib_history from "../lib/history.js";
-import type * as lib_html from "../lib/html.js";
-import type * as lib_interactionGraph from "../lib/interactionGraph.js";
-import type * as lib_interactionLimit from "../lib/interactionLimit.js";
-import type * as lib_invite from "../lib/invite.js";
-import type * as lib_landingVisitorKey from "../lib/landingVisitorKey.js";
-import type * as lib_languages from "../lib/languages.js";
-import type * as lib_pkce from "../lib/pkce.js";
-import type * as lib_planLimits from "../lib/planLimits.js";
-import type * as lib_planLimitsQuery from "../lib/planLimitsQuery.js";
-import type * as lib_policy from "../lib/policy.js";
-import type * as lib_portalConfig from "../lib/portalConfig.js";
-import type * as lib_postCapNotice from "../lib/postCapNotice.js";
-import type * as lib_postCounts from "../lib/postCounts.js";
-import type * as lib_postLimit from "../lib/postLimit.js";
-import type * as lib_profileOptions from "../lib/profileOptions.js";
-import type * as lib_ranking from "../lib/ranking.js";
-import type * as lib_rateLimit from "../lib/rateLimit.js";
-import type * as lib_reactions from "../lib/reactions.js";
-import type * as lib_recap from "../lib/recap.js";
-import type * as lib_recordPost from "../lib/recordPost.js";
-import type * as lib_safeText from "../lib/safeText.js";
-import type * as lib_scrubError from "../lib/scrubError.js";
-import type * as lib_stripePrices from "../lib/stripePrices.js";
-import type * as lib_support from "../lib/support.js";
-import type * as lib_survival from "../lib/survival.js";
-import type * as lib_trialMilestone from "../lib/trialMilestone.js";
-import type * as lib_unsubscribeToken from "../lib/unsubscribeToken.js";
-import type * as linkedin_auth from "../linkedin/auth.js";
-import type * as linkedin_client from "../linkedin/client.js";
-import type * as linkedin_oauth from "../linkedin/oauth.js";
-import type * as linkedin_parsePostContent from "../linkedin/parsePostContent.js";
-import type * as linkedin_parsePostUrl from "../linkedin/parsePostUrl.js";
-import type * as linkedin_tokenRefresh from "../linkedin/tokenRefresh.js";
-import type * as linkedin_types from "../linkedin/types.js";
-import type * as linkedin_verifyPostOwnership from "../linkedin/verifyPostOwnership.js";
-import type * as migrations_backfillFeedFields from "../migrations/backfillFeedFields.js";
-import type * as migrations_backfillInviteCodes from "../migrations/backfillInviteCodes.js";
-import type * as migrations_normalizeContactFeaturedLimit from "../migrations/normalizeContactFeaturedLimit.js";
-import type * as migrations_seedPlanLimits from "../migrations/seedPlanLimits.js";
-import type * as motd_motd from "../motd/motd.js";
-import type * as notifications from "../notifications.js";
-import type * as posts from "../posts.js";
-import type * as privacy_consent from "../privacy/consent.js";
-import type * as privacy_deletion from "../privacy/deletion.js";
-import type * as privacy_emails from "../privacy/emails.js";
-import type * as privacy_export from "../privacy/export.js";
-import type * as privacy_retention from "../privacy/retention.js";
-import type * as rankings from "../rankings.js";
-import type * as search from "../search.js";
-import type * as seed from "../seed.js";
-import type * as sessions from "../sessions.js";
-import type * as stripe from "../stripe.js";
-import type * as users from "../users.js";
+import type * as admin from '../admin.js'
+import type * as ai_comments from '../ai/comments.js'
+import type * as ai_industry from '../ai/industry.js'
+import type * as ai_openrouter from '../ai/openrouter.js'
+import type * as ai_prompts from '../ai/prompts.js'
+import type * as ai_reactions from '../ai/reactions.js'
+import type * as authMetrics from '../authMetrics.js'
+import type * as billing from '../billing.js'
+import type * as billingNode from '../billingNode.js'
+import type * as billingNotices from '../billingNotices.js'
+import type * as crons from '../crons.js'
+import type * as dev from '../dev.js'
+import type * as feed from '../feed.js'
+import type * as feedback_emails from '../feedback/emails.js'
+import type * as feedback_feedback from '../feedback/feedback.js'
+import type * as http from '../http.js'
+import type * as interactions from '../interactions.js'
+import type * as jobs_digest from '../jobs/digest.js'
+import type * as jobs_processQueue from '../jobs/processQueue.js'
+import type * as jobs_rankingSnapshot from '../jobs/rankingSnapshot.js'
+import type * as jobs_refreshFeedEngagement from '../jobs/refreshFeedEngagement.js'
+import type * as jobs_scrapeProfileApify from '../jobs/scrapeProfileApify.js'
+import type * as jobs_survivalSnapshot from '../jobs/survivalSnapshot.js'
+import type * as jobs_syncPosts from '../jobs/syncPosts.js'
+import type * as jobs_syncPostsApify from '../jobs/syncPostsApify.js'
+import type * as landingMetrics from '../landingMetrics.js'
+import type * as lib_access from '../lib/access.js'
+import type * as lib_apify from '../lib/apify.js'
+import type * as lib_articleValidator from '../lib/articleValidator.js'
+import type * as lib_audit from '../lib/audit.js'
+import type * as lib_auth from '../lib/auth.js'
+import type * as lib_authMetrics from '../lib/authMetrics.js'
+import type * as lib_billingEmails from '../lib/billingEmails.js'
+import type * as lib_checkoutCopy from '../lib/checkoutCopy.js'
+import type * as lib_concurrency from '../lib/concurrency.js'
+import type * as lib_cookies from '../lib/cookies.js'
+import type * as lib_digest from '../lib/digest.js'
+import type * as lib_digestEmails from '../lib/digestEmails.js'
+import type * as lib_digestOptOut from '../lib/digestOptOut.js'
+import type * as lib_discountGuard from '../lib/discountGuard.js'
+import type * as lib_downgrade from '../lib/downgrade.js'
+import type * as lib_email from '../lib/email.js'
+import type * as lib_emailLayout from '../lib/emailLayout.js'
+import type * as lib_featuredPurchase from '../lib/featuredPurchase.js'
+import type * as lib_feedHygiene from '../lib/feedHygiene.js'
+import type * as lib_feedRank from '../lib/feedRank.js'
+import type * as lib_fetchWithTimeout from '../lib/fetchWithTimeout.js'
+import type * as lib_history from '../lib/history.js'
+import type * as lib_html from '../lib/html.js'
+import type * as lib_interactionGraph from '../lib/interactionGraph.js'
+import type * as lib_interactionLimit from '../lib/interactionLimit.js'
+import type * as lib_invite from '../lib/invite.js'
+import type * as lib_landingVisitorKey from '../lib/landingVisitorKey.js'
+import type * as lib_languages from '../lib/languages.js'
+import type * as lib_pkce from '../lib/pkce.js'
+import type * as lib_planLimits from '../lib/planLimits.js'
+import type * as lib_planLimitsQuery from '../lib/planLimitsQuery.js'
+import type * as lib_policy from '../lib/policy.js'
+import type * as lib_portalConfig from '../lib/portalConfig.js'
+import type * as lib_postCapNotice from '../lib/postCapNotice.js'
+import type * as lib_postCounts from '../lib/postCounts.js'
+import type * as lib_postLimit from '../lib/postLimit.js'
+import type * as lib_profileOptions from '../lib/profileOptions.js'
+import type * as lib_ranking from '../lib/ranking.js'
+import type * as lib_rateLimit from '../lib/rateLimit.js'
+import type * as lib_reactions from '../lib/reactions.js'
+import type * as lib_recap from '../lib/recap.js'
+import type * as lib_recordPost from '../lib/recordPost.js'
+import type * as lib_safeText from '../lib/safeText.js'
+import type * as lib_scrubError from '../lib/scrubError.js'
+import type * as lib_sentry from '../lib/sentry.js'
+import type * as lib_stripePrices from '../lib/stripePrices.js'
+import type * as lib_support from '../lib/support.js'
+import type * as lib_survival from '../lib/survival.js'
+import type * as lib_trialMilestone from '../lib/trialMilestone.js'
+import type * as lib_unsubscribeToken from '../lib/unsubscribeToken.js'
+import type * as linkedin_auth from '../linkedin/auth.js'
+import type * as linkedin_client from '../linkedin/client.js'
+import type * as linkedin_oauth from '../linkedin/oauth.js'
+import type * as linkedin_parsePostContent from '../linkedin/parsePostContent.js'
+import type * as linkedin_parsePostUrl from '../linkedin/parsePostUrl.js'
+import type * as linkedin_tokenRefresh from '../linkedin/tokenRefresh.js'
+import type * as linkedin_types from '../linkedin/types.js'
+import type * as linkedin_verifyPostOwnership from '../linkedin/verifyPostOwnership.js'
+import type * as migrations_backfillFeedFields from '../migrations/backfillFeedFields.js'
+import type * as migrations_backfillInviteCodes from '../migrations/backfillInviteCodes.js'
+import type * as migrations_normalizeContactFeaturedLimit from '../migrations/normalizeContactFeaturedLimit.js'
+import type * as migrations_seedPlanLimits from '../migrations/seedPlanLimits.js'
+import type * as motd_motd from '../motd/motd.js'
+import type * as notifications from '../notifications.js'
+import type * as observability from '../observability.js'
+import type * as posts from '../posts.js'
+import type * as privacy_consent from '../privacy/consent.js'
+import type * as privacy_deletion from '../privacy/deletion.js'
+import type * as privacy_emails from '../privacy/emails.js'
+import type * as privacy_export from '../privacy/export.js'
+import type * as privacy_retention from '../privacy/retention.js'
+import type * as rankings from '../rankings.js'
+import type * as search from '../search.js'
+import type * as seed from '../seed.js'
+import type * as sessions from '../sessions.js'
+import type * as stripe from '../stripe.js'
+import type * as users from '../users.js'
 
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
+import type { ApiFromModules, FilterApi, FunctionReference } from 'convex/server'
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
@@ -121,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   "ai/openrouter": typeof ai_openrouter;
   "ai/prompts": typeof ai_prompts;
   "ai/reactions": typeof ai_reactions;
+  authMetrics: typeof authMetrics;
   billing: typeof billing;
   billingNode: typeof billingNode;
   billingNotices: typeof billingNotices;
@@ -145,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   "lib/articleValidator": typeof lib_articleValidator;
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
+  "lib/authMetrics": typeof lib_authMetrics;
   "lib/billingEmails": typeof lib_billingEmails;
   "lib/checkoutCopy": typeof lib_checkoutCopy;
   "lib/concurrency": typeof lib_concurrency;
@@ -183,6 +185,7 @@ declare const fullApi: ApiFromModules<{
   "lib/recordPost": typeof lib_recordPost;
   "lib/safeText": typeof lib_safeText;
   "lib/scrubError": typeof lib_scrubError;
+  "lib/sentry": typeof lib_sentry;
   "lib/stripePrices": typeof lib_stripePrices;
   "lib/support": typeof lib_support;
   "lib/survival": typeof lib_survival;
@@ -202,6 +205,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/seedPlanLimits": typeof migrations_seedPlanLimits;
   "motd/motd": typeof motd_motd;
   notifications: typeof notifications;
+  observability: typeof observability;
   posts: typeof posts;
   "privacy/consent": typeof privacy_consent;
   "privacy/deletion": typeof privacy_deletion;

@@ -47,7 +47,7 @@ function tryParseJson(text: string): unknown {
 /**
  * Redact sensitive key names from `context` (an Error, a string, an object, or any mix thereof)
  * and cap the result to a bounded length. Returns a string safe to pass straight to
- * `console.error` as the logged context — this is the ONLY sink; no external service is written.
+ * `console.error` as the logged context, or to Sentry as an event message (lib/sentry.ts).
  */
 export function scrubError(context: unknown): string {
   const normalized = typeof context === 'string' ? tryParseJson(context) : context

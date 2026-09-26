@@ -24,6 +24,7 @@ import { timeAgo } from '@/lib/relativeDay'
 import { toast } from '@/components/ui/toast'
 import { captureEvent } from '@/lib/observability/analytics'
 import { datafastAttribution } from '@/lib/observability/datafast'
+import { captureException } from '@/lib/observability/sentry'
 import { useCardGate } from '@/hooks/useCardGate'
 import { FEATURED_POST_PRICE, usdLabel } from '@/lib/planPrices'
 import { FEATURED_CAP_BONUS, type Tier } from '../../../convex/lib/planLimits'
@@ -266,10 +267,12 @@ export default function MyPostsPage() {
       if (!url) throw new Error('NO_CHECKOUT_URL')
       // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
       window.location.href = url
-    } catch {
+    } catch (err) {
       // F3 — every failure here (a thrown ConvexError code, or a missing url) is a state the UI
       // already prevents, so none of them need telling apart for the buyer; friendlyError would
-      // otherwise leak a raw server code like FEATURED_PRICE_UNSET verbatim.
+      // otherwise leak a raw server code like FEATURED_PRICE_UNSET verbatim. Being prevented, each
+      // one is a fault on a money path, so Sentry hears about it, codes included.
+      captureException(err)
       setActionError(t('myPosts.buyFeaturedError'))
       setBuyingPostId(null)
     }

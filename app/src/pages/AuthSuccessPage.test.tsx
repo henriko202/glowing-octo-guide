@@ -1,5 +1,5 @@
 // app/src/pages/AuthSuccessPage.test.tsx
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StrictMode } from 'react'
 import { render, waitFor } from '@testing-library/react'
 import { clearSignedOut } from '../lib/session'
@@ -19,19 +19,12 @@ vi.mock('convex/react', () => ({
 }))
 
 vi.mock('../lib/session', () => ({
-  clearSignedOut: vi.fn(),
-  LANDING_URL: 'http://landing.test'
+  clearSignedOut: vi.fn()
 }))
 
 vi.mock('../lib/oauthStart', () => ({ OAUTH_VERIFIER_KEY: 'oauthVerifier' }))
 
-const originalLocation = window.location
-
-function stubLocation() {
-  const replace = vi.fn()
-  Object.defineProperty(window, 'location', { value: { replace }, writable: true, configurable: true })
-  return replace
-}
+const ERROR_PAGE = '/auth/error?reason=failed'
 
 describe('AuthSuccessPage', () => {
   beforeEach(() => {
@@ -39,10 +32,6 @@ describe('AuthSuccessPage', () => {
     navigate.mockClear()
     redeem.mockReset()
     vi.mocked(clearSignedOut).mockClear()
-  })
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', { value: originalLocation, writable: true, configurable: true })
   })
 
   it('navigates to the feed and clears signedOut when a session token already exists', () => {
@@ -68,38 +57,35 @@ describe('AuthSuccessPage', () => {
     expect(clearSignedOut).toHaveBeenCalledTimes(1)
   })
 
-  it('fails closed to the landing site without redeeming when the verifier is missing', async () => {
+  it('fails closed to the sign-in error page without redeeming when the verifier is missing', async () => {
     sessionStorage.setItem('oauthCode', 'handed-over-code')
-    const replace = stubLocation()
 
     render(<AuthSuccessPage />)
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('http://landing.test'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(ERROR_PAGE, { replace: true }))
     expect(redeem).not.toHaveBeenCalled()
     expect(sessionStorage.getItem('oauthCode')).toBeNull()
     expect(clearSignedOut).not.toHaveBeenCalled()
   })
 
-  it('fails closed to the landing site without redeeming when the code is missing', async () => {
+  it('fails closed to the sign-in error page without redeeming when the code is missing', async () => {
     sessionStorage.setItem('oauthVerifier', 'verifier-1')
-    const replace = stubLocation()
 
     render(<AuthSuccessPage />)
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('http://landing.test'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(ERROR_PAGE, { replace: true }))
     expect(redeem).not.toHaveBeenCalled()
     expect(sessionStorage.getItem('oauthVerifier')).toBeNull()
   })
 
-  it('drops the code/verifier and returns to the landing site when redeem fails', async () => {
+  it('drops the code/verifier and shows the sign-in error page when redeem fails', async () => {
     sessionStorage.setItem('oauthCode', 'code-1')
     sessionStorage.setItem('oauthVerifier', 'verifier-1')
     redeem.mockRejectedValue(new Error('mismatch'))
-    const replace = stubLocation()
 
     render(<AuthSuccessPage />)
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('http://landing.test'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(ERROR_PAGE, { replace: true }))
     expect(sessionStorage.getItem('oauthCode')).toBeNull()
     expect(sessionStorage.getItem('oauthVerifier')).toBeNull()
     expect(sessionStorage.getItem('sessionToken')).toBeNull()

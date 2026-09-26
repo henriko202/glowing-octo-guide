@@ -19,6 +19,7 @@ import { PORTAL_TIER_KEY, type PortalConfigKey, portalConfigKeyFor, portalHomeKe
 import { findLiveSubscription, isCancelPending, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
+import { reportError } from './lib/sentry'
 import { assertCanEngage } from './lib/access'
 
 const stripeComponent = new StripeSubscriptions(components.stripe, {})
@@ -223,6 +224,8 @@ export const cancelDuplicateSubscription = internalAction({
       // Already canceled (a Stripe webhook retry re-ran the guard) or a transient Stripe failure.
       // Either way this run must not notify: the first run did, or the duplicate is still live.
       console.error('[billing] could not void duplicate subscription', stripeSubscriptionId, scrubError(err))
+      // Stripe refusing (a 4xx) is the first case; anything else leaves the member paying twice, so Sentry hears it.
+      if (!(err instanceof Stripe.errors.StripeInvalidRequestError)) await reportError(ctx, err, { upstream: 'stripe' })
       return
     }
     console.error('[billing] voided duplicate subscription', scrubError({ stripeSubscriptionId }))
@@ -410,6 +413,8 @@ async function releaseScheduleOn(ctx: ActionCtx, sub: Stripe.Subscription): Prom
       await stripe().subscriptionSchedules.release(scheduleId)
     } catch (err) {
       console.error('[billing] could not release subscription schedule', scrubError(err))
+      // A refusal (a 4xx) is the work already done; anything else leaves the downgrade scheduled in Stripe.
+      if (!(err instanceof Stripe.errors.StripeInvalidRequestError)) await reportError(ctx, err, { upstream: 'stripe' })
     }
   }
   await ctx.runMutation(internal.billing.setPendingDowngrade, { stripeSubscriptionId: sub.id })
@@ -453,6 +458,8 @@ export const detachSubscriptionDiscounts = internalAction({
           stripeSubscriptionId,
           attempt: attempt + 1
         })
+      } else {
+        await reportError(ctx, err, { upstream: 'stripe' })
       }
     }
   }

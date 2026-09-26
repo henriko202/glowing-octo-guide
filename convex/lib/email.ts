@@ -7,6 +7,7 @@
 import { env } from '../_generated/server'
 import { scrubError } from './scrubError'
 import { fetchWithTimeout } from './fetchWithTimeout'
+import { reportError } from './sentry'
 
 const FROM_NAME = 'Link Into The SSI'
 
@@ -64,6 +65,8 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
   if (!res.ok) {
     const body = await res.text()
     console.error(`[email] Resend send failed: ${res.status}`, scrubError(body))
+    // The status only: Resend's error body can name the recipient.
+    await reportError(null, `Resend send failed: ${res.status}`, { upstream: 'resend' })
     throw new Error('Failed to send email')
   }
   return { sent: true }

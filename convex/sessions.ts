@@ -8,6 +8,7 @@ import { internalMutation, internalQuery, mutation } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { isPkceChallenge, isPkceVerifier, pkceChallengeFromVerifier } from './lib/pkce'
+import { bumpAuthMetric } from './lib/authMetrics'
 
 // ─── Session lifetime ────────────────────────────────────────────────────────
 // 15-day sliding window: an idle (or stolen-but-unused) token expires SESSION_TTL_MS after its last
@@ -154,6 +155,7 @@ export const createOAuthState = internalMutation({
       interval,
       ref
     })
+    await bumpAuthMetric(ctx.db, 'started')
   }
 })
 
@@ -217,17 +219,20 @@ export const createAuthCode = internalMutation({
     userId: v.id('users'),
     challenge: v.string(),
     plan: v.optional(v.string()),
-    interval: v.optional(v.string())
+    interval: v.optional(v.string()),
+    isNew: v.boolean()
   },
-  handler: async (ctx, { code, userId, challenge, plan, interval }) => {
+  handler: async (ctx, { code, userId, challenge, plan, interval, isNew }) => {
     await ctx.db.insert('authCodes', {
       code,
       userId,
       challenge,
       plan,
       interval,
-      expiresAt: Date.now() + AUTH_CODE_TTL_MS
+      expiresAt: Date.now() + AUTH_CODE_TTL_MS,
+      isNew
     })
+    await bumpAuthMetric(ctx.db, isNew ? 'linkedin_ok_new' : 'linkedin_ok_returning')
   }
 })
 
@@ -263,6 +268,7 @@ export const redeemAuthCode = mutation({
       expiresAt: sessionExpiryFrom(Date.now())
     })
     await ctx.db.delete(row._id)
+    await bumpAuthMetric(ctx.db, row.isNew ? 'signed_in_new' : 'signed_in_returning')
     return { sessionToken }
   }
 })

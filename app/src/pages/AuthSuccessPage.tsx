@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation } from 'convex/react'
 import { api } from '../convex'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { clearSignedOut, LANDING_URL } from '../lib/session'
+import { clearSignedOut } from '../lib/session'
 import { OAUTH_VERIFIER_KEY } from '../lib/oauthStart'
+
+// Both failures land on the sign-in error page (outside RequireAuth), which explains and lets the member retry.
+const ERROR_PAGE = '/auth/error?reason=failed'
 
 export default function AuthSuccessPage() {
   const navigate = useNavigate()
@@ -35,7 +38,7 @@ export default function AuthSuccessPage() {
         // browser that started the login, and burning it here would deny that browser its session.
         sessionStorage.removeItem('oauthCode')
         sessionStorage.removeItem(OAUTH_VERIFIER_KEY)
-        window.location.replace(LANDING_URL)
+        navigate(ERROR_PAGE, { replace: true })
         return
       }
 
@@ -47,10 +50,10 @@ export default function AuthSuccessPage() {
         clearSignedOut()
         navigate('/feed', { replace: true })
       } catch {
-        // Expired, already used, or challenge mismatch — start over from the landing site.
+        // Expired, already used, or challenge mismatch — the member starts over from the error page.
         sessionStorage.removeItem('oauthCode')
         sessionStorage.removeItem(OAUTH_VERIFIER_KEY)
-        window.location.replace(LANDING_URL)
+        navigate(ERROR_PAGE, { replace: true })
       }
     })()
   }, [navigate, redeem])

@@ -11,6 +11,7 @@ import { checkRateLimit } from '../lib/rateLimit'
 import { type AuditDb, writeAuditLog } from '../lib/audit'
 import { resolveBillingLocale } from '../lib/checkoutCopy'
 import { sendEmail } from '../lib/email'
+import { reportError } from '../lib/sentry'
 import { exportReadyEmail } from './emails'
 
 const EXPORT_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -232,6 +233,7 @@ export const generateExport = internalAction({
       }
     } catch (err) {
       console.error('generateExport failed:', err instanceof Error ? err.message : String(err))
+      await reportError(ctx, err)
       await ctx.runMutation(internal.privacy.export.markExportFailed, { requestId })
     }
   }
