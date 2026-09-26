@@ -58,6 +58,10 @@ export function initSentry(): void {
   Sentry.init({
     dsn,
     environment: 'production',
+    // The Convex client fails an action in flight with this when its WebSocket drops (a closed laptop, a tunnel).
+    // That is the member's network, not a fault, and each one would spend the free plan's 5k errors a month. Sentry
+    // matches a string anywhere in the message, so the client's "[CONVEX A(…)]" frame doesn't matter.
+    ignoreErrors: ['Connection lost while action was in flight'],
     dataCollection: {
       // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
       // https://docs.sentry.io/platforms/javascript/guides/react/configuration/options/#dataCollection

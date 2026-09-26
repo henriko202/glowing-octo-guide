@@ -1054,8 +1054,10 @@ Clients **never** pass a `userId`. They pass a `sessionToken`; the server resolv
   anything else (an already‑friendly message, or a code it doesn't recognize) passes through untouched.
 - **Reporting follows the same split:** a `ConvexError` is an answer the backend chose, anything else is a fault.
   `friendlyError` hands every non‑`ConvexError` to Sentry (`captureException`) before it picks the message, so a
-  production "Server Error" still arrives with the request ID that finds its lines in the Convex logs. The backend
-  reports the faults no browser sees ([§17A](#17a-backend-error-reporting)).
+  production "Server Error" still arrives with the request ID that finds its lines in the Convex logs. The one
+  exception is the Convex client's "Connection lost while action was in flight", which a dropped WebSocket gives any
+  action in flight: the member's network, so Sentry's `ignoreErrors` drops it ([§17](#17-security-posture)). The
+  backend reports the faults no browser sees ([§17A](#17a-backend-error-reporting)).
 
 ### LinkedIn member‑API calls
 
@@ -6078,7 +6080,7 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   feed-namespaced copies — the gate then cannot contradict the Billing page or Stripe's own pay-button line:
 
   | Trial copy              | `canTrial === false` twin                                          | Surface                                                             |
-                                                                                          | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+                                                                                              | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
   | `feed.cardGateBody`     | `feed.cardGateBodyNoTrial` (new)                                   | Dialog + `UpgradeAtLimit`                                           |
   | `feed.hiddenPostBanner` | `feed.hiddenPostBannerNoTrial` (new)                               | `CardGateBanner`                                                    |
   | `feed.cardGateCta`      | `billing.noTrialCta` (reused)                                      | all three                                                           |
@@ -7422,7 +7424,10 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   tracing runs at
   `tracesSampleRate:1.0`; Session Replay records 10% of sessions (100% of error sessions) with Sentry's default masking
   (all text masked, media blocked, no canvas recording). Replay compresses in a blob WebWorker, which is why the app CSP
-  allows `blob:` workers (CSP bullet above).
+  allows `blob:` workers (CSP bullet above). `ignoreErrors` drops one message on every capture path: the Convex
+  client's "Connection lost while action was in flight", which a dropped WebSocket gives any action in flight. That is
+  the member's network, not a fault, and each one would spend the free plan's 5k errors a month (the test runs
+  Sentry's own filter over the options `initSentry` passes).
 - **Prod backend errors — Sentry, posted by the backend itself:** Convex's Exception Reporting and Log Streams need
   the Pro plan, so the backend sends its own events, one `fetch` each, with no SDK (`convex/lib/sentry.ts`), and a
   half‑hourly sweep reports the scheduled runs and cron jobs that failed. Both are no‑ops until `SENTRY_DSN` is set
@@ -7821,6 +7826,9 @@ plus the sweep's query), against the free plan's 1,000,000.
 
 - **A browser call whose catch shows its own copy** instead of calling `friendlyError`: the unsubscribe page, the
   rankings opt‑out, the two email toggles and the cancel note.
+- **Dropped on purpose:** an action whose connection dropped ("Connection lost while action was in flight", Sentry's
+  `ignoreErrors` in [§17](#17-security-posture)). The action may still have finished; if it failed instead, only a
+  backend report (the seams above) arrives. A reconnect storm stays invisible.
 - **A mutation that logs and returns:** a featured purchase for a deleted post, or a second payment for one post
   (`posts.applyPurchasedFeature`, which leaves an audit row for the refund), and an unknown Stripe price defaulting to
   `starter` (`lib/stripePrices.ts`, the [§16](#16-environment-variables) danger note). All three stay log lines.
@@ -8087,6 +8095,15 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑26 (Sentry noise filter). **The browser no longer reports a dropped connection as an error.**
+When its WebSocket drops, the Convex client fails any action in flight with "Connection lost while action was in
+flight": the member's network, not a fault, and each one would spend the free plan's 5k errors a month now that
+`friendlyError` reports every non-`ConvexError`. `initSentry` passes it to Sentry's `ignoreErrors` (a substring
+match, so the client's "[CONVEX A (…)]" frame doesn't matter), which drops it on every capture path. The new
+`initSentry` tests mock only `Sentry.init` and run Sentry's own event filter over the options it received: the
+dropped-connection error is dropped, a "Server Error" is kept. Sections updated: §6, §17, §17A (a new "Dropped on
+purpose" blind spot), §21._
 
 _Last updated: 2026‑09‑25 (backend errors → Sentry). **The backend now reports its own errors to Sentry, on the
 Convex free plan.** Convex's Exception Reporting and Log Streams need the Pro plan, so new

@@ -1,5 +1,40 @@
-import { describe, it, expect } from 'vitest'
-import { sentryBeforeSend } from './sentry'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import * as Sentry from '@sentry/react'
+import { initSentry, sentryBeforeSend } from './sentry'
+
+// Only init is replaced, so a test can read the options initSentry passes it. Everything else is the real SDK.
+vi.mock('@sentry/react', async importOriginal => ({
+  ...(await importOriginal<typeof import('@sentry/react')>()),
+  init: vi.fn()
+}))
+
+describe('initSentry', () => {
+  beforeAll(() => {
+    vi.stubEnv('PROD', true)
+    vi.stubEnv('VITE_SENTRY_DSN', 'https://key@o1.ingest.us.sentry.io/1')
+    initSentry()
+  })
+  afterAll(() => vi.unstubAllEnvs())
+
+  // Runs Sentry's own event filter, with the options initSentry passed, over an error carrying `message`.
+  function keptBySentry(message: string): boolean {
+    const client = { getOptions: () => vi.mocked(Sentry.init).mock.calls[0]?.[0] } as unknown as Sentry.BrowserClient
+    const event = { exception: { values: [{ type: 'Error', value: message }] } }
+    return Sentry.eventFiltersIntegration().processEvent?.(event, {}, client) !== null
+  }
+
+  // The Convex client fails an action in flight with this when its WebSocket drops: the member's network, not a fault.
+  it('drops the error an action gets when the connection drops', () => {
+    const lost =
+      '[CONVEX A(ai/comments:generateComment)] Connection lost while action was in flight\n  Called by client'
+    expect(keptBySentry(lost)).toBe(false)
+  })
+
+  it('keeps a server error', () => {
+    const fault = '[CONVEX A(ai/comments:generateComment)] [Request ID: abc] Server Error\n  Called by client'
+    expect(keptBySentry(fault)).toBe(true)
+  })
+})
 
 describe('sentryBeforeSend', () => {
   it('drops request cookies and headers', () => {
