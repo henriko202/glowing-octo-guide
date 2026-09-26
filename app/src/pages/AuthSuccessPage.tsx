@@ -22,7 +22,7 @@ export default function AuthSuccessPage() {
 
     // The code/verifier (and plan/interval) were moved into sessionStorage by the inline script in
     // index.html before any bundle ran, so the URL bar is already scrubbed here.
-    void (;async () => {
+    void (async () => {
       // A login that can't finish: a tab already holding a session keeps it, anyone else gets the error page.
       // Only clear the explicit sign-out marker when a session token exists — opening /auth/success
       // directly must not erase a deliberate sign-out and let RequireAuth re-login via SSO.
