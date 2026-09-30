@@ -66,7 +66,7 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                 key={plan.id}
                 className={`relative flex flex-col rounded-2xl p-7 transition-[border-color,box-shadow] duration-300 ${
                   highlight
-                    ? 'border border-lnblue bg-lnblue/[0.08] shadow-[0_0_48px_rgba(0,119,181,0.2)]'
+                    ? 'border border-lnblue bg-ink-600 bg-linear-to-b from-lnblue/[0.08] to-lnblue/[0.08] shadow-[0_0_48px_rgba(0,119,181,0.2)]'
                     : 'border border-cream/[0.08] bg-ink-600 hover:border-cream/15'
                 }`}
               >

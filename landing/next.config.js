@@ -3,7 +3,8 @@
 // dictionary copy (no user input), so the inline-script risk is negligible and the
 // pages stay prerendered/cached. The app (which renders untrusted data) uses the
 // stricter hashed CSP. Cloudflare Web Analytics (automatic setup) injects its beacon
-// into proxied HTML, so script-src allows that exact script URL; the beacon posts to
+// into proxied HTML, so script-src allows that script URL plus its versioned
+// `beacon.min.js/v…` path (trailing slash = prefix match); the beacon posts to
 // same-origin /cdn-cgi/rum, which connect-src 'self' already covers.
 // DataFast (bundled npm SDK, cookieless) posts pageviews to https://datafa.st, which connect-src allows.
 // Referrer-Policy is strict-origin, so a same-origin page load never carries the `?ref=` invite code in
@@ -25,7 +26,7 @@ const AGENT_LINK_HEADER = [
 const isDev = process.env.NODE_ENV !== 'production'
 const CONTENT_SECURITY_POLICY = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://static.cloudflareinsights.com/beacon.min.js`,
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' https: data:`,
   `connect-src 'self' https://*.convex.cloud https://*.convex.site https://datafa.st`,
@@ -37,6 +38,8 @@ const CONTENT_SECURITY_POLICY = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Inline the (small) CSS into the HTML so it no longer blocks first render (Lighthouse render-blocking).
+  experimental: { inlineCss: true },
   async headers() {
     return [
       {

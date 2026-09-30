@@ -35,6 +35,8 @@ export function buildHeadersContent(scriptHashes) {
     "'self'",
     ...quotedHashes,
     'https://static.cloudflareinsights.com/beacon.min.js',
+    // Cloudflare now serves a versioned `beacon.min.js/v…` path; a trailing slash makes it a prefix match.
+    'https://static.cloudflareinsights.com/beacon.min.js/',
     'https://*.posthog.com'
   ].join(' ')
   const csp = [

@@ -7722,13 +7722,17 @@ The codebase follows a consistent, defensible security model:
   `next.config.js` `headers()` with `script-src 'self' 'unsafe-inline'` (it renders only static copy, so the pages stay
   prerendered/cached; the strict hashed CSP is reserved for the app, which renders untrusted data); its `connect-src`
   allows Convex `.cloud`/`.site` and `https://datafa.st` (cookieless DataFast pageviews). Both CSPs also allow
-  Cloudflare's analytics beacon (`https://static.cloudflareinsights.com/beacon.min.js`) — the zone's Web Analytics
+  Cloudflare's analytics beacon (`https://static.cloudflareinsights.com/beacon.min.js` plus the prefix
+  `…/beacon.min.js/`, since Cloudflare now injects a versioned `beacon.min.js/v…` URL that the exact path alone
+  blocked, a console error Lighthouse flagged) — the zone's Web Analytics
   automatic setup injects it into proxied HTML responses, and the beacon POSTs to same-origin `/cdn-cgi/rum` (covered by
   `connect-src 'self'`). In **dev only**
   (`NODE_ENV !== 'production'`) the landing adds `'unsafe-eval'` to `script-src` because `next dev` evals every module
   (eval-source-map devtool + Fast Refresh) — without it the client bundle throws and nothing hydrates; the deployed
   Worker (built with `NODE_ENV=production`) never gets this relaxation. Landing fonts are **self-hosted** via
-  `next/font/google` (served from `'self'`), so no external font/style host is whitelisted. Both retain
+  `next/font/google` (served from `'self'`), so no external font/style host is whitelisted. The landing also sets
+  `experimental.inlineCss` so its small stylesheet ships as an inline `<style>` instead of a render-blocking
+  request (allowed by `style-src 'unsafe-inline'`). Both retain
   `style-src 'unsafe-inline'` (Radix + inline styles), and both add
   `frame-ancestors 'none'`, `Strict-Transport-Security` (HSTS, 2y + preload), `X-Content-Type-Options: nosniff`,
   `Referrer-Policy` (app `strict-origin-when-cross-origin`; landing `strict-origin`, so a same-origin page load never
