@@ -16,3 +16,9 @@ dist/
 .agents/
 .junie/
 .windsurf/
+
+# Remotion renders and stills (video/): large binaries, re-rendered on demand
+video/out/
+
+# Soundtrack WAVs (video/): written by video/scripts/soundtrack.mjs before every Studio run and render
+video/public/audio/

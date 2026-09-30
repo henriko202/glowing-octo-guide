@@ -6,6 +6,8 @@
   "scripts": {
     "dev:landing": "pnpm --filter landing dev",
     "dev:app": "pnpm --filter app dev",
+    "dev:video": "pnpm --filter video studio",
+    "render:video": "pnpm --filter video render",
     "dev:convex": "npx convex ai-files update && npx convex dev",
     "build:landing": "pnpm --filter landing build",
     "build:app": "pnpm --filter app build",
@@ -20,7 +22,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm --filter convex exec tsc --noEmit -p tsconfig.json && pnpm --filter app exec tsc --noEmit && pnpm --filter landing exec tsc --noEmit",
+    "typecheck": "pnpm --filter convex exec tsc --noEmit -p tsconfig.json && pnpm --filter app exec tsc --noEmit && pnpm --filter landing exec tsc --noEmit && pnpm --filter video exec tsc --noEmit",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm -r test && pnpm --filter convex test:integration"
   },
   "dependencies": {

@@ -41,6 +41,7 @@
     14A. [Design System](#14a-design-system)
     14B. [Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)
 15. [Frontend — Landing Site (`landing/`)](#15-frontend--landing-site-landing)
+    15A. [Promotional Video (`video/`)](#15a-promotional-video-video)
 16. [Environment Variables](#16-environment-variables)
 17. [Security Posture](#17-security-posture)
     17A. [Backend Error Reporting](#17a-backend-error-reporting)
@@ -211,6 +212,10 @@ token and redirects the browser back to the app. This is the backbone of the [se
   industry/country comboboxes (`@/*` alias → `app/src`; theme tokens in `index.css`).
 - **Landing (`landing/`):** Next.js **15** (App Router), React **19**, Tailwind CSS **4** (CSS-first,
   `@tailwindcss/postcss`), TypeScript.
+- **Promo video (`video/`):** [Remotion](https://www.remotion.dev) **4.0.529**, React **19**, TypeScript. Renders the
+  ad MP4s locally: 30 s in three formats (square for LinkedIn, 16:9 for YouTube, 9:16 for Shorts and TikTok) and a
+  15 s cut in 4:5 and 9:16 for Meta and in 16:9 for Facebook and YouTube in-stream; nothing is deployed
+  ([§15A](#15a-promotional-video-video)).
 - **Payments:** Stripe (Checkout + Customer Portal + webhooks).
 - **Post ingestion:** Apify REST API (`harvestapi~linkedin-profile-posts` actor) + manual user‑pasted post URLs.
 - **Testing:** Vitest across all workspaces; React Testing Library + jsdom for the app; a custom
@@ -292,6 +297,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 │       └── seedPlanLimits.ts    # explicit (re-)seed of tier-default plan limits — optional, updateTierDefault self-heals
 │
 ├── convex-mocks/                # Vitest mock for `convex/server` (backend unit tests)
+├── video/                       # Remotion promo ad + sound, 30 s and 15 s, pt + en, 4 formats → video/out/*.mp4 (§15A)
 ├── docs/                        # planning/spec markdown + THIS document
 ├── README.md                    # quickstart (reconciled to code 2026-08-30 — see §19)
 ├── CLAUDE.md / AGENTS.md        # agent instructions
@@ -7162,6 +7168,314 @@ soft glow) and 16px at 70% opacity in the footer.
 
 ---
 
+## 15A. Promotional Video (`video/`)
+
+A 30-second ad in pt-BR and US English, with music and sound effects composed in code, in three formats: square
+(1080×1080) for the LinkedIn feed, 16:9 (1920×1080) for YouTube in-stream ads, and 9:16 (1080×1920) for YouTube
+Shorts and TikTok; plus a 15-second cut, in 4:5 (1080×1350, rendered at 1440×1800) for the Facebook Feed, in 9:16
+for the Instagram Feed, Reels and Stories, and in 16:9 for Facebook and YouTube in-stream ads ("Lengths" and
+"Formats" below). It works muted too, since LinkedIn autoplays without sound. Meta gets only the 15 s files: its Ads
+Manager recommends at most 15 s, Facebook in-stream plays only a video's first 15 s on desktop
+([Meta's in-stream specs](https://www.facebook.com/business/ads-guide/update/video/facebook-instream-video)), and in
+September 2026 its ad setup accepted only 4:5 through 9:16 for Instagram, which leaves out the square.
+[Remotion](https://www.remotion.dev) `4.0.529` draws it with React and renders it locally; nothing in `video/` is
+deployed, and the MP4s are uploaded to each platform's ad manager by hand. Design and storyboard:
+[`docs/superpowers/specs/2026-09-26-promo-video-design.md`](superpowers/specs/2026-09-26-promo-video-design.md). Sound:
+[`docs/superpowers/specs/2026-09-26-promo-audio-design.md`](superpowers/specs/2026-09-26-promo-audio-design.md). The
+15 s cut and the 4:5:
+[`docs/superpowers/specs/2026-09-29-promo-meta-design.md`](superpowers/specs/2026-09-29-promo-meta-design.md). Six
+stills of the promise double as image ads for Meta ("Image ads" below).
+
+### What the ad says
+
+| 30 s      | 15 s      | Scene    | Strings and their source                                                                    |
+|-----------|-----------|----------|---------------------------------------------------------------------------------------------|
+| 0-3       | 0-2.3     | Hook     | landing `hero.eyebrow`                                                                      |
+| 3-7       | 2.3-5     | Promise  | landing `hero.headlineLine1` + `hero.headlineLine2`                                         |
+| 7-12      | none      | Feed     | `feedCaption` (new), app `feed.viewOnLinkedIn`, fictional posts                             |
+| 12-17.5   | 5-7.8     | AI draft | `draftCaption` (new), app `comment.generate` / `generating` / `regenerate` / `languageAuto` |
+| 17.5-23.5 | 7.8-11.2  | Handoff  | landing `hero.subLine2` (one sentence at a time), app `comment.submit`, `feed.comment`      |
+| 23.5-30   | 11.2-14.9 | End card | landing `hero.cta` + `hero.ctaDisclaimer`, literal `linkintothessi.com`                     |
+
+In the 15 s cut ("Lengths" below) the cards rise under the draft caption, so the feed caption never shows, and the
+handoff shows only its first sentence.
+
+Every string that exists on the landing or in the app is imported from its dictionary by `video/src/copy.ts`, so a copy
+change there reaches the ad on the next render. The two new captions, the fictional posts and names, and the AI draft
+live in the same file. Nothing on screen claims an SSI score, a result, a user count or a testimonial. The
+`linkedin.com` window is a plain browser frame: no LinkedIn logo and no copy of LinkedIn's interface.
+
+### How it is built
+
+- **One component, twelve compositions.** `Root.tsx` registers `Ad` once per language and cut, a cut being a format in
+  a length (`CUTS`; "Lengths" and "Formats" below). The id is `ad-<lang>`, then `-<format>` unless it's the square,
+  then `-<length>` unless it's the 30 s. The six 30 s ids keep their names: `ad-pt` and `ad-en` (1080×1080),
+  `ad-pt-16x9` and `ad-en-16x9` (1920×1080), and `ad-pt-9x16` and `ad-en-9x16` (1080×1920), at 900 frames. The six
+  15 s ids are `ad-pt-4x5-15s` and `ad-en-4x5-15s` (1080×1350), `ad-pt-9x16-15s` and `ad-en-9x16-15s` (1080×1920),
+  and `ad-pt-16x9-15s` and `ad-en-16x9-15s` (1920×1080), at 448 frames. All run at 30 fps. The language, the format
+  and the length are the only props. `COPY` is typed `Record<Lang, AdCopy>`, so a missing string fails `tsc`.
+- **One clock per length.** Every scene reads the absolute frame (no `<Sequence>`) and takes its frames from the
+  length's timeline (`video/src/timelines.ts`, "Lengths" below). `Ad.tsx` cross-fades three layers (Opening, Demo and
+  end card: 0-210, 198-705 and 693-900 in the 30 s; 0-150, 138-336 and 324-448 in the 15 s) and drifts the whole frame
+  from scale 1 to 1.03. The tap positions in `Demo.tsx` (`TAPS`) are computed from the same constants that place the
+  buttons, and `moments(timeline)` there derives what each tap sets off, such as the reply posting 4 frames after the
+  Post tap. The only `<Sequence>`s are the sound's (`Soundtrack.tsx`, `layout="none"`): they time audio and draw
+  nothing.
+- **The gold node** (`YouNode.tsx`) is one layer above every scene. It lights the constellation, taps through the mock
+  at `TAPS` (plus the stage origin) and flies into the logo's node (`logoNode(layout)` in `EndCard.tsx`). On the gold
+  submit button it gets a dark edge and a dark tap ring, so that tap stays visible. The end card reveals only the L of
+  `landing/components/LogoMark.tsx` (imported unchanged), so the node that lands is the logo's node.
+- **Fixed layout.** Every box in the mock has a fixed size, so the taps land on the same pixels in both languages and
+  on the same stage pixels in every format. A longer label ellipsizes, as it does in the app, instead of moving a
+  button.
+- **Fonts.** `brand.ts` loads Cormorant Garamond 600 and DM Sans from the app's `@fontsource` packages with
+  `@remotion/fonts`, which holds every frame until the font is ready and fails the render if it can't load. `→` and
+  `↗` (missing from the latin subset) and the emoji come from the system font, Segoe UI Emoji on Windows.
+  `video/remotion.config.ts` gives bundled files hashed names in the Studio too, as renders already do: pnpm keeps the
+  font files in the repo root's `node_modules`, and the Studio's default path-based names pointed outside its server,
+  which answered with an HTML page instead of the font.
+
+### Lengths
+
+The ad comes in two lengths: the 30 s it was designed with (`30s`, 900 frames) and the 15 s cut (`15s`, 448
+frames). `video/src/timelines.ts` holds a `Timeline` per length: the composition's frames, the two cuts, when each
+text enters and starts leaving, when the node lights up, pulses, sinks and jumps, when it sets off for a tap and how
+long it travels, the cards, the taps, the typing and the end card's entrances. Positions stay in `layouts.ts` and
+`Demo.tsx`, and movements (how long a rise, a tap or the flight takes) in the scenes and the node. The 15 s cut's
+design, holds and music:
+[`docs/superpowers/specs/2026-09-29-promo-meta-design.md`](superpowers/specs/2026-09-29-promo-meta-design.md).
+
+- **The same story, shorter.** The 15 s tells the same story with the same five taps and drops two texts: the feed
+  caption (the cards rise under the draft caption instead) and the handoff's second sentence ("Nothing is
+  automated."). Its cuts fall at frames 150 and 336 instead of 210 and 705.
+- **448 frames, not 450.** An MP4 of 448 frames lasts 14.997 s, since its AAC track runs a little past the video's
+  14.933 s; 450 frames would last 15.06 s, which Meta's Ads Manager shows as 15.1.
+- **Faster moves.** The node leaves 12 frames before each tap and travels for 8 (24 and 18 in the 30 s), and the AI
+  types its draft in 24 frames instead of 50. The flight into the logo takes 50 frames in both.
+- **Tight holds.** Each text stays whole on screen for less time than in the 30 s (in parentheses), PT before EN where
+  they differ: the question 0.4 s (1.3), the promise 0.6 and 0.5 s (1.7), the draft caption 1.8 and 2.0 s (3.6), the
+  handoff's sentence 1.2 and 1.3 s (1.7), the posted reply 0.5 s (2.1) and the fine print 1.5 s (3.3). If one reads
+  rushed, the fix is numbers in `timelines.ts`, not code.
+- **One source for the sound too.** `video/scripts/soundtrack.mjs` imports `timelines.ts` for the frame rate, the
+  lengths and the cuts, and Node strips its types on the way in. That is why the file imports nothing and keeps to
+  syntax Node can strip (types, annotations and `as const`).
+
+### Formats
+
+Each composition is one language in one format and one length. `video/src/layouts.ts` holds a `Layout` per format:
+the frame, the safe zone, the mock's stage origin, the node's home, the boxes and font sizes of the Opening, the
+captions and the end card, and the number of dots and gray cards. A layout serves both lengths: the 15 s 9:16 and
+16:9 use the `9x16` and `16x9` entries unchanged. The `1x1` entry holds the square's original numbers, and the square
+renders pixel for pixel as before. Design, the numbers and the platform readings behind each zone:
+[`docs/superpowers/specs/2026-09-28-promo-formats-design.md`](superpowers/specs/2026-09-28-promo-formats-design.md);
+the 4:5's are in the Meta spec (linked in "Lengths" above).
+
+| Format | Frame       | For                                                                  | Safe zone (text and taps) |
+|--------|-------------|----------------------------------------------------------------------|---------------------------|
+| `1x1`  | 1080 × 1080 | LinkedIn feed (30 s)                                                 | x 90–990, y 90–990        |
+| `16x9` | 1920 × 1080 | YouTube in-stream (30 s, 15 s); Facebook in-stream (15 s)            | x 140–1780, y 90–860      |
+| `9x16` | 1080 × 1920 | YouTube Shorts, TikTok (30 s); Instagram Feed, Reels, Stories (15 s) | x 120–960, y 270–1248     |
+| `4x5`  | 1080 × 1350 | Facebook Feed (15 s), rendered at 1440 × 1800                        | x 90–990, y 135–1215      |
+
+- **The stage.** The app mock draws in the square's 1080×1080 coordinates, on a stage placed at the format's origin:
+  (0, 0) in the square, (790, −160) in the 16:9 (on the right, raised), (0, 230) in the 9:16 and (0, 45) in the 4:5.
+  The taps keep their stage coordinates and the node adds the origin, so within a length the taps' timing, the node's
+  path over the mock and every sound are the same in every format.
+- **Text per format.** The 9:16 keeps the square's font sizes in an 820 px column (x 130–950), away from the side
+  icons, and narrows the end card to 740 px (x 170–910), so its fine print stays left of x 940 even with the camera
+  drift. The 16:9 puts the captions beside the mock, left-aligned at 80 px instead of 64, and uses bigger sizes in the
+  Opening and on the end card, since a phone held upright shrinks its 1920 px width more than the square's. The 4:5
+  keeps the square's sizes and 860 px column (x 110–970): its Opening, the node's home and the end card are the
+  square's moved down 135 px, into the frame's central square, and the mock and the caption only 45 px, so the caption
+  sits high (y 145–305) and the feed runs to the bottom edge. It's drawn at 1080×1350 and rendered at 4/3 as
+  1440×1800 (`render.mjs` passes `--scale`), so it's redrawn rather than upscaled.
+- **Dots.** The same seeded draw over the whole frame, kept within 960 px of the node so the first ring lights each
+  one fully: 40 in the square (the same dots as before), 82 in the 16:9, 70 in the 9:16 and 60 in the 4:5, which
+  keeps the square's and the 9:16's density of about one dot per 12,580 px² of free area. The far corners stay dark,
+  though in the 16:9 a few dots, decoration only, fall under YouTube's "Ad" label and Skip button.
+- **The safe-zone check.** When `layouts.ts` loads, it checks that every text box, the mock's text area, the node's
+  home and every stop on its path under every timeline (`nodeStops(layout, timeline)` in `YouNode.tsx`) sit inside
+  the format's safe zone. A failure throws with the format and the element, such as
+  `4x5: caption (x 110–970, y 125–285) is outside the safe zone (x 90–990, y 135–1215)`, and stops the Studio,
+  `remotion compositions` and every render before a frame is drawn. A stop is named by its frame and length, such as
+  `node stop at frame 156 of the 15s`, the frame the node sets off for it. It leaves out the camera drift, the text
+  inside each box (the stills show the wraps), the flight's arc and the gray cards.
+- **What the zones don't clear.** The stricter third-party readings reach into the layouts: TikTok's icon rail over
+  the right ends of the 9:16's hook, EN promise, second card, comment box, LinkedIn reply and fine print; the right
+  140 px of the AdCheckLab template over the 9:16 mock's border and padding (x 940–970, to about 980 with the camera
+  drift) and up to 6 px of its right-aligned buttons and links; Meta's bottom-right corner over Submit's bottom edge and
+  the second card's footer; Shorts' 380 px top over the first line of a two-line caption; YouTube's
+  "center 80%, top 70%" over the 16:9's caption and mock edges, the second card's footer, the bottom of its comment box,
+  the hook's and the promise's second lines and the fine print; and YouTube's risky bottom 25% over the fine print's
+  second line. Once the comment box opens, it pushes the second card below the zone in the square, the 16:9 and the
+  9:16. No tap point falls in any of them, and Henriko approved them on overlay stills that draw every reading. The
+  Instagram Feed may crop the 15 s 9:16 to its centered 4:5 (y 285–1635), which the check can't see since the zone
+  starts at y 270; on the stills that cuts only dots, the Opening's rings and the gray cards. A feed that crops the 4:5
+  to a square keeps y 135–1215, the zone's own height. Measured on the stills, a two-line caption starts 21 px below
+  the crop's top edge, and 17 px at its closest (frames 310 to 324; the drift peaks after the caption is gone). The
+  mock's text ends at y 1017, except in the pushed second card: in PT its post wraps to two lines, and the second,
+  "SaaS:", crosses the crop's bottom edge by 6 px for about 2 s, until the dim lifts it. The full 4:5 cuts nothing, and
+  Henriko accepted it on 2026-09-30. In the 15 s 16:9 the same YouTube readings fall over the same elements, as its
+  stills show; Meta publishes no safe zone for Facebook in-stream ads.
+
+### Sound
+
+`video/scripts/soundtrack.mjs`, a Node script with no dependencies, synthesizes a music file per length and every
+effect into `video/public/audio/*.wav` (48 kHz, 16-bit, stereo). Both lengths share the effects. The WAVs are
+gitignored: `pnpm dev:video` and `pnpm render:video` rebuild them first, and `pnpm --filter video audio` runs the
+script alone. Before writing, it checks itself (each music file is exactly its timeline's length, no sample is `NaN`
+or infinite, no file peaks over its level), so a failure stops the Studio or the render before it starts. Its noise is
+seeded, so every run writes the same bytes.
+
+- **Music** (`music-30s.wav` and `music-15s.wav`): D major at about 116 BPM, so both cuts (210 and 705 in the 30 s,
+  150 and 336 in the 15 s) fall on a bar's first beat. A warm pad on Dsus2 rises from silence under the hook and opens
+  up through the promise, and a riser leads into the Demo. There the beat enters: kick, clap, hats, a pulsing bass and
+  a pluck arpeggio. The 30 s plays D, Bm, G and A twice, the second pass fuller; its last bar breathes, and the end
+  card resolves on D over a low impact. The 15 s plays D, G and Asus4 resolving to A once, fuller from its second bar
+  (at 116.13 BPM, so 12 beats fill frames 150 to 336); it breathes at frame 305, right after the plim, lands on D over
+  the impact at the cut, pulses one bar and holds its final D from frame 398. Both fade out over the last 0.5 s.
+  `ARRANGEMENTS` at the top of the script holds each length's chords.
+- **Effects:** `video/src/Soundtrack.tsx` plays each file on the frame of the timeline moment that times its picture,
+  so a moved tap takes its sound along. The levels are baked into the files, so everything plays at volume 1 except
+  the shimmer, which fades out over its last 4 frames, and any effect still sounding in the ad's last 15 frames, which
+  fades out with the music. In the 15 s that is the land bell. In the 30 s each effect still gets Remotion's volume
+  filter (it plays until the ad ends, so its volume drops in the last 15 frames), but every effect has ended by frame
+  870, before the fade starts at 885, so the filter multiplies each sample that plays by exactly 1.0 and the 30 s
+  audio stays byte for byte as it was. The keys' gaps and variants come from Remotion's seeded `random()`, so every
+  render types the same.
+
+| 30 s frame(s)           | 15 s frame(s)           | Effect (`<name>.wav`)                                       | Reads                                 |
+|-------------------------|-------------------------|-------------------------------------------------------------|---------------------------------------|
+| 90                      | 64                      | `glow`: a slow-attack bell on A4 as the node lights up      | `opening.brighten`                    |
+| 96, 144                 | 70, 106                 | `ring-1`, `ring-3`: bells on D5 and A5                      | `opening.rings`                       |
+| 120                     | 88                      | `ring-2`: a bell on F#5 over the pad's third (F#3)          | `opening.rings`                       |
+| 222, 236, 250           | 138, 144, 150           | `card`: a muffled tick per card                             | `demo.cards`                          |
+| 372, 408, 525, 575, 605 | 168, 186, 234, 266, 284 | `tap`: a short, trackpad-like click                         | `demo.taps`                           |
+| 410-440                 | 188-200                 | `shimmer`: high bell grains (E, F#, A, B), getting denser   | `moments().generating`, `demo.typing` |
+| 440-490                 | 200-224                 | `key-1` to `key-3`: soft keys, 2 or 3 frames apart          | `demo.typing`                         |
+| 609                     | 288                     | `plim`: two bells, A5 then D6                               | `moments().posted`                    |
+| 700-750                 | 314-364                 | `glide`: a soft tone rising from D5 to D6, into the landing | `flight()`, `endCard.landed`          |
+| 750                     | 364                     | `land`: a high D bell (D6) over a soft D5                   | `endCard.landed`                      |
+| 758                     | 372                     | `pop`: a quick upward sweep as the CTA pill appears         | `endCard.cta`                         |
+
+- **Two numbers repeated by hand.** The script takes the frame rate, the lengths and the cuts from `timelines.ts`;
+  only `GLIDE_FRAMES` and `SHIMMER_SECONDS` at its top are repeated. The glide lasts exactly the flight
+  (`flight()` in `YouNode.tsx`, 50 frames in both lengths), and the shimmer lasts 1 s, which its `<Sequence>` cuts
+  where the typing starts (30 frames after `moments().generating` in the 30 s, 12 in the 15 s). Nothing checks them:
+  a glide longer than the flight is cut off at the landing, and a shorter one ends before it.
+- **Tuning.** The levels, the harmony and the brightness are constants at the top of the script (`MUSIC_PEAK_DB`,
+  `PEAK_DB`, `THIRD_DB`, `MIX_DB`, `CUTOFF`, `CHORDS`, and each arrangement's `driveDb`, how hard its music hits the
+  limiter). On 2026-09-26 the final 30 s MP4s measured about −15.5 LUFS integrated with a true peak of about
+  −1.9 dBTP, and every effect started within 16 samples (0.3 ms) of its frame; on 2026-09-30 the 15 s MP4s measured
+  about −15.2 LUFS with a true peak of about −2.5 dBTP. After a change, re-render and hold the MP4s to the same targets
+  (−15 ± 1 LUFS, a true peak at or below −1 dBTP) with any BS.1770 meter, such as a full ffmpeg's `ebur128=peak=true`
+  filter; Remotion's bundled ffmpeg has no filters.
+
+### Commands
+
+```bash
+pnpm dev:video        # the WAVs, then Remotion Studio on http://localhost:3100: pick a composition, scrub, play
+pnpm render:video     # the WAVs, then all of them to video/out/<id>.mp4: H.264 (CRF 18) + AAC, 48 kHz stereo
+pnpm render:video ad-pt-9x16 ad-en-9x16                                                  # the WAVs, then only these ids
+pnpm render:video ad-pt-4x5-15s ad-en-4x5-15s ad-pt-9x16-15s ad-en-9x16-15s              # the WAVs, then these four
+pnpm --filter video audio                                                                # only the WAVs + self-check
+pnpm --filter video exec remotion still src/index.ts ad-pt out/thumb-pt.png --frame=80   # a still, e.g. a thumbnail
+pnpm --filter video exec remotion ffprobe out/ad-pt.mp4                                  # size, fps, length, streams
+```
+
+The first render downloads Chrome Headless Shell (~100 MB) once; later renders run offline. All twelve take about 10
+minutes on the dev PC, the six 15 s ones about 4. `pnpm render:video` runs `video/scripts/render.mjs`, which asks
+Remotion for the ids (`remotion compositions`, about 10 s, so `Root.tsx` stays the only list; the ids are the last
+line of its output, after any note about Remotion's cache or the Chrome download) and renders them one after another
+with the same flags, adding `--scale=1.3333333333333333` for a `-4x5` id; an unknown id stops it before any render.
+`video/out/` and `video/public/audio/` are gitignored. `video/` has no unit tests: the logic is timing and layout, so
+`tsc`, ESLint, the safe-zone check in `layouts.ts`, a review of the stills in every format and length and the
+soundtrack's self-check are the checks. To prove a change left an ad unchanged, compare stills and audio-only renders
+(`--codec=wav --enforce-audio-track`), never MP4s, which aren't reproducible: two renders of the same frames differed
+by up to 44 luma levels on edges.
+
+```mermaid
+flowchart LR
+    L["landing/i18n/dictionaries/{pt,en}.json<br/>hero.*"] --> C["video/src/copy.ts<br/>COPY per language"]
+    A["app/src/i18n/locales/{pt,en}.json<br/>comment.*, feed.*"] --> C
+    C --> Ad["Ad.tsx<br/>Opening, Demo, EndCard + YouNode"]
+    TL["timelines.ts<br/>30 s + 15 s: every frame the ad times"] --> Ad
+    LY["layouts.ts<br/>1x1, 16x9, 9x16, 4x5 + safe-zone check"] --> Ad
+    G["landing/components/LogoMark.tsx"] --> Ad
+    P["scripts/soundtrack.mjs<br/>synth + self-check"] --> W["public/audio/*.wav<br/>(gitignored)"]
+    TL --> P
+    W --> ST["Soundtrack.tsx<br/>music + effects on their frames"]
+    ST --> Ad
+    Ad --> R["Root.tsx<br/>12 compositions: 6 cuts in pt and en"]
+    R --> S["pnpm dev:video<br/>Studio preview"]
+    R --> V["pnpm render:video → scripts/render.mjs<br/>video/out/ad-*.mp4 (twelve files)"]
+    R --> I["remotion still, frames 124 and 176 at 4/3<br/>video/out/images/*.png (six image ads)"]
+    V --> M["LinkedIn Campaign Manager<br/>(30 s square, manual upload)"]
+    V --> YT["Google Ads for YouTube<br/>(30 s and 15 s 16:9 in-stream, 30 s 9:16 Shorts, manual upload)"]
+    V --> MA["Meta Ads Manager<br/>(15 s: 4:5 Facebook Feed, 9:16 Instagram, 16:9 Facebook in-stream, manual upload)"]
+    I --> MA
+    V --> TT["TikTok Ads Manager<br/>(30 s 9:16, manual upload)"]
+```
+
+### Image ads
+
+In September 2026 Meta's Ads Manager recommended mixing image and video ads in each ad set, so six stills of the
+promise double as image ads, at a frame where the gold node has lit and both lines are in. They render at 4/3, like the
+4:5 video, into the gitignored `video/out/images/`, and go by hand into a copy of each language's video ad:
+
+| File                         | Composition and frame     | Size        | For                          |
+|------------------------------|---------------------------|-------------|------------------------------|
+| `ad-<lang>-4x5-promise.png`  | `ad-<lang>-4x5-15s`, 124  | 1440 × 1800 | Facebook and Instagram feeds |
+| `ad-<lang>-9x16-promise.png` | `ad-<lang>-9x16-15s`, 124 | 1440 × 2560 | Stories and Reels            |
+| `ad-<lang>-1x1-promise.png`  | `ad-<lang>`, 176          | 1440 × 1440 | Facebook right column        |
+
+```bash
+pnpm --filter video exec remotion still src/index.ts ad-pt-4x5-15s out/images/ad-pt-4x5-promise.png \
+  --frame=124 --scale=1.3333333333333333    # the others: swap the id, the file and the frame from the table
+```
+
+The square comes from the 30 s, since the 15 s has no square. The faint arc below the text in the 15 s images is the
+Opening's last ring, still spreading; later frames of the promise show it too, and the square's frame 176 comes after
+its rings. The text is landing `hero.headlineLine1` and `hero.headlineLine2`, as in the video.
+
+### Changing the ad
+
+- **Copy.** Nothing re-renders on its own: after a change to landing `hero.*` or app `comment.*` / `feed.*`,
+  re-render and look at the stills in every format and length before uploading, since a longer string can wrap onto
+  one more line, and each format wraps differently. The tight fits today: the PT feed caption in the 16:9 (663 px in
+  680), the PT promise's first line in the 9:16 (802 in 820) and the EN fine print in the 9:16 (about 1,512 px, 32
+  more than two 740 px lines hold, so it takes 3; 2 or 3 both fit). The PT fine print's second line in the 16:9 ends at
+  x 1596 by frame 880, 4 px left of where the overlay stills draw Skip (x 1600–1920, y 800–900), and the check can't see
+  it: the zone runs to x 1780 and y 860. The 4:5 wraps like the square, with the same sizes in the same 860 px column:
+  on its stills every text takes the square's line count, and the EN fine print's first line nearly fills the column,
+  as in the square. The render throws `Expected two sentences in "…"` if `hero.subLine2` stops being two sentences.
+  A change to `hero.headlineLine1` or `headlineLine2` also needs the six image ads re-rendered ("Image ads" above).
+- **A format's layout.** Its numbers are in `video/src/layouts.ts`. The check at load names any text box, tap or stop
+  on the node's path that leaves the safe zone; the stills show the rest (wraps, the camera drift, the gray cards).
+  `pnpm render:video <id> …` re-renders only the ids given.
+- **Timing.** Every frame the ad times is in `video/src/timelines.ts`, one timeline per length; the tap positions stay
+  in `Demo.tsx` (`TAPS`). The node follows the taps, so moving a tap moves the node with it, and every sound effect
+  follows its moment the same way; the music follows the cuts ("Sound" above). The check at load re-checks the node's
+  path under every timeline, and the stills show whether a text still has time to be read. The Studio builds the music
+  only when it starts, so after changing a cut or `total`, restart `pnpm dev:video` to hear the new one; a render
+  always rebuilds it.
+- **Sound.** The effects follow their moments and the music its length's cuts on their own. The arrangement doesn't
+  stretch, though: each length's Demo bars fill the time between its cuts, so a cut that moves a lot changes the tempo
+  (`ARRANGEMENTS` in `video/scripts/soundtrack.mjs`). A new flight or shimmer length goes into `GLIDE_FRAMES` or
+  `SHIMMER_SECONDS` there ("Sound" above). To tune the sound, change the constants there and re-render. Keep the ad
+  working muted: LinkedIn autoplays without sound.
+- **Another length.** Add its name to `LENGTHS` and its timeline to `TIMELINES` in `timelines.ts`, its arrangement to
+  `ARRANGEMENTS` in `soundtrack.mjs` and its `[format, length]` pairs to `CUTS` in `Root.tsx`, which gives its ids a
+  `-<length>` suffix. `tsc` names a missing timeline or field, `soundtrack.mjs` throws on a length with no arrangement
+  before it writes a file, and the check at load names a node stop outside the zone.
+- **Another language.** Add it to `LANGS` and `COPY` in `copy.ts`; `tsc` then lists every missing string, and
+  `Root.tsx` registers the new language in every cut on its own.
+
+**License.** Remotion is free for individuals and for companies with up to 3 employees. Beyond that it needs a company
+license ([remotion.dev/license](https://www.remotion.dev/license)).
+
+---
+
 ## 16. Environment Variables
 
 Canonical inventory (built by grepping every `process.env.*` / `import.meta.env.*` site). `.env*`
@@ -7890,7 +8204,7 @@ plus the sweep's query), against the free plan's 1,000,000.
 
 ### Monorepo & scripts (root `package.json`)
 
-pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root scripts orchestrate via
+pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`, `video`. Root scripts orchestrate via
 `pnpm --filter`:
 
 | Script                                         | Does                                                                                |
@@ -7899,6 +8213,7 @@ pnpm workspaces (`pnpm-workspace.yaml`): `landing`, `app`, `convex`. Root script
 | `build:landing` / `build:app` / `build:convex` | `next build` / `tsc && vite build` / `convex deploy`.                               |
 | `lint` / `lint:fix`                            | `eslint . --max-warnings 0` (zero warnings tolerated) / `--fix`.                    |
 | `format` / `format:check`                      | Prettier write / check.                                                             |
+| `dev:video` / `render:video`                   | Build the WAVs, then Studio on port 3100 / render all MP4s or given ids (§15A).     |
 
 **Backend dependency version (plan 024, 2026-09-10).** `convex` is pinned `^1.45.0` in all three
 manifests (`package.json`, `app/package.json`, `convex/package.json`); the lockfile resolves a single
@@ -7910,7 +8225,7 @@ is a TypeScript error, and a missing `v.string()` var fails the deploy. See
 ### Lint / format / TS
 
 - **ESLint 9** flat config across all workspaces; `@typescript-eslint/no-explicit-any` is a **warn**
-  (and `--max-warnings 0` makes any `any` fail CI), off in tests; React rules for `app/`+`landing/`;
+  (and `--max-warnings 0` makes any `any` fail CI), off in tests; React rules for `app/`+`landing/`+`video/`;
   `no-console` off in `convex/`. Ignores `_generated`, `convex-mocks`, config files, agent dirs.
 - **Prettier:** no semicolons, single quotes, `arrowParens: avoid`, no trailing commas, 120 cols,
   `singleAttributePerLine`, `prettier-plugin-tailwindcss`.
@@ -7963,8 +8278,10 @@ is a TypeScript error, and a missing `v.string()` var fails the deploy. See
 - **Landing:** `landing/vitest.config.ts` maps `@` → the landing root; tests cover the dictionary key/placeholder
   parity, middleware locale/host redirects, trial helpers, and `lib/seo.ts` `pageMetadata` (per-locale canonical,
   hreflang, OG locale, cleared keywords). Run: `pnpm --filter landing test`.
-- **All:** `pnpm -r test` (every workspace now declares a `test` script); `pnpm verify` additionally runs
-  `pnpm --filter convex test:integration` after the recursive unit run.
+- **Video:** no unit tests (the logic is timing and layout); `tsc`, ESLint, the safe-zone check in `layouts.ts`, the
+  reviewed stills and the soundtrack script's self-check are the checks (§15A).
+- **All:** `pnpm -r test` (every workspace except `video/` declares a `test` script, and pnpm skips a package without
+  one); `pnpm verify` additionally runs `pnpm --filter convex test:integration` after the recursive unit run.
 - **CI/deploy:** no `.github/` workflows — deploys run via **Cloudflare Workers Builds** (Git push-to-`master`:
   landing = `opennextjs-cloudflare build`/`deploy`, app = `vite build` + `wrangler deploy`); Convex via
   `npx convex deploy`. New deploy config: `app/wrangler.jsonc`, `landing/wrangler.jsonc`, `landing/open-next.config.ts`,
@@ -8121,6 +8438,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Design tokens / theme / primitives (`app/src/index.css`, `app/src/lib/theme.ts`, `app/src/components/ThemeProvider.tsx`, `app/src/components/ui/`, `app/src/components/PageHeader.tsx`)                                                                                                                                                                                                                                                                                                                                             | [§14A Design System](#14a-design-system)                                                                                                                                                                                                                                                                                                 |
 | Cross-site theme/lang cookies (`app/src/lib/cookies.ts`, `app/src/lib/theme.ts`, `app/src/i18n/index.ts`, `landing/lib/cookies.ts`, `landing/lib/theme.ts`, `landing/app/[lang]/layout.tsx`, `landing/middleware.ts`, `landing/components/ThemeToggle.tsx`)                                                                                                                                                                                                                                                                         | [§14B Cross-site Theme & Language Persistence](#14b-cross-site-theme--language-persistence)                                                                                                                                                                                                                                              |
 | Landing (`landing/**`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | [§15](#15-frontend--landing-site-landing)                                                                                                                                                                                                                                                                                                |
+| Promo video (`video/**`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [§15A](#15a-promotional-video-video)                                                                                                                                                                                                                                                                                                     |
 | Landing SEO/robots/sitemap/structured data (`landing/lib/site.ts`, `landing/lib/seo.ts`, `landing/lib/aiFiles.ts`, `landing/lib/discovery.ts`, `landing/next.config.js` `Link` header, `landing/app/robots.txt/route.ts`, `landing/app/sitemap.ts`, `landing/app/[lang]/linkedin-ssi/*`, `landing/app/{llms.txt,llms-full.txt,pricing.md,auth.md,openapi.json}/route.ts`, `landing/app/.well-known/api-catalog/route.ts`, `landing/components/{StructuredData,Positioning}.tsx`, `landing/i18n/dictionaries/*`, `landing/public/*`) | [§15](#15-frontend--landing-site-landing) "SEO & AI discoverability"                                                                                                                                                                                                                                                                     |
 | Any `process.env` / `import.meta.env` usage                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | [§16 Environment Variables](#16-environment-variables)                                                                                                                                                                                                                                                                                   |
 | Observability/error handling (`app/src/components/ErrorBoundary.tsx`, `convex/lib/scrubError.ts`, backend `console.error` seams)                                                                                                                                                                                                                                                                                                                                                                                                    | [§17 Observability & Error Monitoring](#17-security-posture), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                 |
@@ -8133,6 +8451,92 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑09‑30 (Promo image ads). **Six stills of the promo ad's promise now double as Meta image ads, in
+pt-BR and US English.** Ads Manager recommended mixing image and video ads in each ad set. Frame 124 of the 15 s 4:5
+and 9:16 and frame 176 of the 30 s square render at 4/3 with `remotion still` into the gitignored `video/out/images/`
+(PNGs of 1440×1800, 1440×2560 and 1440×1440, 1.3 to 2.3 MB). §15A "Image ads" lists the files, frames and command,
+and "Changing the ad" says a `hero.headlineLine1` or `headlineLine2` change needs them re-rendered. No code changed.
+Sections updated: §15A._
+
+---
+
+_Last updated: 2026‑09‑30 (Promo 16:9 at 15 s). **The promo ad's 15-second cut now also comes in 16:9, for Facebook and
+YouTube in-stream ads, in both languages.** Facebook in-stream plays only a video's first 15 s on desktop, so the 30 s
+16:9 would lose its end card there; YouTube takes either length. A new `['16x9', '15s']` cut in `Root.tsx` registers
+`ad-pt-16x9-15s` and `ad-en-16x9-15s` (1920×1080, 448 frames) on the unchanged `16x9` layout, and `render.mjs` no
+longer counts the ids in its usage comment. The ten earlier ids are unchanged, the safe-zone check passes, the stills
+show the 30 s 16:9's line counts and YouTube readings, the two MP4s last 14.997 s at about −15.2 LUFS with a true peak
+of about −2.5 dBTP, and the audio-only render is byte-identical to the 4:5's. No app, landing or Convex code changed.
+Gates: `pnpm typecheck`, `pnpm lint` and `pnpm format:check` clean; `pnpm -r test` not rerun, since no tested package
+changed. Sections updated: §3, §15A, §18._
+
+---
+
+_Last updated: 2026‑09‑30 (Promo for Meta). **The promo ad now has a 15-second cut for Meta, in 4:5 for the Facebook
+Feed and in 9:16 for the Instagram Feed, Reels and Stories, in both languages.** Meta's Ads Manager recommends at most
+15 s, and 448 frames make a 14.997 s MP4 (450 would show as 15.1). The new `video/src/timelines.ts` holds every frame
+the ad times, one timeline per length; the scenes, the gold node and the soundtrack read it, and
+`video/scripts/soundtrack.mjs` imports it to write one music file per length (`music-30s.wav`, `music-15s.wav`). The
+15 s keeps the story and drops the feed caption and "Nothing is automated.". The 4:5 layout keeps the square's sizes
+and column, with its texts in the central square (drawn at 1080×1350, rendered at 1440×1800 with `--scale`).
+`Root.tsx` registers ten compositions from a list of cuts, and `render.mjs` reads the ids from the last line of
+`remotion compositions`, which also stops it from taking a Remotion cache note for ids. The six 30 s ads are unchanged
+(222 stills pixel-identical, audio-only renders byte-identical), the four 15 s MP4s measure about −15.2 LUFS with a
+true peak of about −2.5 dBTP, and no app, landing or Convex code changed. Gates: `pnpm typecheck`, `pnpm lint` and
+`pnpm format:check` clean; `pnpm -r test` green and unchanged (app 700/700, convex 789/789, landing 75/75). Sections
+updated: §3, §4, §15A, §18._
+
+---
+
+_Last updated: 2026‑09‑29 (Meta placements). **On Meta, the promo ad's 9:16 now covers the feeds too, and the square
+no longer claims the Instagram and Facebook feeds.** Meta's ad setup accepted only 4:5 through 9:16 for Instagram and
+offered a video outside that range for Facebook only. The 9:16 files are exactly 1080×1920 with square pixels, and a
+feed that crops them to the centered 4:5 keeps every text, the mock and the node's path (stills of frames 150, 400,
+600 and 880). Docs only: no code, render or test changed. Sections updated: §15A._
+
+---
+
+_Last updated: 2026‑09‑28 (Promo formats). **The promo ad now also renders in 16:9 for YouTube in-stream ads and in
+9:16 for YouTube Shorts, Instagram Reels, Stories and TikTok, in both languages.** `video/src/layouts.ts` holds one
+layout per format (frame, safe zone, the mock's stage origin, text boxes and sizes, dots and gray cards) and checks
+at load that every text box, the mock's text area, the node's home and every stop on its path sit inside the
+format's safe zone. The app mock draws on a 1080×1080 stage at each format's origin, so the taps' timing, the node's
+path over the mock and the sound are unchanged; the Opening, the captions and the end card take their boxes and sizes
+from the layout. `Root.tsx` registers six compositions (`ad-pt`, `ad-en`, `ad-pt-16x9`, `ad-en-16x9`, `ad-pt-9x16`,
+`ad-en-9x16`), and the new `video/scripts/render.mjs` renders all of them, or only the ids given
+(`pnpm render:video ad-pt-9x16`). The square is pixel-identical to before (12 stills), all six audio tracks are
+byte-identical, and no app, landing or Convex code changed. Gates: `pnpm typecheck`, `pnpm lint` and `pnpm format:check`
+clean; `pnpm -r test` green and unchanged (app 700/700, convex 789/789, landing 75/75). Sections updated: §3, §4, §15A,
+§18._
+
+---
+
+_Last updated: 2026‑09‑26 (Promo audio). **The promo ad has sound: music and effects composed in code.**
+`video/scripts/soundtrack.mjs` (Node, no dependencies) synthesizes a calm D major track, a pad that opens up through
+the intro and a light beat from the feed cut to a resolution on the end card, plus 14 sound effects, and writes them
+to the gitignored `video/public/audio/` after a self-check; `pnpm dev:video` and `pnpm render:video` run it first, so
+a failed check stops them. `video/src/Soundtrack.tsx` plays the music from frame 0 and each effect on the frame of the
+constant that times its picture (`T`, `FLIGHT` and the new `CTA_AT` are now exported; no value changed, and the key
+stills are pixel-identical). Measured on the final MP4s: about −15.5 LUFS integrated, a true peak of about −1.9 dBTP,
+every effect on its frame, and identical PT and EN audio. No app, landing or Convex code changed. Gates:
+`pnpm typecheck`, `pnpm lint` and `pnpm format:check` clean; `pnpm -r test` green and unchanged (app 700/700, convex
+789/789, landing 75/75). Sections updated: §4, §15A, §18._
+
+---
+
+_Last updated: 2026‑09‑26 (Promo video). **A new `video/` workspace renders the 30-second LinkedIn feed ad in pt-BR
+and English.** Remotion `4.0.529` draws one composition twice (`ad-pt`, `ad-en`, 1080×1080, 30 fps, 900 frames) on a
+single global clock: the Opening (hook, then the promise over a constellation the node's rings light up), the Demo (the
+feed, the AI draft in the comment box, the handoff to a plain `linkedin.com` window) and the end card (logo, CTA, URL,
+trial fine print), with the gold "you" node as one layer above them that ends as the logo's node. Every string that
+exists elsewhere is imported from the landing (`hero.*`) and app (`comment.*`, `feed.*`) dictionaries; the two new
+captions and the fictional mock posts live in `video/src/copy.ts`. Renders go to the gitignored `video/out/`; nothing
+is deployed and no app, landing or Convex code changed. `video` joins `pnpm-workspace.yaml`, the ESLint React block
+and the root `typecheck`, with root scripts `dev:video` / `render:video`; `video/remotion.config.ts` makes the Studio
+load the fonts under pnpm. Gates: `pnpm typecheck`, `pnpm lint` and `pnpm format:check` clean; `pnpm -r test`
+green and unchanged (app 700/700, convex 789/789, landing 75/75; `video/` has no `test` script). Sections updated:
+§3, §4, §15A (new), §18, §21._
 
 _Last updated: 2026‑09‑26 (landing keywords). **The landing keyword lists use the words people actually search, and
 all three locales have 21 terms again.** An en-only addition (`better SSI`, `LinkedIn`, `LinkedIn Jobs`) had left en

@@ -1,5 +1,5 @@
 // eslint.config.js — root flat config for the entire monorepo
-// Applies to: app/ (Vite+React), convex/ (Node+TS), landing/ (Next.js+React)
+// Applies to: app/ (Vite+React), convex/ (Node+TS), landing/ (Next.js+React), video/ (Remotion+React)
 
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
@@ -56,9 +56,9 @@ export default tseslint.config(
     }
   },
 
-  // ─── React rules (app/ and landing/) ─────────────────────────────────────
+  // ─── React rules (app/, landing/ and video/) ─────────────────────────────
   {
-    files: ['app/src/**/*.{ts,tsx}', 'landing/**/*.{ts,tsx,js,jsx}'],
+    files: ['app/src/**/*.{ts,tsx}', 'landing/**/*.{ts,tsx,js,jsx}', 'video/src/**/*.{ts,tsx}'],
     plugins: {
       react: reactPlugin,
       'react-hooks': reactHooks

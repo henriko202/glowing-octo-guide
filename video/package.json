@@ -1,0 +1,25 @@
+{
+  "name": "video",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "audio": "node scripts/soundtrack.mjs",
+    "studio": "pnpm run audio && remotion studio src/index.ts --port=3100",
+    "render": "pnpm run audio && node scripts/render.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.2.8",
+    "@fontsource/cormorant-garamond": "^5.2.11",
+    "@remotion/cli": "4.0.529",
+    "@remotion/fonts": "4.0.529",
+    "lucide-react": "^1.20.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "typescript": "^5.9.3"
+  }
+}
