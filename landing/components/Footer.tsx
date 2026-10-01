@@ -24,6 +24,18 @@ export default function Footer({
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-cream-muted">
           <Link
+            href={`/${lang}/linkedin-ssi`}
+            className="transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+          >
+            {dict.ssiGuide}
+          </Link>
+          <Link
+            href={`/${lang}/linkedin-job-search`}
+            className="transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+          >
+            {dict.jobGuide}
+          </Link>
+          <Link
             href={`/${lang}/privacy`}
             className="transition-colors duration-300 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >

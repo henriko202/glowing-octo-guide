@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Dictionary } from '@/i18n/getDictionary'
 import en from '@/i18n/dictionaries/en.json'
+import ssiGuide from '@/app/[lang]/linkedin-ssi/content/en'
+import jobGuide from '@/app/[lang]/linkedin-job-search/content/en'
 import { llmsFullTxt, llmsTxt, pricingMarkdown } from './aiFiles'
 import { planPrice } from './trial'
 
@@ -28,6 +30,8 @@ describe('llmsTxt', () => {
     }
     expect(text).toContain('llms-full.txt')
     expect(text).toContain('pricing.md')
+    expect(text).toContain('/en/linkedin-ssi')
+    expect(text).toContain('/en/linkedin-job-search')
     expect(text).toContain(dict.positioning.closing)
   })
 })
@@ -48,6 +52,21 @@ describe('llmsFullTxt', () => {
     }
     for (const plan of dict.pricing.plans) {
       expect(text).toContain(`### ${plan.name}`)
+    }
+  })
+
+  it('carries both guides: the answer, every step, and every FAQ', () => {
+    const text = llmsFullTxt(dict)
+    for (const guide of [ssiGuide, jobGuide]) {
+      expect(text).toContain(`## ${guide.meta.title}`)
+      expect(text).toContain(guide.hero.intro)
+      for (const step of guide.improve.steps) {
+        expect(text).toContain(step.body)
+      }
+      for (const item of guide.faq.items) {
+        expect(text).toContain(`#### ${item.q}`)
+        expect(text).toContain(item.a)
+      }
     }
   })
 })

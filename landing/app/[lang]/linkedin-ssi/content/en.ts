@@ -17,7 +17,7 @@ const guide = {
     headline: 'What is LinkedIn SSI?',
     intro:
       'LinkedIn SSI, short for Social Selling Index, is a score from 0 to 100 that LinkedIn gives every member. It looks at four parts of how you use LinkedIn: your professional brand, the people you connect with, how you engage with posts, and the relationships you keep. LinkedIn updates it every day.',
-    updated: 'Last updated: September 2026'
+    updated: 'Last updated: October 2026'
   },
   pillars: {
     heading: 'The four areas LinkedIn scores',
@@ -92,6 +92,10 @@ const guide = {
       {
         q: 'Is the LinkedIn SSI still available?',
         a: 'Yes. The score still exists, and LinkedIn still updates it every day. Since August 2026, you need Sales Navigator to see it, so members without Sales Navigator can no longer check their number.'
+      },
+      {
+        q: 'How do I check my LinkedIn SSI?',
+        a: "Sign in to LinkedIn and open linkedin.com/sales/ssi. Since August 2026, the page only opens for accounts with Sales Navigator. If you don't have it, there's no other official place to see your score."
       },
       {
         q: 'How often does the SSI update?',

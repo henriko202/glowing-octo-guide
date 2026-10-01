@@ -4,12 +4,24 @@ import type { GuideContent } from './content/en'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
 
-const SSI_SOURCE_URL = 'https://business.linkedin.com/sales-solutions/social-selling'
+export type GuideSources = { line: string; links: { label: string; url: string }[] }
 
 const body = 'text-base leading-relaxed text-cream-muted'
 const sectionHeading = 'font-display text-2xl font-semibold text-cream md:text-3xl'
 
-export default function Guide({ guide, dict, lang }: { guide: GuideContent; dict: Dictionary; lang: Locale }) {
+// Shared by every guide route (/linkedin-ssi, /linkedin-job-search): the section keys keep the SSI
+// guide's names, but each one is only a slot (cards, paragraphs + sources, numbered steps, FAQ).
+export default function Guide({
+  guide,
+  sources,
+  dict,
+  lang
+}: {
+  guide: GuideContent
+  sources: GuideSources
+  dict: Dictionary
+  lang: Locale
+}) {
   return (
     <main className="bg-ink text-cream">
       <div className="mx-auto max-w-3xl px-6 pt-14 pb-20 md:pt-20">
@@ -56,15 +68,20 @@ export default function Guide({ guide, dict, lang }: { guide: GuideContent; dict
             </p>
           ))}
           <p className="mt-6 text-sm text-cream-muted">
-            {dict.ssiExplainer.sourceLine}{' '}
-            <a
-              href={SSI_SOURCE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-4 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
-            >
-              {dict.ssiExplainer.sourceLabel}
-            </a>
+            {sources.line}
+            {sources.links.map((link, i) => (
+              <span key={link.url}>
+                {i === 0 ? ' ' : ' · '}
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-4 hover:text-cream focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+                >
+                  {link.label}
+                </a>
+              </span>
+            ))}
           </p>
         </section>
 

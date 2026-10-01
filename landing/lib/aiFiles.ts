@@ -1,10 +1,14 @@
 import type { Dictionary } from '@/i18n/getDictionary'
 import { planPrice } from '@/lib/trial'
 import { CONTACT_EMAIL, SITE_URL } from '@/lib/site'
+import type { GuideContent } from '@/app/[lang]/linkedin-ssi/content/en'
+import ssiGuide from '@/app/[lang]/linkedin-ssi/content/en'
+import jobGuide from '@/app/[lang]/linkedin-job-search/content/en'
 
 // Builds the AI-agent-facing files (`/pricing.md`, `/llms.txt`, `/llms-full.txt`) from the same
-// sources the page uses — `planPrice()` for money and the English dictionary for
-// names/features/disclosures — so they cannot drift when the page copy or pricing changes.
+// sources the page uses — `planPrice()` for money, the English dictionary for
+// names/features/disclosures, and the English guide content — so they cannot drift when the page
+// copy or pricing changes.
 
 const money = (amount: number) => `$${amount}`
 const priceAmounts = (plan: Dictionary['pricing']['plans'][number]) =>
@@ -39,6 +43,34 @@ function positioningSection(dict: Dictionary) {
 function ssiSection(dict: Dictionary) {
   const pillars = dict.ssiExplainer.pillars.map((pillar, i) => `${i + 1}. ${pillar.title}`).join('\n')
   return `${dict.ssiExplainer.intro}\n\n${pillars}\n\nSince August 2026, LinkedIn's SSI page requires Sales Navigator. Link Into The SSI neither accesses nor predicts a member's SSI.`
+}
+
+// A whole guide page as one section of `/llms-full.txt`: the answer, the steps, and every FAQ.
+function guideSection(guide: GuideContent, path: string) {
+  const steps = guide.improve.steps.map((step, i) => `${i + 1}. **${step.title}.** ${step.body}`).join('\n')
+  const faq = guide.faq.items.map(item => `#### ${item.q}\n\n${item.a}`).join('\n\n')
+
+  return `## ${guide.meta.title}
+
+Page: ${SITE_URL}/en${path}
+
+${guide.hero.intro}
+
+${guide.scoring.paragraphs.join('\n\n')}
+
+### ${guide.improve.heading}
+
+${steps}
+
+${guide.improve.note}
+
+### ${guide.product.heading}
+
+${guide.product.body}
+
+### ${guide.faq.heading}
+
+${faq}`
 }
 
 function pricingDetails(dict: Dictionary, headingLevel = 2) {
@@ -92,6 +124,7 @@ function keyPages() {
     `[Pricing](${SITE_URL}/en#pricing)`,
     `[How it works](${SITE_URL}/en#how-it-works)`,
     `[What is LinkedIn SSI (guide)](${SITE_URL}/en/linkedin-ssi)`,
+    `[How to get a job on LinkedIn (guide)](${SITE_URL}/en/linkedin-job-search)`,
     `[FAQ](${SITE_URL}/en#faq)`,
     `[Pricing file (pricing.md)](${SITE_URL}/pricing.md)`
   ]
@@ -184,6 +217,10 @@ ${ssiSection(dict)}
 ## FAQ
 
 ${faq}
+
+${guideSection(ssiGuide, '/linkedin-ssi')}
+
+${guideSection(jobGuide, '/linkedin-job-search')}
 
 ## Key pages
 

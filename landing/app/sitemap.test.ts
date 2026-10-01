@@ -6,7 +6,11 @@ import { SITE_URL } from '@/lib/site'
 describe('sitemap', () => {
   it('lists only the indexable landing pages for every locale', () => {
     expect(sitemap().map(entry => entry.url)).toEqual(
-      i18n.locales.flatMap(locale => [`${SITE_URL}/${locale}`, `${SITE_URL}/${locale}/linkedin-ssi`])
+      i18n.locales.flatMap(locale => [
+        `${SITE_URL}/${locale}`,
+        `${SITE_URL}/${locale}/linkedin-ssi`,
+        `${SITE_URL}/${locale}/linkedin-job-search`
+      ])
     )
   })
 

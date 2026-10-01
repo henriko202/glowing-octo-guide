@@ -12,7 +12,7 @@ const guide: GuideContent = {
     headline: 'O que é o SSI do LinkedIn?',
     intro:
       'O SSI do LinkedIn, sigla de Social Selling Index, é uma nota de 0 a 100 que o LinkedIn dá a cada membro. Ela avalia quatro partes do seu uso do LinkedIn: sua marca profissional, as pessoas com quem você se conecta, como você interage com publicações e os relacionamentos que você mantém. O LinkedIn atualiza a nota todos os dias.',
-    updated: 'Última atualização: setembro de 2026'
+    updated: 'Última atualização: outubro de 2026'
   },
   pillars: {
     heading: 'As quatro áreas que o LinkedIn pontua',
@@ -87,6 +87,10 @@ const guide: GuideContent = {
       {
         q: 'O SSI do LinkedIn ainda existe?',
         a: 'Sim. A nota continua existindo, e o LinkedIn continua atualizando todos os dias. Desde agosto de 2026, você precisa do Sales Navigator para vê-la, então quem não tem o Sales Navigator não consegue mais consultar o número.'
+      },
+      {
+        q: 'Como ver meu SSI no LinkedIn?',
+        a: 'Entre no LinkedIn e abra linkedin.com/sales/ssi. Desde agosto de 2026, a página só abre para contas com Sales Navigator. Sem ele, não existe outro lugar oficial para ver sua nota.'
       },
       {
         q: 'Com que frequência o SSI é atualizado?',

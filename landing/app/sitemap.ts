@@ -7,7 +7,8 @@ import { SITE_URL } from '@/lib/site'
 // tag and invite Search Console "excluded by noindex" noise.
 const ROUTES = [
   { path: '', changeFrequency: 'weekly' as const, priority: 1 },
-  { path: '/linkedin-ssi', changeFrequency: 'monthly' as const, priority: 0.8 }
+  { path: '/linkedin-ssi', changeFrequency: 'monthly' as const, priority: 0.8 },
+  { path: '/linkedin-job-search', changeFrequency: 'monthly' as const, priority: 0.8 }
 ]
 
 export default function sitemap(): MetadataRoute.Sitemap {
