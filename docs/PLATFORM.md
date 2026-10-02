@@ -1308,7 +1308,8 @@ What to know before touching it:
 - **The order matters when switching.** (1) Add the new URL in the LinkedIn Developer Portal (Auth → Authorized
   redirect URLs) and keep the old one. (2) Deploy the app Worker, then check it:
   `curl -sI https://www.app.linkintothessi.com/auth/linkedin/callback` must answer 302 with a `location` on the Convex
-  host (200 means the old Worker is still serving the SPA). The hop is inert until LinkedIn uses it. (3) Set
+  host (200 means the old Worker is still serving the SPA). In Windows PowerShell type `curl.exe`, because `curl`
+  there is an alias of `Invoke-WebRequest` and rejects `-sI`. The hop is inert until LinkedIn uses it. (3) Set
   `LINKEDIN_REDIRECT_URI` on the production Convex deployment. With the URL unregistered, LinkedIn refuses every
   sign-in. With the Worker not deployed yet, the callback path serves the SPA, the sign-in loops, and each lap leaves
   an unused `code` in a page URL that the page's scripts can read. So step 2 is a security step, not only a working
@@ -8689,16 +8690,18 @@ is that the callback URL (a single-use code and the CSRF state) passes through i
 `docs/compliance/SUBPROCESSORS.md` and `DATA-INVENTORY.md` (Activity 11) now say. No policy copy change and no
 `POLICY_VERSION` bump. It takes effect after three manual steps, in this order: add the new URL in the LinkedIn
 Developer Portal and keep the old one, push so Cloudflare deploys the Worker, then set `LINKEDIN_REDIRECT_URI` on
-Convex prod. Setting it back is the rollback. A security review of the hop followed the same day. The Worker checks
-nothing on purpose: nothing in a callback request proves it came from LinkedIn, and Convex already refuses every
-request that lacks a `state` we issued and have not used, plus that browser's nonce cookie, before it asks LinkedIn
-anything. Five forged shapes, the `Set-Cookie` guard and a replayed callback are now pinned through the real router
-in `convex/integration/oauthCallback.test.ts` (7 tests). §7 and §17 also state the one limit LinkedIn's web flow
-leaves (no PKCE, no `nonce`, so an unused `code` is not tied to one browser), which is why the callback path must
-never serve a page and why the Worker must answer 302 before the variable changes. Also fixed: §18 said the repo had
-no CI workflow (`.github/workflows/ci.yml` runs `pnpm verify`), and the §16 port caveat named
-`LINKEDIN_REDIRECT_URI`, which has no port. Sections updated: §2 (Worker paragraph, topology chart, OAuth design
-note), §4, §7 (sequence chart, new "The callback hop" subsection), §16, §17, §18, §21._
+Convex prod. Setting it back is the rollback. All three were done on 2026‑10‑02 and checked from outside: LinkedIn
+accepts the new URL, the Worker answers 302, and a forged callback sent through the hop ends on `/auth/error`. A
+security review of the hop followed the same day. The Worker checks nothing on purpose: nothing in a callback request
+proves it came from LinkedIn, and Convex already refuses every request that lacks a `state` we issued and have not
+used, plus that browser's nonce cookie, before it asks LinkedIn anything. Five forged shapes, the `Set-Cookie` guard
+and a replayed callback are now pinned through the real router in `convex/integration/oauthCallback.test.ts`
+(7 tests). §7 and §17 also state the one limit LinkedIn's web flow leaves (no PKCE, no `nonce`, so an unused `code`
+is not tied to one browser), which is why the callback path must never serve a page and why the Worker must answer
+302 before the variable changes. Also fixed: §18 said the repo had no CI workflow (`.github/workflows/ci.yml` runs
+`pnpm verify`), and the §16 port caveat named `LINKEDIN_REDIRECT_URI`, which has no port. Sections updated: §2
+(Worker paragraph, topology chart, OAuth design note), §4, §7 (sequence chart, new "The callback hop" subsection),
+§16, §17, §18, §21._
 
 _Last updated: 2026‑10‑02 (Sign-in error logging). **Every failed sign-in now reaches Sentry with its cause, and a
 browser without `crypto.subtle` can sign in.** Sentry reported `Cannot read properties of undefined (reading
