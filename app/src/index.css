@@ -148,4 +148,10 @@
   [role='button']:not([aria-disabled='true']) {
     cursor: pointer;
   }
+  /* Fixed 16px box: without flex-shrink: 0 a checkbox beside a wrapping label gets squeezed. */
+  input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+  }
 }
