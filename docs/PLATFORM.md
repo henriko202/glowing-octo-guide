@@ -5145,7 +5145,22 @@ Imports `./i18n` (side‑effect init) → `./index.css` → mounts
 ### Routing & session handling (`App.tsx`)
 
 Declarative `react-router-dom` routes. The session token lives in **`sessionStorage`** (key
-`sessionToken`) — there's no React context/store; each page reads it directly. A `<ScrollToTop/>`
+`sessionToken`) — there's no React context/store; each page reads it directly.
+
+**A second tab takes the first one's session (2026-10-02).** `sessionStorage` is per tab, so a tab opened with
+ctrl/middle click starts empty: it looked signed out, `RequireAuth` sent it to `/auth/start`, LinkedIn re-authenticated
+it silently, and `AuthSuccessPage` landed it on `/feed` instead of the page that was clicked. `main.tsx` therefore
+awaits `joinSessionChannel()` (`lib/sessionHandoff.ts`) **before the first render**: every tab answers a
+`session-request` on the `session` `BroadcastChannel` with its own token, and a tab with no token asks once and waits
+up to **300 ms** for an answer, stores it in its own `sessionStorage`, then renders — on the route it was opened on,
+with no trip to LinkedIn. Nothing is persisted, so the token still dies with the last tab. It resolves at once for a
+tab that already holds a token (a reload), on the `/auth/*` routes (they never need a session), and in a browser
+without `BroadcastChannel`; with no sibling tab the wait runs out and `RequireAuth` starts the login as before, which
+still ends on `/feed`. The first sibling to answer wins, so two tabs signed in as different accounts (dev
+impersonation) make the new tab's account a coin toss. The per-tab `motdDismissed` memory is not handed over: a new
+tab shows a dismissed MOTD again.
+
+A `<ScrollToTop/>`
 sibling of `<Routes>` resets `window.scrollTo(0, 0)` on every pathname change (skipped when the URL carries an in-page
 `#anchor`) — the declarative router doesn't restore scroll on its own, and the app uses a page-scroll model (the window
 is the scroller; see AppShell), so without it a scrolled feed would carry its scroll into the next page.
@@ -5584,6 +5599,17 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
       not just implied by the status field.
         - **`ALREADY_SUBSCRIBED`.** When the server refuses a second live subscription (§8), `handleUpgrade` toasts
           `billing.alreadySubscribed` and opens the portal. The member sees a door, never the error prefix.
+        - **Busy until the page leaves (2026-10-02).** One state, `leavingFor` (`'portal'` or the clicked plan id),
+          covers all three Stripe exits (`handleUpgrade`, `handlePlanSwitch`, `handleManageSubscription`). While it
+          is set every Stripe button is disabled, the clicked plan button shows a spinner and `aria-busy`, and the
+          Manage buttons read `...`. It is cleared **only when no redirect follows** (an error, a scheduled downgrade,
+          an empty url): assigning `location.href` just starts the navigation, and the page stays alive for the
+          second or two Stripe takes to answer, so clearing it in a `finally` put the button back to normal while
+          the member was still waiting (and checkout had no busy state at all, so a second click opened a second
+          session). Same rule as `CancelInterstitial.go` and `MyPostsPage.handleBuyFeatured`. The one other reset
+          is a `pageshow` listener that clears it when `event.persisted` is true: a page restored from the
+          back/forward cache (Back from Stripe) comes back with its state intact, so the buttons would otherwise
+          stay disabled until a reload.
         - **The plan the visitor chose.** `targetPlan` calls the shared `resolveTargetPlan(searchParams)` helper
           (`lib/targetPlan.ts`, which also exports `PLAN_IDS`/`isPlanId` — the single validation source, reused by
           `CardGateDialog`/`CardGateBanner` for their own trial-CTA links, R04): `?plan=` → `sessionStorage.chosenPlan`
@@ -7716,7 +7742,9 @@ The codebase follows a consistent, defensible security model:
   callers have no per‑user key) to bound `oauthStates` growth, and every OAuth redirect sets `Cache-Control: no-store`
   so the code‑bearing success 302 is never cacheable.
 - **Sessions:** random UUID, **15‑day sliding TTL** (`SESSION_TTL_MS` — see [§7](#7-authentication--identity)), stored
-  in **`sessionStorage`** (cleared on tab close). The token **never travels in a URL**: it is returned over the Convex
+  in **`sessionStorage`** (cleared on tab close; a tab opened from another one receives the token over a same-origin
+  `BroadcastChannel`, never through storage that outlives the tabs — [§14](#14-frontend--authenticated-app-app) Routing & session
+  handling). The token **never travels in a URL**: it is returned over the Convex
   transport when the SPA redeems the callback's single‑use, 2‑minute login code with
   `sessions.redeemAuthCode({ code, verifier })`. The redirect fragment carries only `#code=…`, bound to a PKCE‑style
   `SHA‑256(verifier)` challenge minted at `/auth/start` and kept in `sessionStorage.oauthVerifier` — never sent to the

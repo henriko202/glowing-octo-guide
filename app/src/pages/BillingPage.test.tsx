@@ -1128,3 +1128,65 @@ describe('BillingPage status matrix', () => {
     await waitFor(() => expect(mockMutation).toHaveBeenCalledWith({ sessionToken: 'tok' }))
   })
 })
+
+// Assigning `location.href` only STARTS the navigation: the page stays alive for a second or two
+// while Stripe answers, so the button has to stay busy through the redirect, not just the action.
+// A hash url stands in for Stripe's: jsdom navigates to it without a "not implemented" error.
+describe('busy state while leaving for Stripe', () => {
+  it('marks the clicked checkout button busy and keeps it busy once the url is back', async () => {
+    mockCheckout.mockResolvedValueOnce({ url: '#stripe' })
+    renderPage()
+    const button = screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0]
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    await waitFor(() => expect(window.location.hash).toBe('#stripe'))
+    await act(async () => {})
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('frees the checkout button again when no redirect follows', async () => {
+    renderPage()
+    const button = screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0]
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    await waitFor(() => expect(button).toBeEnabled())
+  })
+
+  it('keeps the portal button busy once the url is back', async () => {
+    mockPortal.mockResolvedValueOnce({ url: '#portal' })
+    setUser({ subscriptionStatus: 'trialing' })
+    renderPage()
+    const button = screen.getByRole('button', { name: 'billing.manageSubscription' })
+    fireEvent.click(button)
+    await waitFor(() => expect(window.location.hash).toBe('#portal'))
+    await act(async () => {})
+    expect(button).toBeDisabled()
+  })
+
+  it('keeps the plan-switch button busy once the url is back', async () => {
+    mockSwitch.mockResolvedValueOnce({ url: '#switch' })
+    setUser({ subscriptionStatus: 'active', tier: 'starter' })
+    renderPage()
+    const button = screen.getByRole('button', { name: /billing\.switchPlan.*Pro/ })
+    fireEvent.click(button)
+    await waitFor(() => expect(window.location.hash).toBe('#switch'))
+    await act(async () => {})
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-busy', 'true')
+  })
+
+  // Back from Stripe out of the back/forward cache, the page comes back exactly as it was left.
+  it('frees the button when the page is restored from the back/forward cache, not on a plain pageshow', async () => {
+    mockCheckout.mockResolvedValueOnce({ url: '#stripe' })
+    renderPage()
+    const button = screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0]
+    fireEvent.click(button)
+    await waitFor(() => expect(window.location.hash).toBe('#stripe'))
+    act(() => void window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false })))
+    expect(button).toBeDisabled()
+    act(() => void window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })))
+    expect(button).toBeEnabled()
+  })
+})

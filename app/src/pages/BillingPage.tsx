@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
 import { TRIAL_INTERACTION_THRESHOLD, TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
@@ -67,7 +68,20 @@ export default function BillingPage() {
   const undoDowngrade = useAction(api.billingNode.undoScheduledDowngrade)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [resumeLoading, setResumeLoading] = useState(false)
-  const [portalLoading, setPortalLoading] = useState(false)
+  // What is on its way to Stripe: 'portal', or the plan whose button was clicked. It is cleared only
+  // when NO redirect follows — assigning `location.href` just starts the navigation, and the page
+  // stays alive (and clickable) for the second or two Stripe takes to answer.
+  const [leavingFor, setLeavingFor] = useState<string | null>(null)
+  const portalLoading = leavingFor !== null
+  // Back from Stripe through the browser's back/forward cache: the page is restored exactly as it
+  // was left, busy state included, so nothing would ever clear it. `persisted` is true only then.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setLeavingFor(null)
+    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [])
   const [searchParams, setSearchParams] = useSearchParams()
 
   // R07 — celebrate activation. Stripe redirects here as /billing?success=true. `justSubscribed`
@@ -305,6 +319,7 @@ export default function BillingPage() {
   })()
 
   async function handleUpgrade(planId: string, priceId: string) {
+    setLeavingFor(planId)
     try {
       if (!sessionToken) throw new Error(t('auth.notSignedIn'))
       // R18: the card-entry step, so the survival panel can tell a card-gate leak from an activation leak.
@@ -323,6 +338,7 @@ export default function BillingPage() {
         sessionStorage.removeItem('chosenInterval')
         // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
         window.location.href = result.url
+        return
       }
     } catch (err: unknown) {
       const message = friendlyError(err, String(err))
@@ -334,6 +350,7 @@ export default function BillingPage() {
       }
       toast(t('billing.checkoutFailed', { error: message }))
     }
+    setLeavingFor(null)
   }
 
   // Card holders switch plans in the portal; everyone else checks out.
@@ -352,16 +369,18 @@ export default function BillingPage() {
 
   async function handleManageSubscription() {
     if (!sessionToken) return
-    setPortalLoading(true)
+    setLeavingFor('portal')
     try {
       const result = await createPortal({ sessionToken })
-      // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
-      if (result?.url) window.location.href = result.url
+      if (result?.url) {
+        // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
+        window.location.href = result.url
+        return
+      }
     } catch (err: unknown) {
       toast(t('billing.portalFailed', { error: friendlyError(err, String(err)) }))
-    } finally {
-      setPortalLoading(false)
     }
+    setLeavingFor(null)
   }
 
   // Lands the member on Stripe's confirmation for the price on the button they clicked (R08, and the
@@ -373,27 +392,31 @@ export default function BillingPage() {
   // fix say it instead, because the portal cannot apply either one.
   async function handlePlanSwitch(priceId: string, planId: string) {
     if (!sessionToken) return
-    setPortalLoading(true)
+    setLeavingFor(planId)
     try {
       const result = await createPlanSwitch({ sessionToken, priceId })
-      // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
-      if (result?.url) window.location.href = result.url
-      else {
-        captureEvent('downgrade_scheduled', { from: me?.tier ?? 'starter', to: planId })
-        // Plan only, no date: pendingAt reaches this component a beat later, through the query.
-        toast(t('billing.pendingScheduled', { plan: t(`billing.plans.${planId}.name`) }))
+      if (result?.url) {
+        // eslint-disable-next-line react-hooks/immutability -- a browser redirect, not a React mutation
+        window.location.href = result.url
+        return
       }
+      captureEvent('downgrade_scheduled', { from: me?.tier ?? 'starter', to: planId })
+      // Plan only, no date: pendingAt reaches this component a beat later, through the query.
+      toast(t('billing.pendingScheduled', { plan: t(`billing.plans.${planId}.name`) }))
     } catch (err: unknown) {
       const message = friendlyError(err, String(err))
-      if (message.startsWith('PENDING_DOWNGRADE')) return void toast(t('billing.pendingUndoFirst'))
-      if (message.startsWith('CANCEL_PENDING')) return void toast(t('billing.pendingResumeFirst'))
+      if (message.startsWith('PENDING_DOWNGRADE')) toast(t('billing.pendingUndoFirst'))
+      else if (message.startsWith('CANCEL_PENDING')) toast(t('billing.pendingResumeFirst'))
       // The grid disables its buttons during a trial, so this only lands from a stale tab. Saying so
       // beats the portal home, which cannot change a trial's plan either.
-      if (message.startsWith('TRIAL_NO_SWITCH')) return void toast(t('billing.trialNoSwitch'))
-      await handleManageSubscription()
-    } finally {
-      setPortalLoading(false)
+      else if (message.startsWith('TRIAL_NO_SWITCH')) toast(t('billing.trialNoSwitch'))
+      else {
+        // The portal handler owns the busy state from here: it may be the one that redirects.
+        await handleManageSubscription()
+        return
+      }
     }
+    setLeavingFor(null)
   }
 
   async function handleResume() {
@@ -434,7 +457,14 @@ export default function BillingPage() {
       disabled={portalLoading}
       className={`mt-3 text-[13px] ${portalLoading ? 'cursor-wait' : 'cursor-pointer'}`}
     >
-      {portalLoading ? '...' : t('billing.manageSubscription')}
+      {portalLoading ? (
+        <Loader2
+          className="h-3.5 w-3.5 animate-spin"
+          aria-hidden="true"
+        />
+      ) : (
+        t('billing.manageSubscription')
+      )}
     </Button>
   )
 
@@ -484,7 +514,14 @@ export default function BillingPage() {
             disabled={portalLoading}
             className="mt-3 cursor-pointer text-[13px]"
           >
-            {portalLoading ? '...' : t('feed.cardGatePastDueCta')}
+            {portalLoading ? (
+              <Loader2
+                className="h-3.5 w-3.5 animate-spin"
+                aria-hidden="true"
+              />
+            ) : (
+              t('feed.cardGatePastDueCta')
+            )}
           </Button>
         </div>
       )}
@@ -534,7 +571,14 @@ export default function BillingPage() {
               disabled={portalLoading}
               className={`text-[13px] ${portalLoading ? 'cursor-wait' : 'cursor-pointer'}`}
             >
-              {portalLoading ? '...' : t('billing.manageSubscription')}
+              {portalLoading ? (
+                <Loader2
+                  className="h-3.5 w-3.5 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                t('billing.manageSubscription')
+              )}
             </Button>
             {subscriptionInfo.cancelAtPeriodEnd ? (
               <Button
@@ -543,7 +587,14 @@ export default function BillingPage() {
                 aria-busy={resumeLoading}
                 className="cursor-pointer text-[13px]"
               >
-                {resumeLoading ? '...' : t('billing.cancel.resume')}
+                {resumeLoading ? (
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  t('billing.cancel.resume')
+                )}
               </Button>
             ) : (
               <>
@@ -556,7 +607,14 @@ export default function BillingPage() {
                     aria-busy={resumeLoading}
                     className="cursor-pointer text-[13px]"
                   >
-                    {resumeLoading ? '...' : t('billing.pendingKeep', { plan: t(`billing.plans.${me?.tier}.name`) })}
+                    {resumeLoading ? (
+                      <Loader2
+                        className="h-3.5 w-3.5 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      t('billing.pendingKeep', { plan: t(`billing.plans.${me?.tier}.name`) })
+                    )}
                   </Button>
                 )}
                 <button
@@ -754,8 +812,15 @@ export default function BillingPage() {
                 <Button
                   onClick={() => priceId && handlePlanClick(planId, priceId)}
                   disabled={!priceId || portalLoading || isTrialing}
+                  aria-busy={leavingFor === planId}
                   className={`mt-auto w-full text-[13px] ${priceId && !isTrialing ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-60'}`}
                 >
+                  {leavingFor === planId && (
+                    <Loader2
+                      className="h-3.5 w-3.5 animate-spin"
+                      aria-hidden="true"
+                    />
+                  )}
                   {/* A trial cannot change plan (product rule, 2026-09-09) — convert early, cancel, or
                       let it run out. The member's own tier shows the "current plan" badge instead of
                       reaching this branch at all, so this labels the plans they are not on. */}

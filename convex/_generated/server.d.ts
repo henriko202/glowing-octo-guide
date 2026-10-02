@@ -10,16 +10,16 @@
 
 import {
   ActionBuilder,
-  GenericActionCtx,
-  GenericDatabaseReader,
-  GenericDatabaseWriter,
-  GenericMutationCtx,
-  GenericQueryCtx,
   HttpActionBuilder,
   MutationBuilder,
-  QueryBuilder
-} from 'convex/server'
-import type { DataModel } from './dataModel.js'
+  QueryBuilder,
+  GenericActionCtx,
+  GenericMutationCtx,
+  GenericQueryCtx,
+  GenericDatabaseReader,
+  GenericDatabaseWriter,
+} from "convex/server";
+import type { DataModel } from "./dataModel.js";
 
 /**
  * Typesafe environment variables.
