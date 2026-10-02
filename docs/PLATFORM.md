@@ -85,7 +85,7 @@ the internal tier id, negotiated limits, contact links, and prices are unchanged
 
 | Capability                          | Starter |               Growth                |     Pro     |       Contact (Custom)       |
 |-------------------------------------|:-------:|:-----------------------------------:|:-----------:|:----------------------------:|
-| Price                               | $10/mo  |               $15/mo                |   $50/mo    |            Custom            |
+| Price                               | $10/mo  |               $15/mo                |   $30/mo    |            Custom            |
 | Access shared feed                  |   ✓    |                 ✓                  |     ✓      |              ✓              |
 | 7‑day trial (card required)         |   ✓    | ✓ (tier chosen on landing, see §8) |     ✓      |              —               |
 | Feed filtered by industry + country |   ✗    |       ✓ (auto from profile)        | ✓ (custom) |         ✓ (custom)          |
@@ -1189,6 +1189,21 @@ malformed `state`, a missing cookie, a rejected state and a throw after the stat
 a member who had just canceled on LinkedIn was sent straight back to it. Each failure is also counted, best effort, in
 the sign-in funnel ([§12C](#12c-sign-in-funnel-metrics)).
 
+A `failed` redirect also names the exit it took, as `&cause=<token>`. The page never shows it; it reports it to Sentry
+(`AuthErrorPage`, [§14](#14-frontend--authenticated-app-app)), so one failed sign-in can be told apart from the next
+without the Convex logs. The start route's 400 (no valid `vc`) has no page to land on and stays a log line. A
+`linkedin_error` redirect also carries the code LinkedIn returned, as `&linkedin_error=<code>`, when it is a plain
+`/^[a-z_]{1,32}$/` token (it is a query value anyone can send); `error_description` is never passed on.
+
+| `cause`          | The callback exit                                       | Funnel count                                      |
+|------------------|---------------------------------------------------------|---------------------------------------------------|
+| `linkedin_error` | LinkedIn returned an `error` other than the two cancels | `linkedin_error`                                  |
+| `missing_code`   | no `code` parameter                                     | `rejected`                                        |
+| `bad_state`      | `state` missing or not a UUID                           | not counted                                       |
+| `lost_cookie`    | no `oauth_nonce_<state>` cookie came back               | `lost_cookie`, or `rejected` when the row expired |
+| `state_rejected` | `validateAndConsumeOAuthState` refused the state        | `rejected`                                        |
+| `callback_error` | a throw after that (also sent by `reportError`)         | `error`                                           |
+
 ```mermaid
 sequenceDiagram
     participant U as User (browser)
@@ -1207,15 +1222,15 @@ sequenceDiagram
     CV ->> DB: createOAuthState(state, browserNonce, challenge, +10min, plan?, interval?, ref?) · bumps started
     CV -->> U: 302 → LinkedIn authorize?scope=…&state<br/>Set-Cookie: oauth_nonce_<state> (HttpOnly; Secure; SameSite=Lax; 10min)
 U ->> LI: authenticate & consent
-Note over LI, CV: ?error=user_cancelled_* ⇒ recordOAuthFailure(denied) → APP_URL/auth/error?reason=denied<br/>any other ?error= ⇒ recordOAuthFailure(linkedin_error) → APP_URL/auth/error?reason=failed
+Note over LI, CV: ?error=user_cancelled_* ⇒ recordOAuthFailure(denied) → APP_URL/auth/error?reason=denied<br/>any other ?error= ⇒ recordOAuthFailure(linkedin_error) → APP_URL/auth/error?reason=failed&cause=linkedin_error
 LI -->> CV: 302 /auth/linkedin/callback?code&state (sends the oauth_nonce_<state> cookie)
 CV ->> CV: readCookie(oauth_nonce_<state>) — missing ⇒ reject
 CV ->> DB: validateAndConsumeOAuthState(state, browserNonce) → { valid, plan?, interval?, ref?, challenge }
 alt invalid / expired state, missing/mismatched nonce cookie, or missing challenge
 CV ->> DB: recordOAuthFailure(state, lost_cookie / rejected) — best effort, once per issued state
-CV -->> U: 302 → APP_URL/auth/error?reason=failed<br/>Set-Cookie: oauth_nonce_<state> cleared
+CV -->> U: 302 → APP_URL/auth/error?reason=failed&cause=lost_cookie / state_rejected<br/>Set-Cookie: oauth_nonce_<state> cleared
 else valid
-Note over CV: a throw from here on ⇒ recordOAuthError + 302 → APP_URL/auth/error?reason=failed
+Note over CV: a throw from here on ⇒ recordOAuthError + 302 → APP_URL/auth/error?reason=failed&cause=callback_error
 CV ->> LI: exchangeCodeForTokens(code)
 LI -->> CV: access_token, refresh_token, expires_in
 CV ->> LI: GET /v2/userinfo
@@ -1409,9 +1424,8 @@ default to `starter`. `contact` is admin‑assigned, not purchasable via Checkou
 The BillingPage exposes a **monthly / annual toggle**, seeded from the interval the member is already billed on
 (`getSubscriptionInfo.priceInterval`) and defaulting to annual for anyone without a subscription row; a `?interval=`
 link, the landing's stash, or a click always wins (§14). Annual pricing is 2 months free: Starter $100/yr · Growth
-$150/yr ·
-Pro $500/yr. The landing shows the annual price on every card and puts the monthly price behind a text link ("Prefer to pay monthly?") — the Good-Better-Best ladder is Starter $
-10 → Growth $15 → Pro $50, and Starter is the
+$150/yr · Pro $300/yr. The landing shows the annual price on every card and puts the monthly price behind a text link
+("Prefer to pay monthly?") — the Good-Better-Best ladder is Starter $10 → Growth $15 → Pro $30, and Starter is the
 decoy that makes Growth the obvious buy (backlog/revenue/R13).
 
 ### Featured post add-on (one-time Checkout, backlog/R17)
@@ -2673,6 +2687,21 @@ as
 > script now prints it at the moment of creation and downgrades later failures to warnings), so the secret has to be
 > revealed by hand in Developers → Webhooks.
 >
+> **Dev, Pro re-priced 2026-10-02.** The run created `price_1UM50YFPUrUP5vm67HDQ3UXM` ($30 monthly) and
+> `price_1UM50ZFPUrUP5vm68fXGdHbV` ($300 annual) under the existing Pro product. Read back the same day: both are active
+> at 3000 and 30000 cents, all four env copies name them, and the starter, growth and pro portal configurations list
+> them (6 / 4 / 2 prices under `expand`). The Pro pair of 2026-09-08 above stays active, and its monthly price is still
+> the product's `default_price`, which blocks archiving until the product is repointed.
+>
+> **Live, Pro re-priced 2026-10-02.** The same command with the live key created `price_1UM5LnFPUrUP5vm66PUfEkPC` ($30
+> monthly) and `price_1UM5LnFPUrUP5vm655Qi7Urq` ($300 annual). Read back the same day: the production deployment env
+> names both, `createCheckoutSession` accepts them and refuses the 2026-09-09 monthly id (`Invalid price ID`), and
+> production held no subscription, so nobody had to be moved. The Stripe objects themselves rest on the script's own
+> read-back: no live key exists on the development machine. The script archives nothing, so the Pro pair of 2026-09-09
+> stays active here too. The app's `VITE_STRIPE_PRO_*` copies are build-time: the production bundle still carried the
+> 2026-09-09 pair when this was written, so Pro checkout fails closed, never at the wrong price, until a build with the
+> new pair is live.
+>
 > **Production is the same command**, with `--key sk_live_…` and an explicit `--site https://<prod>.convex.site`. The
 > script is convergent — product matched by name, price by amount + interval + currency, webhook by url, portal by
 > `is_default` — so the products that already exist in live are **reused, never duplicated**, and nothing is ever
@@ -2742,6 +2771,7 @@ double up with ours, and downgrade proration), so treat this as required setup r
 | Trial-ending email        | Settings → Billing → Subscriptions and emails          | **OFF**                                                                                                                                                                                                                                                                                      | Toggle **Send a reminder email 7 days before a free trial ends**, under _Email notifications and customer management_. Ours handles it (`sendTrialEnding`, above). Both enabled = two warnings for one event.                                                                                                                                                                        |
 | Payment receipt           | Settings → Business → Customer emails                  | **ON**                                                                                                                                                                                                                                                                                       | A different page from the row above: under _Payments_, toggle **Successful payments**. The receipt for the first charge is Stripe's job; we send no receipt of our own.                                                                                                                                                                                                              |
 | Starter prices (R13)      | Products → Starter                                     | Create a **$10 monthly** and a **$100 annual** Price (2 months free) in every environment; repoint `STRIPE_STARTER_PRICE_ID` / `STRIPE_STARTER_ANNUAL_PRICE_ID` and the `VITE_STRIPE_STARTER_*` copies. `scripts/stripe-provision.mjs` does all of this in one run. ✅ test mode 2026-09-10. | The client's labels (`app/src/lib/planPrices.ts`, `landing/components/Pricing.tsx`) already say $10/$100.                                                                                                                                                                                                                                                                            |
+| Pro prices (2026-10-02)   | Products → Pro                                         | Create a **$30 monthly** and a **$300 annual** Price (2 months free) in every environment; repoint `STRIPE_PRO_PRICE_ID` / `STRIPE_PRO_ANNUAL_PRICE_ID` and the `VITE_STRIPE_PRO_*` copies. `scripts/stripe-provision.mjs` does all of this in one run. ✅ test mode and live 2026-10-02.    | The client's labels (`app/src/lib/planPrices.ts`, `landing/lib/trial.ts`) already say $30/$300, so the new ids must be in place before that code is deployed: until then checkout still charges $50/$500. The script never archives: retire the old Prices once the product's `default_price` is repointed. Production had no subscription on 2026-10-02, so nothing to migrate.     |
 | Featured post Price (R17) | Products → "Featured post"                             | One-time **$5** Price (not recurring) per environment; set `STRIPE_FEATURED_POST_PRICE_ID` in the Convex env. ✅ test mode 2026-09-10.                                                                                                                                                       | Never add it to the subscription price ids.                                                                                                                                                                                                                                                                                                                                          |
 | Webhook events            | Developers → Webhooks → `<convex site>/stripe/webhook` | `customer.subscription.created` / `.updated` / `.deleted`, **`customer.subscription.trial_will_end`**, `invoice.payment_failed`, `checkout.session.completed`                                                                                                                                | Six events, written by the script (`EVENTS`). Without `trial_will_end` subscribed the day-7 reminder never fires and the 7-day path charges unannounced. ✅ test mode 2026-09-09.                                                                                                                                                                                                    |
 
@@ -4594,10 +4624,12 @@ and returning members folded together, every failure reason folded into `failed`
 
 ### What the counters cannot tell
 
-- **The last hop has no failure event.** Between `/auth/success` and a session the app reports nothing, so a closed
+- **The last hop has no failure counter.** Between `/auth/success` and a session nothing is counted, so a closed
   tab or a code opened in another browser (no verifier) shows only as the gap between **Back from LinkedIn** and
   **Signed in**. A member who was already signed in is no longer part of that gap: since the 2026‑09‑26 change the
-  tab redeems the fresh code like any other, so the sign-in counts as `signed_in_returning`.
+  tab redeems the fresh code like any other, so the sign-in counts as `signed_in_returning`. Sentry does see the
+  part of the gap that reaches the error page, as `Sign-in failed: no_verifier`, `no_login_code` or `redeem_failed`
+  ([§14](#14-frontend--authenticated-app-app), AuthErrorPage); a closed tab still leaves nothing.
 - **Early days undercount.** Before that change reached the app, a tab that already held a session dropped the code
   without redeeming it, so a member who signed in again from the landing counted as **Back from LinkedIn** only. The
   counters themselves went live on 2026‑09‑26 (first `started` at 10:39 UTC), so the landing clicks of earlier days
@@ -4631,7 +4663,7 @@ flowchart TD
     GAP --> HAS{"tab already holds a session?"}
     HAS -->|"yes: keeps it"| FEED["/feed"]
     DEN --> EPD["/auth/error?reason=denied"]
-    LIE --> EPF["/auth/error?reason=failed"]
+    LIE --> EPF["/auth/error?reason=failed&cause=…<br/>reports Sign-in failed: cause to Sentry"]
     NC --> EPF
     REJ --> EPF
     LC --> EPF
@@ -5199,7 +5231,12 @@ sync with the compliance docs and live support inbox.
   PKCE verifier (kept in `sessionStorage.oauthVerifier`), derives its SHA‑256 challenge, and navigates to
   `${VITE_CONVEX_SITE}/auth/linkedin?vc=<challenge>` via `beginOAuthLogin` (`lib/oauthStart.ts`). A run‑once latch
   keeps StrictMode's double effect from overwriting the verifier with a challenge that isn't the one navigated to.
-  Renders only a spinner.
+  The challenge is hashed with WebCrypto (`crypto.subtle`); a browser that exposes no `crypto.subtle` (a non‑secure
+  context, some embedded browsers) gets the same SHA‑256 from a built‑in fallback in `oauthStart.ts`, because the
+  start route rejects a login without a challenge. If `beginOAuthLogin` still rejects (blocked `sessionStorage`, no
+  `crypto` at all), the page hands the error to Sentry (`captureException`) and navigates to
+  `/auth/error?reason=failed&cause=start_failed`; before 2026‑10‑02 the rejection was unhandled and the spinner never
+  ended. Otherwise it renders only a spinner.
 - **AuthSuccessPage** — the OAuth callback lands here with `#code`/`plan`/`interval`; the pre‑bundle inline script
   in `index.html` has already moved the code into `sessionStorage` (keys `oauthCode` / `chosenPlan` / `chosenInterval`)
   and scrubbed the fragment before this page runs. That script captures a `#code=` **only on this route**, also in a
@@ -5210,10 +5247,22 @@ sync with the compliance docs and live support inbox.
   ([§12C](#12c-sign-in-funnel-metrics)). It never redeems when the code or verifier is missing (a handed‑over code must
   not be burned for its owner). When the login cannot finish, missing code or verifier or a failed redeem, a tab that
   already holds a session keeps it (clears `signedOut`, `/feed`); any other tab fails closed to
-  `/auth/error?reason=failed` (`navigate(…, { replace: true })`). A run‑once latch keeps the single‑use code from
-  being redeemed twice under StrictMode.
+  `/auth/error?reason=failed&cause=…` (`navigate(…, { replace: true })`), with `cause` = `no_login_code` (nothing to
+  redeem), `no_verifier` (a code but no verifier: LinkedIn came back in a tab or browser other than the one that
+  started) or `redeem_failed`. A redeem that throws anything but a `ConvexError` (network, server) also goes to Sentry
+  as the error itself; a `ConvexError` is the mutation's answer (expired, used, mismatch). A run‑once latch keeps the
+  single‑use code from being redeemed twice under StrictMode.
 - **AuthErrorPage** (`/auth/error`, **public** — outside `RequireAuth`) — where every failed sign-in lands: the OAuth
-  callback's failure redirects (§7) and `AuthSuccessPage`'s two failure paths in a tab without a session.
+  callback's failure redirects (§7), `AuthStartPage`'s failed start and `AuthSuccessPage`'s failure paths in a tab
+  without a session. **It is the one place a failed sign-in is logged:** on mount, unless `reason=denied` (a cancel is
+  the member's answer, not a fault), it calls `captureMessage('Sign-in failed: <cause>', { 'signin.cause': <cause> })`
+  (`lib/observability/sentry.ts`, [§17](#17-security-posture)), so Sentry groups one issue per cause and the event
+  carries the browser, OS and replay of the failed attempt. `cause` is a URL parameter anyone can write, so only a
+  `/^[a-z_]{1,32}$/` token is passed on; anything else, or none, is reported as `unknown`. A `linkedin_error`
+  parameter that passes the same check is added to the message (`Sign-in failed: linkedin_error (<code>)`, so each
+  LinkedIn error is its own issue) and as the `signin.linkedin_error` tag; one that fails it is dropped. ponytail: a reload of the
+  page reports again, and a crafted link can spend Sentry quota; add a per-tab `sessionStorage` latch if either shows
+  up.
   `?reason=denied` renders
   `auth.error.deniedTitle` / `deniedBody` (the member canceled on LinkedIn, so nothing was shared); any other or no
   reason renders `failedTitle` / `failedBody`, which suggests opening the site in the usual browser rather than inside
@@ -6757,8 +6806,8 @@ content** (encodes the business rules):
   app's own verb ("Feature 1 post a month at the top of the feed"; pt/es "Destaque" / "Destaca"), so a member finds
   the same word on the **Feature** button in My Posts. The contact tier reads "Need higher limits? Custom plans start
   at …", echoing the app's own "Need higher limits?" line.
-  Monthly prices are Starter $10, Growth $15, and Pro $50, with annual prices at ten times monthly.
-  Since 2026‑09‑16 the annual card leads with the plan's monthly equivalent (`$8.33`, `$12.50`, `$41.67`) and the line
+  Monthly prices are Starter $10, Growth $15, and Pro $30, with annual prices at ten times monthly.
+  Since 2026‑09‑16 the annual card leads with the plan's monthly equivalent (`$8.33`, `$12.50`, `$25.00`) and the line
   under it states the charge and the saving (`$100 billed annually · 2 months free`); monthly mode leads with the
   monthly price and keeps the `2 months free if you pay annually` line. The renewal line under each CTA repeats the
   interval's total, so the amount charged after the trial is visible on the card in both intervals.
@@ -7533,7 +7582,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `STRIPE_PRO_PRICE_ID`            |              ✓ (billing)               | `lib/stripePrices.ts`                                                        | Monthly price id → `pro` tier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `STRIPE_STARTER_ANNUAL_PRICE_ID` |              ✓ (billing)               | `lib/stripePrices.ts`                                                        | Annual price id → `starter` tier ($100/yr). Create in Stripe Dashboard alongside the monthly price.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `STRIPE_GROWTH_ANNUAL_PRICE_ID`  |              ✓ (billing)               | `lib/stripePrices.ts`                                                        | Annual price id → `growth` tier ($150/yr).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `STRIPE_PRO_ANNUAL_PRICE_ID`     |              ✓ (billing)               | `lib/stripePrices.ts`                                                        | Annual price id → `pro` tier ($500/yr).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `STRIPE_PRO_ANNUAL_PRICE_ID`     |              ✓ (billing)               | `lib/stripePrices.ts`                                                        | Annual price id → `pro` tier ($300/yr).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `STRIPE_FEATURED_POST_PRICE_ID`  |             ✓ (R17 add-on)             | `lib/stripePrices.ts`                                                        | One-time $5 featured-post Price (backlog/R17). Not a tier; never in `ALLOWED_PRICE_IDS`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `STRIPE_SECRET_KEY`              |              ✓ (billing)               | `billingNode.ts`, `privacy/deletion.ts` + _(read by `@convex-dev/stripe`)_   | Stripe API secret — used directly in `billingNode.ts` for checkout + trial-end (and in `privacy/deletion.ts` to cancel subscriptions on a deletion request); also consumed by the Stripe component for customer/webhook ops. **Unset ⇒ `billingNode.ts:27` throws `'STRIPE_SECRET_KEY is not configured'`** on any checkout/portal/trial-end call.                                                                                                                                                                                                                                                                     |
 | `STRIPE_WEBHOOK_SECRET`          |              ✓ (billing)               | _(read by `@convex-dev/stripe`)_                                             | Verifies webhook signatures at `/stripe/webhook`. **Unset/mismatched ⇒ the signature check fails, the event is rejected, and subscriptions silently stop syncing** (Stripe retries/alerts on repeated 4xxs, but nothing in-app surfaces this to a user).                                                                                                                                                                                                                                                                                                                                                               |
@@ -7617,7 +7666,7 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 | `VITE_STRIPE_PRO_PRICE_ID`            |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Monthly price id for Pro checkout (missing → button disabled). Must match `STRIPE_PRO_PRICE_ID` in Convex.                                                                                             |
 | `VITE_STRIPE_STARTER_ANNUAL_PRICE_ID` |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Starter ($100/yr). Must match `STRIPE_STARTER_ANNUAL_PRICE_ID` in Convex.                                                                                                          |
 | `VITE_STRIPE_GROWTH_ANNUAL_PRICE_ID`  |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Growth ($150/yr). Must match `STRIPE_GROWTH_ANNUAL_PRICE_ID` in Convex.                                                                                                            |
-| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Pro ($500/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                                                  |
+| `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Pro ($300/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                                                  |
 | `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`             | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`.                    |
 | `VITE_POSTHOG_KEY`                    |      – (prod only; unset ⇒ analytics off)       | `observability/analytics.ts`          | PostHog project key for product analytics. Unset ⇒ `initPostHog()` no‑ops. Capture is **also** gated on the user's `analytics` consent (opt‑out by default).                                           |
 | `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts`          | PostHog ingestion host. Defaults to EU Cloud; set `https://us.i.posthog.com` for US Cloud.                                                                                                             |
@@ -7794,7 +7843,9 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   `window.onerror`/`unhandledrejection`; `ErrorBoundary.componentDidCatch`
   ([§14](#14-frontend--authenticated-app-app)) calls `captureException` to report React render crashes;
   `friendlyError` ([§6](#6-backend-architecture--conventions)) calls it for every caught non‑`ConvexError`, i.e. a
-  backend call that failed where the member reads a fallback; `MyPostsPage`'s featured‑purchase catch calls it for
+  backend call that failed where the member reads a fallback; the sign-in pages report every failed sign-in
+  (`AuthErrorPage`'s `captureMessage('Sign-in failed: <cause>')`, plus the caught error itself from `AuthStartPage`
+  and `AuthSuccessPage`, [§14](#14-frontend--authenticated-app-app)); `MyPostsPage`'s featured‑purchase catch calls it for
   every failure, codes included, since the UI prevents them all (F3); and
   `BillingPage`'s R07 activation-timeout path (§8, §14) calls the same helper when a checkout's webhook never lands
   within ~20s — a genuinely lost webhook must be visible even though the member is never told the word. Treated
@@ -8019,6 +8070,7 @@ flowchart TD
         A1["window.onerror / unhandledrejection"] --> S1["Sentry.init (beforeSend: scrubError, no PII)"]
         A2["ErrorBoundary.componentDidCatch"] --> S1
         A7["friendlyError: any non-ConvexError"] --> S1
+        A8["AuthErrorPage: Sign-in failed: cause"] --> S1
         A3["AnalyticsConsentGate reads analytics consent"] --> P1{"analytics consent?"}
         P1 -- granted --> P2["PostHog opt_in + identify(user._id)"]
         P1 -- withdrawn/none --> P3["PostHog opt_out + reset"]
@@ -8480,6 +8532,40 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 
 When you add a **new subsystem**, add a new numbered section and a Table‑of‑Contents entry, and add a flow chart
 (Mermaid) if it introduces a multi‑step flow.
+
+---
+
+_Last updated: 2026‑10‑02 (Sign-in error logging). **Every failed sign-in now reaches Sentry with its cause, and a
+browser without `crypto.subtle` can sign in.** Sentry reported `Cannot read properties of undefined (reading
+'digest')` on `/auth/start?plan=pro&interval=annual`: that browser had `crypto` but no `crypto.subtle`, the rejection
+was unhandled, and the visitor watched a spinner. `oauthStart.ts` now falls back to a built-in SHA‑256 (tested against
+WebCrypto across the padding boundaries and the RFC 7636 vector), and a start that still fails is reported and sent to
+the error page. Every failed exit names itself: the callback's redirects carry `&cause=` (`linkedin_error`,
+`missing_code`, `bad_state`, `lost_cookie`, `state_rejected`, `callback_error`), `AuthStartPage` sends `start_failed`,
+`AuthSuccessPage` sends `no_login_code`, `no_verifier` or `redeem_failed`, and `AuthErrorPage` reports
+`Sign-in failed: <cause>` once per landing (not for a cancel), with the code LinkedIn returned when the cause is
+`linkedin_error`. The start route's 400 and the lost-cookie exit got
+their own log lines. No new data: a fixed token, no personal data, under the Sentry disclosure already in the
+policies, so no `POLICY_VERSION` bump. Deploy Convex and the app together; either order is safe (an old app ignores
+`cause`, an old backend's failures report as `unknown`). Sections updated: §7 (cause table, sequence chart), §12C
+(last-hop blind spot, flow chart), §14 (AuthStartPage, AuthSuccessPage, AuthErrorPage), §17 (Sentry capture paths,
+flow chart), §21._
+
+_Last updated: 2026‑10‑02 (Pro price). **Pro now costs $30 a month or $300 a year, down from $50 and $500.** The three
+price tables changed together: the app's labels (`app/src/lib/planPrices.ts`), the landing's `MONTHLY_PRICES`
+(`landing/lib/trial.ts`, which also feeds the cards, the JSON-LD `highPrice`, `/pricing.md`, `/llms.txt` and
+`/llms-full.txt`) and the cents in `scripts/stripe-provision.mjs`. Annual stays ten times monthly, so the annual Pro
+card now leads with `$25.00`. Starter, Growth, the $5 featured-post add-on and the Custom tier's floor are unchanged.
+Stripe Prices are immutable, so each environment needs two new Price objects and the two `STRIPE_PRO_*` ids repointed
+in all four env copies. That step is Henriko's, and **both modes were applied on 2026‑10‑02** (§8, "Dev, Pro re-priced"
+and "Live, Pro re-priced"). Test mode was read back from Stripe: both Prices, the four dev env copies and the three tier
+portal configurations. In live the production env names the new pair, and `createCheckoutSession` accepts it and refuses
+the old one; the Stripe objects rest on the script's own read-back. The app's `VITE_STRIPE_PRO_*` copies are build-time,
+so they must hold the live pair when this code is built: until that build is live, the deployed bundle sends the old
+pair and Pro checkout is refused (`Invalid price ID`), never charged at the wrong price. Production held no subscription
+on 2026‑10‑02, so no member had to be moved off the old Prices (§16 explains why one would: an unmapped price id syncs
+as `starter`). Gates: `pnpm verify` green (format, lint, typecheck, 82 landing, 789 Convex, 700 app and 130 integration
+tests); the landing was checked in the browser in en, pt and es. Sections updated: §1, §8, §15, §16._
 
 ---
 

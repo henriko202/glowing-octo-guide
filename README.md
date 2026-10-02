@@ -129,7 +129,7 @@ Stripe subscription for the tier chosen on the billing grid; it converts on **50
 whichever comes first. Cancellation never revokes access — a canceled member keeps engaging; only their own posts stop
 entering the feed once the paid period ends.
 
-| Capability                          | Starter ($10/mo) | Growth ($15/mo) | Pro ($50/mo) |   Contact   |
+| Capability                          | Starter ($10/mo) | Growth ($15/mo) | Pro ($30/mo) |   Contact   |
 |-------------------------------------|:----------------:|:---------------:|:------------:|:-----------:|
 | Access shared feed                  |        ✓        |       ✓        |      ✓      |     ✓      |
 | 7-day trial (card required)         |        ✓        |       ✓        |      ✓      |      —      |

@@ -57,7 +57,7 @@ const SCHEDULE_AT_PERIOD_END = ['decreasing_item_amount', 'shortening_interval']
 const PLANS = [
   { key: 'starter', name: 'Starter', monthly: 1000, annual: 10000 },
   { key: 'growth', name: 'Growth', monthly: 1500, annual: 15000 },
-  { key: 'pro', name: 'Pro', monthly: 5000, annual: 50000 }
+  { key: 'pro', name: 'Pro', monthly: 3000, annual: 30000 }
 ]
 
 // One product per tier — the portal's own model, and the only one it accepts (see the interval

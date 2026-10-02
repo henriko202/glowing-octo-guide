@@ -5,7 +5,7 @@ export type BillingInterval = 'annual' | 'monthly'
 const MONTHLY_PRICES = new Map([
   ['starter', 10],
   ['growth', 15],
-  ['pro', 50]
+  ['pro', 30]
 ])
 
 export function planPrice(plan: string, interval: BillingInterval) {

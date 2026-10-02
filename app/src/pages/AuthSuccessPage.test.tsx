@@ -2,6 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StrictMode } from 'react'
 import { render, waitFor } from '@testing-library/react'
+import { ConvexError } from 'convex/values'
+import { captureException } from '../lib/observability/sentry'
 import { clearSignedOut } from '../lib/session'
 import AuthSuccessPage from './AuthSuccessPage'
 
@@ -24,7 +26,9 @@ vi.mock('../lib/session', () => ({
 
 vi.mock('../lib/oauthStart', () => ({ OAUTH_VERIFIER_KEY: 'oauthVerifier' }))
 
-const ERROR_PAGE = '/auth/error?reason=failed'
+vi.mock('../lib/observability/sentry', () => ({ captureException: vi.fn() }))
+
+const errorPage = (cause: string) => `/auth/error?reason=failed&cause=${cause}`
 
 describe('AuthSuccessPage', () => {
   beforeEach(() => {
@@ -32,6 +36,7 @@ describe('AuthSuccessPage', () => {
     navigate.mockClear()
     redeem.mockReset()
     vi.mocked(clearSignedOut).mockClear()
+    vi.mocked(captureException).mockClear()
   })
 
   it('keeps the session and clears signedOut when a signed-in tab has nothing to redeem', async () => {
@@ -91,7 +96,7 @@ describe('AuthSuccessPage', () => {
 
     render(<AuthSuccessPage />)
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(ERROR_PAGE, { replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(errorPage('no_verifier'), { replace: true }))
     expect(redeem).not.toHaveBeenCalled()
     expect(sessionStorage.getItem('oauthCode')).toBeNull()
     expect(clearSignedOut).not.toHaveBeenCalled()
@@ -102,7 +107,7 @@ describe('AuthSuccessPage', () => {
 
     render(<AuthSuccessPage />)
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(ERROR_PAGE, { replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(errorPage('no_login_code'), { replace: true }))
     expect(redeem).not.toHaveBeenCalled()
     expect(sessionStorage.getItem('oauthVerifier')).toBeNull()
   })
@@ -114,11 +119,28 @@ describe('AuthSuccessPage', () => {
 
     render(<AuthSuccessPage />)
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(ERROR_PAGE, { replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(errorPage('redeem_failed'), { replace: true }))
     expect(sessionStorage.getItem('oauthCode')).toBeNull()
     expect(sessionStorage.getItem('oauthVerifier')).toBeNull()
     expect(sessionStorage.getItem('sessionToken')).toBeNull()
     expect(clearSignedOut).not.toHaveBeenCalled()
+  })
+
+  it('reports a redeem that broke, but not one the server refused', async () => {
+    sessionStorage.setItem('oauthCode', 'code-1')
+    sessionStorage.setItem('oauthVerifier', 'verifier-1')
+    redeem.mockRejectedValue(new ConvexError('Login could not be verified. Please try again.'))
+    const refused = render(<AuthSuccessPage />)
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(errorPage('redeem_failed'), { replace: true }))
+    expect(captureException).not.toHaveBeenCalled()
+    refused.unmount()
+
+    const fault = new Error('Server Error')
+    sessionStorage.setItem('oauthCode', 'code-2')
+    sessionStorage.setItem('oauthVerifier', 'verifier-2')
+    redeem.mockRejectedValue(fault)
+    render(<AuthSuccessPage />)
+    await waitFor(() => expect(captureException).toHaveBeenCalledWith(fault))
   })
 
   it('redeems once even when the effect runs twice (StrictMode)', async () => {

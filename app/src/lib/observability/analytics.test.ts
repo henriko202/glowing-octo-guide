@@ -96,6 +96,13 @@ describe('initPostHog', () => {
     )
   })
 
+  it('records session replay with every text node and input masked', () => {
+    // posthog-js replay masks inputs only by default; page text (post snippets, member names) needs the selector.
+    const options = vi.mocked(posthog.init).mock.calls[0]?.[1]
+    expect(options?.disable_session_recording).toBeUndefined()
+    expect(options?.session_recording).toEqual({ maskAllInputs: true, maskTextSelector: '*' })
+  })
+
   it('masks the unsubscribe token and invite codes in captured URLs', () => {
     // posthog-js sends the full `$current_url`, query included; it masks only the params named here (plus its
     // built-in ad click-id list), and only when mask_personal_data_properties is on.

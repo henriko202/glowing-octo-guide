@@ -136,7 +136,7 @@ describe('HTTP routes', () => {
       headers: { cookie: `oauth_nonce_${state}=${nonce}` }
     })
 
-    expect(response.headers.get('Location')).toBe('https://app.test/auth/error?reason=failed')
+    expect(response.headers.get('Location')).toBe('https://app.test/auth/error?reason=failed&cause=callback_error')
     expect(sentryEvents).toHaveLength(1)
     expect(sentryEvents[0].tags.route).toBe('GET /auth/linkedin/callback')
   })

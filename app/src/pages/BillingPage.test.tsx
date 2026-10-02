@@ -319,8 +319,8 @@ describe('chosen plan (R03)', () => {
     // link (no OAuth stash) must land on the monthly price, not the annual default.
     mockSearchParams = new URLSearchParams('?plan=pro&interval=monthly')
     renderPage()
-    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
-    expect(screen.queryByText('US$500/yr')).not.toBeInTheDocument()
+    expect(screen.getByText('US$30/mo')).toBeInTheDocument()
+    expect(screen.queryByText('US$300/yr')).not.toBeInTheDocument()
   })
 
   it('seeds the toggle from the interval the member is already billed on', async () => {
@@ -334,8 +334,8 @@ describe('chosen plan (R03)', () => {
       priceInterval: 'month'
     }
     renderPage()
-    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
-    expect(screen.queryByText('US$500/yr')).not.toBeInTheDocument()
+    expect(screen.getByText('US$30/mo')).toBeInTheDocument()
+    expect(screen.queryByText('US$300/yr')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /billing\.switchPlan.*Pro/ }))
     await waitFor(() => expect(mockSwitch).toHaveBeenCalledWith({ sessionToken: 'tok', priceId: 'price_pro_month' }))
   })
@@ -351,8 +351,8 @@ describe('chosen plan (R03)', () => {
     }
     mockSearchParams = new URLSearchParams('?plan=pro&interval=annual')
     renderPage()
-    expect(screen.getByText('US$500/yr')).toBeInTheDocument()
-    expect(screen.queryByText('US$50/mo')).not.toBeInTheDocument()
+    expect(screen.getByText('US$300/yr')).toBeInTheDocument()
+    expect(screen.queryByText('US$30/mo')).not.toBeInTheDocument()
   })
 
   it('keeps a click made before the subscription row arrives', () => {
@@ -362,7 +362,7 @@ describe('chosen plan (R03)', () => {
     mockQueryReturns['users.getSubscriptionInfo'] = undefined
     const { rerender } = renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'billing.monthly' }))
-    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
+    expect(screen.getByText('US$30/mo')).toBeInTheDocument()
     mockQueryReturns['users.getSubscriptionInfo'] = {
       tier: 'growth',
       status: 'active',
@@ -374,8 +374,8 @@ describe('chosen plan (R03)', () => {
         <BillingPage />
       </MemoryRouter>
     )
-    expect(screen.getByText('US$50/mo')).toBeInTheDocument()
-    expect(screen.queryByText('US$500/yr')).not.toBeInTheDocument()
+    expect(screen.getByText('US$30/mo')).toBeInTheDocument()
+    expect(screen.queryByText('US$300/yr')).not.toBeInTheDocument()
   })
 
   it('shows the localized plan name as the current plan, never the capitalized tier id', () => {

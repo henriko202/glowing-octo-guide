@@ -2,8 +2,8 @@
 // opted-out (no capture, no cookies) and only starts capturing once a logged-in user has granted the
 // `analytics` consent (convex/privacy/consent.ts). Withdrawal or sign-out opts back out and resets the
 // stored identity. Runs in PROD only and only when VITE_POSTHOG_KEY is set (hard no-op otherwise).
-// No session replay (disable_session_recording), no clicked-element text (mask_all_text), no URL secrets
-// (custom_personal_data_properties) and no email/PII — users are identified by their opaque Convex user id only.
+// Session replay masks all text and inputs (session_recording), no clicked-element text (mask_all_text), no URL
+// secrets (custom_personal_data_properties) and no email/PII — users are identified by their opaque Convex user id only.
 // Sentry (error monitoring) is the necessary/security path — see sentry.ts.
 // syncAnalyticsConsent also starts and stops DataFast web analytics under the same consent — see datafast.ts.
 import posthog from 'posthog-js'
@@ -28,7 +28,9 @@ export function initPostHog(): void {
     api_host: (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ?? 'https://eu.i.posthog.com',
     opt_out_capturing_by_default: true, // no capture until analytics consent is granted
     opt_out_persistence_by_default: true, // and no ph_* cookie/localStorage while opted out (persists otherwise)
-    disable_session_recording: true, // no session replay
+    // Session replay rides the same consent: the recorder only runs while opted in. Every text node and input
+    // is masked, same reason as mask_all_text below. It also needs "Record user sessions" on in the PostHog project.
+    session_recording: { maskAllInputs: true, maskTextSelector: '*' },
     capture_performance: false, // performance autocapture is not shipped; its observer logged console errors
     capture_pageview: true,
     autocapture: true,

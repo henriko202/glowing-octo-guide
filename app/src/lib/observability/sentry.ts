@@ -99,3 +99,8 @@ export function initSentry(): void {
 export function captureException(error: unknown, componentStack?: string | null): void {
   Sentry.captureException(error, componentStack ? { contexts: { react: { componentStack } } } : undefined)
 }
+
+/** Report a failure that has no exception to capture. Sentry groups by message; the tags are searchable there. */
+export function captureMessage(message: string, tags: Record<string, string>): void {
+  Sentry.captureMessage(message, { level: 'error', tags })
+}

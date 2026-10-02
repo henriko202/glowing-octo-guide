@@ -80,7 +80,7 @@ describe('CardGateDialog', () => {
     expect(screen.getByText(/already used your free trial/i)).toBeInTheDocument()
     // M6: the gate names the amount itself, both intervals, so the member never learns the price
     // one page after being asked to subscribe.
-    expect(screen.getByText(/the pro plan is US\$50\/mo or US\$500\/yr/i)).toBeInTheDocument()
+    expect(screen.getByText(/the pro plan is US\$30\/mo or US\$300\/yr/i)).toBeInTheDocument()
     expect(screen.queryByText(/free for/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/starting your trial/i)).not.toBeInTheDocument()
   })

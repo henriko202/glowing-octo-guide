@@ -127,8 +127,14 @@ describe('sign-in funnel counters', () => {
 
     const response = await callback(t, `error=unauthorized_scope_error&state=${state}`)
 
-    expect(response.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed`)
+    expect(response.headers.get('Location')).toBe(
+      `${APP_URL}/auth/error?reason=failed&cause=linkedin_error&linkedin_error=unauthorized_scope_error`
+    )
     expect(await counts(t)).toEqual({ started: 1, linkedin_error: 1 })
+
+    // The code is a query value anyone can send: one that is not a plain token is left out of the redirect.
+    const crafted = await callback(t, `error=${encodeURIComponent('x&reason=denied')}&state=${state}`)
+    expect(crafted.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed&cause=linkedin_error`)
   })
 
   test('a browser that comes back without the sign-in cookie counts a lost cookie', async () => {
@@ -137,7 +143,7 @@ describe('sign-in funnel counters', () => {
 
     const response = await callback(t, `code=li-code&state=${state}`)
 
-    expect(response.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed`)
+    expect(response.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed&cause=lost_cookie`)
     expect(await counts(t)).toEqual({ started: 1, lost_cookie: 1 })
   })
 
@@ -159,7 +165,7 @@ describe('sign-in funnel counters', () => {
 
     const response = await callback(t, `code=li-code&state=${state}`, `oauth_nonce_${state}=someone-else`)
 
-    expect(response.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed`)
+    expect(response.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed&cause=state_rejected`)
     expect(await counts(t)).toEqual({ started: 1, rejected: 1 })
     expect(await t.run(async ctx => ctx.db.query('oauthStates').collect())).toHaveLength(1)
   })
@@ -180,7 +186,7 @@ describe('sign-in funnel counters', () => {
 
     const response = await callback(t, `code=li-code&state=${state}`, cookie)
 
-    expect(response.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed`)
+    expect(response.headers.get('Location')).toBe(`${APP_URL}/auth/error?reason=failed&cause=callback_error`)
     expect(await counts(t)).toEqual({ started: 1, error: 1 })
   })
 })

@@ -5,7 +5,7 @@ describe('landing trial offer', () => {
   it.each([
     ['starter', 10, 100],
     ['growth', 15, 150],
-    ['pro', 50, 500]
+    ['pro', 30, 300]
   ] as const)('keeps %s monthly and annual offers consistent', (plan, monthly, annual) => {
     expect(planPrice(plan, 'monthly')).toBe(monthly)
     expect(planPrice(plan, 'annual')).toBe(annual)

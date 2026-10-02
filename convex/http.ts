@@ -90,6 +90,7 @@ http.route({
     // the initiating browser. A direct hit without a valid challenge is not a login flow.
     const vc = reqUrl.searchParams.get('vc')
     if (!vc || !isPkceChallenge(vc)) {
+      console.error('LinkedIn sign-in start: missing or malformed challenge')
       return new Response('Invalid login request.', { status: 400, headers: NO_STORE })
     }
     const rawPlan = reqUrl.searchParams.get('plan') ?? undefined
@@ -135,8 +136,9 @@ http.route({
     const clearNonce = (): Record<string, string> =>
       state !== null && OAUTH_STATE_RE.test(state) ? { 'Set-Cookie': clearNonceCookie(state) } : {}
     // Every failure lands on the app's /auth/error page. It sits outside RequireAuth, which would restart the
-    // sign-in on its own and loop a member who just canceled back to LinkedIn.
-    const failedUrl = `${appUrl}/auth/error?reason=failed`
+    // sign-in on its own and loop a member who just canceled back to LinkedIn. `cause` names the exit taken; the page
+    // never shows it, it reports it to Sentry (AuthErrorPage) so a failed sign-in can be told apart from the next.
+    const failedUrl = (cause: string) => `${appUrl}/auth/error?reason=failed&cause=${cause}`
     // Set once the state is consumed: only then does a thrown error count as `error` in the funnel.
     let consumed = false
 
@@ -154,13 +156,19 @@ http.route({
         // malformed request) fails every sign-in, so it must not hide among the cancels.
         const canceled = error === 'user_cancelled_login' || error === 'user_cancelled_authorize'
         await countSignInFailure(ctx, state, canceled ? 'denied' : 'linkedin_error')
-        return redirect(canceled ? `${appUrl}/auth/error?reason=denied` : failedUrl, clearNonce())
+        // LinkedIn's code rides along for the Sentry report. Anyone can send this query value, so only an
+        // OAuth-style token is passed on (AuthErrorPage checks the same shape again).
+        const linkedinError = /^[a-z_]{1,32}$/.test(error) ? `&linkedin_error=${error}` : ''
+        return redirect(
+          canceled ? `${appUrl}/auth/error?reason=denied` : failedUrl('linkedin_error') + linkedinError,
+          clearNonce()
+        )
       }
 
       if (!code) {
         console.error('LinkedIn callback: missing code parameter')
         await countSignInFailure(ctx, state, 'rejected')
-        return redirect(failedUrl, clearNonce())
+        return redirect(failedUrl('missing_code'), clearNonce())
       }
 
       // CSRF: validate the state parameter against the value we stored on initiation, and require
@@ -168,13 +176,13 @@ http.route({
       // victim's browser into the attacker's account. If either is missing/expired/unknown — reject.
       if (!state || !OAUTH_STATE_RE.test(state)) {
         console.error('LinkedIn callback: missing state parameter')
-        return redirect(failedUrl, clearNonce())
+        return redirect(failedUrl('bad_state'), clearNonce())
       }
       const nonce = readCookie(req.headers.get('cookie'), nonceCookieName(state))
       if (!nonce) {
-        console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
+        console.error('LinkedIn callback: no browser nonce cookie for this state')
         await countSignInFailure(ctx, state, 'lost_cookie')
-        return redirect(failedUrl, clearNonce())
+        return redirect(failedUrl('lost_cookie'), clearNonce())
       }
       const oauthState = await ctx.runMutation(internal.sessions.validateAndConsumeOAuthState, {
         state,
@@ -183,7 +191,7 @@ http.route({
       if (!oauthState.valid) {
         console.error('LinkedIn callback: invalid or expired state parameter — possible CSRF attempt')
         await countSignInFailure(ctx, state, 'rejected')
-        return redirect(failedUrl, clearNonce())
+        return redirect(failedUrl('state_rejected'), clearNonce())
       }
       consumed = true
 
@@ -233,7 +241,7 @@ http.route({
       console.error('OAuth callback error:', scrubError(err))
       await reportError(ctx, err, routeTags(req))
       if (consumed) await countSignInFailure(ctx, state, 'error')
-      return redirect(failedUrl, clearNonce())
+      return redirect(failedUrl('callback_error'), clearNonce())
     }
   })
 })

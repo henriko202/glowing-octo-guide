@@ -11,8 +11,8 @@ export function isInterval(i: string | null): i is Interval {
 }
 
 export const PLAN_PRICES: Record<Interval, Record<string, string>> = {
-  monthly: { starter: 'US$10/mo', growth: 'US$15/mo', pro: 'US$50/mo' },
-  annual: { starter: 'US$100/yr', growth: 'US$150/yr', pro: 'US$500/yr' }
+  monthly: { starter: 'US$10/mo', growth: 'US$15/mo', pro: 'US$30/mo' },
+  annual: { starter: 'US$100/yr', growth: 'US$150/yr', pro: 'US$300/yr' }
 }
 
 // backlog/R17 — the one-time featured-post add-on. A label like the rest: Stripe's Price is charged.

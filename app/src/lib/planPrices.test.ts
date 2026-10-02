@@ -33,7 +33,7 @@ describe('usdLabel', () => {
   it('renders U$ with the interval word in pt and es', () => {
     expect(usdLabel('pt', PLAN_PRICES.monthly.growth)).toBe('U$15/mês')
     expect(usdLabel('pt-BR', PLAN_PRICES.annual.starter)).toBe('U$100/ano')
-    expect(usdLabel('es', PLAN_PRICES.annual.pro)).toBe('U$500/año')
+    expect(usdLabel('es', PLAN_PRICES.annual.pro)).toBe('U$300/año')
     expect(usdLabel('pt', FEATURED_POST_PRICE)).toBe('U$5')
   })
 })

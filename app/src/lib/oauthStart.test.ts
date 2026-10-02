@@ -34,6 +34,20 @@ describe('challengeFromVerifier', () => {
       'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'
     )
   })
+
+  it('hashes without crypto.subtle (missing outside a secure context and in some embedded browsers)', async () => {
+    // Lengths cross every SHA-256 padding boundary (55/56 and 119/120 bytes spill into an extra block).
+    const verifiers = [
+      'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk',
+      ...[0, 55, 56, 64, 119, 120, 200].map(n => 'a'.repeat(n))
+    ]
+    vi.stubGlobal('crypto', webcrypto)
+    const expected = await Promise.all(verifiers.map(challengeFromVerifier))
+    expect(expected[0]).toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM')
+
+    vi.stubGlobal('crypto', { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) })
+    await expect(Promise.all(verifiers.map(challengeFromVerifier))).resolves.toEqual(expected)
+  })
 })
 
 describe('beginOAuthLogin', () => {
