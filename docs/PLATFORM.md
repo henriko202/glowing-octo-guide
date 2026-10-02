@@ -156,7 +156,9 @@ The landing Worker declares both `www.linkintothessi.com` and `linkintothessi.co
 The app Worker likewise declares `www.app.linkintothessi.com` and `app.linkintothessi.com` as Custom Domains in
 `app/wrangler.jsonc`. Its Worker entrypoint (`app/src/cloudflare-worker.ts`) runs before Static Assets, permanently
 redirects the old app hostname to `www.app` while preserving path/query, and delegates canonical-host requests to the
-`ASSETS` binding so SPA fallback remains active.
+`ASSETS` binding so SPA fallback remains active. Before either of those, it answers `/auth/linkedin/callback` with a
+**302** to the same path and query on the production Convex host, so LinkedIn's consent screen can name the app's host
+(see [the callback hop](#the-callback-hop-production-only)).
 
 ### Deployment & integration topology
 
@@ -184,6 +186,7 @@ flowchart LR
     Landing -- " CTA links (NEXT_PUBLIC_APP_URL) " --> App
     App -- " useQuery/useMutation/useAction<br/>(VITE_CONVEX_URL) " --> Cloud
     App -- " sign-in redirect<br/>(VITE_CONVEX_SITE)/auth/linkedin " --> Site
+    App -- " production callback hop<br/>Worker 302 → /auth/linkedin/callback " --> Site
     Site <-- " 3-legged OAuth + token exchange " --> LinkedIn
     App -- " engagement handoff: opens post on LinkedIn " --> LinkedIn
     App -- " Checkout redirect " --> Stripe
@@ -194,10 +197,17 @@ flowchart LR
 
 ### Why OAuth runs through `.convex.site` (key design decision)
 
-The LinkedIn `redirect_uri` points at **Convex** (`https://<deployment>.convex.site/auth/linkedin/callback`), **never**
-at the React app. LinkedIn returns the authorization `code` to Convex, which exchanges it for tokens **server‑side**, so
-the **client secret and the user's access/refresh tokens never touch the browser**. Convex then issues an opaque session
-token and redirects the browser back to the app. This is the backbone of the [security model](#17-security-posture).
+The authorization `code` LinkedIn returns always ends at a **Convex** HTTP action
+(`https://<deployment>.convex.site/auth/linkedin/callback`), **never** in the React app's JavaScript. Convex exchanges
+it for tokens **server‑side**, so the **client secret and the user's access/refresh tokens never touch the browser**.
+Convex then issues an opaque session token and redirects the browser back to the app. This is the backbone of the
+[security model](#17-security-posture).
+
+In development the LinkedIn `redirect_uri` is that Convex URL itself. In production it is
+`https://www.app.linkintothessi.com/auth/linkedin/callback`, because LinkedIn's consent screen prints the host of the
+`redirect_uri` ("You will be redirected to ..."), and the app's own host reads better there than a Convex deployment
+name. The app Worker answers that path with a 302 to the Convex callback and serves no page for it, so the design above
+still holds (see [the callback hop](#the-callback-hop-production-only)).
 
 ---
 
@@ -250,7 +260,7 @@ token and redirects the browser back to the app. This is the backbone of the [se
 ├── app/                         # React + Vite SaaS dashboard → Cloudflare Workers (Static Assets)
 │   ├── index.html               # mount point + pre-hydration theme guard (CSP is generated into dist/_headers
 │   │                            #   by scripts/gen-headers.mjs, not an index.html meta tag)
-│   ├── src/cloudflare-worker.ts # canonical-host 308, then delegation to the ASSETS binding
+│   ├── src/cloudflare-worker.ts # LinkedIn callback 302 to Convex, canonical-host 308, then the ASSETS binding
 │   ├── vite.config.ts           # dev port 5174, inline Vitest config
 │   └── src/
 │       ├── main.tsx             # ConvexProvider + BrowserRouter bootstrap
@@ -391,7 +401,7 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 
 | Field                         | Type                                                   | Req | Meaning                                                                                                                                                                                                                                                                                                                                                                                                             |
 |-------------------------------|--------------------------------------------------------|:---:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedinId`                  | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`).                                                                                                                                                                                                                                                                                                                                                |
+| `linkedinId`                  | string                                                 | ✓  | LinkedIn member id (`sub` from OIDC). Lookup key (`by_linkedin_id`). Scoped to the LinkedIn app: a new Client ID issues a new one, and sign-in re-links it by verified email.                                                                                                                                                                                                                                       |
 | `name`                        | string                                                 | ✓  | Display name.                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `headline`                    | string                                                 |  –  | LinkedIn headline.                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `profilePictureUrl`           | string                                                 |  –  | Avatar URL.                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -424,7 +434,7 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `bannedAt`                    | number                                                 |  –  | Ban timestamp.                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `bannedBy`                    | `id('users')`                                          |  –  | Admin who banned (self‑reference).                                                                                                                                                                                                                                                                                                                                                                                  |
 | `bannedReason`                | string                                                 |  –  | User‑visible reason on the banned screen.                                                                                                                                                                                                                                                                                                                                                                           |
-| `email`                       | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing.                                                                                                                                                                                                                                                                                                 |
+| `email`                       | string                                                 |  –  | Email from LinkedIn OIDC `email` claim. Used for DSR confirmations and breach notification. Not used for marketing. Also the sign-in fallback key (`by_email`) when the `sub` is unknown, only if `email_verified`.                                                                                                                                                                                                 |
 | `deletionRequestedAt`         | number                                                 |  –  | When the user requested account deletion (ms). Erasure-audit-trail field — kept for compliance even though no query reads it back (`deletionScheduledAt` drives the actual cron/idempotency logic).                                                                                                                                                                                                                 |
 | `deletionScheduledAt`         | number                                                 |  –  | When the hard-delete cron will purge this account (ms). Presence signals pending erasure.                                                                                                                                                                                                                                                                                                                           |
 | `deletionReason`              | `'user_request'\|'dormancy'`                           |  –  | Why the deletion was scheduled.                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -436,7 +446,8 @@ One row per authenticated LinkedIn member. Inserted on first login (`linkedin/au
 | `referredByCode`              | string                                                 |  –  | **R19** — the inviter's code this member joined through. Stamped **insert‑only** by `linkedin/auth.upsertUserHandler`, after a `by_invite_code` lookup proves the code belongs to a real member who is **not banned**; an unknown or banned‑inviter code is dropped, never stored, and an existing member logging in with a `ref` is unchanged. Drives `trialDaysFor` (14 days, not 7) and the Billing gift line.   |
 | `createdAt`                   | number                                                 | ✓  | Creation timestamp (ms).                                                                                                                                                                                                                                                                                                                                                                                            |
 
-Indexes: `by_linkedin_id [linkedinId]`, `by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
+Indexes: `by_linkedin_id [linkedinId]`, `by_email [email]` (sign-in fallback when the `sub` is unknown),
+`by_stripe_customer [stripeCustomerId]`, `by_tier [tier]`,
 `by_subscription_status [subscriptionStatus]` (active-subscriber fan-out for the Apify sync),
 `by_token_expiry [tokenExpiresAt]` (retention cron targets expired tokens directly),
 `by_deletion_and_last_login [deletionScheduledAt, lastLoginAt]` (compound — serves both the hard-delete sweep, ranging
@@ -1210,6 +1221,7 @@ sequenceDiagram
     participant LP as Landing (TrialProvider / Pricing CTA)
     participant CV as Convex .site (http.ts)
     participant LI as LinkedIn
+    participant W as App Worker (production only)
     participant DB as Convex DB
     participant A as App (React)
     LP ->> A: /auth/start?plan=growth&interval=annual&ref=k3p9x2ab
@@ -1223,7 +1235,9 @@ sequenceDiagram
     CV -->> U: 302 → LinkedIn authorize?scope=…&state<br/>Set-Cookie: oauth_nonce_<state> (HttpOnly; Secure; SameSite=Lax; 10min)
 U ->> LI: authenticate & consent
 Note over LI, CV: ?error=user_cancelled_* ⇒ recordOAuthFailure(denied) → APP_URL/auth/error?reason=denied<br/>any other ?error= ⇒ recordOAuthFailure(linkedin_error) → APP_URL/auth/error?reason=failed&cause=linkedin_error
-LI -->> CV: 302 /auth/linkedin/callback?code&state (sends the oauth_nonce_<state> cookie)
+LI -->> W: production: 302 → www.app.linkintothessi.com/auth/linkedin/callback?code&state
+W -->> CV: 302 → the same path and query on the Convex host (no-store, no body)
+Note over CV, LI: dev has no Worker, so LinkedIn redirects straight to the Convex callback<br/>either way the browser sends the oauth_nonce_<state> cookie to Convex
 CV ->> CV: readCookie(oauth_nonce_<state>) — missing ⇒ reject
 CV ->> DB: validateAndConsumeOAuthState(state, browserNonce) → { valid, plan?, interval?, ref?, challenge }
 alt invalid / expired state, missing/mismatched nonce cookie, or missing challenge
@@ -1234,9 +1248,10 @@ Note over CV: a throw from here on ⇒ recordOAuthError + 302 → APP_URL/auth/e
 CV ->> LI: exchangeCodeForTokens(code)
 LI -->> CV: access_token, refresh_token, expires_in
 CV ->> LI: GET /v2/userinfo
-LI -->> CV: sub, name, picture
-CV ->> DB: upsertUser(…, referredByCode: ref?) → { userId, isNew } (tokens stored server-side)
-Note over CV, DB: insert only, and only if by_invite_code finds a non-banned member
+LI -->> CV: sub, name, picture, email, email_verified
+CV ->> DB: upsertUser(…, emailVerified, referredByCode: ref?) → { userId, isNew } (tokens stored server-side)
+Note over CV, DB: match by_linkedin_id, else by_email when email_verified (re-links linkedinId), else insert
+Note over CV, DB: ref is stamped on insert only, and only if by_invite_code finds a non-banned member
 CV ->> DB: createAuthCode(code=UUID, userId, challenge, isNew, +2min) · bumps linkedin_ok_new / _returning
 CV -->> U: 302 → APP_URL/auth/success#code=UUID&plan=growth&interval=annual<br/>Cache-Control: no-store ; oauth_nonce_<state> cleared
 Note over CV, U: every OAuth 302 sets Cache-Control: no-store ; no session token in any URL ; ref is never echoed back
@@ -1248,6 +1263,82 @@ A ->> A: sessionStorage.sessionToken = token → navigate /feed
 Note over U, A: a handed-over#code= link is inert — the verifier never left this browser
 end
 ```
+
+### The callback hop (production only)
+
+LinkedIn's consent screen ends with "You will be redirected to" and the host of the `redirect_uri`. With a
+`redirect_uri` on Convex, members read a deployment name they have never seen (`whimsical-elk-440.convex.site`). So in
+production `LINKEDIN_REDIRECT_URI` is `https://www.app.linkintothessi.com/auth/linkedin/callback`, and the screen names
+the app's own host.
+
+No page lives at that path. The app Worker (`app/src/cloudflare-worker.ts`) runs before Static Assets and answers it
+with a bodiless **302** to the same path and query on the Convex host, with `Cache-Control: no-store`. The browser then
+calls the Convex callback itself, so the flow above is unchanged:
+
+- The `oauth_nonce_<state>` cookie is host-only on the Convex host. The browser still sends it, because a
+  `SameSite=Lax` cookie goes out on a top-level GET navigation, redirects included.
+- The token exchange still matches. The authorize URL and the token request both read `LINKEDIN_REDIRECT_URI`
+  (`convex/linkedin/oauth.ts`), so LinkedIn sees the same value twice. No backend code changed.
+- LinkedIn's error redirects (`?error=...&state=...`) take the same hop, query intact.
+
+**The Worker checks nothing, on purpose.** Nothing in a callback request proves that it came from LinkedIn. LinkedIn
+does not sign the redirect, and the member's own browser delivers it, so a `Referer` or address check would turn away
+some real sign-ins and stop nothing that the checks below do not already stop. A callback is real when three things
+hold, and Convex checks all three: the `state` is one we issued and have not used, the browser holds that state's
+nonce cookie, and LinkedIn accepts the `code` when Convex exchanges it server to server with the client secret. A
+request that fails the first two is refused before LinkedIn is asked anything, and writes no account, login code or
+session (`convex/integration/oauthCallback.test.ts`). The Convex callback is public either way, so a filter in the
+Worker could only refuse what Convex already refuses.
+
+**One limit, set by LinkedIn.** LinkedIn offers PKCE to native apps only and puts no `nonce` in the ID token, so a
+`code` is not tied to the browser that asked for it. Someone who reads a `code` before Convex exchanges it could
+present it from a browser where they started their own sign-in, and would be signed in as that member. The `code`
+travels only over TLS and Convex exchanges it in the same redirect chain, so reading it in time takes the member's own
+device, or our Cloudflare or Convex account. An unused `code` expires after 30 minutes. That is why this path must
+never serve a page: a page's scripts, error reporting and analytics included, can read its URL.
+
+What to know before touching it:
+
+- **The Convex host is a constant.** The Worker has no runtime variables (`VITE_*` exist only at build time), so
+  `CONVEX_SITE` is written out in the Worker and must equal the `VITE_CONVEX_SITE` build variable. Its test pins the
+  value. If the production deployment ever changes, change both.
+- **Dev keeps the Convex redirect URI.** `vite dev` runs no Worker, so a localhost `redirect_uri` would hand the
+  callback to the SPA, whose `*` route sends it to `/feed`, where `RequireAuth` starts the sign-in again. The dev
+  consent screen therefore still names the dev deployment.
+- **The order matters when switching.** (1) Add the new URL in the LinkedIn Developer Portal (Auth → Authorized
+  redirect URLs) and keep the old one. (2) Deploy the app Worker, then check it:
+  `curl -sI https://www.app.linkintothessi.com/auth/linkedin/callback` must answer 302 with a `location` on the Convex
+  host (200 means the old Worker is still serving the SPA). The hop is inert until LinkedIn uses it. (3) Set
+  `LINKEDIN_REDIRECT_URI` on the production Convex deployment. With the URL unregistered, LinkedIn refuses every
+  sign-in. With the Worker not deployed yet, the callback path serves the SPA, the sign-in loops, and each lap leaves
+  an unused `code` in a page URL that the page's scripts can read. So step 2 is a security step, not only a working
+  one.
+- **Rollback** is step 3 undone: set `LINKEDIN_REDIRECT_URI` back to the Convex callback, which is why the old URL
+  stays registered. A sign-in in flight when the variable changes fails once, at the token exchange, and lands on
+  `/auth/error`.
+- **Every LinkedIn app needs each deployment's URL registered:** the dev Convex callback and the production app-host
+  one (see [Changing the LinkedIn app](#changing-the-linkedin-app)).
+
+### Changing the LinkedIn app
+
+LinkedIn's OIDC `sub` is scoped to the OAuth app, so a new `LINKEDIN_CLIENT_ID` gives every member a `sub` we have
+never stored. `upsertUserHandler` therefore resolves a sign-in in three steps: `by_linkedin_id`, then `by_email`, then
+insert. The email step runs only when LinkedIn sends an email **and** `email_verified: true`; a match re-links the row
+(`linkedinId` is patched to the new `sub`) and counts as a returning sign-in, so tier, Stripe customer, posts and ban
+state all stay on the same account. An absent email is never looked up: it would match every row without one.
+
+A member still becomes a second account when their row has no stored email or their LinkedIn primary email changed
+since their last sign-in. There is no merge tool; fix such a row by hand in the Convex dashboard.
+
+To switch apps:
+
+1. Deploy the backend with the `by_email` fallback first. It is inert while every `sub` still matches.
+2. On the new LinkedIn app, add the "Sign In with LinkedIn using OpenID Connect" product and register the same
+   redirect URI (`LINKEDIN_REDIRECT_URI`).
+3. Set `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` on the Convex deployment (dev first, then prod).
+
+Sessions are our own, so signed-in members stay signed in. Each member sees LinkedIn's consent screen once more, and
+refresh tokens issued by the old app stop refreshing until that member's next sign-in replaces them.
 
 ### Session‑authenticated request flow
 
@@ -1264,7 +1355,7 @@ flowchart TD
 
 | Function                                                                                 | Kind                                   | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 |------------------------------------------------------------------------------------------|----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `linkedin.auth.upsertUser`                                                               | internalMutation                       | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. `headline` is patched **only when provided** — OIDC login carries none, so a manually-set/scraped headline survives every login instead of being unset. Never writes `isAdmin`. Returns `{ userId, isNew }`: `isNew` (the insert branch) picks the new/returning sign-in counters ([§12C](#12c-sign-in-funnel-metrics)).                                                                                                                                                                                                                         |
+| `linkedin.auth.upsertUser`                                                               | internalMutation                       | Insert on first login (default `subscriptionStatus`, `createdAt`); patch profile + tokens thereafter. `headline` is patched **only when provided** — OIDC login carries none, so a manually-set/scraped headline survives every login instead of being unset. Never writes `isAdmin`. Returns `{ userId, isNew }`: `isNew` (the insert branch) picks the new/returning sign-in counters ([§12C](#12c-sign-in-funnel-metrics)). Looks up `by_linkedin_id`, then `by_email` (verified email only) and re-links `linkedinId`.                                                                                                                             |
 | `users.getMe`                                                                            | query (public)                         | Safe profile via `resolveSession` + `toSafeMe` (strips token **values** + raw `isAdmin`; re‑adds `isAdmin:true` only for admins; passes `isBanned`/`bannedReason`; **keeps `tokenExpiresAt`** — not a secret, drives the client's reconnect‑before‑expiry banner). **R19** adds `trialDays` (`trialDaysFor(user)`: 14 or 7) and `inviterName` (first name only, never stored). Also adds **`trialEligible`** — `trialEligible(rowCount)` over the member's `subscriptions` rows (`by_user`), the same rule checkout enforces, so no client has to guess trial eligibility from `subscriptionStatus` (§8).                                              |
 | `linkedin.oauth.refreshAccessToken`                                                      | function (server‑only)                 | `grant_type=refresh_token` call to the token endpoint. Same log‑real/throw‑sanitized discipline as `exchangeCodeForTokens`; never logs the token value. Called only by the refresh cron below.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `linkedin.auth.updateTokens`                                                             | internalMutation                       | Patches `linkedinAccessToken`/`tokenExpiresAt` (always) + `linkedinRefreshToken` (only when LinkedIn returns a new one — a non‑rotating provider's omitted `refresh_token` leaves the stored value untouched instead of clearing it). Never writes `isAdmin`, mirroring `upsertUser`.                                                                                                                                                                                                                                                                                                                                                                  |
@@ -4791,7 +4882,9 @@ flowchart TD
 - **Email capture.** `linkedin/auth.upsertUser` now stores `email` from the OIDC userinfo (previously fetched and
   discarded) and forwards the address to Stripe (`billing.ts`
   `getOrCreateCustomer`). Email is stored under legitimate interest / legal obligation — a contact channel for
-  data‑subject rights and breach notification — **not** marketing consent.
+  data‑subject rights and breach notification — **not** marketing consent. It is also the sign-in fallback key
+  (account authentication, contract basis — `DATA-INVENTORY.md` Activity 1): see "Changing the LinkedIn app" in
+  [§7](#7-authentication--identity).
 - **Login + policy stamping.** `upsertUser` sets `lastLoginAt` on every login and stamps new users with the current
   `POLICY_VERSION` (`lib/policy.ts`) in `acknowledgedPolicyVersion`, so newly created accounts are never immediately
   re‑prompted to re‑accept the policy.
@@ -7601,7 +7694,7 @@ files are git‑ignored; the `.env*.example` files document the required set.
 |----------------------------------|:---------------------------------------:|------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `LINKEDIN_CLIENT_ID`             |                   ✓                    | `linkedin/oauth.ts`                                                          | OAuth client id (authorize URL + token exchange **and** the token-refresh call — no separate var).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `LINKEDIN_CLIENT_SECRET`         |                   ✓                    | `linkedin/oauth.ts`                                                          | OAuth client secret (server‑side token exchange **and** refresh — `refreshAccessToken` reuses the same env pair, nothing new was added for the refresh cron).                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `LINKEDIN_REDIRECT_URI`          |                   ✓                    | `linkedin/oauth.ts`                                                          | Must be `https://<deployment>.convex.site/auth/linkedin/callback` (Convex, **not** the app).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `LINKEDIN_REDIRECT_URI`          |                   ✓                    | `linkedin/oauth.ts`                                                          | Dev: the Convex callback. Prod: `https://www.app.linkintothessi.com/auth/linkedin/callback`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `APP_URL`                        |   – (default `http://localhost:5173`)   | `http.ts`, `billing*.ts`, `billingNotices.ts`, `jobs/digest.ts`              | Browser redirect base: OAuth success/error + Stripe success/cancel/portal URLs, the `/unsubscribe` redirect target and the digest footer link. Production: `https://www.app.linkintothessi.com` with no trailing slash.                                                                                                                                                                                                                                                                                                                                                                                                |
 | `STRIPE_STARTER_PRICE_ID`        |              ✓ (billing)               | `lib/stripePrices.ts`                                                        | Monthly price id → `starter` tier; checkout allowlist + price→tier map.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `STRIPE_GROWTH_PRICE_ID`         |              ✓ (billing)               | `lib/stripePrices.ts`                                                        | Monthly price id → `growth` tier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -7628,6 +7721,13 @@ files are git‑ignored; the `.env*.example` files document the required set.
 | `LANDING_METRICS_SECRET`         |        – (uniques off if unset)         | `landingMetrics.ts`, `http.ts`                                               | HMAC-SHA256 key for the landing beacon's daily-rotated visitor keys (`landingVisitorSecret()` — unique counts only). **Unset ⇒ falls back to `UNSUBSCRIBE_SECRET`; with both unset, unique counting is off while the `count` totals still record.** The hash is computed server-side from IP+UA, kept at most 48 hours and then pruned; raw IP/User-Agent are never stored ([§5](#5-data-model), [§15](#15-frontend--landing-site-landing)).                                                                                                                                                                           |
 | `INCLUDE_DIGEST_ADDRESS`         |      – (default keeps the address)      | `lib/digest.ts`, `jobs/digest.ts`, `dev.ts`                                  | CAN-SPAM postal address line in the digest footer: unset or any value other than `'false'` keeps the controller's fiscal address; `'false'` omits it. Production leaves it unset.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `SENTRY_DSN`                     |       – (prod only; off if unset)       | `lib/sentry.ts`, `observability.ts`                                          | Sentry DSN for backend error reports ([§17A](#17a-backend-error-reporting)). The app's `VITE_SENTRY_DSN` value works: backend events carry `server_name` (the deployment URL) and `convex.*` tags. Set on **prod only**. Unset ⇒ `reportError` and the failed-run sweep send nothing, so dev and the tests stay silent. Needs no Convex Pro plan.                                                                                                                                                                                                                                                                      |
+
+> **Which host `LINKEDIN_REDIRECT_URI` names.** LinkedIn's consent screen prints the host of this URL, and the URL
+> must be registered in the LinkedIn app (Auth → Authorized redirect URLs). Dev:
+> `https://<deployment>.convex.site/auth/linkedin/callback`, the Convex callback itself. Production:
+> `https://www.app.linkintothessi.com/auth/linkedin/callback`, which the app Worker forwards to the Convex callback
+> ([§7](#the-callback-hop-production-only)). Set the production value only after the URL is registered and the Worker
+> is live. Setting it back to `https://<prod>.convex.site/auth/linkedin/callback` is the rollback.
 
 > **Stripe component/SDK versions (plan 023, 2026-09-10).** `@convex-dev/stripe` `^0.1.6` + `stripe` `^22.2.1`
 > (lockfile resolves `22.6.1`); Node ≥18 required and met. No `apiVersion` is set on the direct `new Stripe(key)`
@@ -7679,6 +7779,9 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 | `VITE_COOKIE_DOMAIN`                            | `.linkintothessi.com`                                                                                          |
 | `VITE_STRIPE_*_PRICE_ID` (+ `_ANNUAL_PRICE_ID`) | the 6 Stripe price ids — **must equal the matching Convex `STRIPE_*_PRICE_ID`** (see danger/parity note above) |
 
+The app Worker's own code reads none of these at runtime, so `CONVEX_SITE` in `app/src/cloudflare-worker.ts` is a
+constant that must equal `VITE_CONVEX_SITE` ([§7](#the-callback-hop-production-only)).
+
 ### App (`app/`) — Vite, `VITE_` prefix (embedded in the browser bundle)
 
 | Variable                              |                    Required                     | Consumed in                           | Purpose                                                                                                                                                                                                |
@@ -7709,8 +7812,8 @@ Workers Builds env, not at runtime. `<prod>` = the production Convex deployment 
 | `NEXT_PUBLIC_DATAFAST_WEBSITE_ID` |       – (prod only; unset ⇒ DataFast off)       | `components/DataFast.tsx` | Public DataFast website id, the same one the app uses. Cookieless: every visitor, no cookie, no banner. Inert under `next dev` and on localhost even when set, so it only matters in the production Cloudflare build ([§15](#15-frontend--landing-site-landing) Web analytics).                                                                                        |
 
 > **Port caveat:** the Vite dev server actually runs on **5174** (`app/vite.config.ts`), but every
-> default fallback / `.env.example` assumes **5173**. Align `LINKEDIN_REDIRECT_URI`/`APP_URL` with the
-> port you actually run locally.
+> default fallback / `.env.example` assumes **5173**. Align `APP_URL` with the port you actually run
+> locally. `LINKEDIN_REDIRECT_URI` has no port: in dev it is the Convex callback.
 
 ---
 
@@ -7740,7 +7843,16 @@ The codebase follows a consistent, defensible security model:
   client bucket** (`clientBucket` of the best‑effort `x-forwarded-for`, never the IP) plus a **global 1800/hour
   backstop** (`checkOAuthStartBudget`; anonymous
   callers have no per‑user key) to bound `oauthStates` growth, and every OAuth redirect sets `Cache-Control: no-store`
-  so the code‑bearing success 302 is never cacheable.
+  so the code‑bearing success 302 is never cacheable. In production the callback reaches Convex through the app
+  Worker's 302 ([§7](#the-callback-hop-production-only)), so LinkedIn's `code` and the `state` pass through Cloudflare
+  in one request URL. The Worker holds no secret and checks nothing: every check above still runs on Convex, and only
+  Convex, with the client secret, can exchange that `code`, which it does in the same redirect chain. The nonce cookie
+  is host-only on the Convex host and never reaches the Worker. The Worker's answer is a bodiless, `no-store` 302 to
+  one fixed host and path, so it is not an open redirect and no page script ever sees the URL. That last point carries
+  weight: LinkedIn's web flow has no PKCE and no `nonce`, so an unused `code` is not tied to one browser, and whoever
+  reads one in time could present it from their own sign-in attempt (the limit is spelled out in
+  [§7](#the-callback-hop-production-only)). Forged and replayed callbacks are pinned in
+  `convex/integration/oauthCallback.test.ts`.
 - **Sessions:** random UUID, **15‑day sliding TTL** (`SESSION_TTL_MS` — see [§7](#7-authentication--identity)), stored
   in **`sessionStorage`** (cleared on tab close; a tab opened from another one receives the token over a same-origin
   `BroadcastChannel`, never through storage that outlives the tabs — [§14](#14-frontend--authenticated-app-app) Routing & session
@@ -8393,12 +8505,15 @@ is a TypeScript error, and a missing `v.string()` var fails the deploy. See
   reviewed stills and the soundtrack script's self-check are the checks (§15A).
 - **All:** `pnpm -r test` (every workspace except `video/` declares a `test` script, and pnpm skips a package without
   one); `pnpm verify` additionally runs `pnpm --filter convex test:integration` after the recursive unit run.
-- **CI/deploy:** no `.github/` workflows — deploys run via **Cloudflare Workers Builds** (Git push-to-`master`:
+- **CI/deploy:** `.github/workflows/ci.yml` runs `pnpm verify` on every push to `master` and on pull requests, and
+  deploys nothing. Deploys run via **Cloudflare Workers Builds** (Git push-to-`master`:
   landing = `opennextjs-cloudflare build`/`deploy`, app = `vite build` + `wrangler deploy`); Convex via
   `npx convex deploy`. New deploy config: `app/wrangler.jsonc`, `landing/wrangler.jsonc`, `landing/open-next.config.ts`,
   `app/scripts/gen-headers.mjs`; root scripts `deploy:app`/`deploy:landing`/`preview:landing`. Each Wrangler config owns
   both its canonical `www` Custom Domain and its legacy hostname; deployment provisions DNS/TLS, while the Worker keeps
-  the legacy hostname attached solely for its path- and query-preserving 308.
+  the legacy hostname attached solely for its path- and query-preserving 308. The app Worker also carries the LinkedIn
+  callback hop ([§7](#the-callback-hop-production-only)), so it must be live before `LINKEDIN_REDIRECT_URI` points at
+  the app host.
 
 ### Pre-launch requirements
 
@@ -8518,7 +8633,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | If you change…                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Update section(s)                                                                                                                                                                                                                                                                                                                        |
 |-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `convex/schema.ts` (tables/fields/indexes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [§5 Data Model](#5-data-model) (+ ER diagram)                                                                                                                                                                                                                                                                                            |
-| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`)                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                                                                                                                                                                                                                                                               |
+| Auth/session/OAuth (`http.ts`, `linkedin/*`, `sessions.ts`, `lib/auth.ts`, the `app/src/cloudflare-worker.ts` callback hop)                                                                                                                                                                                                                                                                                                                                                                                                         | [§7](#7-authentication--identity) (+ flow) and [§17](#17-security-posture)                                                                                                                                                                                                                                                               |
 | Billing/Stripe (`billing.ts`, `billingNode.ts`, `stripe.ts`, `billingNotices.ts`, `lib/trialMilestone.ts`, `lib/checkoutCopy.ts`, `lib/billingEmails.ts`, `http.ts` webhooks, tiers)                                                                                                                                                                                                                                                                                                                                                | [§8](#8-subscriptions--billing) (+ flow), [§1 tiers](#1-product-overview--business-model)                                                                                                                                                                                                                                                |
 | Transactional emails — shell, builders and language resolution (`lib/emailLayout.ts`, `lib/html.ts`, `lib/billingEmails.ts`, `privacy/emails.ts`, `feedback/emails.ts`, `lib/checkoutCopy.ts`, `app/src/hooks/useLanguageSync.ts`)                                                                                                                                                                                                                                                                                                  | [§8](#8-subscriptions--billing), [§12A](#12a-feedback), [§13B](#13b-privacy--compliance)                                                                                                                                                                                                                                                 |
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                                                                                                                                                                                                                                                                                                  | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
@@ -8562,6 +8677,28 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑10‑02 (LinkedIn consent host). **In production, LinkedIn's consent screen can now name the app's
+host instead of the Convex deployment.** The screen prints the host of the OAuth `redirect_uri`, so production's
+`LINKEDIN_REDIRECT_URI` moves to `https://www.app.linkintothessi.com/auth/linkedin/callback`, and the app Worker
+(`app/src/cloudflare-worker.ts`, one new test) answers that path with a bodiless, `no-store` 302 to the same path and
+query on the Convex host. The browser still calls the Convex callback itself, so the nonce cookie, the PKCE binding
+and the token exchange are untouched, and no backend code changed. Dev keeps its Convex redirect URI, because
+`vite dev` runs no Worker. No new processor, purpose or stored data: Cloudflare already hosts the app, and what is new
+is that the callback URL (a single-use code and the CSRF state) passes through it in production, which
+`docs/compliance/SUBPROCESSORS.md` and `DATA-INVENTORY.md` (Activity 11) now say. No policy copy change and no
+`POLICY_VERSION` bump. It takes effect after three manual steps, in this order: add the new URL in the LinkedIn
+Developer Portal and keep the old one, push so Cloudflare deploys the Worker, then set `LINKEDIN_REDIRECT_URI` on
+Convex prod. Setting it back is the rollback. A security review of the hop followed the same day. The Worker checks
+nothing on purpose: nothing in a callback request proves it came from LinkedIn, and Convex already refuses every
+request that lacks a `state` we issued and have not used, plus that browser's nonce cookie, before it asks LinkedIn
+anything. Five forged shapes, the `Set-Cookie` guard and a replayed callback are now pinned through the real router
+in `convex/integration/oauthCallback.test.ts` (7 tests). §7 and §17 also state the one limit LinkedIn's web flow
+leaves (no PKCE, no `nonce`, so an unused `code` is not tied to one browser), which is why the callback path must
+never serve a page and why the Worker must answer 302 before the variable changes. Also fixed: §18 said the repo had
+no CI workflow (`.github/workflows/ci.yml` runs `pnpm verify`), and the §16 port caveat named
+`LINKEDIN_REDIRECT_URI`, which has no port. Sections updated: §2 (Worker paragraph, topology chart, OAuth design
+note), §4, §7 (sequence chart, new "The callback hop" subsection), §16, §17, §18, §21._
 
 _Last updated: 2026‑10‑02 (Sign-in error logging). **Every failed sign-in now reaches Sentry with its cause, and a
 browser without `crypto.subtle` can sign in.** Sentry reported `Cannot read properties of undefined (reading

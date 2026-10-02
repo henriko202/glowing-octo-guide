@@ -269,6 +269,15 @@ callback just created the account (`authCodes.isNew`). Both rows keep the short 
 `authMetrics`: per-day integer totals of each sign-in step (sent to LinkedIn, back, signed in, and each failure
 reason), with no user reference, IP or key. The totals identify no one and are kept. See `docs/PLATFORM.md` §12C.
 
+**Sign-in callback through Cloudflare.** In production LinkedIn sends the browser back to the app's own host
+(`https://www.app.linkintothessi.com/auth/linkedin/callback`), so its consent screen names that host instead of the
+Convex deployment. The app Worker on Cloudflare, already the app's host, answers with a redirect to the Convex callback
+and stores nothing. The request URL carries LinkedIn's single-use authorization code and the `state` nonce above, so
+both pass through Cloudflare and can appear in its request logs (`RETENTION-POLICY.md`, host and server logs). Only
+Convex, which holds the OAuth client secret, can exchange the code, and it does so in the same redirect chain; LinkedIn
+expires an unused code after 30 minutes. The table above lists where this activity's rows are stored; Cloudflare
+stores none of them (`SUBPROCESSORS.md`). Dev sign-ins do not take this hop. See `docs/PLATFORM.md` §7.
+
 ---
 
 ### Activity 12: In-App Feedback

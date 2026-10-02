@@ -3,16 +3,17 @@ import { updateTokensHandler, type UpsertUserArgs, upsertUserHandler } from './a
 import { POLICY_VERSION } from '../lib/policy'
 
 // Minimal in-memory mock for Convex db context. `by_linkedin_id` answers with the existing user,
-// `by_invite_code` (backlog/R19) with the inviter — both optional.
-function createMockDb(existingUser?: any, inviter?: any) {
+// `by_invite_code` (backlog/R19) with the inviter, `by_email` with the row an email claim would find — all optional.
+function createMockDb(existingUser?: any, inviter?: any, byEmail?: any) {
   const records: any[] = existingUser ? [existingUser] : []
   const patches: any[] = []
   const inserts: any[] = []
+  const byIndex: Record<string, any> = { by_invite_code: inviter, by_email: byEmail, by_linkedin_id: records[0] }
 
   return {
     query: (_table: string) => ({
       withIndex: (name: string, _fn: any) => ({
-        first: async () => (name === 'by_invite_code' ? (inviter ?? null) : (records[0] ?? null))
+        first: async () => byIndex[name] ?? null
       })
     }),
     get: async (_id: string) => records.find(r => r._id === _id) ?? null,
@@ -108,6 +109,34 @@ describe('upsertUserHandler', () => {
     await upsertUserHandler(db, { ...BASE_ARGS, referredByCode: 'abc12345' })
     expect(db._inserts).toHaveLength(0)
     expect(db._patches[0].data).not.toHaveProperty('referredByCode')
+  })
+
+  // LinkedIn's `sub` is scoped to the OAuth app: after a Client ID change the same member arrives with a new one.
+  describe('email claim after a LinkedIn app change', () => {
+    const oldRow = { _id: 'existing-id', linkedinId: 'li-old-app', email: 'jane@example.com', tier: 'pro' }
+
+    it('re-links the old row when the sub is unknown and the email is verified', async () => {
+      const db = createMockDb(undefined, undefined, oldRow)
+      const result = await upsertUserHandler(db, { ...BASE_ARGS, email: 'jane@example.com', emailVerified: true })
+      expect(result).toEqual({ userId: 'existing-id', isNew: false })
+      expect(db._inserts).toHaveLength(0)
+      expect(db._patches[0].data.linkedinId).toBe('li-123')
+    })
+
+    it('creates a new user when the email is not verified', async () => {
+      const db = createMockDb(undefined, undefined, oldRow)
+      const result = await upsertUserHandler(db, { ...BASE_ARGS, email: 'jane@example.com' })
+      expect(result.isNew).toBe(true)
+      expect(db._patches).toHaveLength(0)
+    })
+
+    // An index lookup on an absent email would match every row that has no email.
+    it('creates a new user when LinkedIn sends no email', async () => {
+      const db = createMockDb(undefined, undefined, { _id: 'no-email-row', linkedinId: 'li-other' })
+      const result = await upsertUserHandler(db, { ...BASE_ARGS, emailVerified: true })
+      expect(result.isNew).toBe(true)
+      expect(db._patches).toHaveLength(0)
+    })
   })
 })
 

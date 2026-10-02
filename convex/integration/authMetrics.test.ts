@@ -33,7 +33,7 @@ afterEach(() => {
 })
 
 // LinkedIn answers the token exchange and the userinfo call for one member.
-function stubLinkedIn(sub: string) {
+function stubLinkedIn(sub: string, claims: { email?: string; email_verified?: boolean } = {}) {
   process.env.LINKEDIN_CLIENT_ID = 'client'
   process.env.LINKEDIN_CLIENT_SECRET = 'secret'
   process.env.LINKEDIN_REDIRECT_URI = 'https://convex.test/auth/linkedin/callback'
@@ -42,7 +42,8 @@ function stubLinkedIn(sub: string) {
   vi.stubGlobal('fetch', async (url: string | URL | Request) => {
     const href = url instanceof Request ? url.url : String(url)
     if (href.endsWith('/oauth/v2/accessToken')) return json({ access_token: 'access', expires_in: 3600 })
-    if (href.endsWith('/v2/userinfo')) return json({ sub, name: 'Ana Lima', given_name: 'Ana', family_name: 'Lima' })
+    if (href.endsWith('/v2/userinfo'))
+      return json({ sub, name: 'Ana Lima', given_name: 'Ana', family_name: 'Lima', ...claims })
     throw new Error(`unexpected fetch: ${href}`)
   })
 }
@@ -94,6 +95,49 @@ describe('sign-in funnel counters', () => {
     await t.mutation(api.sessions.redeemAuthCode, { code, verifier: VERIFIER })
 
     expect(await counts(t)).toEqual({ started: 1, linkedin_ok_returning: 1, signed_in_returning: 1 })
+  })
+
+  // A new LinkedIn app issues every member a new `sub`; the verified email finds their account again.
+  test('a member arriving with a new sub and a verified email keeps their account', async () => {
+    const t = convexTest(schema, modules)
+    const userId = await t.run(async ctx =>
+      ctx.db.insert('users', {
+        linkedinId: 'li-old-app',
+        name: 'Ana Lima',
+        email: 'ana@example.com',
+        tier: 'pro',
+        subscriptionStatus: 'active',
+        createdAt: 1
+      })
+    )
+    stubLinkedIn('li-new-app', { email: 'ana@example.com', email_verified: true })
+    const { state, cookie } = await startSignIn(t)
+
+    codeFrom(await callback(t, `code=li-code&state=${state}`, cookie))
+
+    const users = await t.run(async ctx => ctx.db.query('users').collect())
+    expect(users).toHaveLength(1)
+    expect(users[0]).toMatchObject({ _id: userId, linkedinId: 'li-new-app', tier: 'pro' })
+    expect(await counts(t)).toEqual({ started: 1, linkedin_ok_returning: 1 })
+  })
+
+  test('an unverified email never claims an account', async () => {
+    const t = convexTest(schema, modules)
+    await t.run(async ctx =>
+      ctx.db.insert('users', {
+        linkedinId: 'li-old-app',
+        name: 'Ana Lima',
+        email: 'ana@example.com',
+        subscriptionStatus: 'none',
+        createdAt: 1
+      })
+    )
+    stubLinkedIn('li-new-app', { email: 'ana@example.com', email_verified: false })
+    const { state, cookie } = await startSignIn(t)
+
+    codeFrom(await callback(t, `code=li-code&state=${state}`, cookie))
+
+    expect(await t.run(async ctx => ctx.db.query('users').collect())).toHaveLength(2)
   })
 
   test('a failed redeem counts nothing past LinkedIn', async () => {

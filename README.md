@@ -82,8 +82,10 @@ Set the backend environment variables in the [Convex dashboard](https://dashboar
 LINKEDIN_CLIENT_ID=...
 LINKEDIN_CLIENT_SECRET=...
 LINKEDIN_REDIRECT_URI=https://<your-deployment>.convex.site/auth/linkedin/callback
-#   ↑ Must point to Convex (.convex.site), NOT the app. LinkedIn returns the code to Convex,
-#     which exchanges it server-side so the client secret + user tokens never touch the browser.
+#   ↑ Dev: point at Convex (.convex.site), never at localhost. Convex exchanges the code
+#     server-side so the client secret + user tokens never touch the browser.
+#     Prod: https://www.app.linkintothessi.com/auth/linkedin/callback (the app Worker forwards it
+#     to Convex, so LinkedIn's consent screen shows the app's host; docs/PLATFORM.md §7).
 APP_URL=http://localhost:5174
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
@@ -118,7 +120,7 @@ pnpm dev:app      # Terminal 2 — React app  → http://localhost:5174
 pnpm dev:landing  # Terminal 3 — Next.js landing → http://localhost:3000 (optional locally)
 ```
 
-> The Vite dev server runs on **5174**; align `LINKEDIN_REDIRECT_URI` / `APP_URL` with the port you actually run.
+> The Vite dev server runs on **5174**; align `APP_URL` with the port you actually run.
 
 ---
 
@@ -150,7 +152,8 @@ entering the feed once the paid period ends.
 ### LinkedIn OAuth
 
 1. User clicks "Sign in with LinkedIn" → Convex HTTP action (`.convex.site`) redirects to LinkedIn.
-2. LinkedIn returns `code` → Convex exchanges it for tokens **server-side** + fetches the OIDC profile.
+2. LinkedIn returns `code` → Convex exchanges it for tokens **server-side** + fetches the OIDC profile. In production
+   the callback lands on the app host first, and the app Worker 302s it to Convex.
 3. User record upserted; tokens stored server-side only. Convex issues an opaque session token and redirects to the app.
 
 ### Post ingestion (Apify)

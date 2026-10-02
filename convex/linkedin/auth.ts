@@ -28,6 +28,8 @@ export interface UpsertUserArgs {
   refreshToken?: string // LinkedIn standard OAuth may omit refresh_token
   tokenExpiresAt: number
   email?: string
+  /** LinkedIn's `email_verified` claim. Only a verified email may claim an existing account. */
+  emailVerified?: boolean
   /** backlog/R19 — the inviter's code from ?ref=; honoured on insert only, after verification. */
   referredByCode?: string
 }
@@ -38,14 +40,25 @@ export async function upsertUserHandler(
   db: UpsertDb,
   args: UpsertUserArgs
 ): Promise<{ userId: string; isNew: boolean }> {
-  const existing = await db
+  let existing = await db
     .query('users')
     .withIndex('by_linkedin_id', q => q.eq('linkedinId', args.linkedinId))
     .first()
 
+  // LinkedIn's `sub` is scoped to the OAuth app, so a member who joined under an earlier Client ID arrives
+  // with one we have never seen. Their verified email finds the account, and the patch below re-links it.
+  // SECURITY: never look up an absent email (it would match every row without one) or an unverified one.
+  if (!existing && args.email && args.emailVerified) {
+    existing = await db
+      .query('users')
+      .withIndex('by_email', q => q.eq('email', args.email))
+      .first()
+  }
+
   if (existing) {
     const patch: Record<string, unknown> = {
       // SECURITY: isAdmin is intentionally excluded — it can only be set directly in the DB
+      linkedinId: args.linkedinId,
       name: args.name,
       profilePictureUrl: args.profilePictureUrl,
       linkedinAccessToken: args.accessToken,
@@ -106,6 +119,7 @@ export const upsertUser = internalMutation({
     refreshToken: v.optional(v.string()), // optional — LinkedIn may not return it
     tokenExpiresAt: v.number(),
     email: v.optional(v.string()),
+    emailVerified: v.optional(v.boolean()),
     referredByCode: v.optional(v.string())
   },
   handler: async (ctx, args) => upsertUserHandler(ctx.db as unknown as UpsertDb, args as UpsertUserArgs)

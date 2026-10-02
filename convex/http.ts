@@ -213,6 +213,8 @@ http.route({
         refreshToken: tokens.refresh_token,
         tokenExpiresAt,
         email: userInfo.email,
+        // Strict: the validator takes a boolean, and anything but a literal `true` must not claim an account.
+        emailVerified: userInfo.email_verified === true,
         referredByCode: oauthState.ref
       })
 

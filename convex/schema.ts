@@ -93,7 +93,8 @@ export default defineSchema({
     // ─── Privacy & compliance ────────────────────────────────────────────────
     // Contact channel captured from the LinkedIn OIDC `email` claim (previously discarded).
     // Used for DSR confirmations and breach notification. Stored under legitimate interest /
-    // legal obligation, NOT marketing consent.
+    // legal obligation, NOT marketing consent. Also the sign-in fallback key (`by_email`): a verified
+    // email finds the account when the LinkedIn `sub` is unknown (see linkedin/auth.upsertUserHandler).
     email: v.optional(v.string()),
     // Account-deletion lifecycle (self-service erasure + dormancy). `deletionRequestedAt` is an
     // intentional erasure-audit-trail timestamp (when the user asked) — kept for compliance even
@@ -119,6 +120,8 @@ export default defineSchema({
     createdAt: v.number()
   })
     .index('by_linkedin_id', ['linkedinId'])
+    // Sign-in fallback when the LinkedIn `sub` is unknown (it changes with the OAuth app) — see linkedin/auth.ts.
+    .index('by_email', ['email'])
     .index('by_stripe_customer', ['stripeCustomerId'])
     .index('by_tier', ['tier'])
     // Active-subscriber fan-out (Apify post sync). Replaces a full-table .filter() scan.
