@@ -27,9 +27,9 @@ export const enterStyle = (frame: number, start: number): CSSProperties => {
   return { opacity: p, transform: `translateY(${(1 - p) * 24}px)` }
 }
 
-export const exitStyle = (frame: number, start: number): CSSProperties => {
+export const exitStyle = (frame: number, start: number, rise = 16): CSSProperties => {
   const p = progress(frame, start, XF)
-  return { opacity: 1 - p, filter: `blur(${p * 6}px)`, transform: `translateY(${-p * 16}px)` }
+  return { opacity: 1 - p, filter: `blur(${p * 6}px)`, transform: `translateY(${-p * rise}px)` }
 }
 
 export const STAGGER = 3 // frames between two words of a reveal

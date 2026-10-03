@@ -8,12 +8,14 @@ export type Lang = (typeof LANGS)[number]
 
 // Only the keys the ad reads.
 type LandingStrings = {
+  nav: { banner: string }
   hero: {
     eyebrow: string
     headlineLine1: string
     headlineLine2: string
     subLine2: string
     cta: string
+    loginCta: string
     ctaDisclaimer: string
   }
 }
@@ -32,13 +34,16 @@ export type AdCopy = {
   handoff: [string, string]
   cta: string
   finePrint: string
+  // The 15 s cut's offer: the landing's 1-month banner, one sentence each (the badge and the end card's title take the
+  // first, the line under the title the second), and its "Log in" button, in place of the trial pair.
+  monthFree: { cta: string; lines: [string, string] }
   ui: AppStrings['comment'] & AppStrings['feed']
   you: string
   posts: [Post, Post]
   draft: string
 }
 
-// The handoff shows landing hero.subLine2 one sentence at a time.
+// The handoff shows landing hero.subLine2 one sentence at a time, and the 15 s offer splits nav.banner the same way.
 function sentences(line: string): [string, string] {
   const parts = line.split(/(?<=\.) /)
   if (parts.length !== 2) throw new Error(`Expected two sentences in "${line}"`)
@@ -48,15 +53,16 @@ function sentences(line: string): [string, string] {
 // Every string that already exists on the landing or in the app comes from its dictionary, so a copy change there
 // reaches the ad on the next render.
 function fromSources(
-  { hero }: LandingStrings,
+  { nav, hero }: LandingStrings,
   { comment, feed }: AppStrings
-): Pick<AdCopy, 'hook' | 'promise' | 'handoff' | 'cta' | 'finePrint' | 'ui'> {
+): Pick<AdCopy, 'hook' | 'promise' | 'handoff' | 'cta' | 'finePrint' | 'monthFree' | 'ui'> {
   return {
     hook: hero.eyebrow,
     promise: [hero.headlineLine1, hero.headlineLine2],
     handoff: sentences(hero.subLine2),
     cta: hero.cta,
     finePrint: hero.ctaDisclaimer,
+    monthFree: { cta: hero.loginCta, lines: sentences(nav.banner) },
     ui: {
       generate: comment.generate,
       generating: comment.generating,

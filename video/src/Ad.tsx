@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion'
+import { Badge } from './Badge'
 import { C, XF } from './brand'
 import { COPY, type Lang } from './copy'
 import { type Format, LAYOUTS } from './layouts'
@@ -37,9 +38,13 @@ export function Ad({ lang, format, length }: AdProps) {
   const frame = useCurrentFrame()
   const { durationInFrames } = useVideoConfig()
   const copy = COPY[lang]
+  // The 15 s cut sells the landing's 1-month offer: a badge until the end card (not in the 4:5, layouts.ts), and the
+  // end card leads with it.
+  const monthFree = length === '15s' ? copy.monthFree : undefined
   const layout = LAYOUTS[format]
   const timeline = TIMELINES[length]
   const { cuts } = timeline
+  const drift = interpolate(frame, [0, durationInFrames], [1, 1.03])
   return (
     <AbsoluteFill
       style={{
@@ -47,7 +52,7 @@ export function Ad({ lang, format, length }: AdProps) {
       }}
     >
       {/* The camera drift: the whole frame scales 1 → 1.03 over the ad. */}
-      <AbsoluteFill style={{ transform: `scale(${interpolate(frame, [0, durationInFrames], [1, 1.03])})` }}>
+      <AbsoluteFill style={{ transform: `scale(${drift})` }}>
         <Crossfade
           from={0}
           to={cuts.feed}
@@ -74,10 +79,22 @@ export function Ad({ lang, format, length }: AdProps) {
         >
           <EndCard
             copy={copy}
+            monthFree={monthFree}
             layout={layout}
             timeline={timeline}
           />
         </Crossfade>
+        {/* Still: it undoes the drift, which would lift the 9:16's badge over the Instagram Feed's crop (layouts.ts),
+            and stays under the node. */}
+        {monthFree && layout.badge && (
+          <AbsoluteFill style={{ transform: `scale(${1 / drift})` }}>
+            <Badge
+              text={monthFree.lines[0]}
+              out={cuts.end - XF}
+              box={layout.badge}
+            />
+          </AbsoluteFill>
+        )}
         <YouNode
           layout={layout}
           timeline={timeline}

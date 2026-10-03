@@ -56,6 +56,8 @@ export const TIMELINES: Record<Length, Timeline> = {
       typing: [200, 224],
       captions: { draft: { at: 138, out: 234 }, handoff: { at: 248, out: 448 } }
     },
-    endCard: { reveal: 326, title: 356, landed: 364, cta: 372, url: 380, finePrint: 386 }
+    // The 15 s end card's `finePrint` is the banner's second sentence, which sits under the title, so it enters before
+    // the button (EndCard.tsx).
+    endCard: { reveal: 326, title: 356, landed: 364, cta: 372, url: 380, finePrint: 366 }
   }
 }

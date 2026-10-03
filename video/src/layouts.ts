@@ -1,3 +1,4 @@
+import { BADGE_H } from './Badge'
 import { SIZE } from './brand'
 import { MOCK_TEXT } from './scenes/Demo'
 import { FINE_PRINT_LINE } from './scenes/EndCard'
@@ -21,6 +22,9 @@ export type Layout = {
   // `dots`: one per ~12,580 px² of makeDots()' free area (Opening.tsx), the density of the square and the 9:16
   opening: { box: Box; hook: number; promise: number; dots: number }
   caption: { box: Box; size: number; align: 'center' | 'left' }
+  // The 15 s cut's 1-month badge (Badge.tsx), a pill centered in or left-aligned on the column `x` to `x + w`. The
+  // 4:5 has none: room for it would push the feed past a 1:1 crop's bottom edge, so its offer is only the end card.
+  badge?: { x: number; w: number; top: number; size: number; align: 'center' | 'left' }
   skeletons: number // gray cards below the fold
   endCard: {
     x: number
@@ -30,6 +34,9 @@ export type Layout = {
     cta: TextAt
     url: TextAt
     finePrint: TextAt & { lines: number }
+    // The 15 s card (EndCard.tsx): the offer's title, two lines in its own `w` centered on the column, the line under
+    // it, and the tops of the button and the URL, which keep their sizes
+    offer?: { title: TextAt & { w: number }; note: TextAt; cta: number; url: number }
   }
 }
 
@@ -55,7 +62,8 @@ export const LAYOUTS: Record<Format, Layout> = {
     }
   },
   // 16:9 for YouTube in-stream ads. The bottom 20% stays clear for the "Ad" label and Skip; the mock sits on the
-  // right, raised because no caption sits above it, and the captions take the left column.
+  // right, raised because no caption sits above it, and the captions take the left column. The 15 s badge sits at the
+  // top of that column, above the captions' text, and left of the mock.
   '16x9': {
     width: 1920,
     height: 1080,
@@ -64,6 +72,7 @@ export const LAYOUTS: Record<Format, Layout> = {
     home: { x: 960, y: 250 },
     opening: { box: { x: 320, y: 440, w: 1280, h: 420 }, hook: 96, promise: 112, dots: 82 },
     caption: { box: { x: 160, y: 110, w: 680, h: 690 }, size: 80, align: 'left' },
+    badge: { x: 160, w: 720, top: 112, size: 34, align: 'left' },
     skeletons: 1,
     endCard: {
       x: 260,
@@ -72,12 +81,15 @@ export const LAYOUTS: Record<Format, Layout> = {
       title: { top: 370, size: 72 },
       cta: { top: 490, size: 40 },
       url: { top: 630, size: 36 },
-      finePrint: { top: 720, size: 36, lines: 2 }
+      finePrint: { top: 720, size: 36, lines: 2 },
+      offer: { title: { top: 368, size: 84, w: 900 }, note: { top: 566, size: 36 }, cta: 644, url: 780 }
     }
   },
   // 9:16 for YouTube Shorts, Instagram Reels and Stories, and TikTok: the square moved down 230 px, with an 820 px
   // text column away from the side icons, and 740 px on the end card so the EN fine print stays left of AdCheckLab's
-  // x 940 with the camera drift. Meta keeps the top 14% and the bottom 35%; the sides come from TikTok.
+  // x 940 with the camera drift. Meta keeps the top 14% and the bottom 35%; the sides come from TikTok. The 15 s badge
+  // fills the gap between the zone's top and the caption box, still, just under the Instagram Feed's 4:5 crop (y 285),
+  // and at 28 px so the caption, which the drift lifts toward it, stays 7 px below until it rises away.
   '9x16': {
     width: 1080,
     height: 1920,
@@ -86,6 +98,7 @@ export const LAYOUTS: Record<Format, Layout> = {
     home: { x: 540, y: 480 },
     opening: { box: { x: 130, y: 680, w: 820, h: 450 }, hook: 88, promise: 96, dots: 70 },
     caption: { box: { x: 130, y: 330, w: 820, h: 160 }, size: 64, align: 'center' },
+    badge: { x: 130, w: 820, top: 286, size: 28, align: 'center' },
     skeletons: 2,
     endCard: {
       x: 170,
@@ -94,7 +107,8 @@ export const LAYOUTS: Record<Format, Layout> = {
       title: { top: 650, size: 60 },
       cta: { top: 758, size: 34 },
       url: { top: 890, size: 30 },
-      finePrint: { top: 970, size: 28, lines: 3 }
+      finePrint: { top: 970, size: 28, lines: 3 },
+      offer: { title: { top: 650, size: 80, w: 740 }, note: { top: 842, size: 34 }, cta: 926, url: 1058 }
     }
   },
   // 4:5 for the Facebook Feed, drawn at 1080×1350 and rendered at 4/3 (render.mjs). The texts sit in the central
@@ -116,7 +130,8 @@ export const LAYOUTS: Record<Format, Layout> = {
       title: { top: 555, size: 60 },
       cta: { top: 663, size: 34 },
       url: { top: 795, size: 30 },
-      finePrint: { top: 875, size: 28, lines: 3 }
+      finePrint: { top: 875, size: 28, lines: 3 },
+      offer: { title: { top: 555, size: 80, w: 860 }, note: { top: 747, size: 34 }, cta: 831, url: 963 }
     }
   }
 }
@@ -134,8 +149,8 @@ const describe = (box: Box) => `x ${span(box.x, box.w)}, y ${span(box.y, box.h)}
 const point = ({ x, y }: Point): Box => ({ x, y, w: 0, h: 0 })
 for (const format of FORMATS) {
   const layout = LAYOUTS[format]
-  const { zone, stage, opening, caption, endCard } = layout
-  const { logo, finePrint } = endCard
+  const { zone, stage, opening, caption, badge, endCard } = layout
+  const { logo, url, finePrint, offer } = endCard
   const endCardBottom = finePrint.top + finePrint.lines * finePrint.size * FINE_PRINT_LINE
   const items: [string, Box][] = [
     ['opening text', opening.box],
@@ -150,6 +165,10 @@ for (const format of FORMATS) {
       ])
     )
   ]
+  if (badge) items.push(['badge', { x: badge.x, y: badge.top, w: badge.w, h: badge.size * BADGE_H }])
+  // the 15 s card ends on the URL's one line
+  if (offer)
+    items.push(['15 s end card', { x: endCard.x, y: logo.top, w: endCard.w, h: offer.url + url.size - logo.top }])
   for (const [name, box] of items) {
     if (!inside(box, zone)) {
       throw new Error(`${format}: ${name} (${describe(box)}) is outside the safe zone (${describe(zone)})`)

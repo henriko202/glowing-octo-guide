@@ -23,9 +23,23 @@ export function logoNode(layout: Layout) {
   return { x: logo.left + (28.4 - 11.5) * unit, y: logo.top + (7.6 - 3.2) * unit, r: 2.4 * unit }
 }
 
-export function EndCard({ copy, layout, timeline }: { copy: AdCopy; layout: Layout; timeline: Timeline }) {
+// The 30 s card: the logo, the brand, the button, the URL and the trial's fine print. With `monthFree` (the 15 s), the
+// banner's first sentence is the title in gold, its second sits under it in the fine print's place, and the brand
+// line goes.
+export function EndCard({
+  copy,
+  monthFree,
+  layout,
+  timeline
+}: {
+  copy: AdCopy
+  monthFree?: AdCopy['monthFree']
+  layout: Layout
+  timeline: Timeline
+}) {
   const frame = useCurrentFrame()
-  const { x, w, title, cta, url, finePrint } = layout.endCard
+  const { x, w, title, cta, url, finePrint, offer } = layout.endCard
+  if (monthFree && !offer) throw new Error('This format has no end card for the 1-month offer (layouts.ts)')
   const at = timeline.endCard
   const logo = logoBox(layout)
   const centered: CSSProperties = { position: 'absolute', left: x, width: w, textAlign: 'center' }
@@ -49,23 +63,53 @@ export function EndCard({ copy, layout, timeline }: { copy: AdCopy; layout: Layo
       >
         <LogoMark />
       </div>
+      {monthFree && offer ? (
+        <div
+          style={{
+            ...centered,
+            left: x + (w - offer.title.w) / 2,
+            width: offer.title.w,
+            top: offer.title.top,
+            fontFamily: SERIF,
+            fontWeight: 600,
+            fontSize: offer.title.size,
+            fontVariantNumeric: 'lining-nums', // Cormorant's default old-style 1 reads as an "ı"
+            lineHeight: 1.05,
+            color: C.goldText,
+            textWrap: 'balance'
+          }}
+        >
+          <Words
+            text={monthFree.lines[0]}
+            start={at.title}
+          />
+        </div>
+      ) : (
+        <div
+          style={{
+            ...centered,
+            top: title.top,
+            fontFamily: SERIF,
+            fontWeight: 600,
+            fontSize: title.size,
+            letterSpacing: '0.025em',
+            color: C.cream
+          }}
+        >
+          <Words
+            text="Link Into The SSI"
+            start={at.title}
+          />
+        </div>
+      )}
       <div
         style={{
           ...centered,
-          top: title.top,
-          fontFamily: SERIF,
-          fontWeight: 600,
-          fontSize: title.size,
-          letterSpacing: '0.025em',
-          color: C.cream
+          top: monthFree && offer ? offer.cta : cta.top,
+          display: 'flex',
+          justifyContent: 'center'
         }}
       >
-        <Words
-          text="Link Into The SSI"
-          start={at.title}
-        />
-      </div>
-      <div style={{ ...centered, top: cta.top, display: 'flex', justifyContent: 'center' }}>
         <div
           style={{
             opacity: Math.min(1, pop * 1.5),
@@ -80,14 +124,14 @@ export function EndCard({ copy, layout, timeline }: { copy: AdCopy; layout: Layo
             fontWeight: 600
           }}
         >
-          {copy.cta}
+          {monthFree ? monthFree.cta : copy.cta}
           <span style={{ marginLeft: (cta.size * 14) / 34 }}>→</span>
         </div>
       </div>
       <div
         style={{
           ...centered,
-          top: url.top,
+          top: monthFree && offer ? offer.url : url.top,
           fontFamily: SANS,
           fontSize: url.size,
           fontWeight: 500,
@@ -97,20 +141,36 @@ export function EndCard({ copy, layout, timeline }: { copy: AdCopy; layout: Layo
       >
         linkintothessi.com
       </div>
-      <div
-        style={{
-          ...centered,
-          top: finePrint.top,
-          fontFamily: SANS,
-          fontSize: finePrint.size,
-          lineHeight: FINE_PRINT_LINE,
-          color: C.muted,
-          textWrap: 'balance',
-          ...enterStyle(frame, at.finePrint)
-        }}
-      >
-        {copy.finePrint}
-      </div>
+      {monthFree && offer ? (
+        <div
+          style={{
+            ...centered,
+            top: offer.note.top,
+            fontFamily: SANS,
+            fontSize: offer.note.size,
+            fontWeight: 500,
+            color: C.cream,
+            ...enterStyle(frame, at.finePrint)
+          }}
+        >
+          {monthFree.lines[1]}
+        </div>
+      ) : (
+        <div
+          style={{
+            ...centered,
+            top: finePrint.top,
+            fontFamily: SANS,
+            fontSize: finePrint.size,
+            lineHeight: FINE_PRINT_LINE,
+            color: C.muted,
+            textWrap: 'balance',
+            ...enterStyle(frame, at.finePrint)
+          }}
+        >
+          {copy.finePrint}
+        </div>
+      )}
     </AbsoluteFill>
   )
 }
