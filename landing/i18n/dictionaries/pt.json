@@ -47,9 +47,9 @@
     "howItWorks": "Como funciona",
     "features": "Recursos",
     "pricing": "Planos",
-    "cta": "Começar teste grátis",
     "loginCta": "Entrar",
-    "skipToContent": "Pular para o conteúdo"
+    "skipToContent": "Pular para o conteúdo",
+    "banner": "Ganhe 1 mês grátis para experimentar. Entre para saber mais!"
   },
   "hero": {
     "eyebrow": "Você faz um bom trabalho, mas pouca gente vê?",
@@ -200,6 +200,8 @@
     "annualSubLabel": "{{price}} cobrado anualmente · 2 meses grátis",
     "monthlySubLabel": "2 meses grátis no plano anual",
     "trialNote": "Grátis por 7 dias ou até suas primeiras 50 interações (feitas ou recebidas), o que vier primeiro. Cartão necessário. Cancele quando quiser.",
+    "freeMonthBadge": "1 mês grátis",
+    "freeMonthNote": "Grátis no primeiro mês do plano mensal, com um código promocional. Cartão necessário. Cancele quando quiser.",
     "enterpriseNote": "Precisa de limites maiores? Planos Custom a partir de",
     "enterprisePriceMonth": "U$100/mês",
     "enterprisePriceYear": "U$1.000/ano",
@@ -246,7 +248,8 @@
       }
     ],
     "renewalAnnual": "Após o teste: {{price}} cobrados anualmente.",
-    "renewalMonthly": "Após o teste: {{price}} cobrados mensalmente."
+    "renewalMonthly": "Após o teste: {{price}} cobrados mensalmente.",
+    "afterFreeMonth": "Após o mês grátis: {{price}} cobrados mensalmente."
   },
   "faq": {
     "eyebrow": "FAQ",
@@ -261,8 +264,8 @@
         "a": "Ferramentas de automação reagem e comentam em massa usando a sua conta. Aqui, você escolhe uma publicação por vez e reage ou comenta você mesmo, no LinkedIn."
       },
       {
-        "q": "O que inclui o teste grátis e quando serei cobrado?",
-        "a": "Você tem tudo do plano que escolher, grátis por 7 dias ou até chegar a 50 interações, o que vier primeiro. Conta como interação cada reação ou comentário que você faz ou recebe no app. O primeiro rascunho com IA que você gera para cada publicação também conta. Você cadastra um cartão para começar e só cobramos quando o teste termina. Cancele antes disso e você não paga nada."
+        "q": "Tem teste grátis? Quando serei cobrado?",
+        "a": "No Starter e no Growth, um código promocional deixa o primeiro mês grátis no plano mensal. Sem código, cobramos seu cartão quando você assina. O Pro é grátis por 7 dias ou até você chegar a 50 interações, o que vier primeiro. Conta como interação cada reação ou comentário que você faz ou recebe no app. O primeiro rascunho com IA que você gera para cada publicação também conta. Você cadastra um cartão para começar e só cobramos quando o teste termina. Cancele antes disso e você não paga nada."
       },
       {
         "q": "O que é o SSI e em quanto tempo o meu vai mudar?",
@@ -289,8 +292,6 @@
   "finalCta": {
     "headlineLine1": "Conheça o feed.",
     "headlineLine2": "Depois, decida se é para você.",
-    "subheadline": "Grátis por 7 dias ou até suas primeiras 50 interações (feitas ou recebidas), o que vier primeiro. Cartão necessário. Cancele quando quiser.",
-    "cta": "Começar meu teste grátis",
     "loginCta": "Entrar",
     "ctaTrust": "Login oficial do LinkedIn · Recebemos só seu nome, foto e e-mail · Nunca publicamos por você"
   },
@@ -319,9 +320,5 @@
     "en": "English",
     "pt": "Português",
     "es": "Español"
-  },
-  "trialOffer": {
-    "annual": "Escolha qualquer plano · A partir de {{price}} por ano após o teste",
-    "monthly": "Escolha qualquer plano · A partir de {{price}} por mês após o teste"
   }
 }

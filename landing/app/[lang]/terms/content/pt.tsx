@@ -6,7 +6,7 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Termos de Serviço</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última atualização:</strong> setembro de 2026
+          <strong className="text-cream">Última atualização:</strong> outubro de 2026
         </p>
 
         {/* 1. Aceitação */}
@@ -107,14 +107,21 @@ export default function Pt({ lang }: { lang: Locale }) {
           depois que essa publicação for destacada.
         </p>
         <p>
-          <strong className="text-cream">Teste grátis.</strong> Novas contas começam com um{' '}
-          <strong className="text-cream">teste grátis de 7 dias</strong> (14 dias quando você entra pelo link de convite
-          de um membro) e é necessário informar um método de pagamento para iniciá-lo. O teste termina — e a cobrança
-          começa — assim que você atingir <strong className="text-cream">50 interações</strong> (feitas e recebidas) ou
-          quando o período de teste terminar, o que vier primeiro. Avisamos você por e-mail antes da primeira cobrança.
-          Você pode cancelar a qualquer momento antes do fim do teste, na página Assinatura da sua conta, e nada será
-          cobrado. Há um teste grátis por conta; se você assinar novamente após cancelar, a cobrança começa
-          imediatamente e isso é informado no checkout.
+          <strong className="text-cream">Teste grátis.</strong> O plano <strong className="text-cream">Pro</strong>{' '}
+          começa com um <strong className="text-cream">teste grátis de 7 dias</strong> (14 dias quando você entra pelo
+          link de convite de um membro) e é necessário informar um método de pagamento para iniciá-lo. Os planos Starter
+          e Growth não têm teste grátis: a cobrança começa quando você assina. O teste termina — e a cobrança começa —
+          assim que você atingir <strong className="text-cream">50 interações</strong> (feitas e recebidas) ou quando o
+          período de teste terminar, o que vier primeiro. Avisamos você por e-mail antes da primeira cobrança. Você pode
+          cancelar a qualquer momento antes do fim do teste, na página Assinatura da sua conta, e nada será cobrado. Há
+          um teste grátis por conta; se você assinar novamente após cancelar, a cobrança começa imediatamente e isso é
+          informado no checkout.
+        </p>
+        <p>
+          <strong className="text-cream">Códigos promocionais.</strong> Um código promocional informado no checkout pode
+          deixar grátis o primeiro mês de um plano mensal. Ainda é necessário um método de pagamento e, depois desse
+          mês, você é cobrado pelo preço mensal do plano, a menos que cancele antes. Códigos promocionais não valem no
+          plano anual.
         </p>
         <p>
           <strong className="text-cream">Cancelamento.</strong> Você pode cancelar sua assinatura a qualquer momento

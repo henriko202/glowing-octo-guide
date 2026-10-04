@@ -57,6 +57,10 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
         <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
           {dict.plans.map(plan => {
             const highlight = plan.id === 'growth'
+            // Pro sells its trial; Starter and Growth sell the free month, a promo code that only the
+            // monthly Checkout accepts (convex/lib/stripePrices.promotionCodesAllowed). So their
+            // button always opens the monthly plan, whichever interval the grid is showing.
+            const freeMonth = plan.id !== 'pro'
             const amount = planPrice(plan.id, interval)
             const monthlyPrice = annual ? formatPrice(amount / 12, lang, 2) : formatPrice(amount, lang)
             const totalPrice = formatPrice(amount, lang)
@@ -78,7 +82,14 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                   </div>
                 )}
                 <div className="mb-6">
-                  <h3 className="text-xl font-semibold text-cream">{plan.name}</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-xl font-semibold text-cream">{plan.name}</h3>
+                    {freeMonth && (
+                      <span className="rounded-full bg-gold px-2.5 py-0.5 text-xs font-semibold text-on-gold">
+                        {dict.freeMonthBadge}
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-1 text-sm leading-relaxed text-cream-muted">{plan.description}</p>
                 </div>
                 <div className="mb-6">
@@ -89,7 +100,7 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                 {/* The one axis the three plans are compared on (backlog/R13): the number the ladder
                     sells, in body-weight cream so it reads before the checklist. */}
                 <p className="mb-5 text-sm font-medium text-cream">{plan.axis}</p>
-                <ul className="mb-8 flex-1 space-y-2.5">
+                <ul className="mb-6 flex-1 space-y-2.5">
                   {plan.features.map(f => (
                     <li
                       key={f}
@@ -105,8 +116,21 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                     </li>
                   ))}
                 </ul>
+                {/* Only Pro has a trial (convex/lib/trialMilestone.ts planHasTrial decides it at
+                    checkout); the free month is the promo code's, so its renewal line quotes the
+                    monthly price. The terms sit above the button so the buttons line up whatever
+                    the notes' length. */}
+                <div className="mb-4 space-y-2 text-xs leading-relaxed text-cream-muted">
+                  <p>{freeMonth ? dict.freeMonthNote : dict.trialNote}</p>
+                  <p>
+                    {freeMonth
+                      ? dict.afterFreeMonth.replace('{{price}}', formatPrice(planPrice(plan.id, 'monthly'), lang))
+                      : (annual ? dict.renewalAnnual : dict.renewalMonthly).replace('{{price}}', totalPrice)}
+                  </p>
+                </div>
                 <TrialLink
                   plan={plan.id}
+                  interval={freeMonth ? 'monthly' : undefined}
                   placement="pricing"
                   className={`block rounded-xl py-3 text-center text-sm font-semibold transition-[background-color,border-color] duration-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${
                     highlight
@@ -116,10 +140,6 @@ export default function Pricing({ dict, lang }: { dict: Dictionary['pricing']; l
                 >
                   {plan.cta}
                 </TrialLink>
-                <p className="mt-3 text-xs leading-relaxed text-cream-muted">{dict.trialNote}</p>
-                <p className="mt-2 text-xs leading-relaxed text-cream-muted">
-                  {(annual ? dict.renewalAnnual : dict.renewalMonthly).replace('{{price}}', totalPrice)}
-                </p>
               </div>
             )
           })}

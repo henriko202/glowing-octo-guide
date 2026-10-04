@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { PrimaryCta, SelectedOffer } from '@/components/TrialProvider'
+import { LoginLink } from '@/components/TrialProvider'
 import type { GuideContent } from './content/en'
 import type { Dictionary } from '@/i18n/getDictionary'
 import type { Locale } from '@/i18n/config'
@@ -146,18 +146,12 @@ export default function Guide({
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-cream-muted">{guide.cta.body}</p>
           <div className="mt-8 flex flex-col items-center gap-3">
-            <PrimaryCta
+            <LoginLink
               placement="final"
-              loginLabel={dict.hero.loginCta}
               className="inline-flex min-h-11 items-center rounded-full bg-gold px-8 py-4 font-semibold text-on-gold transition-colors hover:bg-gold-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
             >
-              {dict.hero.cta}
-            </PrimaryCta>
-            <SelectedOffer
-              dict={dict.trialOffer}
-              lang={lang}
-            />
-            <p className="text-[13px] leading-relaxed text-cream-muted">{dict.hero.ctaDisclaimer}</p>
+              {dict.hero.loginCta}
+            </LoginLink>
             <p className="text-[13px] leading-relaxed text-cream-muted">{dict.hero.ctaTrust}</p>
           </div>
         </section>

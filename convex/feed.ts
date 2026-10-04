@@ -80,7 +80,7 @@ export function toFeedAuthor(author: Doc<'users'>) {
  * erasure, and reappears if they cancel), and `past_due` authors: a failed renewal hides their
  * posts (and any featured boost on them) until the charge clears, and `syncUserSubscription`
  * writing `active` brings them back — computed live from the status, so recovery needs no post
- * mutation. Trialing authors ARE eligible: they hold a card-backed Growth trial (Task 4 / Plan 2B)
+ * mutation. Trialing authors ARE eligible: they hold a card-backed Pro trial (Task 4 / Plan 2B)
  * so their posts belong in the feed (reciprocity).
  *
  * A CANCELED author keeps their posts in the feed only until their paid period ends: cancellation

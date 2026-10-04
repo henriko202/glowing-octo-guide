@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { PrimaryCta } from './TrialProvider'
+import { LoginLink } from './TrialProvider'
 import LogoMark from './LogoMark'
 import ThemeToggle from './ThemeToggle'
 import LanguageSelector from './LanguageSelector'
@@ -33,6 +33,13 @@ export default function Nav({
         scrolled ? 'border-b border-cream/5' : 'border-b border-transparent'
       }`}
     >
+      {/* Sticky with the nav; Hero's top padding and globals.css scroll-padding-top reserve its height. */}
+      <LoginLink
+        placement="nav"
+        className="flex min-h-11 items-center justify-center bg-gold px-4 py-1 text-center text-xs leading-tight font-semibold text-on-gold transition-colors hover:bg-gold-light focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-ink sm:text-sm"
+      >
+        {dict.banner}
+      </LoginLink>
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-6">
         <Link
           href={`/${lang}`}
@@ -78,13 +85,12 @@ export default function Nav({
             lang={lang}
           />
           <ThemeToggle dict={themeToggleDict} />
-          <PrimaryCta
+          <LoginLink
             placement="nav"
-            loginLabel={dict.loginCta}
             className="hidden min-h-11 items-center rounded-full border border-gold/60 px-3 py-2 text-sm font-medium whitespace-nowrap text-gold-text transition-colors duration-300 hover:bg-gold hover:text-on-gold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold sm:inline-flex md:px-5"
           >
-            {dict.cta}
-          </PrimaryCta>
+            {dict.loginCta}
+          </LoginLink>
         </div>
       </nav>
     </header>

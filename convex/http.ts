@@ -357,20 +357,11 @@ function reportingHandlers(handlers: StripeEventHandlers): StripeEventHandlers {
 registerRoutes(http, components.stripe, {
   webhookPath: '/stripe/webhook',
   events: reportingHandlers({
+    // Two tabs, two checkouts: the checkout guard cannot see a second checkout completed between
+    // session creation and Stripe confirming payment. syncUserSubscription voids the newer one itself,
+    // inside its own transaction, on whichever of these events makes it live (PLATFORM §8).
     'customer.subscription.created': async (ctx, event: Stripe.CustomerSubscriptionCreatedEvent) => {
-      // Two tabs, two checkouts: the checkout guard cannot see a second checkout completed between
-      // session creation and Stripe confirming payment. syncUserSubscription decides, inside its own
-      // transaction, whether this member now holds a duplicate and which row is the newer one. Only
-      // `created` acts on it — Stripe emits `updated` for the duplicate right after, and acting there
-      // too would void (and notify) twice.
-      const duplicate = await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))
-      if (duplicate) {
-        await ctx.scheduler.runAfter(0, internal.billingNode.cancelDuplicateSubscription, {
-          userId: duplicate.userId,
-          stripeSubscriptionId: duplicate.stripeSubscriptionId,
-          tier: duplicate.keepTier
-        })
-      }
+      await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))
     },
     'customer.subscription.updated': async (ctx, event: Stripe.CustomerSubscriptionUpdatedEvent) => {
       await ctx.runMutation(internal.stripe.syncUserSubscription, syncArgs(event))

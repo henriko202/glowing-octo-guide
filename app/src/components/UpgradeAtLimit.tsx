@@ -10,7 +10,7 @@ import { api } from '../convex'
 import { SUPPORT_EMAIL } from '@/lib/support'
 import { captureEvent } from '@/lib/observability/analytics'
 import { useCardGate } from '@/hooks/useCardGate'
-import { resolveTargetPlan } from '@/lib/targetPlan'
+import { gatePlan } from '@/lib/targetPlan'
 import { FEATURED_POST_PRICE, PLAN_PRICES, usdLabel } from '@/lib/planPrices'
 
 export type LimitKind = 'weeklyPosts' | 'featured' | 'interactionCap' | 'visibility'
@@ -51,7 +51,7 @@ export default function UpgradeAtLimit({
   // wrong ask. Point them at the same trial/payment-fix ask CardGateBanner/CardGateDialog use
   // instead (F2), branching on past_due -- and on canTrial -- the same way those do (F5).
   if (gated) {
-    const plan = resolveTargetPlan(searchParams)
+    const plan = gatePlan(searchParams, canTrial)
     const pastDue = status === 'past_due'
     return (
       <span className={className}>

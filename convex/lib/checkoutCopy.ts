@@ -39,7 +39,21 @@ const NO_TRIAL_MESSAGE: Record<BillingLocale, string> = {
   es: 'Sin prueba gratuita esta vez: ya usaste la tuya. El cobro es hoy y tu plan comienza de inmediato. Cancela cuando quieras desde Suscripción.'
 }
 
-/** The line under Stripe's pay button. Stripe caps custom_text.submit.message at 1200 chars. */
-export function checkoutSubmitMessage(locale: BillingLocale, opts: { trial: boolean; days: number }): string {
-  return opts.trial ? trialMessage(opts.days)[locale] : NO_TRIAL_MESSAGE[locale]
+// A plan with no trial at all (Starter, Growth): the member never had one to use up.
+const NO_PLAN_TRIAL_MESSAGE: Record<BillingLocale, string> = {
+  en: 'You are billed today and your plan starts immediately. Cancel anytime from Subscription.',
+  pt: 'A cobrança é hoje e seu plano começa imediatamente. Cancele quando quiser em Assinatura.',
+  es: 'El cobro es hoy y tu plan comienza de inmediato. Cancela cuando quieras desde Suscripción.'
+}
+
+/**
+ * The line under Stripe's pay button. Stripe caps custom_text.submit.message at 1200 chars.
+ * `trialUsed` picks the no-trial reason: the member already had theirs, or the plan has none.
+ */
+export function checkoutSubmitMessage(
+  locale: BillingLocale,
+  opts: { trial: boolean; days: number; trialUsed: boolean }
+): string {
+  if (opts.trial) return trialMessage(opts.days)[locale]
+  return (opts.trialUsed ? NO_TRIAL_MESSAGE : NO_PLAN_TRIAL_MESSAGE)[locale]
 }

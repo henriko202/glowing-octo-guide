@@ -161,7 +161,7 @@ describe('trialEndingEmail', () => {
 })
 
 describe('duplicateSubscriptionCanceledEmail', () => {
-  it('says plainly that the extra subscription was voided and nothing extra was charged', () => {
+  it('says plainly that the extra subscription was voided and any charge refunded', () => {
     for (const l of LOCALES) {
       const m = duplicateSubscriptionCanceledEmail(l, { planName: 'Growth', billingUrl: BILLING_URL })
       expect(m.subject.length).toBeGreaterThan(0)

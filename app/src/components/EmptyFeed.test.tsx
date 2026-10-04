@@ -138,7 +138,7 @@ describe('EmptyFeed', () => {
         made={0}
       />
     )
-    expect(screen.getByText(/as soon as you start your free trial/i)).toBeInTheDocument()
+    expect(screen.getByText(/as soon as you start your free pro trial/i)).toBeInTheDocument()
     expect(screen.queryByTestId('activation-checklist')).not.toBeInTheDocument()
   })
 
@@ -186,7 +186,7 @@ describe('EmptyFeed', () => {
         caughtUp
       />
     )
-    expect(screen.getByText(/as soon as you start your free trial/i)).toBeInTheDocument()
+    expect(screen.getByText(/as soon as you start your free pro trial/i)).toBeInTheDocument()
     expect(screen.queryByText(/you.re caught up/i)).not.toBeInTheDocument()
   })
 })

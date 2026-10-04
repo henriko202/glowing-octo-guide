@@ -87,7 +87,7 @@ the internal tier id, negotiated limits, contact links, and prices are unchanged
 |-------------------------------------|:-------:|:-----------------------------------:|:-----------:|:----------------------------:|
 | Price                               | $10/mo  |               $15/mo                |   $30/mo    |            Custom            |
 | Access shared feed                  |   ✓    |                 ✓                  |     ✓      |              ✓              |
-| 7‑day trial (card required)         |   ✓    | ✓ (tier chosen on landing, see §8) |     ✓      |              —               |
+| 7‑day trial (card required)         |   ✗    |                 ✗                  |     ✓      |              —               |
 | Feed filtered by industry + country |   ✗    |       ✓ (auto from profile)        | ✓ (custom) |         ✓ (custom)          |
 | Control who sees your posts         |   ✗    |                 ✗                  |     ✓      |              ✓              |
 | Interactions counted per post (cap) |   25    |                 50                  |     200     | 200 (per‑user override‑able) |
@@ -109,14 +109,17 @@ direct DB edit to that user's `planLimits` row (no admin control yet). A one‑o
 tier‑default rows still at the old 9999 seed to 5 — see [§9](#9-plan-limits-system). See
 [§19](#19-known-discrepancies-dead-code--roadmap).
 
-**Trial model (Plan 2B).** New users start at `subscriptionStatus: 'none'` with no app-side trial. The trial begins when
-they add a card via Stripe Checkout, which creates a real subscription in
-`trialing` status for the **plan the member chose** — the one they picked on the landing site, carried through OAuth as
+**Trial model (Plan 2B; Pro only since 2026‑10‑03).** New users start at `subscriptionStatus: 'none'` with no app-side
+trial. The trial begins when they add a card via Stripe Checkout **for Pro**, which creates a real subscription in
+`trialing` status. **Starter and Growth have no trial** (launch promotion, 2026‑10‑03): their checkout bills on day one,
+decided per checkout by `planHasTrial(tier)` (`lib/trialMilestone.ts`, `TRIAL_PLAN = 'pro'`), so no Stripe config
+change was involved. The plan the member chose — picked on the landing site, carried through OAuth as
 `?plan=`/`?interval=` and re-offered as the single primary card on `/billing`, with **Growth** as the fallback for
-anyone arriving cold (see §14). Billing starts at **50 combined interactions (made + received)
+anyone arriving cold (see §14) — is what they check out; the feed's card gate sells the **Pro trial** to a member who
+can still trial. Billing starts at **50 combined interactions (made + received)
 OR 7 days, whichever comes first**: the 7-day side is Stripe's own `trial_period_days`; the 50-interaction milestone
 fires `endTrialEarly` (server-side) to convert the trial immediately. Because the trial is a real Stripe subscription,
-trialing users get the **chosen tier's plan limits naturally** — no tier mapping shim is needed. **Engaging** with
+trialing users get **Pro's plan limits naturally** — no tier mapping shim is needed. **Engaging** with
 others (comment / react) is **card-gated server-side** via `assertCanEngage` in `convex/lib/access.ts`, which requires
 an engage‑granting `subscriptionStatus ∈ {trialing, active, canceled}`; only `none` (never subscribed) and `past_due`
 (failed payment) receive a `PAYMENT_REQUIRED` error. **Cancellation never revokes access** — a canceled member keeps
@@ -126,7 +129,7 @@ for this gate (hidden-post banner, tap-bound gate dialog, X/50 progress bar, SSI
 see [§14 "Trial UI (Plan 2C)"](#trial-ui-plan-2c).
 
 **One trial per account, forever.** `createCheckoutSession` grants `trial_period_days` only to a member who has never
-held a `subscriptions` row, and refuses a second _live_ subscription outright (`ALREADY_SUBSCRIBED` → the Customer
+held a `subscriptions` row **and** is checking out Pro (so a Starter or Growth buyer has used the trial up too), and refuses a second _live_ subscription outright (`ALREADY_SUBSCRIBED` → the Customer
 Portal). A returning subscriber checks out **without** a trial and is billed on day one — stated on the Billing page
 _before_ the checkout (`getMe.trialEligible` swaps every trial promise on the Billing page **and on the card gate** for
 its honest twin, §14) and again under
@@ -1622,8 +1625,9 @@ configurations", §8).
 Key checkout parameters:
 
 - `trial_period_days: trialDaysFor(user)` — **conditional**, not unconditional: set only when
-  `trialEligible(rows.length)` (`lib/trialMilestone.ts`) is true, i.e. the member has never held a subscription row. See
-  "One live subscription, one trial" below. The length is `TRIAL_PERIOD_DAYS` (**7**) normally and
+  `trialEligible(rows.length)` (`lib/trialMilestone.ts`) is true, i.e. the member has never held a subscription row,
+  **and** `planHasTrial(getTierFromPriceId(priceId))` is true, i.e. the price is Pro's (since 2026‑10‑03; Starter and
+  Growth bill on day one during the launch promotion). See "One live subscription, one trial" below. The length is `TRIAL_PERIOD_DAYS` (**7**) normally and
   `INVITED_TRIAL_PERIOD_DAYS` (**14**) when `users.referredByCode` is set (**R19**); both constants and `trialDaysFor`
   live in `lib/trialMilestone.ts` — the hard-coded `TRIAL_PERIOD_DAYS` that used to sit in `billingNode.ts` is gone, so
   backend and UI read one source. **The R01 repeat-trial rule still wins:** a member who has already held a subscription
@@ -1644,12 +1648,16 @@ Key checkout parameters:
   the same (deactivate old, create new). Existing subscriptions keep the discount they already redeemed, and the app
   never names the coupon (only `allow_promotion_codes`), so this is a Stripe-side operation with no code change.
   `max_redemptions` and `first_time_transaction` are create-only too — changing them is the same re-issue, and a new
-  code restarts its redemption count.
+  code restarts its redemption count. Since 2026‑10‑03 the landing's Starter and Growth cards advertise this free
+  month ("Try … free", §15) and link to the monthly price, so a code with a low `max_redemptions` cap breaks that
+  promise for everyone after the cap.
 - `locale: stripeCheckoutLocale(billingLocale)` (`lib/checkoutCopy.ts`) — the hosted page renders in the member's own
   language. Stripe's codes are not ours: our `pt` maps onto Stripe's `pt-BR`.
-- `custom_text.submit.message: checkoutSubmitMessage(billingLocale, { trial, days })` — the early-charge rule, stated
-  under the pay button, **before** the card. Two deterministic variants (trial / no trial) × three languages, pure and
-  unit-tested. `days` is the trial length actually granted, so an invited member reads "after 14 days" on the same
+- `custom_text.submit.message: checkoutSubmitMessage(billingLocale, { trial, days, trialUsed })` — the early-charge
+  rule, stated under the pay button, **before** the card. Three deterministic variants × three languages, pure and
+  unit-tested: trial; no trial because the member already used theirs (`trialUsed`, "you already used your free
+  trial"); and no trial because the plan has none (`NO_PLAN_TRIAL_MESSAGE`, since 2026‑10‑03: a first-time Starter or
+  Growth buyer must not read that they used something they never had). `days` is the trial length actually granted, so an invited member reads "after 14 days" on the same
   screen where they are about to enter a card. Never "may end early" — the rule is a fact, not a hedge — and Stripe caps
   the field at 1200 characters.
 - `metadata.datafast_visitor_id` / `datafast_session_id` — DataFast revenue attribution
@@ -1679,6 +1687,16 @@ Two pure guards run before the session is created, both reading `internal.billin
   `undefined` for a non-trial subscription: a marker that erases itself would hand a returning member a second free
   trial. A returning subscriber is billed on day one and is told so in `custom_text` before entering the card, never
   discovered on the statement.
+- **`planHasTrial(tier)`** (since 2026‑10‑03) — the plan half: only `TRIAL_PLAN` (`'pro'`) has a trial, so the
+  checkout's `trial` is `trialEligible(rows.length) && planHasTrial(tier)`. A first-time Starter or Growth buyer is
+  billed on day one, and the row that checkout inserts uses the trial up, like any other row (the user's call: one
+  trial per account stays the rule, so a Starter buyer who later wants Pro does not get a Pro trial). The two helpers
+  are unit-tested; the action that joins them (price id → tier → `trial`) is proven by `scripts/billing-scenarios.mjs`
+  against test-mode Stripe. `--coupons` opens real Checkout sessions for a fresh probe member on Starter and Growth
+  monthly, Growth annual, and Pro monthly and annual, and compares each pay-button line with `checkoutSubmitMessage`:
+  the trial line on both Pro prices only. Stripe does not read back a session's `subscription_data`, so that line,
+  built from the same `trial` flag as `trial_period_days`, is the witness. `--pastdue`'s returning member checks out
+  Pro and must get the "you already used yours" line.
 - **The same answer reaches the client, from the server (`getMe.trialEligible`).** The UI must never re-derive
   eligibility from `users.subscriptionStatus`: that field is not the rule. `canceled` is only the _common_ ineligible
   state — `toSubscriptionStatus` (`stripe.ts`) maps Stripe's `incomplete`, `incomplete_expired` and `paused` to **
@@ -1686,7 +1704,8 @@ Two pure guards run before the session is created, both reading `internal.billin
   with rows back to `'none'` too. Both are ineligible while reading as a brand-new member. `getMe` therefore returns
   the row-count answer itself, and **every** trial promise in the app renders behind it: `BillingPage`'s pre-card block
   and, since 2026‑09‑07, the three **card-gate** surfaces, which are gated on exactly the statuses (`'none'` /
-  `past_due`) where this trap lives — `useCardGate().canTrial` (§14).
+  `past_due`) where this trap lives — `useCardGate().canTrial` (§14). `getMe.trialEligible` stays **member-level**: the
+  plan half (`planHasTrial`) is the client's to apply per plan card, because one Billing page shows all three.
 
 **Language.** `createCheckoutSession` takes an optional `locale` argument (the app passes `i18n.language`), and
 `billingNode.createCheckoutSession` persists the resolved value to `users.language` through
@@ -1710,7 +1729,7 @@ sequenceDiagram
     B ->> B: requireAuthAction(sessionToken)
     B ->> DB: internal.billing.listUserSubscriptions(userId)
     B -->> A: findLiveSubscription? → ConvexError ALREADY_SUBSCRIBED (client opens the portal)
-    B ->> B: trial = trialEligible(rows.length); days = trialDaysFor(user); billingLocale = resolveBillingLocale(...)
+    B ->> B: trial = trialEligible(rows.length) && planHasTrial(tier); days = trialDaysFor(user); billingLocale = resolveBillingLocale(...)
 B ->> SC: getOrCreateCustomer(userId, email, name)
 B ->> S: checkout.sessions.create(trial? days, card-required, promo-codes, locale, custom_text, metadata datafast_*)
 B ->> DB: setStripeCustomerId (if unset) + users.setLanguageFromCheckout (if changed)
@@ -1735,9 +1754,9 @@ default. See "Per-tier portal configurations" in [§8](#8-subscriptions--billing
 reads it once — latching a `justSubscribed` flag during render, not in an effect. The webhook (`http.ts` →
 `stripe.ts`) can land a moment after the redirect, so while `justSubscribed` is true and `me.subscriptionStatus` is
 still pre‑checkout — `none` for a first checkout, or `canceled` for a member re‑subscribing (their row keeps
-`canceled` until the webhook lands) — the page shows an inline activating state: `billing.activating` ("your trial…")
-for `none`, `billing.activatingPlan` ("your plan…") for `canceled`, because the repeat‑trial guard in `billingNode.ts`
-gives a re‑subscriber no second trial. `getMe` is reactive, so it clears itself the instant the row updates — no
+`canceled` until the webhook lands) — the page shows an inline activating state, `billing.activatingPlan` ("Activating
+your plan…") for both. It used to say "your trial…" for `none`, but since 2026‑10‑03 a first-time Starter or Growth
+buyer has no trial either, so `billing.activating` was deleted rather than branched on the plan. `getMe` is reactive, so it clears itself the instant the row updates — no
 polling. After ~20s with no flip it falls back to `billing.activatingTimeout` (a neutral "your
 plan will show here shortly", the Manage button visible, never blaming the member or naming a webhook) and reports the
 case via `captureException` (§17) so a genuinely lost webhook is visible. Once the status becomes `trialing` or
@@ -1848,8 +1867,8 @@ the copy and the rules are unit-tested without a database. **Plan names are loca
 `billing.plans.*.name` in the app
 locales (including the `Custom` tier name), so a raw tier id never reaches a member and
 an English plan name never lands inside a Portuguese email. `sendDuplicateCanceled` therefore takes a **tier id**, not a
-rendered plan name: `http.ts` deals in tier ids and the mailer localizes, so display copy never passes through the
-webhook layer.
+rendered plan name: `syncUserSubscription` (`stripe.ts`) deals in tier ids and the mailer localizes, so display copy
+never passes through the webhook layer.
 
 Every transactional body now renders through the shared branded shell **`lib/emailLayout.ts`**, with escaping in **
 `lib/html.ts`**: a table-based 600 px card (dark header band + wordmark, gold rule, white content card, muted footer)
@@ -1998,21 +2017,21 @@ see [§17](#17-security-posture).
 `http.ts` registers handlers for these Stripe events, each delegating to an internal mutation in
 `stripe.ts`:
 
-| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), persist the **price snapshot** (`unit_amount` / `currency` / `recurring.interval` off `items.data[0].price`) and `cancelAtPeriodEnd`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). Also persists `stripeCreated` + `lastEventAt`, **refuses a stale replay** (a live status for a row already `canceled` — Stripe retries on any non-2xx) **and an out‑of‑order event** (`event.created` older than the row's `lastEventAt`; only the duplicate decision still runs), and when **another row defines the member** (this row is the duplicate, or this is a non-live event while they still hold a live row) leaves the user doc alone. Returns the **duplicate to void**, which only the `created` handler acts on (below). Mirrors `sub.schedule` as `stripeScheduleId`; a landed **scheduled downgrade** clears the pending mirror and releases the schedule (B07). |
-| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`. If the member **still holds a live row** (the voided duplicate's own `deleted`, or a period-end cancel landing after a re-subscribe) their `tier` / `subscriptionStatus` / `subscriptionEndsAt` follow that row — nothing is downgraded. Otherwise set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this), downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `customer.subscription.trial_will_end`      | Schedules `internal.billingNotices.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears. Skips an event older than the row's `lastEventAt`, so a retried failure cannot re‑block a member whose payment already cleared, and ignores a failure for a row already `canceled` (Stripe's dunning end delivers the final failure and the `deleted` in either order).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `checkout.session.completed`                | `isFeaturedPostCheckout` (`lib/featuredPurchase.ts`) lets through only a **paid** `payment`-mode session tagged `metadata.kind === 'featured_post'` — a subscription checkout completes through this same event and is ignored here. `posts.applyPurchasedFeature` normalises `postId`, no-ops on a redelivery (same session id) or logs a `post.featured_purchase_duplicate` audit row for a second paid session on an already-featured post (no refund), and otherwise features the post with its tier's cap bonus. Never throws — Stripe always sees 200. See "Featured post add-on" above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Stripe event                                | Handler effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `customer.subscription.created` / `updated` | `syncUserSubscription`: set `tier` (via `resolveSyncedTier` — **admin tier never changes**) + `subscriptionStatus`, stamp `subscriptionEndsAt = current_period_end`, stamp `trialEndsAt = sub.trial_end` (seconds→ms, `null` → `undefined`), persist the **price snapshot** (`unit_amount` / `currency` / `recurring.interval` off `items.data[0].price`) and `cancelAtPeriodEnd`, re‑stamp `authorTierRank` on all the user's posts, **upsert** our `subscriptions` row. If status `active` → **un‑hide** the user's hidden posts **and** schedule an immediate Apify sync (only when `isApifyPostSyncEnabled(appSettings)`). Also persists `stripeCreated` + `lastEventAt`, **refuses a stale replay** (a live status for a row already `canceled` — Stripe retries on any non-2xx) **and an out‑of‑order event** (`event.created` older than the row's `lastEventAt`, or an `incomplete` event for a row already `trialing`/`active`: one born `incomplete` whose own `created` lands after its paid `updated`), and when **another row defines the member** (this row is the duplicate, or this is a non-live event while they still hold a live row) leaves the user doc alone. On the event that first makes a row live (`wentLive`) it **schedules the void of a duplicate itself** and closes that row (below); returns nothing. Mirrors `sub.schedule` as `stripeScheduleId`; a landed **scheduled downgrade** clears the pending mirror and releases the schedule (B07). |
+| `customer.subscription.deleted`             | `cancelUserSubscription`: mark sub `canceled`. If the member **still holds a live row** (the voided duplicate's own `deleted`, or a period-end cancel landing after a re-subscribe) their `tier` / `subscriptionStatus` / `subscriptionEndsAt` follow that row — nothing is downgraded. Otherwise set user `status = canceled` (access is **not** revoked — see `canEngage`) and `subscriptionEndsAt = the sub's last `current_period_end` (their posts leave the feed after this), downgrade tier→`starter`, **except admins** whose tier is fixed. Re‑stamp posts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `customer.subscription.trial_will_end`      | Schedules `internal.billingNotices.sendTrialEnding` with `sub.trial_end` (seconds→ms). Stripe fires this **3 days before** `trial_end`; it never fires for the 50-interaction path, because `endTrialEarly` sets `trial_end: 'now'`. Ours is therefore the only day-7 warning — Stripe's built-in trial-ending email stays OFF (see "Stripe Dashboard setup").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `invoice.payment_failed`                    | `markPastDue`: set `subscriptionStatus = past_due` (tier unchanged) — this **does** gate engagement until payment clears. Skips an event older than the row's `lastEventAt`, so a retried failure cannot re‑block a member whose payment already cleared, and ignores a failure for a row already `canceled` (Stripe's dunning end delivers the final failure and the `deleted` in either order) or still `incomplete` / `incomplete_expired`, or with no row yet (a declined **first** payment, possible only for a subscription made outside Checkout: the member has not subscribed yet).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `checkout.session.completed`                | `isFeaturedPostCheckout` (`lib/featuredPurchase.ts`) lets through only a **paid** `payment`-mode session tagged `metadata.kind === 'featured_post'` — a subscription checkout completes through this same event and is ignored here. `posts.applyPurchasedFeature` normalises `postId`, no-ops on a redelivery (same session id) or logs a `post.featured_purchase_duplicate` audit row for a second paid session on an already-featured post (no refund), and otherwise features the post with its tier's cap bonus. Never throws — Stripe always sees 200. See "Featured post add-on" above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ```mermaid
 flowchart TD
     W["Stripe webhook → /stripe/webhook"] --> T{"event type"}
     T -->|created/updated| SYNC["syncUserSubscription"]
-    SYNC --> ORD{"event.created older than the row's lastEventAt?"}
-    ORD -->|yes| STALE["skip: row, user doc, posts and emails untouched (duplicate decision still runs)"]
-    ORD -->|no| P1["patch user: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
+    SYNC --> ORD{"event.created older than the row's lastEventAt, or incomplete for a trialing/active row?"}
+    ORD -->|yes| STALE["skip: row, user doc, posts and emails untouched"]
+    ORD -->|no| P1["patch user, unless another live row defines the member: tier (admin fixed), status, subscriptionEndsAt, trialEndsAt (from sub.trial_end)"]
     ORD -->|no| P2["re-stamp authorTierRank on all posts"]
     ORD -->|no| P3["upsert subscriptions row (+ price snapshot, cancelAtPeriodEnd, stripeCreated, lastEventAt)"]
     ORD -->|no| PEND{"resolvePendingDowngrade (B07)"}
@@ -2024,12 +2043,12 @@ flowchart TD
     ACT -->|yes| G{"isApifyPostSyncEnabled(appSettings)?"}
     G -->|yes| U2["scheduler.runAfter(0) → Apify sync this user"]
     G -->|no| NOOP["no-op (Apify dormant at launch)"]
-    T -->|created| DUP{"sync returned a duplicate (2 live rows; newest by Stripe created)?"}
-    DUP -->|yes| CDS["scheduler → cancelDuplicateSubscription (void the NEWER one)"]
+    ORD -->|no| DUP{"this event made the row live, and 2 live rows (newest by Stripe created)?"}
+    DUP -->|yes| CDS["close the NEWER row + scheduler → cancelDuplicateSubscription (void + refund it)"]
     DUP -->|no| OK["nothing to do"]
     T -->|trial_will_end| TWE["scheduler → billingNotices.sendTrialEnding (day-7 reminder)"]
     T -->|deleted| CAN["cancelUserSubscription → follow the surviving live row if any, else tier→starter (admin fixed), status canceled (access kept), stamp subscriptionEndsAt"]
-    T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement; skips an out-of-order event or a canceled row)"]
+    T -->|payment_failed| PD["markPastDue (tier unchanged; past_due gates engagement; skips an out-of-order event, a canceled row, an incomplete one or no row)"]
     T -->|checkout . session . completed| CSC{"isFeaturedPostCheckout? (payment mode + paid + metadata.kind=featured_post)"}
     CSC -->|no| IGN["ignore (subscription checkouts complete through this event too)"]
     CSC -->|yes| APF["posts.applyPurchasedFeature (normalizeId · redelivery/duplicate no-op+audit · else feature + cap bonus)"]
@@ -2045,38 +2064,67 @@ The checkout guard runs when the session is **created**; it cannot see a second 
 between that check and Stripe confirming payment. `syncUserSubscription` closes that window **inside its own
 transaction**: after upserting the row it collects the member's rows and, when two are live, `findDuplicateSubscription`
 names the **newest by Stripe's own `created`** (persisted as `subscriptions.stripeCreated`) — never by webhook arrival
-order, which Stripe does not guarantee. Deciding in the transaction is what makes it safe: two concurrent `created`
-syncs conflict on the user doc (OCC), so exactly one of them sees both rows and exactly one cancel is scheduled. The
-mutation returns `{ userId, stripeSubscriptionId, keepTier }`, and only the `customer.subscription.created` handler
-acts on it (Stripe emits `updated` for the duplicate right after `created`; acting there too would void and notify
-twice), scheduling `internal.billingNode.cancelDuplicateSubscription`. The member keeps the plan they already had: their
-user doc never follows the duplicate, and the duplicate's own `customer.subscription.deleted` re-derives their state
-from
-the surviving row (table above):
+order, which Stripe does not guarantee. Deciding in the transaction is what makes it safe: two concurrent syncs
+conflict on the user doc (OCC), so exactly one of them sees both rows and exactly one cancel is scheduled.
+
+**When.** Only on the event that **first makes this row live** (`wentLive`, `lib/trialMilestone.ts`), and the mutation
+schedules `internal.billingNode.cancelDuplicateSubscription` **itself**, in the same transaction, so no crash can fall
+between deciding and scheduling. Which event that is depends on the plan:
+
+- **Trial (Pro):** the subscription is born `trialing`, so it is the `created`.
+- **Direct (Starter, Growth):** since API basil (we run dahlia), Checkout creates the subscription only **after** the
+  first payment succeeds, so it is born `active` and its `created` is the one. A subscription made outside Checkout
+  (the API, the Dashboard, the `--direct` probe) is born `incomplete` (not live) instead, and Stripe sends the `updated`
+  to `active` once the first invoice is paid, often in the **same second** as the `created`; that `updated` is the one.
+  The `created` can land after it with the same stamp; `isStatusRegression` refuses it (Stripe never moves a
+  subscription back to `incomplete`), so the member is never set back to `none`.
+
+Any later event for that row (Stripe's sibling `updated`, a retry after a non-2xx, a renewal) finds it live already and
+cannot void or notify twice. The same transaction also marks the duplicate's row `canceled`, before Stripe's `deleted`
+lands: a **third** tab going live in that window then finds only the kept row live and is voided itself, instead of
+picking the second one again. The member keeps the plan they already had: their user doc never follows the duplicate,
+and the duplicate's own `customer.subscription.deleted` re-derives their state from the surviving row (table above):
 
 - `stripe.subscriptions.cancel(id, { prorate: false, invoice_now: false })` — no proration credit and no immediate
-  invoice; financially the duplicate never existed.
+  invoice.
+- `refundInvoice(latest_invoice)` — refunds **every paid payment** on the duplicate's latest invoice, which is its first
+  (the void is scheduled the moment it goes live)
+  (`invoicePayments.list({ invoice, status: 'paid' })`, idempotency key per payment). A direct duplicate was charged
+  before it went live; a trial duplicate's first invoice is $0 and has nothing to refund. A refund failure is logged and
+  reported to Sentry (no retry; the refund is one click in the Dashboard) and never blocks the notice below. So,
+  financially, the duplicate never existed.
 - `internal.users.setBillingNotice(userId, 'duplicate_canceled')` — raises the dismissible banner on `/billing`
   (`users.billingNotice`; cleared by `users.clearBillingNotice`).
 - `internal.billingNotices.sendDuplicateCanceled({ userId, tier })` — the email, in the member's language.
 
 A voided subscription is **never silent**: the member is told in-app **and** by email, in the same pass that cancels it.
 
-A Stripe **retry** of the duplicate's `created` (after a non-2xx) is harmless: once the row is `canceled`,
-`syncUserSubscription` ignores any live status for it (a canceled Stripe subscription never comes back), and if the
-retry lands before the `deleted` event, `cancelDuplicateSubscription` catches Stripe's already-canceled error and
-returns without a second notice.
+Once the row is `canceled`, `syncUserSubscription` ignores any live status for it (a canceled Stripe subscription never
+comes back), and should a second cancel ever be attempted, `cancelDuplicateSubscription` catches Stripe's
+already-canceled error and returns without a second notice or refund.
+
+A **declined first card** in Checkout leaves nothing behind: no subscription, no invoice, no webhook (Stripe changelog
+2025-03-31.basil, "Checkout Sessions have lower latency and new update semantics"); the member retries on the same page
+or leaves, and stays as they were. Only a subscription made outside Checkout stays `incomplete` at Stripe after a
+declined first payment (never `past_due`, which is for renewals), and `markPastDue` ignores that
+`invoice.payment_failed`, for an `incomplete` row and for a subscription we hold no row for yet (a renewal's row exists
+since its `created`): the member stays unsubscribed (`none`), can start a new checkout, and the retry that pays is still
+the `incomplete` → `active` event that runs the duplicate check above. Before 2026-10-03 that failure turned them
+`past_due` (live), which refused their next checkout and let the later paid `updated` skip the duplicate check.
 
 **Webhook ordering.** Stripe does **not** guarantee the delivery order of webhook events, so every applied `created` /
 `updated` / `payment_failed` event stamps the row with its own `event.created` (`subscriptions.lastEventAt`, ms —
 `http.ts` passes it as `eventCreated`), and `syncUserSubscription` / `markPastDue` **skip an event strictly older than
 that stamp** (`isStaleEvent`, `lib/trialMilestone.ts`): the row, the user doc, the post re‑stamp and every email are
 left alone, so a late `trialing` update can no longer rewind a converted subscription and make the next `active` event
-re‑send the conversion email. Only the duplicate decision still runs for a stale `created`, on the rows as they are, so
-a retried two‑tab `created` can still void its duplicate. Stripe stamps events at second resolution, so equal stamps
-apply in arrival order (the checkout `created` and its sibling `updated` share a second); two _distinct_ same‑second
-events with different statuses can therefore still land in arrival order, as they always did — that is the known
-ceiling. A row or event without a stamp is never treated as stale — no backfill. Replays of the **same** event were
+re‑send the conversion email. A stale event is skipped whole: the void is scheduled by the event that made the row
+live, inside its own transaction, so no later or replayed event needs to repeat it. Stripe stamps events at second
+resolution, so equal stamps apply in arrival order (the checkout `created` and its sibling `updated` share a second).
+The one same‑second pair that matters is the `created` (`incomplete`) of a subscription born `incomplete` and its paid
+`updated` (`active`): `isStatusRegression` refuses an `incomplete` / `incomplete_expired` event for a row already `trialing` or
+`active`, since Stripe never moves a subscription back there. Other _distinct_ same‑second events with different
+statuses still land in arrival order, as they always did — that is the known ceiling. A row or event without a stamp
+is never treated as stale — no backfill. Replays of the **same** event were
 already safe (the row is `active`, so `isTrialConversion` is false). The `canceled`‑row guard is the other half and
 lives in **both** writers: `cancelUserSubscription` does not stamp, so it is the status, not the stamp, that rejects a
 late live event for a voided row — and `markPastDue` ignores a failure for a row already `canceled`, because Stripe's
@@ -2085,19 +2133,22 @@ the member `past_due` for good.
 
 ```mermaid
 flowchart TD
-    E["customer.subscription.created"] --> SY["syncUserSubscription (one transaction)"]
-    SY --> ST{"event.created older than the row's lastEventAt?"}
-    ST -->|yes, stale| STALE["duplicate decision only, on the rows as they are (user doc untouched)"] --> RET
-    ST -->|no| UP["upsert row (+ stripeCreated, lastEventAt)"]
+    E["customer.subscription.created / updated"] --> SY["syncUserSubscription (one transaction)"]
+    SY --> ST{"stale (older than lastEventAt) or incomplete for a trialing/active row?"}
+    ST -->|yes| SKIPALL["skip whole: row, user doc, posts, emails untouched"]
+    ST -->|no| LIVE["wentLive? (trial or paid Checkout: its created; born incomplete: the paid incomplete → active updated)"]
+    LIVE --> UP["upsert row (+ stripeCreated, lastEventAt)"]
     UP --> ROWS["collect the member's rows"]
     ROWS --> Q{"findDuplicateSubscription: 2+ live rows?"}
-    Q -->|no| USER["user doc follows this row"] --> DONE["done"]
-    Q -->|yes, this row is the newest| SKIP["user doc untouched (the kept row defines the member)"] --> RET
-    Q -->|yes, another row is newer| USER2["user doc follows this row"] --> RET["return { userId, duplicate id, keepTier }"]
-    RET --> CDS["created handler: scheduler → billingNode.cancelDuplicateSubscription"]
+    Q -->|no, another live row defines the member| SKIP0["user doc untouched (e.g. a non-live event for a row they no longer rely on)"]
+    Q -->|no, otherwise| USER["user doc follows this row"] --> DONE["done"]
+    Q -->|yes, and this event made the row live| CDS["same transaction: mark the newest row canceled + scheduler → billingNode.cancelDuplicateSubscription(newest)"]
+    Q -->|yes, this row is the duplicate| SKIP["user doc untouched (the kept row defines the member)"]
+    Q -->|yes, this row is the kept one| USER2["user doc follows this row"]
     CDS --> C1["stripe.subscriptions.cancel(prorate:false, invoice_now:false)"]
-    CDS --> C2["users.setBillingNotice('duplicate_canceled')"]
-    CDS --> C3["billingNotices.sendDuplicateCanceled(userId, keepTier)"]
+    C1 --> C4["refundInvoice(latest_invoice): refund every paid payment (direct duplicate; a trial's is $0)"]
+    C4 --> C2["users.setBillingNotice('duplicate_canceled')"]
+    C4 --> C3["billingNotices.sendDuplicateCanceled(userId, keepTier)"]
     C1 --> DEL["customer.subscription.deleted → cancelUserSubscription follows the surviving live row"]
 ```
 
@@ -2531,7 +2582,9 @@ status active, pendingTier none`, schedule already handed back.
 > own code.
 >
 > Since 2026-09-18 `billing-scenarios.mjs` also carries `--coupons`, a separate run with its own clock and probe
-> member that proves the promotion-code guard; the free-year finding below is what added it.
+> member that proves the promotion-code guard; the free-year finding below is what added it. Since 2026-10-03 its
+> Checkout sessions also prove the Pro-only trial rule (see `planHasTrial` above), and `--direct` proves the no-trial
+> plans (Starter, Growth) and the duplicate void with its refund (dated block below).
 >
 > **Why the synthetic customer was the ceiling.** A test clock can only be attached to a customer **at creation**, so a
 > clock run must build its own customer — and `syncUserSubscription` finds the member by `users.by_stripe_customer`, so
@@ -2577,7 +2630,8 @@ status active, pendingTier none`, schedule already handed back.
 > week and asserts its shape (attempts monotonic, retries in distinct later weeks, exhausted inside the window);
 > Stripe's exact retry timestamps are still not pinned — a test clock replays scheduled retries with multi-day lag,
 > so an exact hour would test Stripe's scheduler rather than our code. Deliberately **not** covered: the
-> featured-post checkout, the duplicate-subscription guard, and `endTrialEarly`'s 50-interaction
+> featured-post checkout, the trial-path duplicate (`--direct` covers the paid one, the one that moves money; the
+> trial one is integration-tested in `convex/integration/stripeSync.test.ts`), and `endTrialEarly`'s 50-interaction
 > trigger. What the trigger then does **is** covered: the run calls `endTrialEarly`
 > itself, on a portal-cancelled trial (must not convert) and on a live one (one paid full-price invoice, nothing
 > pending).
@@ -2657,6 +2711,14 @@ as
 > was $0, its switch to annual was **paid in full** ($148.77); the trial-end invoice read `paid 15000 vs 15000`,
 > discount `[]`. The B07 default run re-passed **69/69** against the same deployment afterwards.
 >
+> Re-proven 2026-10-03, `--coupons` **26/26**. The no-trial switch check failed once that day on its own assertion,
+> not on money: the account bills in Stripe's **flexible** mode (API `2025-09-30.clover` on), where the switch is
+> **prorated** (`paid 14877` = $150 × 362/365, not the "full" $150 the old text implied), the unused free month is
+> credited at what it was charged (**$0**, flexible mode credits the originally debited amount), and a consumed
+> coupon can still list a **$0** entry in `total_discount_amounts`. The check now reads the invoice's own lines: the
+> annual line is present and charged, no line carries a non-zero discount, and the total is not reduced by a credit
+> (`total >= annual line`). The trial-end check likewise accepts only $0 discount entries.
+>
 > ✅ **The dunning round trip and its terminal state are proven too, 2026-09-18 — `--pastdue` 27/27 checks.** The
 > trial renewal charged to `tok_chargeCustomerFail` (4000000000000341 — attaches fine, every charge declines) at
 > trial end: Stripe `past_due`, the renewal invoice `open`, and our row and the user both `past_due`. In that state a
@@ -2675,6 +2737,22 @@ as
 > not the days. Clock `clock_1UHZ3cFPUrUP5vm6gkjpc1mJ` (deleted), subscriptions
 > `sub_1UHZ3kFPUrUP5vm6LF2qCPlk` (recovery) and `sub_1UHZ3vFPUrUP5vm6YwevSpzU` (dunning). Raw card numbers are
 > refused on this account, so the token — not the number — is the fixture.
+>
+> ✅ **The direct (no-trial) plans and the duplicate void are proven, 2026-10-03 — `--direct` 16/16 checks.** Checkout
+> itself cannot be driven from a script, so the run covers both shapes a direct subscription can have. A Growth
+> subscription made with `payment_behavior: 'default_incomplete'` (the API / Dashboard shape) is born `incomplete`; a
+> first card that declines (`tok_chargeCustomerFail`, a 402) leaves the member **`none`** and the row `incomplete`
+> after Stripe's `invoice.payment_failed`; paying with a good card turns the row and the member `active` on Growth (the
+> same-second out-of-order `created` that `isStatusRegression` refuses is pinned by
+> `convex/integration/stripeSync.test.ts`, not by this run). A second, Starter subscription made with
+> `error_if_incomplete` is born **`active`**, the shape Checkout creates since basil, and stands in for another tab: it
+> is **voided by the webhook** on its `created`, its $10 charge **refunded in full**, customer balance 0, our row
+> `canceled`, while the first stays `active` and the member keeps Growth with `billingNotice: 'duplicate_canceled'`.
+> The decline check was **red first** (`member past_due, row past_due`) against the code before `markPastDue` learned
+> to skip an `incomplete` row. A frozen clock stamps both subscriptions with the same `created`, so the run advances it
+> 60 s between them (the void picks the newer by that stamp). A real dev Checkout the same day (Growth, monthly)
+> confirmed the Checkout shape: Stripe sent one `customer.subscription.created`, already `active`, and no `updated`;
+> the invoice was paid in the same second and `checkout.session.completed` followed a second later.
 >
 > ⚠️ The webhook-scheduled release **cannot be asserted under a test clock.** Stripe locks writes while a clock
 > advances (`Test clock advancement underway - cannot perform modifications`), and the swap webhook necessarily fires
@@ -5722,9 +5800,13 @@ post.interactionCapBonus)`. Right after a submit, the order-bump toast is `myPos
           holders always see the grid, because a switcher needs the comparison. The lead is `billing.chosenPlanLead`
           when
           the plan came from the URL or the stash and `billing.newUserLead` otherwise. A chosen plan is labelled **"Your
-          choice"**; the Growth fallback is labelled **"Recommended"**. Every pre-card CTA says "Try {{plan}} free"
-          (the landing's plan-card wording) without promising a fixed duration — **unless the member has no trial
-          left**, see the next bullet.
+          choice"**; the Growth fallback is labelled **"Recommended"**. The Pro card's pre-card CTA says "Try {{plan}}
+          free" (the landing's plan-card wording) without promising a fixed duration — **unless the member has no trial
+          left**, see the next bullet. Since 2026‑10‑03 **only Pro has a trial**: the Starter and Growth cards always
+          say `billing.noTrialCta` ("Subscribe to {{plan}}") and a chosen Starter/Growth plan gets
+          `billing.noTrialChosenPlanLead`, because each per-plan promise asks `canTrial && planHasTrial(planId)`.
+          `billing.newUserTrialNote` names Pro as the trial plan and ends "Starter and Growth are billed when you
+          subscribe", so the one note stays true under every card.
           `chosenPlan` / `chosenInterval` are removed from `sessionStorage` once
           a checkout URL is in hand, so a later visit in the same tab does not re-nudge. The monthly/annual toggle and
           the
@@ -5829,7 +5911,8 @@ text-accent-foreground`, the gold-border pattern `ChangeTierModal` already uses 
               `justSubscribed` (read once, during render, then the param is stripped). While `justSubscribed` is true
               and
               `me.subscriptionStatus` is still `none` (or `canceled`, for a re‑subscriber), an inline banner shows
-              `billing.activating` (or `billing.activatingPlan` — a re‑subscriber gets no trial), swapping to
+              `billing.activatingPlan` ("Activating your plan…" for everyone; `billing.activating`, "your trial…",
+              was deleted 2026‑10‑03 because a first Starter/Growth checkout has no trial either), swapping to
               `billing.activatingTimeout` (with the Manage button) after ~20s with no webhook flip. The moment the
               status
               becomes `trialing` or `active`, `CheckoutSuccessDialog` (shadcn `Dialog`) opens exactly once: body
@@ -6237,18 +6320,23 @@ controls. `FeedPage` calls `useCardGate()` and passes `gated` plus an `onGated` 
   real accessible name and stay clickable; a tap calls `onGated` instead of `onReact`/`onComment`/navigating (see the
   `PostCard` bullet above). A dead click was considered worse than a dialog.
 - `onGated` opens a shared **`CardGateDialog`** (`app/src/components/CardGateDialog.tsx`, `feed.cardGateTitle`/
-  `cardGateBody` copy — leads with the result, never billing mechanics: "Get noticed on LinkedIn", then what the trial
-  lets you do: react, comment with help from AI, and show your posts to other members. The title is shared by the
+  `cardGateBody` copy — leads with the result, never billing mechanics: "Get noticed on LinkedIn", then what the free
+  Pro trial lets you do: react, comment with help from AI, and show your posts to other members. The title is shared by the
   trial, no-trial and `past_due` variants, so it names only the result; the body also renders inline in
   `UpgradeAtLimit`, so it reads on its own). Its `source` prop
   (`GateSource = 'react' | 'comment' | 'linkedin' | 'aiDraft'`; each `PostCard` control reports its own source —
   `'aiDraft'` is reserved for `CommentBox`'s AI-draft control, which is structurally unreachable while gated and
   untouched by R04) only tags the `card_gate_opened` PostHog event, not the copy. Its
-  primary CTA is `feed.cardGateCta` ("Start free trial") — **never** "Add a payment method" — linking to
-  `/billing?plan={{resolveTargetPlan()}}` and firing `card_gate_cta_clicked`; a secondary "Not now" closes it.
+  primary CTA is `feed.cardGateCta` ("Try Pro free") — **never** "Add a payment method" — linking to
+  `/billing?plan={{gatePlan(searchParams, canTrial)}}` and firing `card_gate_cta_clicked`; a secondary "Not now"
+  closes it. **Since 2026‑10‑03 only Pro has a trial, so the gate sells the Pro trial:** `gatePlan`
+  (`lib/targetPlan.ts`) returns `TRIAL_PLAN` (`'pro'`) while `canTrial`, and falls back to `resolveTargetPlan` (URL →
+  `chosenPlan` stash → Growth) for a member who can't trial, who is sent to subscribe to the plan they chose, as
+  before. `feed.cardGateBody`, `feed.hiddenPostBanner` and the cost line name Pro. All three gate surfaces
+  (`CardGateDialog`, `CardGateBanner`, `UpgradeAtLimit`'s gated branch) call `gatePlan`, never `resolveTargetPlan`.
   (`captureEvent`, consent-gated, no-op pre-init.) Under the footer, one muted line says what the CTA costs
   (`feed.cardGateCost` — free for `{{days}}` days or your first `{{threshold}}` interactions in the app, made or
-  received, whichever comes first; card required; then the selected plan starts; cancel anytime — the landing
+  received, whichever comes first; card required; then your Pro plan starts; cancel anytime — the landing
   `pricing.trialNote` order, the
   threshold interpolated from `TRIAL_INTERACTION_THRESHOLD`, never typed into the copy; R04's "the line under it says
   what it costs"). Covered by `app/src/components/CardGateDialog.test.tsx` (event fired once with the tap source, CTA
@@ -6439,6 +6527,14 @@ landing's plain lines ("Each post stays in the feed until it gets 50 reactions a
 Growth still _filters_ by industry and country, and Pro's visibility control stays scoped to the shared feed. pt-BR and
 neutral Latin-American Spanish were written natively with the same meaning. Value-only: no key, leaf, or placeholder
 changed. The landing got the same pass ([§15](#15-frontend--landing-site-landing)).
+
+**Pro-only trial copy (2026-10-03):** every app string that promised a trial without naming a plan now names Pro,
+because Starter and Growth no longer have one (§8). `feed.cardGateBody`, `feed.cardGateCta` ("Try Pro free" / "Testar
+o Pro grátis" / "Prueba Pro gratis"), `feed.cardGateCost` ("Then your Pro plan starts"), `feed.hiddenPostBanner`,
+`settings.inviteBody`, `recap.inviteLine` and `billing.giftFrom` say "free Pro trial" / "teste grátis do Pro" /
+"prueba gratis de Pro"; `billing.newUserTrialNote` opens with "Pro is free for…" and ends "Starter and Growth are
+billed when you subscribe." `billing.activating` ("Activating your trial…") was **deleted** from all three locales;
+`billing.activatingPlan` covers every first checkout. No key was added.
 
 **Namespaces added in Phase 2b:** `privacy.*` — covers all labels, headings, status messages, and confirmation copy used
 by `PrivacyDataPage` and `CancelDeletionScreen`; present in `en`, `pt`, and
@@ -6929,17 +7025,26 @@ content** (encodes the business rules):
   Monthly prices are Starter $10, Growth $15, and Pro $30, with annual prices at ten times monthly.
   Since 2026‑09‑16 the annual card leads with the plan's monthly equivalent (`$8.33`, `$12.50`, `$25.00`) and the line
   under it states the charge and the saving (`$100 billed annually · 2 months free`); monthly mode leads with the
-  monthly price and keeps the `2 months free if you pay annually` line. The renewal line under each CTA repeats the
-  interval's total, so the amount charged after the trial is visible on the card in both intervals.
-  `landing/lib/trial.ts` supplies both card prices and the plan-agnostic offer beside the generic CTAs; the quoted
-  price is the interval's Starter price, the floor, because a trial can start on any plan. `Intl.NumberFormat`
+  monthly price and keeps the `2 months free if you pay annually` line. On Pro, a billing line above the CTA repeats
+  the selected interval's total, so the amount charged is visible on the card in both intervals. On Starter and
+  Growth, the `afterFreeMonth` line always quotes the monthly price, because monthly is the only interval their
+  button opens.
+  `landing/lib/trial.ts` supplies the card prices (`planPrice`, `formatPrice`). `Intl.NumberFormat`
   formats USD in the page locale, with pt/es writing the dollar as `U$` and en keeping `$`. These are display values;
   Stripe Prices remain authoritative for charges.
 - Each pricing card states its **per-post** visibility cap of 25, 50, or 200 reactions and comments. The
-  **account-wide**
-  trial threshold is separate. Immediately below every plan CTA, the page states that a card is required, the trial
-  ends at 50 interactions made or received across the account or up to seven days, whichever comes first, and
-  cancellation is available. The next line states that plan's renewal price and billing interval.
+  **account-wide** trial threshold is separate. **Only Pro has a trial (2026‑10‑03 launch promotion, §8).** Starter
+  and Growth sell the **free month** instead: a gold `pricing.freeMonthBadge` pill beside the plan name ("1 month
+  free"), the CTA "Try Starter free" / "Try Growth free" (pt "Testar o … grátis", es "Prueba … gratis"), and above it
+  `pricing.freeMonthNote` ("Free for your first month on monthly billing, with a promo code. Card required. Cancel
+  anytime.") and `pricing.afterFreeMonth` ("After the free month: $10 billed monthly."). The month is a Stripe
+  promotion code that only the **monthly** Checkout accepts (`promotionCodesAllowed`, §8), so these two buttons pass
+  `interval="monthly"` to `TrialLink` and always open the monthly plan, even while the grid shows annual prices;
+  the renewal line therefore always quotes the monthly price. Pro keeps "Try Pro free" with `pricing.trialNote` (card required, 50 interactions made or
+  received across the account or up to seven days, whichever comes first, cancel anytime) and then the
+  `renewalAnnual`/`renewalMonthly` line ("After your trial, …"). The notes sit **above** the button (`mb-4` block after
+  the feature list, which keeps `flex-1`), so the three buttons line up at the card bottom whatever the notes' length;
+  under the button, Pro's two notes pushed its button about 70px above the other two.
 - `Proof` leads with the activity recap and lists the four categories it shows: reactions and comments you made, and
   reactions and comments on your posts. The recap card mirrors the app's own recap disclaimer (it only counts activity
   in the app, never reads or estimates the SSI, and adds no score of its own). The founder note keeps the
@@ -6986,13 +7091,16 @@ content** (encodes the business rules):
   search for the brand returned only `linkintothessi.com`, and the SSI queries returned automation-vendor blogs. The
   pages above make the site retrievable and quotable; being named in an answer depends on off-site presence and on
   measurement (backlog B36), both outside this repo.
-- `FAQ` answers safety, automation, trial, SSI, pace, cancellation, visibility, and job-search questions. The trial
-  answer spells out what counts as an interaction, matching `convex/interactions.ts`: reactions and comments you make,
+- `FAQ` answers safety, automation, trial, SSI, pace, cancellation, visibility, and job-search questions. Since
+  2026‑10‑03 the trial question is "Is there a free trial, and when am I charged?" and the answer opens with "On
+  Starter and Growth, a promo code makes your first month free on monthly billing. Without a code, we charge your card
+  when you subscribe. Pro is free for 7 days or until you reach 50 interactions, whichever comes first." The answer
+  leads with the free month so it never contradicts the "Try Starter free" button above it. The trial answer spells out what counts as an interaction, matching `convex/interactions.ts`: reactions and comments you make,
   the first AI draft per post (regenerations don't count), and reactions and comments other members leave on your
   posts. Closed answers use the native `hidden` attribute, so they are absent from the accessibility tree. Open
   answers have no fixed maximum height.
-- `FinalCTA` repeats the plan-agnostic trial offer, the same card and trial disclosure as the hero/pricing, and the
-  sign-in reassurance. `Footer` retains localized legal links and contact details.
+- `FinalCTA` renders the headline, a "Log in" `LoginLink` (no plan or interval), and the sign-in reassurance. Offers
+  live only on the pricing cards. `Footer` retains localized legal links and contact details.
 
 ### Legal pages — pt/es drafts
 
@@ -7032,6 +7140,12 @@ trial period ends**". A referral gift that made the Terms silently wrong for the
 the worst kind of stale legal copy, and the length-agnostic phrasing means the clause survives any future change to
 either constant. Only the length is gifted — **one free trial per account** still binds, and the invited member is
 still charged at 50 interactions if they get there first.
+
+**Updated 2026-10-03 (Pro-only trial).** The clause now opens "The **Pro** plan starts with a 7-day free trial" and adds
+"The Starter and Growth plans have no free trial: billing starts when you subscribe", in all three locales; "Last
+updated" moved to October 2026. `POLICY_VERSION` was **not** bumped: it versions the privacy policy only, and §10 of
+the Terms promises to communicate material changes by email or in-app notice, which is Henriko's call for the members
+already signed up.
 
 The wording deliberately matches the Stripe `custom_text` under the pay button and the billing emails
 ([§8](#8-subscriptions--billing)) — one rule, three surfaces, no drift; the `custom_text` builder
@@ -7109,7 +7223,7 @@ literals), which covers [§17](#17-security-posture) launch-checklist items 5 an
   storage and links to `/cookies`.
 - **`/cookies`** is now a full inventory in five sections. *Needed for the site and app*: the `lang`/`theme` cookies and
   their storage copies, `sessionToken`, `oauthVerifier`/`oauthCode`, the backend's `oauth_nonce_<state>` cookie,
-  `signedOut`, `chosenPlan`/`chosenInterval`, `motdDismissed`, `ref`, `trialStarted`, `cookieNoticeDismissed` and
+  `signedOut`, `chosenPlan`/`chosenInterval`, `motdDismissed`, `ref`, `cookieNoticeDismissed` and
   PostHog's `__ph_opt_in_out_<token>` flag. *Error monitoring*: `sentryReplaySession`. *Website statistics without
   cookies*: DataFast's `datafast_visitor_id`, `datafast_session_id` and `datafast_session_start` in `sessionStorage` and
   `datafast_event_queue` in `localStorage`, Cloudflare Web Analytics, and the funnel counter. *App analytics, only with
@@ -7185,8 +7299,8 @@ See [`docs/compliance/README.md`](compliance/README.md) for the consolidated leg
 
 ### CTAs → app
 
-Every conversion CTA is a real anchor rendered by `TrialLink`, exported from
-`landing/components/TrialProvider.tsx`. Its destination comes from `SIGN_IN_URL` in `landing/lib/links.ts`:
+Every CTA is a real anchor rendered by `TrialLink` (pricing cards) or `LoginLink` (hero, nav, final CTA, guides),
+both exported from `landing/components/TrialProvider.tsx`. Its destination comes from `SIGN_IN_URL` in `landing/lib/links.ts`:
 `${NEXT_PUBLIC_APP_URL}/auth/start`, falling back to `http://localhost:5173/auth/start` when the app URL is not
 configured. The CTAs no longer link straight to Convex OAuth: `/auth/start` is the app's PKCE entry point, which
 generates the verifier/challenge in the browser and then bounces to Convex's `/auth/linkedin` start with the
@@ -7195,11 +7309,9 @@ rather than the app root — preserves the signed-out visitor flow described in 
 OAuth on load instead of bouncing a signed-out visitor back to the landing site.
 
 `TrialProvider` wraps the server-rendered page children in `app/[lang]/layout.tsx`. It owns one
-`BillingInterval` (`annual` or `monthly`), initially annual. `Pricing` changes that shared state. The navigation,
-hero, final CTA, and every plan card then render their links with the same interval. Generic CTAs select Growth;
-plan cards select their own tier. `SelectedOffer` displays the interval's plan-agnostic offer beside the hero and
-final CTA: "Pick any plan" with the Starter price as the from-floor, since the trial can start on any plan. A full
-page load initializes the interval to annual; this preference is not persisted in browser storage.
+`BillingInterval` (`annual` or `monthly`), initially annual. `Pricing` changes that shared state, and every plan card
+renders its trial link with that interval and its own tier. A full page load initializes the interval to annual; this
+preference is not persisted in browser storage.
 The section content remains server-rendered rather than becoming a single client page.
 
 The `plan` and `interval` parameters are used by OAuth and billing, not merely displayed. The callback forwards them
@@ -7223,41 +7335,47 @@ removed. The middleware continues to preserve the query when redirecting to a lo
 
 Trial buttons do not promise a fixed duration: the static landing cannot identify a referred visitor's fourteen-day
 upper bound, and either trial can end first at 50 recorded interactions. The app shows the actual invited member's
-trial duration after sign-in.
+trial duration after sign-in. Since 2026‑10‑03 only the Pro card is a trial button. Starter and Growth use the same
+`TrialLink`, labelled "Try … free" for the promo-code free month, with its optional `interval` prop fixed to
+`monthly`: the code is refused on annual Checkouts (§8), so the toggle must not send them there.
 
-| Location     | Selected plan | Interval                  | Adjacent information                                                                            |
-|--------------|---------------|---------------------------|-------------------------------------------------------------------------------------------------|
-| Navigation   | Growth        | Shared selection          | Mobile Pricing shortcut remains visible; trial shortcut starts at `sm`                          |
-| Hero         | Growth        | Shared selection          | Plan-agnostic offer (Starter from-floor), card and account-wide trial rule, sign-in reassurance |
-| Pricing card | Card's tier   | Shared selection          | Per-post cap, card and account-wide trial rule, tier's renewal amount/period                    |
-| Final CTA    | Growth        | Shared selection          | Plan-agnostic offer (Starter from-floor), card and account-wide trial rule, sign-in reassurance |
-| Custom       | Negotiated    | Display follows selection | Existing $100/month or $1,000/year floor; contact by email                                      |
+| Location     | Selected plan | Interval                  | Adjacent information                                                         |
+|--------------|---------------|---------------------------|------------------------------------------------------------------------------|
+| Navigation   | None (log in) | None                      | "1 month free" bar above it (login link); "Log in" shortcut starts at `sm`   |
+| Hero         | None (log in) | None                      | Sign-in reassurance                                                          |
+| Pricing card | Card's tier   | Pro: shared; else monthly | Per-post cap; Pro: trial + renewal; Starter/Growth: free month + renewal     |
+| Final CTA    | None (log in) | None                      | Sign-in reassurance                                                          |
+| Custom       | Negotiated    | Display follows selection | Existing $100/month or $1,000/year floor; contact by email                   |
 
 The sign-in reassurance describes OIDC-only name/photo/email access and manual posting. It makes no claim of
 LinkedIn endorsement or guaranteed account safety.
 
-#### Returning-visitor CTA — "Log in" after a trial click (2026‑09‑21)
+#### Primary CTAs always "Log in" + the 1-month banner (2026‑10‑03)
 
-The landing cannot see the app's session: the token lives in app-origin `sessionStorage`, and the explicit sign-out
-marker lives in app-origin `localStorage` (`app/src/lib/session.ts`). The only signal available on this origin is the
-trial click itself, so every trial CTA — `TrialLink` on the pricing cards and the primary CTAs while unswapped —
-writes the landing-origin flag `trialStarted = '1'` in `onClick`, beside the funnel beacon. The read follows the same
-storage-guard shape as `CookieNotice`: a throw or an absent key counts as "not started".
-
-`PrimaryCta` (exported from `landing/components/TrialProvider.tsx`) renders the three primary slots (`hero`, `nav`,
-`final`) from that flag. It is a client component in this module, so `Hero` and `FinalCTA` stay server components.
-Before the flag is set it renders the usual Growth trial link; afterwards it swaps the label to the matching
-`loginCta` string ("Log in" / "Entrar" / "Iniciar sesión") and points at `${SIGN_IN_URL}?ref=…` (`loginHref` in
-`landing/lib/trial.ts`) — the same `/auth/start` route with **no** `plan` or `interval`. The app root is deliberately
+The primary slots (`hero`, `nav`, `final`, and the guide pages' closing CTA) always render `LoginLink` with the
+matching `loginCta` string ("Log in" / "Entrar" / "Iniciar sesión"), pointing at `${SIGN_IN_URL}?ref=…` (`loginHref`
+in `landing/lib/trial.ts`): the same `/auth/start` route with **no** `plan` or `interval`. The app root is deliberately
 not the target: `RequireAuth` bounces a browser carrying the app-origin `signedOut` marker back to the landing
 (`app/src/App.tsx`), so a "Log in" click after an explicit sign-out would ping-pong; `/auth/start` always begins OAuth
-and clears that marker on success. The pricing cards keep their plan-specific `TrialLink`s — a pricing click still
-sets the flag, which is what switches the primary slots on the next visit.
+and clears that marker on success. `LoginLink` is a client component only so it can read the referral; `Hero` and
+`FinalCTA` stay server components. Only the pricing cards still start a checkout (`TrialLink`); since the same day only
+the Pro card starts a trial and keeps the `pricing.trialNote` disclosure (7 days or 50 interactions, card required).
 
-The server snapshot is `false`, so the statically prerendered HTML keeps the trial CTA and the label swaps after
-hydration (the same `useSyncExternalStore` shape as the referral read). No cookie is written, so static caching is
-unaffected, and no app or backend code is involved — the flag exists only on this origin. Both states fire the same
-`cta_click_{hero|nav|final}` beacon, so the admin funnel counts a login click in the same placement buckets.
+The fixed header carries a full-width gold bar above the nav, `nav.banner` ("Get 1 month free to try it out. Log in
+to learn more!"), so it stays on screen while scrolling like the nav. It is itself a `LoginLink` firing
+`cta_click_nav`. The header grew from 64px to about 108px (the bar wraps to two lines on phones), so `Hero`'s top
+padding went to `pt-40 md:pt-52` and `globals.css` `scroll-padding-top` to `8rem`. **The month is not an app trial:** the in-app trial is still
+7/14 days or 50 interactions (`convex/lib/trialMilestone.ts`); the month is a Stripe promotion code (100% off,
+duration `once`) that the member types at a **monthly** Checkout (`allow_promotion_codes`, §8). The app never shows or
+applies the code, so it reaches the member outside the app. Since later the same day the Starter and Growth pricing
+cards advertise it too (badge, "Try … free", monthly-only link, see the pricing-card bullet above), as do the trial
+FAQ, `/pricing.md`, `/llms.txt`, and a "Promotion codes" paragraph in `/terms` §5. So the 7-day disclaimer and the "Pick any plan · From $X after the trial" offer line were removed from the
+hero, final CTA and guide CTA (with `SelectedOffer` and the `trialOffer`, `nav.cta`, `finalCta.cta` and
+`finalCta.subheadline` keys). `hero.cta` and `hero.ctaDisclaimer` remain only because the promo video's 30 s cut reads them
+(`video/src/copy.ts`, §15A).
+
+This replaced the 2026‑09‑21 returning-visitor swap (a landing-origin `trialStarted` flag that turned the primary
+slots into "Log in" after a trial click); the flag is no longer read or written and was removed from `/cookies`.
 
 #### Layout and accessibility
 
@@ -7266,8 +7384,9 @@ height. `CookieNotice` is fixed to the viewport bottom with bottom safe-area pad
 page scrolls and can overlap footer content until dismissed. Its dismissal remains SSR-safe and persists when browser
 storage is available.
 
-Navigation keeps a Pricing shortcut on narrow screens. Below `sm`, its separate trial shortcut is hidden so Pricing,
-language, theme, and brand targets fit without crowding. The hero and pricing trial actions remain available. Header
+Navigation keeps a Pricing shortcut on narrow screens. Below `sm`, its separate Log in shortcut is hidden so Pricing,
+language, theme, and brand targets fit without crowding. The banner, hero Log in, and pricing-card buttons remain
+available. Header
 controls have at least 44px target heights. A localized skip link targets the focusable `main` landmark. CSS reserves
 space for the fixed header when scrolling to anchors. Reduced-motion preferences disable smooth scrolling and
 nonessential transitions/animations. FAQ answers use their full content height when expanded.
@@ -7275,7 +7394,7 @@ nonessential transitions/animations. FAQ answers use their full content height w
 Body and supporting copy retain the existing semantic `text-cream-muted` token and visible focus outlines. The
 color palette and fonts remain the product's existing light/dark system. Regression coverage includes offer amounts,
 referral preservation across interval changes, invalid referral rejection, recursive locale key/placeholder parity,
-identical trial disclosures at the hero, pricing cards, and final CTA, and `lib/seo.ts` legal-page canonicals/hreflang.
+the promo video's `hero.ctaDisclaimer` matching `pricing.trialNote`, and `lib/seo.ts` legal-page canonicals/hreflang.
 Run: `pnpm --filter landing test`.
 
 ### Landing funnel metrics (cookieless)
@@ -7285,10 +7404,9 @@ The landing measures its funnel first-party, with no cookie and no client identi
 - **`pricing_view`** — `Pricing.tsx` observes the `#pricing` section with an `IntersectionObserver` (`threshold:
   0.25`) and fires once on the first intersection, then disconnects; cleanup disconnects too, so scroll depth or a
   re-render cannot inflate the count.
-- **`cta_click_{hero|nav|pricing|final}`** — every trial/primary CTA carries one of the four placements (`PrimaryCta`
-  in `Hero`/`Nav`/`FinalCTA`, `TrialLink` on the `Pricing` cards) and its `onClick` fires the matching event without
-  preventing navigation. The `plan`/`interval`/`ref` href construction is unchanged; the returning-visitor swap above
-  only changes the destination and label.
+- **`cta_click_{hero|nav|pricing|final}`** — every trial/login CTA carries one of the four placements (`LoginLink`
+  in `Hero`/`Nav` (button and banner bar)/`FinalCTA`/guides, `TrialLink` on the `Pricing` cards) and its `onClick` fires
+  the matching event without preventing navigation.
 
 `landing/lib/metrics.ts` owns the transport: `trackLandingEvent(event)` POSTs `{"event":"<name>"}` to
 `${NEXT_PUBLIC_CONVEX_SITE}/landing/event` as **`Content-Type: text/plain;charset=UTF-8`** — a CORS-safelisted type,
@@ -7391,10 +7509,22 @@ stills of the promise double as image ads for Meta ("Image ads" below).
 | 7-12      | none      | Feed     | `feedCaption` (new), app `feed.viewOnLinkedIn`, fictional posts                             |
 | 12-17.5   | 5-7.8     | AI draft | `draftCaption` (new), app `comment.generate` / `generating` / `regenerate` / `languageAuto` |
 | 17.5-23.5 | 7.8-11.2  | Handoff  | landing `hero.subLine2` (one sentence at a time), app `comment.submit`, `feed.comment`      |
-| 23.5-30   | 11.2-14.9 | End card | landing `hero.cta` + `hero.ctaDisclaimer`, literal `linkintothessi.com`                     |
+| 23.5-30   | 11.2-14.9 | End card | 30 s: `hero.cta` + `hero.ctaDisclaimer`; 15 s: `nav.banner` + `hero.loginCta`; literal URL  |
+| none      | 0-11.2    | Badge    | the first sentence of landing `nav.banner` (9:16 and 16:9 only)                             |
 
 In the 15 s cut ("Lengths" below) the cards rise under the draft caption, so the feed caption never shows, and the
-handoff shows only its first sentence.
+handoff shows only its first sentence. **Since 2026‑10‑03 the 15 s cut sells the landing's month, not the trial, and
+leads with it.** `AdCopy.monthFree` splits landing `nav.banner` into its two sentences (`sentences()`, as for the
+handoff) and takes `hero.loginCta` ("Log in" / "Entrar") for the button; `Ad.tsx` passes it only when
+`length === '15s'`. In the 9:16 and the 16:9 a gold pill (`video/src/Badge.tsx`) shows the first sentence ("Get 1
+month free to try it out." / "Ganhe 1 mês grátis para experimentar.") from frame 0, so a feed that plays only the
+first seconds still shows the offer, and leaves as the end card fades in (frames 324-336). The 4:5 has no badge
+(Henriko's call, 2026‑10‑03; "Formats" below says why). In every 15 s format the end card drops the brand line: the
+same sentence is its title, in gold serif at 80-84 px on up to two lines, the second sentence ("Log in to learn
+more!" / "Entre para saber mais!") sits under it in cream, and the "Log in" button and the URL follow. The 30 s cut
+keeps `hero.cta` + `hero.ctaDisclaimer` and has no badge. The month is granted outside the app (§15, "Primary CTAs always
+'Log in'"), so any Meta ad text in Ads Manager that quotes the 7-day `trialNote` beside a 15 s video must be edited
+there.
 
 Every string that exists on the landing or in the app is imported from its dictionary by `video/src/copy.ts`, so a copy
 change there reaches the ad on the next render. The two new captions, the fictional posts and names, and the AI draft
@@ -7413,10 +7543,10 @@ live in the same file. Nothing on screen claims an SSI score, a result, a user c
 - **One clock per length.** Every scene reads the absolute frame (no `<Sequence>`) and takes its frames from the
   length's timeline (`video/src/timelines.ts`, "Lengths" below). `Ad.tsx` cross-fades three layers (Opening, Demo and
   end card: 0-210, 198-705 and 693-900 in the 30 s; 0-150, 138-336 and 324-448 in the 15 s) and drifts the whole frame
-  from scale 1 to 1.03. The tap positions in `Demo.tsx` (`TAPS`) are computed from the same constants that place the
-  buttons, and `moments(timeline)` there derives what each tap sets off, such as the reply posting 4 frames after the
-  Post tap. The only `<Sequence>`s are the sound's (`Soundtrack.tsx`, `layout="none"`): they time audio and draw
-  nothing.
+  from scale 1 to 1.03, all but the 15 s badge ("Formats" below). The tap positions in `Demo.tsx` (`TAPS`) are
+  computed from the same constants that place the buttons, and `moments(timeline)` there derives what each tap sets
+  off, such as the reply posting 4 frames after the Post tap. The only `<Sequence>`s are the sound's
+  (`Soundtrack.tsx`, `layout="none"`): they time audio and draw nothing.
 - **The gold node** (`YouNode.tsx`) is one layer above every scene. It lights the constellation, taps through the mock
   at `TAPS` (plus the stage origin) and flies into the logo's node (`logoNode(layout)` in `EndCard.tsx`). On the gold
   submit button it gets a dark edge and a dark tap ring, so that tap stays visible. The end card reveals only the L of
@@ -7450,8 +7580,10 @@ design, holds and music:
   types its draft in 24 frames instead of 50. The flight into the logo takes 50 frames in both.
 - **Tight holds.** Each text stays whole on screen for less time than in the 30 s (in parentheses), PT before EN where
   they differ: the question 0.4 s (1.3), the promise 0.6 and 0.5 s (1.7), the draft caption 1.8 and 2.0 s (3.6), the
-  handoff's sentence 1.2 and 1.3 s (1.7), the posted reply 0.5 s (2.1) and the fine print 1.5 s (3.3). If one reads
-  rushed, the fix is numbers in `timelines.ts`, not code.
+  handoff's sentence 1.2 and 1.3 s (1.7) and the posted reply 0.5 s (2.1). On the end card the 1-month title holds
+  2.0 and 1.8 s and the line under it 2.1 s (the 30 s fine print: 3.3). In the 9:16 and the 16:9 the badge's sentence stays on screen 10.8 s.
+  The line under the title enters at frame 366 (`endCard.finePrint`), before the button at 372, since it sits above
+  it. If one reads rushed, the fix is numbers in `timelines.ts`, not code.
 - **One source for the sound too.** `video/scripts/soundtrack.mjs` imports `timelines.ts` for the frame rate, the
   lengths and the cuts, and Node strips its types on the way in. That is why the file imports nothing and keeps to
   syntax Node can strip (types, annotations and `as const`).
@@ -7485,13 +7617,34 @@ the 4:5's are in the Meta spec (linked in "Lengths" above).
   square's moved down 135 px, into the frame's central square, and the mock and the caption only 45 px, so the caption
   sits high (y 145–305) and the feed runs to the bottom edge. It's drawn at 1080×1350 and rendered at 4/3 as
   1440×1800 (`render.mjs` passes `--scale`), so it's redrawn rather than upscaled.
+- **The 15 s badge and end card** (`badge` and `endCard.offer` in `layouts.ts`, used only by the 15 s, so the 30 s
+  renders as before). The badge sits where the format has room above the text: centered at the top of the 9:16
+  (y 286, 28 px, in the gap between the zone's top and the caption box, just under the Instagram Feed's crop line),
+  and left-aligned at the top of the 16:9's caption column (x 160, y 112, 34 px), left of the mock. The 4:5 has none, so
+  `Ad.tsx` draws it only when the layout has a `badge`: the 4:5 has no free band above its caption, and making room
+  (the mock and the caption 50 px lower, tried on 2026‑10‑03) pushed the second card's post across a 1:1 crop's
+  bottom edge, by up to 24 px and the whole PT "SaaS:" line for about 2 s ("What the zones don't clear" below), so
+  Henriko kept the 4:5's offer to its end card. The pill is 1.5 times its text size tall (`BADGE_H` in `Badge.tsx`).
+  It stands still: `Ad.tsx` wraps it in the inverse of the camera drift (`scale(1 / drift)`) inside the one drift
+  layer, so the node still draws over it (a separate layer for the node shifted its anti-aliasing in every cut), and
+  it leaves by fading and blurring without the other texts' 16 px rise (`exitStyle(frame, out, 0)`), so the 9:16's
+  pill stays under the Instagram Feed's crop line ("What the zones don't clear" below). The drift still lifts the
+  caption toward it, so the 9:16's gap, measured to the caption's highest glyph, closes from 15 px (EN 21) as the
+  caption enters to 7 px (EN 8) at frame 316: at 30 px it closed to 4 (EN 5), and 26 px would leave 10. Only a
+  leaving caption's rise reaches the pill: the draft caption's top meets the pill's bottom edge on frames 235 to 237,
+  already blurred and fading, which on the stills reads as part of its fade. In the 16:9 the caption's left edge
+  drifts from x 156 to x 143 while the pill stays at x 160. The offer card keeps the 30 s card's logo, button and URL
+  sizes and puts the title in its own column (740 px in the 9:16, 860 in the 4:5, 900 in the 16:9), at 80 px (84 in
+  the 16:9), with `fontVariantNumeric: 'lining-nums'`: Cormorant Garamond's default old-style "1" reads as "ı", so
+  "1 mês" looked like "ı mês".
 - **Dots.** The same seeded draw over the whole frame, kept within 960 px of the node so the first ring lights each
   one fully: 40 in the square (the same dots as before), 82 in the 16:9, 70 in the 9:16 and 60 in the 4:5, which
   keeps the square's and the 9:16's density of about one dot per 12,580 px² of free area. The far corners stay dark,
   though in the 16:9 a few dots, decoration only, fall under YouTube's "Ad" label and Skip button.
 - **The safe-zone check.** When `layouts.ts` loads, it checks that every text box, the mock's text area, the node's
-  home and every stop on its path under every timeline (`nodeStops(layout, timeline)` in `YouNode.tsx`) sit inside
-  the format's safe zone. A failure throws with the format and the element, such as
+  home, every stop on its path under every timeline (`nodeStops(layout, timeline)` in `YouNode.tsx`), the badge's
+  pill box where the format has one and the 15 s end card (from the logo's top to the URL's line) sit inside the
+  format's safe zone. A failure throws with the format and the element, such as
   `4x5: caption (x 110–970, y 125–285) is outside the safe zone (x 90–990, y 135–1215)`, and stops the Studio,
   `remotion compositions` and every render before a frame is drawn. A stop is named by its frame and length, such as
   `node stop at frame 156 of the 15s`, the frame the node sets off for it. It leaves out the camera drift, the text
@@ -7506,13 +7659,20 @@ the 4:5's are in the Meta spec (linked in "Lengths" above).
   second line. Once the comment box opens, it pushes the second card below the zone in the square, the 16:9 and the
   9:16. No tap point falls in any of them, and Henriko approved them on overlay stills that draw every reading. The
   Instagram Feed may crop the 15 s 9:16 to its centered 4:5 (y 285–1635), which the check can't see since the zone
-  starts at y 270; on the stills that cuts only dots, the Opening's rings and the gray cards. A feed that crops the 4:5
+  starts at y 270; on the stills that cuts dots, the Opening's rings and the gray cards, but not the 1-month badge: its
+  pill stands still at y 286–327, and only the blur of its fade-out reaches over the line, a faint glow up to 5 px high
+  on frames 325 to 328 (measured on the stills). The caption rises as it fades out and the pill doesn't, so on frame
+  326, both nearly gone, the caption's top reaches the pill's bottom edge. A feed that crops the 4:5
   to a square keeps y 135–1215, the zone's own height. Measured on the stills, a two-line caption starts 21 px below
   the crop's top edge, and 17 px at its closest (frames 310 to 324; the drift peaks after the caption is gone). The
   mock's text ends at y 1017, except in the pushed second card: in PT its post wraps to two lines, and the second,
   "SaaS:", crosses the crop's bottom edge by 6 px for about 2 s, until the dim lifts it. The full 4:5 cuts nothing, and
-  Henriko accepted it on 2026-09-30. In the 15 s 16:9 the same YouTube readings fall over the same elements, as its
-  stills show; Meta publishes no safe zone for Facebook in-stream ads.
+  Henriko accepted it on 2026-09-30. The 15 s end card's offer ends at y 1003 with the drift, inside the crop. In the
+  15 s 16:9 the YouTube readings fall over the same caption, mock, card and Opening edges. It has no fine print, but
+  two things are new with the 1-month offer: the badge's left end (x 160, so the pill's first 32 px and the first
+  3 px of its text) sits outside the center 80% (x 192–1728), and the offer card's URL (y 797–823 on the last frame)
+  sits below the top 70% (y 756), its lower half in the risky bottom 25%. Henriko has not yet reviewed these two on
+  overlay stills. Meta publishes no safe zone for Facebook in-stream ads.
 
 ### Sound
 
@@ -7592,9 +7752,9 @@ by up to 44 luma levels on edges.
 
 ```mermaid
 flowchart LR
-    L["landing/i18n/dictionaries/{pt,en}.json<br/>hero.*"] --> C["video/src/copy.ts<br/>COPY per language"]
+    L["landing/i18n/dictionaries/{pt,en}.json<br/>hero.*, nav.banner"] --> C["video/src/copy.ts<br/>COPY per language"]
     A["app/src/i18n/locales/{pt,en}.json<br/>comment.*, feed.*"] --> C
-    C --> Ad["Ad.tsx<br/>Opening, Demo, EndCard + YouNode"]
+    C --> Ad["Ad.tsx<br/>Opening, Demo, EndCard + YouNode<br/>15 s: Badge + the 1-month end card"]
     TL["timelines.ts<br/>30 s + 15 s: every frame the ad times"] --> Ad
     LY["layouts.ts<br/>1x1, 16x9, 9x16, 4x5 + safe-zone check"] --> Ad
     G["landing/components/LogoMark.tsx"] --> Ad
@@ -7632,7 +7792,9 @@ pnpm --filter video exec remotion still src/index.ts ad-pt-4x5-15s out/images/ad
 
 The square comes from the 30 s, since the 15 s has no square. The faint arc below the text in the 15 s images is the
 Opening's last ring, still spreading; later frames of the promise show it too, and the square's frame 176 comes after
-its rings. The text is landing `hero.headlineLine1` and `hero.headlineLine2`, as in the video.
+its rings. The text is landing `hero.headlineLine1` and `hero.headlineLine2`, as in the video. Since 2026‑10‑03 the
+two 9:16 images also carry the 1-month badge at the top (the first sentence of `nav.banner`), as the 9:16 video does;
+the 4:5 images and the square have none, so they render as before.
 
 ### Changing the ad
 
@@ -7643,9 +7805,14 @@ its rings. The text is landing `hero.headlineLine1` and `hero.headlineLine2`, as
   more than two 740 px lines hold, so it takes 3; 2 or 3 both fit). The PT fine print's second line in the 16:9 ends at
   x 1596 by frame 880, 4 px left of where the overlay stills draw Skip (x 1600–1920, y 800–900), and the check can't see
   it: the zone runs to x 1780 and y 860. The 4:5 wraps like the square, with the same sizes in the same 860 px column:
-  on its stills every text takes the square's line count, and the EN fine print's first line nearly fills the column,
-  as in the square. The render throws `Expected two sentences in "…"` if `hero.subLine2` stops being two sentences.
-  A change to `hero.headlineLine1` or `headlineLine2` also needs the six image ads re-rendered ("Image ads" above).
+  on its stills every text takes the square's line count. The render throws `Expected two sentences in "…"` if
+  `hero.subLine2` or `nav.banner` stops being two sentences. A change to `hero.headlineLine1` or `headlineLine2` also
+  needs the six image ads re-rendered ("Image ads" above).
+- **The 1-month offer (15 s only).** A change to `nav.banner` or `hero.loginCta` needs the six 15 s MP4s re-rendered,
+  and a change to `nav.banner` the two 9:16 image ads too. The badge never wraps (`white-space: nowrap`), and the
+  check sees its column, not its text: the PT pill is 680 px wide in the 16:9's 720 px column, the tight fit, and
+  560 in the 9:16's 820. The end card's title has room for two lines; a third would run into the line under
+  it, and the check can't see that either, so look at the stills of frame 447 in every format.
 - **A format's layout.** Its numbers are in `video/src/layouts.ts`. The check at load names any text box, tap or stop
   on the node's path that leaves the safe zone; the stills show the rest (wraps, the camera drift, the gray cards).
   `pnpm render:video <id> …` re-renders only the ids given.
@@ -8337,9 +8504,9 @@ Only actions and HTTP actions can `fetch`, so a query or mutation that throws is
   type and id (`stripe_event`, `stripe_event_id`, to resend it from Stripe's dashboard once fixed), then re‑thrown, so
   the component answers the 500 that makes Stripe retry.
 - **Upstream calls whose failure is caught and logged, not thrown:**
-    - the Stripe calls in `billingNode.ts`. `cancelDuplicateSubscription` and `releaseScheduleOn` report anything but
-      a `StripeInvalidRequestError`, which is Stripe refusing work already done; `detachSubscriptionDiscounts`
-      reports after its last retry;
+    - the Stripe calls in `billingNode.ts`. `cancelDuplicateSubscription`'s cancel and `releaseScheduleOn` report
+      anything but a `StripeInvalidRequestError`, which is Stripe refusing work already done; the duplicate's refund
+      (`refundInvoice`) reports every failure; `detachSubscriptionDiscounts` reports after its last retry;
     - the Stripe cancel on a deletion request (`privacy/deletion.ts`) and a failed data export (`privacy/export.ts`);
     - a Resend refusal (`lib/email.ts`) and an OpenRouter refusal or empty reply (`ai/openrouter.ts`). These carry the
       status only: the response bodies can hold a recipient or post text.
@@ -8640,7 +8807,7 @@ or push updates the relevant section (s) here in the same change**. Practical ch
 | Cancel / downgrade / resume (`billingNode.createCancelFlowSession`, `billingNode.resumeSubscription`, `app/src/components/CancelInterstitial.tsx`)                                                                                                                                                                                                                                                                                                                                                                                  | [§8](#8-subscriptions--billing), [§14](#14-frontend--authenticated-app-app)                                                                                                                                                                                                                                                              |
 | Scheduled downgrade / no credit at period end (`convex/lib/downgrade.ts`, `billingNode` schedule helpers, `billing.setPendingDowngrade`, `stripe.syncUserSubscription`)                                                                                                                                                                                                                                                                                                                                                             | [§5](#5-data-model) subscriptions fields, [§8](#8-subscriptions--billing) scheduled-downgrade subsection + webhook table, [§14](#14-frontend--authenticated-app-app) BillingPage + CancelInterstitial + PostHog                                                                                                                          |
 | Customer Portal configurations (`convex/lib/portalConfig.ts`, `billingNode.portalConfigurationId` / `portalSession` / `createPortalSession`, the portal block in `scripts/stripe-provision.mjs`)                                                                                                                                                                                                                                                                                                                                    | [§8](#8-subscriptions--billing) per-tier portal configurations + Dashboard table, [§14](#14-frontend--authenticated-app-app) BillingPage                                                                                                                                                                                                 |
-| Billing scenario runs (`scripts/billing-scenarios.mjs`, the default nine plus `--coupons` / `--pastdue`)                                                                                                                                                                                                                                                                                                                                                                                                                            | [§8](#8-subscriptions--billing) the scenarios — add one whenever a billing guard, mirror field or webhook effect is added                                                                                                                                                                                                                |
+| Billing scenario runs (`scripts/billing-scenarios.mjs`, the default nine plus `--coupons` / `--pastdue` / `--direct`)                                                                                                                                                                                                                                                                                                                                                                                                               | [§8](#8-subscriptions--billing) the scenarios — add one whenever a billing guard, mirror field or webhook effect is added                                                                                                                                                                                                                |
 | Post-cap email (`lib/postCapNotice.ts`, `interactions.flipCapIfReached`, `billingNotices.sendPostCapReached`, `lib/billingEmails.postCapReachedEmail`)                                                                                                                                                                                                                                                                                                                                                                              | [§8](#8-subscriptions--billing), [§9](#9-plan-limits-system), [§11](#11-feed--engagement)                                                                                                                                                                                                                                                |
 | Featured post add-on (`billingNode.purchaseFeaturedPost`, `http.ts` `checkout.session.completed`, `posts.applyPurchasedFeature` / `assertFeaturedPurchasable`, `lib/featuredPurchase.ts`, `MyPostsPage` `BuyFeaturedButton`)                                                                                                                                                                                                                                                                                                        | [§5](#5-data-model) posts fields, [§8](#8-subscriptions--billing) add-on subsection + webhook table, [§9](#9-plan-limits-system) effective cap, [§10](#10-posts--content-pipeline) featuring, [§11](#11-feed--engagement) cap sites, [§14](#14-frontend--authenticated-app-app) My Posts + PostHog, [§16 env](#16-environment-variables) |
 | Invite / referral (`lib/invite.ts`, `users.getOrCreateInviteCode` / `getInviteSummary`, `trialDaysFor`, `landing/components/TrialProvider.tsx`)                                                                                                                                                                                                                                                                                                                                                                                     | §5, §7, §8, §13B, §14, §15 (cross-cutting — the prose in each links back)                                                                                                                                                                                                                                                                |
@@ -8678,6 +8845,77 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑10‑03 (free month on Starter and Growth). **The landing's Starter and Growth cards now sell the
+1-month promo code: a gold "1 month free" pill beside the plan name and a "Try Starter free" / "Try Growth free"
+button** (pt "Testar o … grátis", es "Prueba … gratis"). Above the button, `pricing.freeMonthNote` states the terms
+(monthly billing, with a promo code, card required, cancel anytime) and `pricing.afterFreeMonth` quotes the monthly
+price that follows. The code is accepted only by a monthly Checkout (`promotionCodesAllowed`), so `TrialLink` got an
+optional `interval` prop and these two buttons always open the monthly plan, even on the default annual grid; Pro
+still follows the toggle and keeps its trial. `pricing.billedAnnual`/`billedMonthly` ("starting today") were deleted.
+The trial FAQ, `/pricing.md` (new "Free month (Starter and Growth)" section, pinned in `aiFiles.test.ts`), `/llms.txt`
+and a new "Promotion codes" paragraph in `/terms` §5 (en/pt/es) say the same. No backend or Stripe change: the code
+still reaches the member outside the app, and the Checkout pay-button line for these plans still reads "You are billed
+today" (true without a code, $0 with one). Sections: §8 (promotion codes), §15 (pricing cards, CTA table, 1-month
+banner)._
+
+_Last updated: 2026‑10‑03 (direct plans: billing fixes). **Starter and Growth now bill at checkout; a paid duplicate
+is now refunded, and the event guards cover both shapes a direct subscription can have.** Since API basil (we run
+dahlia), Checkout creates the subscription only after the first payment succeeds: it is born `active`, and a declined
+card there leaves nothing behind. One made through the API or the Dashboard is born `incomplete` instead. (1) The void
+of a second-tab duplicate canceled it but **kept its charge**, and ran only on `created`, which misses a duplicate born
+`incomplete`. `syncUserSubscription` now voids on the event that first makes the row live (`wentLive`), scheduling
+`cancelDuplicateSubscription` inside its own transaction (it returns nothing now; `http.ts` just calls it) and marking
+the duplicate's row `canceled` there (a third tab going live before Stripe's `deleted` is voided too); the void
+**refunds** the duplicate's paid first invoice (`refundInvoice`, via `invoicePayments`), and the notice and email now
+say "If it was charged, we refunded the full amount" (en/pt/es). (2) Defensive, for subscriptions born `incomplete`
+(not reachable through Checkout): `isStatusRegression` (`lib/trialMilestone.ts`) refuses an `incomplete` event for a
+row already `trialing`/`active` (its own `created` landing after its paid `updated` in the same second), and
+`markPastDue` skips an `incomplete` row and a subscription with no row yet, so a declined first payment no longer makes
+the member `past_due` (live). New `convex/integration/stripeSync.test.ts` (10 tests) and unit tests for both helpers;
+`scripts/billing-scenarios.mjs` gains `--direct` (16/16 against test-mode Stripe: a subscription born `incomplete`
+with a declined first card, red on the old code, then a duplicate born `active` as Checkout's is), and `--coupons`'
+no-trial switch check reads invoice lines, because flexible billing prorates the switch ($148.77 is correct money).
+All four runs pass: default 69/69, `--coupons` 26/26, `--pastdue` 28/28, `--direct` 16/16. No schema or env change.
+Sections updated: §8, §17A._
+
+_Last updated: 2026‑10‑03 (1-month offer leads the 15 s video). **The 15 s cut (pt + en, all three formats) now
+ends on the landing's 1-month offer, and in the 9:16 and the 16:9 shows it from the first frame too.** There a gold
+pill (`video/src/Badge.tsx`) carries the first sentence of `nav.banner` until the end card fades in. In every 15 s
+format the end card drops the brand line for that sentence as a big gold title, with the second sentence under it,
+then the "Log in" button and the URL (`endCard.offer` in `layouts.ts`; `AdCopy.monthFree` is now `{ cta, lines }`).
+The 4:5 has no badge: making room moved its feed 50 px down, which a 1:1 crop cut by up to 24 px, plus the whole PT
+"SaaS:" line for about 2 s, so Henriko kept its offer to the end card, and its frames before the end card match the
+previous code pixel for pixel. So does the 30 s cut. The badge stands still, counter-scaled inside the camera drift so
+the node still draws over it, and fades without rising: drifting, the 9:16's pill had crossed the Instagram Feed's 4:5
+crop line by up to 15 px (its letters by 5). It now sits at y 286, at 28 px instead of 30 so the caption the drift
+lifts stays 7 px under it until the caption rises away. Still to review on overlay stills: in the 16:9 the badge's
+left end and the offer card's URL fall outside YouTube's stricter readings. The six 15 s MP4s and the two 9:16 image
+ads need a re-render. Sections updated: §15A._
+
+_Last updated: 2026‑10‑03 (Pro-only trial). **During the launch promotion only Pro has a free trial; Starter and
+Growth bill at checkout.** `createCheckoutSession` grants `trial_period_days` only when the member never held a
+subscription row **and** `planHasTrial(tier)` (new in `lib/trialMilestone.ts`, `TRIAL_PLAN = 'pro'`); no Stripe config
+change, since the trial is set per checkout. One trial per account stays the rule, so a first Starter/Growth checkout
+uses it up. The pay-button line gains a third variant (`NO_PLAN_TRIAL_MESSAGE`, "billed today", no "you already used
+yours"). In the app the card gate sells the Pro trial (`gatePlan` → `?plan=pro`, "Try Pro free"), the Billing page's
+Starter/Growth cards say "Subscribe to …", every trial string names Pro, and `billing.activating` was deleted. On the
+landing the Starter/Growth cards say "Subscribe to …" over a new "billed … starting today" line, the card notes moved
+above the buttons so the three line up, the trial FAQ answers for both cases, `/pricing.md` and `/llms.txt` say "Pro
+only", and Terms §5 names Pro (last updated October 2026; no `POLICY_VERSION` bump, privacy unchanged). The 30 s
+video's fine print ("Free for 7 days…") names no plan and stays true. `scripts/billing-scenarios.mjs` now checks the
+rule against test-mode Stripe: `--coupons` asserts each Checkout session's pay-button line (the trial on Pro monthly
+and annual only), and `--pastdue`'s returning member must get no second trial on Pro. Its fixtures stay Growth trials
+made through the API, a state that predates this change. Sections updated: §1, §8, §14, §15._
+
+_Last updated: 2026‑10‑03 (1-month banner, login-only primary CTAs). **The landing's primary CTAs (hero, nav, final
+CTA, guides) now always say "Log in", and a sticky gold bar in the header reads "Get 1 month free to try it out. Log in
+to learn more!"** (`nav.banner`, en/pt/es). The month is granted outside the app; the in-app trial is unchanged (7/14
+days or 50 interactions), so the 7-day disclaimer and the from-price offer line left those slots, while the pricing
+cards keep their trial links and `trialNote`. The 2026‑09‑21 `trialStarted` swap, `PrimaryCta` and `SelectedOffer`
+are gone; `/cookies` drops `trialStarted` (no POLICY_VERSION bump: privacy policy unchanged). The promo video's 15 s
+cut (pt + en, all three formats) now ends on "Log in" + the 1-month line; the 30 s cut is unchanged. Sections
+updated: §15, §15A._
 
 _Last updated: 2026‑10‑02 (LinkedIn consent host). **In production, LinkedIn's consent screen can now name the app's
 host instead of the Convex deployment.** The screen prints the host of the OAuth `redirect_uri`, so production's

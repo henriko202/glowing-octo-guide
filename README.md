@@ -126,15 +126,15 @@ pnpm dev:landing  # Terminal 3 — Next.js landing → http://localhost:3000 (op
 
 ## Subscription Tiers
 
-Numeric caps are **enforced** (read from the `planLimits` table). The 7-day trial requires a card and starts a real
-Stripe subscription for the tier chosen on the billing grid; it converts on **50 combined interactions OR 7 days**,
-whichever comes first. Cancellation never revokes access — a canceled member keeps engaging; only their own posts stop
+Numeric caps are **enforced** (read from the `planLimits` table). Only **Pro** has a trial (launch promotion,
+2026-10-03); Starter and Growth bill at checkout. The 7-day trial requires a card and starts a real Stripe
+subscription; it converts on **50 combined interactions OR 7 days**, whichever comes first. Cancellation never revokes access — a canceled member keeps engaging; only their own posts stop
 entering the feed once the paid period ends.
 
 | Capability                          | Starter ($10/mo) | Growth ($15/mo) | Pro ($30/mo) |   Contact   |
 |-------------------------------------|:----------------:|:---------------:|:------------:|:-----------:|
 | Access shared feed                  |        ✓        |       ✓        |      ✓      |     ✓      |
-| 7-day trial (card required)         |        ✓        |       ✓        |      ✓      |      —      |
+| 7-day trial (card required)         |        ✗        |       ✗        |      ✓      |      —      |
 | Feed filtered by industry + country |        ✗        |    ✓ (auto)    | ✓ (custom)  | ✓ (custom) |
 | Control who sees your posts         |        ✗        |       ✗        |      ✓      |     ✓      |
 | Interactions counted per post (cap) |        25        |       50        |     200      |    200+     |

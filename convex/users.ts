@@ -74,7 +74,7 @@ export function toSafeMe(user: Doc<'users'>) {
   /* eslint-disable @typescript-eslint/no-unused-vars -- destructure-and-discard sensitive fields */
   const { linkedinAccessToken, linkedinRefreshToken, stripeCustomerId, bannedBy, bannedAt, isAdmin, ...safeUser } = user
   /* eslint-enable @typescript-eslint/no-unused-vars */
-  // backlog/R19 — the trial the member would get at checkout (7, or 14 when invited); the gate
+  // backlog/R19 — the Pro trial the member would get at checkout (7, or 14 when invited); the gate
   // screens and Billing render "{{days}}-day trial" from it instead of a hard-coded 7.
   const trialDays = trialDaysFor(user)
   return isAdmin ? { ...safeUser, trialDays, isAdmin: true as const } : { ...safeUser, trialDays }
@@ -210,6 +210,7 @@ export const getMe = query({
     // subscription went incomplete/paused (toSubscriptionStatus maps those to 'none' with the row
     // already inserted) and one an admin set back to 'none'. The rule is "no row, ever", so one row
     // answers it: take(1) keeps the most-subscribed query in the app on a bounded read.
+    // Member-level only: the plan half (Pro only, planHasTrial) is the client's to apply per plan.
     const subscriptions = await ctx.db
       .query('subscriptions')
       .withIndex('by_user', q => q.eq('userId', user._id))

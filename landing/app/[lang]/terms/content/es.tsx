@@ -6,7 +6,7 @@ export default function Es({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Términos de Servicio</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última actualización:</strong> Septiembre 2026
+          <strong className="text-cream">Última actualización:</strong> Octubre 2026
         </p>
 
         {/* 1. Aceptación */}
@@ -105,14 +105,21 @@ export default function Es({ lang }: { lang: Locale }) {
           esa publicación ha sido destacada.
         </p>
         <p>
-          <strong className="text-cream">Prueba gratuita.</strong> Las cuentas nuevas comienzan con una{' '}
-          <strong className="text-cream">prueba gratuita de 7 días</strong> (14 días cuando se une mediante el enlace de
-          invitación de un miembro) y se requiere un método de pago para iniciarla. La prueba termina —y la facturación
-          comienza— en cuanto alcanza <strong className="text-cream">50 interacciones</strong> (hechas y recibidas) o
-          cuando termina el período de prueba, lo que ocurra primero. Le avisamos por correo antes del primer cobro.
-          Puede cancelar en cualquier momento antes de que termine la prueba desde la página Suscripción de su cuenta, y
-          no se le cobrará. Hay una prueba gratuita por cuenta; si se suscribe de nuevo tras cancelar, el cobro comienza
-          de inmediato y se indica en el checkout.
+          <strong className="text-cream">Prueba gratuita.</strong> El plan <strong className="text-cream">Pro</strong>{' '}
+          comienza con una <strong className="text-cream">prueba gratuita de 7 días</strong> (14 días cuando se une
+          mediante el enlace de invitación de un miembro) y se requiere un método de pago para iniciarla. Los planes
+          Starter y Growth no tienen prueba gratuita: la facturación comienza cuando se suscribe. La prueba termina —y
+          la facturación comienza— en cuanto alcanza <strong className="text-cream">50 interacciones</strong> (hechas y
+          recibidas) o cuando termina el período de prueba, lo que ocurra primero. Le avisamos por correo antes del
+          primer cobro. Puede cancelar en cualquier momento antes de que termine la prueba desde la página Suscripción
+          de su cuenta, y no se le cobrará. Hay una prueba gratuita por cuenta; si se suscribe de nuevo tras cancelar,
+          el cobro comienza de inmediato y se indica en el checkout.
+        </p>
+        <p>
+          <strong className="text-cream">Códigos promocionales.</strong> Un código promocional ingresado en el checkout
+          puede hacer gratuito el primer mes de un plan mensual. Se sigue requiriendo un método de pago y, después de
+          ese mes, se le factura el precio mensual del plan, salvo que cancele antes. Los códigos promocionales no están
+          disponibles en la facturación anual.
         </p>
         <p>
           <strong className="text-cream">Cancelación.</strong> Puede cancelar su suscripción en cualquier momento desde

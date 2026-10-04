@@ -338,7 +338,7 @@ export function duplicateSubscriptionCanceledEmail(
     en: {
       subject: `We removed a duplicate subscription on ${APP}`,
       heading: 'We removed a duplicate subscription',
-      body: `A second subscription was created on your account by mistake, so we cancelled it right away. You have not been charged for it. Your ${a.planName} plan is unchanged.`,
+      body: `A second subscription was created on your account by mistake, so we cancelled it right away. If it was charged, we refunded the full amount. Your ${a.planName} plan is unchanged.`,
       link: `See your subscription:`,
       planLabel: 'Plan',
       cta: 'Manage billing'
@@ -346,7 +346,7 @@ export function duplicateSubscriptionCanceledEmail(
     pt: {
       subject: `Removemos uma assinatura duplicada no ${APP}`,
       heading: 'Removemos uma assinatura duplicada',
-      body: `Uma segunda assinatura foi criada na sua conta por engano, então cancelamos na hora. Você não foi cobrado por ela. Seu plano ${a.planName} continua igual.`,
+      body: `Uma segunda assinatura foi criada na sua conta por engano, então cancelamos na hora. Se ela foi cobrada, devolvemos o valor total. Seu plano ${a.planName} continua igual.`,
       link: `Veja sua assinatura:`,
       planLabel: 'Plano',
       cta: 'Gerenciar assinatura'
@@ -354,7 +354,7 @@ export function duplicateSubscriptionCanceledEmail(
     es: {
       subject: `Eliminamos una suscripción duplicada en ${APP}`,
       heading: 'Eliminamos una suscripción duplicada',
-      body: `Se creó una segunda suscripción en tu cuenta por error, así que la cancelamos de inmediato. No se te cobró por ella. Tu plan ${a.planName} sigue igual.`,
+      body: `Se creó una segunda suscripción en tu cuenta por error, así que la cancelamos de inmediato. Si se cobró, te devolvimos el importe total. Tu plan ${a.planName} sigue igual.`,
       link: `Consulta tu suscripción:`,
       planLabel: 'Plan',
       cta: 'Gestionar suscripción'

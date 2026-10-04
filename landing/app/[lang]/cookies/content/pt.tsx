@@ -6,7 +6,7 @@ export default function Pt({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Política de Cookies &amp; Armazenamento</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Última atualização:</strong> setembro de 2026
+          <strong className="text-cream">Última atualização:</strong> outubro de 2026
         </p>
         <p>
           Esta página lista cada cookie e item de armazenamento do navegador que o Link Into The SSI usa em
@@ -60,10 +60,6 @@ export default function Pt({ lang }: { lang: Locale }) {
           <li>
             <strong className="text-cream">ref</strong> (site, armazenamento de sessão) &mdash; o código de convite do
             link que você seguiu, repassado ao aplicativo quando você se cadastra.
-          </li>
-          <li>
-            <strong className="text-cream">trialStarted</strong> (site, armazenamento local) &mdash; depois que você
-            inicia um teste, os nossos botões passam a oferecer o login.
           </li>
           <li>
             <strong className="text-cream">cookieNoticeDismissed</strong> (site, armazenamento local) &mdash; lembra que

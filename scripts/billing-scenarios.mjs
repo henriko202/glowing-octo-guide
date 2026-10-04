@@ -1,12 +1,13 @@
 // scripts/billing-scenarios.mjs — the billing proofs in one script: the B07 downgrade run below, the
-// promotion-code guard run selected by --coupons, and the past-due dunning round trip selected by
-// --pastdue. TEST MODE ONLY.
+// promotion-code guard run selected by --coupons, the past-due dunning round trip selected by
+// --pastdue, and the direct (no-trial) plan with its duplicate void selected by --direct. TEST MODE ONLY.
 //
 //   node scripts/billing-scenarios.mjs                    full B07 run, deletes the test clock afterwards
 //   node scripts/billing-scenarios.mjs --keep             keep the clock (and its customer/subscription)
 //   node scripts/billing-scenarios.mjs --user <convexId>  read-only audit of one member, writes nothing
 //   node scripts/billing-scenarios.mjs --coupons          coupon guard run: a free month must not become a free year
 //   node scripts/billing-scenarios.mjs --pastdue          dunning: failed renewal → past_due → retries → terminal cancel
+//   node scripts/billing-scenarios.mjs --direct           no-trial plan goes live on payment; a second one is voided + refunded
 //
 // The --pastdue run (2026-09-18): a trial whose renewal is charged to Stripe's failing card
 // (`tok_chargeCustomerFail`, 4000000000000341 — attaches fine, every charge declines) lands
@@ -20,7 +21,7 @@
 // setting produces is followed through the webhook — this account CANCELS after the last retry, and
 // the `unpaid` branch is asserted too should the setting ever move. After the terminal cancel, the
 // member's route back is proven: a plan switch refuses (`NO_LIVE_SUBSCRIPTION`, the subscription is
-// gone) and checkout accepts a fresh subscription.
+// gone) and checkout accepts a fresh subscription, on Pro without a second trial.
 //
 // The --coupons run (2026-09-18): a 100%-off promotion code is attached to a trialing monthly
 // subscription, then the portal-equivalent switch to annual happens on day 3 — while the `once`
@@ -31,8 +32,9 @@
 // (lib/discountGuard) detaches the coupon before the trial-end invoice, so that invoice is PAID IN
 // FULL. Checkout cannot drive a test-clock customer, so the coupon is attached the way a promotion
 // code attaches it there: a subscription-level discount on the created subscription. The Checkout
-// assertions drive our real createCheckoutSession action against its own disposable probe member.
-// A second, no-trial subscription then carries the coupon to its own conclusion: consumed by its
+// assertions drive our real createCheckoutSession action against its own disposable probe member,
+// and also prove the trial rule (2026-10-03): a first checkout grants the trial on Pro, monthly and
+// annual, and on no other plan. A second, no-trial subscription then carries the coupon to its own conclusion: consumed by its
 // first invoice, so the same-day switch to annual is charged in full — the proof that the promotion
 // only ever discounts one first monthly invoice.
 //
@@ -67,11 +69,15 @@
 //   `--user` needs neither to be useful: it is all GETs plus one sandboxed readonly query, and it
 //   degrades to a Stripe-only report when the deployment is unreachable.
 //
+// The trials below are Growth trials made straight through the Stripe API. Since 2026-10-03 checkout
+// grants a trial on Pro only, but the guards and the money they test do not depend on the plan, and
+// a Growth trial started before that date is still a live state.
+//
 // NOT COVERED, deliberately: Stripe's exact retry TIMESTAMPS (`--pastdue` asserts the timetable's
 // shape — attempts monotonic, retries in distinct later weeks, exhaustion inside the window — but a
 // test clock replays scheduled retries with multi-day lag, so pinning an exact hour would test the
-// scheduler rather than our code), the featured-post one-time checkout, the duplicate-subscription
-// guard, and endTrialEarly's 50-interaction TRIGGER — reaching 50 needs 50 real interactions. What that trigger
+// scheduler rather than our code), the featured-post one-time checkout, the trial-path duplicate
+// (`--direct` covers the paid one, which is the one that moves money), and endTrialEarly's 50-interaction TRIGGER — reaching 50 needs 50 real interactions. What that trigger
 // then DOES is covered: the conversion step below runs endTrialEarly itself, first on a cancelled
 // trial (it must not convert) and then on a live one, where it asserts the MONEY — one paid invoice
 // for the full price, nothing pending. The row moving to `active` never proved a charge: the
@@ -89,6 +95,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+// The real checkout copy, so a session's pay-button line is compared with what billingNode would write. Node ≥ 22.18
+// strips the types itself.
+import { checkoutSubmitMessage } from '../convex/lib/checkoutCopy.ts'
+import { TRIAL_PERIOD_DAYS } from '../convex/lib/trialMilestone.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const API = 'https://api.stripe.com/v1'
@@ -709,6 +719,8 @@ async function couponRun() {
     if (!PRICE.growth) fail('STRIPE_GROWTH_PRICE_ID is missing from .env.local — run scripts/stripe-provision.mjs')
     if (!ANNUAL_PRICE.growth)
       fail('STRIPE_GROWTH_ANNUAL_PRICE_ID is missing from .env.local — run scripts/stripe-provision.mjs')
+    if (!ANNUAL_PRICE.pro)
+      fail('STRIPE_PRO_ANNUAL_PRICE_ID is missing from .env.local — run scripts/stripe-provision.mjs')
 
     heading('Coupon guard — a free-month promotion code must not become a free year')
     const coupon = await stripe('POST', '/coupons', {
@@ -790,7 +802,11 @@ async function couponRun() {
     // The coupon itself cannot be price-scoped — Stripe's `applies_to` lists products, and each
     // tier's monthly and annual prices share one product — so monthly-only is enforced on the
     // Checkout session: the promotion-code field must be offered for monthly and hidden for annual.
-    heading('Checkout — the promotion-code field is monthly-only')
+    //
+    // The same sessions prove the trial rule (2026-10-03): only Pro has a trial (lib/trialMilestone planHasTrial),
+    // and this probe has never held a subscription. Stripe does not read back a session's subscription_data, so
+    // the pay-button line is the witness: billingNode builds it and trial_period_days from the same `trial` flag.
+    heading('Checkout — monthly-only promotion codes, Pro-only trial')
     const checkoutProbe = call('linkedin/auth:upsertUser', {
       linkedinId: `lits-coupon-checkout-${Date.now().toString(36)}`,
       name: 'Coupon Checkout Probe',
@@ -803,9 +819,14 @@ async function couponRun() {
     const minted = call('sessions:create', { token: checkoutToken, userId: checkoutProbe.value.userId })
     if (!minted.ok) fail(`could not mint the checkout probe session:\n${minted.error}`)
 
-    for (const [label, priceId, wanted] of [
-      ['monthly', PRICE.growth, true],
-      ['annual', ANNUAL_PRICE.growth, false]
+    const trialLine = checkoutSubmitMessage('en', { trial: true, days: TRIAL_PERIOD_DAYS, trialUsed: false })
+    const billedLine = checkoutSubmitMessage('en', { trial: false, days: TRIAL_PERIOD_DAYS, trialUsed: false })
+    for (const [label, priceId, wanted, trial] of [
+      ['Growth monthly', PRICE.growth, true, false],
+      ['Growth annual', ANNUAL_PRICE.growth, false, false],
+      ['Starter monthly', PRICE.starter, true, false],
+      ['Pro monthly', PRICE.pro, true, true],
+      ['Pro annual', ANNUAL_PRICE.pro, false, true]
     ]) {
       const created = call('billingNode:createCheckoutSession', {
         priceId,
@@ -827,6 +848,12 @@ async function couponRun() {
         `the ${label} checkout ${wanted ? 'offers' : 'hides'} the promotion-code field`,
         (session.allow_promotion_codes ?? false) === wanted,
         `allow_promotion_codes=${session.allow_promotion_codes}`
+      )
+      const line = session.custom_text?.submit?.message
+      check(
+        `the ${label} checkout ${trial ? 'grants' : 'skips'} the trial`,
+        line === (trial ? trialLine : billedLine),
+        line
       )
     }
 
@@ -889,18 +916,35 @@ async function couponRun() {
 
     // ── The no-trial switch: no coupon left, so annual is charged ──
     heading('The same day — the no-trial member switches with no coupon left to lose')
-    await stripe('POST', `/subscriptions/${subNoTrial.id}`, {
+    const annual = await stripe('GET', `/prices/${ANNUAL_PRICE.growth}`)
+    const switchedNoTrial = await stripe('POST', `/subscriptions/${subNoTrial.id}`, {
       items: [{ id: subNoTrial.items.data[0].id, price: ANNUAL_PRICE.growth }],
       proration_behavior: 'always_invoice'
     })
-    const [switchCharge] = await invoicesOf(subNoTrial.id)
+    // Asserted per line, not on the invoice's discount list: since API 2025-09-30.clover a subscription bills in
+    // `flexible` mode, where the consumed coupon still lists a $0 entry, the switch credits the free month at what
+    // was paid for it ($0), and the annual line is the year prorated from today ($150 × 362/365 = $148.77).
+    const switchCharge = await stripe('GET', `/invoices/${switchedNoTrial.latest_invoice}`)
+    const switchLines = (await stripe('GET', `/invoices/${switchCharge.id}/lines?limit=100`)).data
+    const annualLine = switchLines.find(l => linePriceOf(l) === ANNUAL_PRICE.growth && l.amount > 0)
+    const discounted = switchLines.flatMap(l => l.discount_amounts ?? []).filter(d => d.amount !== 0)
+    note(
+      `billing mode ${switchedNoTrial.billing_mode?.type ?? 'unknown'}; lines ${switchLines
+        .map(l => `${l.amount}${l.proration || l.parent?.subscription_item_details?.proration ? ' (proration)' : ''}`)
+        .join(', ')}`
+    )
     check(
       'the post-free-month switch to annual is charged, not discounted',
-      switchCharge?.status === 'paid' &&
+      switchCharge.status === 'paid' &&
         switchCharge.amount_paid === switchCharge.total &&
-        switchCharge.total > 0 &&
-        (switchCharge.total_discount_amounts ?? []).length === 0,
-      `${switchCharge?.status} paid=${switchCharge?.amount_paid} total=${switchCharge?.total}`
+        Boolean(annualLine) &&
+        discounted.length === 0,
+      `${switchCharge.status} paid=${switchCharge.amount_paid} total=${switchCharge.total} annual line=${annualLine?.amount} of ${annual.unit_amount}`
+    )
+    check(
+      'and the free month is not credited back',
+      switchCharge.total >= (annualLine?.amount ?? Infinity),
+      `total ${switchCharge.total} vs annual line ${annualLine?.amount}`
     )
     const noTrialAfter = await stripe('GET', `/subscriptions/${subNoTrial.id}?expand[]=items.data.price`)
     check(
@@ -912,7 +956,6 @@ async function couponRun() {
     // ── The money ──
     heading('Trial end — the first invoice after the trial must charge the full annual price')
     await advanceTo(clock.id, sub.trial_end + 3600, 'trial end')
-    const annual = await stripe('GET', `/prices/${ANNUAL_PRICE.growth}`)
     const [charge] = await invoicesOf(sub.id)
     check(
       'the trial-end invoice is paid in full',
@@ -921,7 +964,7 @@ async function couponRun() {
     )
     check(
       'no discount reached it',
-      (charge?.total_discount_amounts ?? []).length === 0,
+      (charge?.total_discount_amounts ?? []).every(d => d.amount === 0),
       JSON.stringify(charge?.total_discount_amounts ?? [])
     )
     await waitFor('row is active after the paid trial-end invoice', readSub(sub.id), r => r?.status === 'active')
@@ -946,6 +989,163 @@ async function couponRun() {
       } catch (err) {
         note(`could not expire checkout session ${id}: ${err.message}`)
       }
+    }
+    if (probeUserId) note(`probe member ${probeUserId} left in the dev DB; harmless, never reused`)
+  }
+}
+
+// ── Direct-plan run (--direct) ─────────────────────────────────────────────────────────────────
+// Starter and Growth bill at checkout, with no trial (2026-10-03). Since API basil, Checkout creates the
+// subscription only once the first payment succeeds, so a declined card there leaves nothing behind. One made
+// through the API or the Dashboard is born `incomplete` instead, and goes live on an `updated` once its first
+// invoice is paid: the first subscription takes that path (`default_incomplete`), after a first card that
+// declines, and the member must stay unsubscribed rather than turn past_due (2026-10-03, red on the old
+// markPastDue). The second one is born `active`, the shape Checkout creates, and stands in for a second tab:
+// it must be voided by the webhook, refunded in full (it was already charged), and announced, while the
+// member keeps the first plan and pays nothing more.
+async function directRun() {
+  const now = Math.floor(Date.now() / 1000)
+  let clockId
+  let probeUserId
+
+  // `default_incomplete`: born incomplete, live once its first invoice is paid. `error_if_incomplete` charges the
+  // default card first and is born active, as Checkout's is.
+  const subscribeDirect = async (customerId, priceId, userId, born = 'incomplete') => {
+    const sub = await stripe('POST', '/subscriptions', {
+      customer: customerId,
+      items: [{ price: priceId }],
+      payment_behavior: born === 'active' ? 'error_if_incomplete' : 'default_incomplete',
+      metadata: { convexUserId: userId }
+    })
+    check(`the ${tierOf(priceId)} subscription is born ${born}`, sub.status === born, sub.status)
+    return sub
+  }
+  const pay = (sub, paymentMethod) =>
+    stripe('POST', `/invoices/${sub.latest_invoice}/pay`, { payment_method: paymentMethod })
+  const readMember = id =>
+    `const u = await ctx.db.get(${JSON.stringify(id)})
+     return u && { tier: u.tier, status: u.subscriptionStatus, notice: u.billingNotice ?? null }`
+
+  try {
+    preflight()
+    heading('Direct plan — a subscription with no trial goes live when its first invoice is paid')
+    const stale = (await stripe('GET', '/test_helpers/test_clocks?limit=100')).data.filter(
+      c => c.name === 'billing-direct'
+    )
+    for (const c of stale) {
+      await stripe('DELETE', `/test_helpers/test_clocks/${c.id}`)
+      note(`swept a leftover clock ${c.id} from an earlier run`)
+    }
+    const clock = await stripe('POST', '/test_helpers/test_clocks', { frozen_time: now, name: 'billing-direct' })
+    clockId = clock.id
+    const customer = await stripe('POST', '/customers', {
+      test_clock: clock.id,
+      email: 'billing-direct-probe@example.invalid',
+      description: 'LITS direct-plan probe — safe to delete'
+    })
+    const pm = await stripe('POST', '/payment_methods', { type: 'card', card: { token: 'tok_visa' } })
+    await stripe('POST', `/payment_methods/${pm.id}/attach`, { customer: customer.id })
+    await stripe('POST', `/customers/${customer.id}`, { invoice_settings: { default_payment_method: pm.id } })
+
+    const upserted = call('linkedin/auth:upsertUser', {
+      linkedinId: `lits-direct-${Date.now().toString(36)}`,
+      name: 'Direct Plan Probe',
+      email: 'billing-direct-probe@example.invalid',
+      accessToken: 'probe-not-a-real-token',
+      tokenExpiresAt: Date.now() + 10 * 365 * 24 * 3600 * 1000
+    })
+    if (!upserted.ok) fail(`could not create the probe member — is \`npx convex dev\` running?\n${upserted.error}`)
+    probeUserId = upserted.value.userId
+    call('billing:setStripeCustomerId', { userId: probeUserId, stripeCustomerId: customer.id })
+    note('the duplicate notice below will try to email billing-direct-probe@example.invalid; that bounce is expected')
+
+    const first = await subscribeDirect(customer.id, PRICE.growth, probeUserId)
+    await waitFor('the row is created incomplete', readSub(first.id), r => r?.status === 'incomplete')
+    // The first card declines. Stripe keeps the subscription `incomplete` and sends invoice.payment_failed: they
+    // have not subscribed yet, so they must not turn past_due (live), which would refuse their next checkout.
+    const declining = await stripe('POST', '/payment_methods', {
+      type: 'card',
+      card: { token: 'tok_chargeCustomerFail' }
+    })
+    await stripe('POST', `/payment_methods/${declining.id}/attach`, { customer: customer.id })
+    // Not through stripe(): a decline is a 402, which it would treat as a failed run.
+    const declined = await fetch(`${API}/invoices/${first.latest_invoice}/pay`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ payment_method: declining.id })
+    })
+    check('the first card is declined', declined.status === 402, String(declined.status))
+    await waitForStripe(
+      'Stripe reports the failed first payment',
+      async () => (await stripe('GET', '/events?type=invoice.payment_failed&limit=20')).data,
+      events => events.some(e => e.data.object.id === first.latest_invoice)
+    )
+    await sleep(5000) // the webhook's delivery, which nothing on either side marks
+    const unpaid = query(readMember(probeUserId)).value
+    const unpaidRow = query(readSub(first.id)).value
+    check(
+      'the member is not subscribed yet, never past_due',
+      unpaid?.status === 'none' && unpaidRow?.status === 'incomplete',
+      `member ${unpaid?.status}, row ${unpaidRow?.status}`
+    )
+
+    await pay(first, pm.id)
+    await waitFor('the row goes active with the paid invoice', readSub(first.id), r => r?.status === 'active')
+    await waitFor(
+      'the member is active on Growth',
+      readMember(probeUserId),
+      u => u?.status === 'active' && u?.tier === 'growth'
+    )
+    const events = (await stripe('GET', `/events?type=customer.subscription.*&limit=20`)).data
+      .filter(e => e.data.object.id === first.id)
+      .reverse()
+      .map(e => `${e.type.split('.').pop()}(${e.data.object.status}) @${e.created}`)
+    note(`Stripe sent ${events.join(', ')}`)
+    // The created was applied at the first wait, so this only checks that the member settles active. The
+    // same-second out-of-order `created` that isStatusRegression refuses is pinned by
+    // convex/integration/stripeSync.test.ts.
+    await sleep(5000)
+    const settled = query(readMember(probeUserId)).value
+    check('and stays active after the paid update', settled?.status === 'active', settled?.status)
+
+    heading('A second direct checkout from another tab — voided, refunded, announced')
+    // A frozen clock stamps both subscriptions with the same `created`, and the void picks the newer by that stamp.
+    await advanceTo(clockId, now + 60)
+    const second = await subscribeDirect(customer.id, PRICE.starter, probeUserId, 'active')
+    const voided = await waitForStripe(
+      'the webhook voids the second subscription',
+      () => stripe('GET', `/subscriptions/${second.id}`),
+      s => s.status === 'canceled'
+    )
+    check(
+      'the first subscription is untouched',
+      (await stripe('GET', `/subscriptions/${first.id}`)).status === 'active'
+    )
+    const paid = (await stripe('GET', `/invoice_payments?invoice=${voided.latest_invoice}&status=paid`)).data
+    const intent = paid[0]?.payment?.payment_intent
+    const charged = paid.reduce((sum, p) => sum + (p.amount_paid ?? 0), 0)
+    check('the second subscription was charged before it was voided', charged > 0, String(charged))
+    await waitForStripe(
+      'its charge is refunded in full',
+      async () => (intent ? (await stripe('GET', `/refunds?payment_intent=${intent}`)).data : []),
+      refunds => refunds.reduce((sum, r) => sum + (r.status === 'failed' ? 0 : r.amount), 0) === charged
+    )
+    check('no credit parked on the customer', (await balanceOf(customer.id)) === 0)
+    await waitFor('our row for it is canceled', readSub(second.id), r => r?.status === 'canceled')
+    await waitFor(
+      'the member keeps Growth, active, and is told',
+      readMember(probeUserId),
+      u => u?.status === 'active' && u?.tier === 'growth' && u?.notice === 'duplicate_canceled'
+    )
+  } finally {
+    heading('Cleanup')
+    if (!clockId) {
+      note('nothing created')
+    } else if (flag('keep')) {
+      note(`kept: test clock ${clockId}, with its customer, subscriptions and invoices`)
+    } else {
+      await stripe('DELETE', `/test_helpers/test_clocks/${clockId}`)
+      note(`test clock ${clockId} deleted, with its customer, subscriptions and invoices`)
     }
     if (probeUserId) note(`probe member ${probeUserId} left in the dev DB; harmless, never reused`)
   }
@@ -1185,8 +1385,9 @@ async function pastDueRun() {
         'billingNode:createPlanSwitchSession',
         { sessionToken: sessionTokenB, priceId: PRICE.growth }
       )
+      // On Pro, the trial plan: this member already had a trial, so even Pro must bill today (one trial per account).
       const resub = call('billingNode:createCheckoutSession', {
-        priceId: PRICE.growth,
+        priceId: PRICE.pro,
         sessionToken: sessionTokenB,
         locale: 'en'
       })
@@ -1197,6 +1398,12 @@ async function pastDueRun() {
       )
       const resubId = String(resub.ok ? resub.value?.url : '').match(/cs_(?:test|live)_[A-Za-z0-9]+/)?.[0]
       if (resubId) {
+        const line = (await stripe('GET', `/checkout/sessions/${resubId}`)).custom_text?.submit?.message
+        check(
+          'the returning member gets no second trial, even on Pro',
+          line === checkoutSubmitMessage('en', { trial: false, days: TRIAL_PERIOD_DAYS, trialUsed: true }),
+          line
+        )
         try {
           await stripe('POST', `/checkout/sessions/${resubId}/expire`)
           note(`expired checkout session ${resubId}`)
@@ -1311,7 +1518,15 @@ async function audit(convexUserId) {
 
 let aborted = false
 try {
-  await (USER ? audit(USER) : flag('coupons') ? couponRun() : flag('pastdue') ? pastDueRun() : run())
+  await (USER
+    ? audit(USER)
+    : flag('coupons')
+      ? couponRun()
+      : flag('pastdue')
+        ? pastDueRun()
+        : flag('direct')
+          ? directRun()
+          : run())
 } catch (err) {
   aborted = true
   // fail() has already printed and set the exit code; anything else is a genuine crash.

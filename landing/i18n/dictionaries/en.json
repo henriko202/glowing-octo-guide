@@ -47,9 +47,9 @@
     "howItWorks": "How it works",
     "features": "Features",
     "pricing": "Pricing",
-    "cta": "Start free trial",
     "loginCta": "Log in",
-    "skipToContent": "Skip to content"
+    "skipToContent": "Skip to content",
+    "banner": "Get 1 month free to try it out. Log in to learn more!"
   },
   "hero": {
     "eyebrow": "Good at your work, but few people see it?",
@@ -195,6 +195,8 @@
     "annualSubLabel": "{{price}} billed annually · 2 months free",
     "monthlySubLabel": "2 months free if you pay annually",
     "trialNote": "Free for 7 days or your first 50 interactions (made or received), whichever comes first. Card required. Cancel anytime.",
+    "freeMonthBadge": "1 month free",
+    "freeMonthNote": "Free for your first month on monthly billing, with a promo code. Card required. Cancel anytime.",
     "enterpriseNote": "Need higher limits? Custom plans start at",
     "enterprisePriceMonth": "US$100/mo",
     "enterprisePriceYear": "US$1,000/yr",
@@ -241,7 +243,8 @@
       }
     ],
     "renewalAnnual": "After your trial: {{price}} billed annually.",
-    "renewalMonthly": "After your trial: {{price}} billed monthly."
+    "renewalMonthly": "After your trial: {{price}} billed monthly.",
+    "afterFreeMonth": "After the free month: {{price}} billed monthly."
   },
   "faq": {
     "eyebrow": "FAQ",
@@ -256,8 +259,8 @@
         "a": "Automation tools react and comment in bulk from your account. Here, you pick one post at a time, and you react or comment yourself on LinkedIn."
       },
       {
-        "q": "What does the free trial include, and when am I charged?",
-        "a": "You get everything in the plan you choose, free for 7 days or until you reach 50 interactions, whichever comes first. An interaction is a reaction or comment you make or receive in the app. The first AI draft you create for each post counts too. You add a card to start, and we charge it when the trial ends. Cancel before then and you pay nothing."
+        "q": "Is there a free trial, and when am I charged?",
+        "a": "On Starter and Growth, a promo code makes your first month free on monthly billing. Without a code, we charge your card when you subscribe. Pro is free for 7 days or until you reach 50 interactions, whichever comes first. An interaction is a reaction or comment you make or receive in the app. The first AI draft you create for each post counts too. You add a card to start, and we charge it when the trial ends. Cancel before then and you pay nothing."
       },
       {
         "q": "What is the SSI, and how quickly will mine change?",
@@ -284,8 +287,6 @@
   "finalCta": {
     "headlineLine1": "See the feed for yourself.",
     "headlineLine2": "Then decide if it's for you.",
-    "subheadline": "Free for 7 days or your first 50 interactions (made or received), whichever comes first. Card required. Cancel anytime.",
-    "cta": "Start my free trial",
     "loginCta": "Log in",
     "ctaTrust": "Official LinkedIn sign-in · We only get your name, photo, and email · We never post for you"
   },
@@ -314,9 +315,5 @@
     "en": "English",
     "pt": "Português",
     "es": "Español"
-  },
-  "trialOffer": {
-    "annual": "Pick any plan · From {{price}} a year after the trial",
-    "monthly": "Pick any plan · From {{price}} a month after the trial"
   }
 }

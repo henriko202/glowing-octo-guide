@@ -5,7 +5,7 @@ import { api } from '../convex'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { captureEvent } from '@/lib/observability/analytics'
-import { resolveTargetPlan } from '@/lib/targetPlan'
+import { gatePlan } from '@/lib/targetPlan'
 import { PLAN_PRICES, usdLabel } from '@/lib/planPrices'
 import { useCardGate } from '@/hooks/useCardGate'
 
@@ -31,12 +31,12 @@ export function useOwnPostState(enabled: boolean): { hasHiddenPost: boolean; has
 export default function CardGateBanner({ className }: { className?: string }) {
   const { t, i18n } = useTranslation()
   const [searchParams] = useSearchParams()
-  const plan = resolveTargetPlan(searchParams)
   // A past_due member already has a card and already had a trial — "start your trial" copy is
   // wrong for them (F5); they need to fix a failed payment, not sign up. `canTrial` catches the
   // quieter version: a member on 'none' who still has subscription rows (incomplete/paused, or an
   // admin status reset) gets no trial at checkout either.
   const { status, canTrial } = useCardGate()
+  const plan = gatePlan(searchParams, canTrial)
   const pastDue = status === 'past_due'
 
   return (

@@ -16,7 +16,7 @@ import {
 } from './lib/stripePrices'
 import { buildDowngradePhases, isSpentSchedule, planChangeDirection } from './lib/downgrade'
 import { PORTAL_TIER_KEY, type PortalConfigKey, portalConfigKeyFor, portalHomeKeyFor } from './lib/portalConfig'
-import { findLiveSubscription, isCancelPending, trialDaysFor, trialEligible } from './lib/trialMilestone'
+import { findLiveSubscription, isCancelPending, planHasTrial, trialDaysFor, trialEligible } from './lib/trialMilestone'
 import { checkoutSubmitMessage, resolveBillingLocale, stripeCheckoutLocale } from './lib/checkoutCopy'
 import { scrubError } from './lib/scrubError'
 import { reportError } from './lib/sentry'
@@ -45,7 +45,8 @@ function datafastMetadata(visitorId?: string, sessionId?: string): Record<string
   return metadata
 }
 
-// Card-required trial checkout (7 days, 14 for an invited member — lib/trialMilestone.trialDaysFor).
+// Checkout. Pro gets a card-required trial (7 days, 14 for an invited member — lib/trialMilestone
+// planHasTrial + trialDaysFor); Starter and Growth bill immediately.
 // The component's createCheckoutSession can't set a trial / card-collection / promo codes, so we
 // call the Stripe SDK directly here. The component still owns the customer record and webhook sync.
 export const createCheckoutSession = action({
@@ -77,9 +78,11 @@ export const createCheckoutSession = action({
       throw new ConvexError('ALREADY_SUBSCRIBED: You already have a plan. Manage it from the billing portal.')
     }
 
-    // One trial per user, forever. A returning subscriber checks out without a trial and is told
-    // so under the pay button, before the card — never discovered on the statement.
-    const trial = trialEligible(subscriptions.length)
+    // One trial per user, forever, and only on Pro. A returning subscriber, or a first Starter/Growth
+    // checkout, goes without a trial and is told so under the pay button, before the card — never
+    // discovered on the statement.
+    const trialUsed = !trialEligible(subscriptions.length)
+    const trial = !trialUsed && planHasTrial(getTierFromPriceId(priceId))
     const trialDays = trialDaysFor(user)
     const billingLocale = resolveBillingLocale(locale ?? user.language, user.primaryLocale)
 
@@ -110,7 +113,7 @@ export const createCheckoutSession = action({
       allow_promotion_codes: promotionCodesAllowed(env, priceId),
       locale: stripeCheckoutLocale(billingLocale),
       // The rule the member is agreeing to, two centimetres from the pay button.
-      custom_text: { submit: { message: checkoutSubmitMessage(billingLocale, { trial, days: trialDays }) } },
+      custom_text: { submit: { message: checkoutSubmitMessage(billingLocale, { trial, days: trialDays, trialUsed }) } },
       success_url: `${appUrl}/billing?success=true`,
       cancel_url: `${appUrl}/billing`
     })
@@ -211,17 +214,41 @@ export const endTrialEarly = internalAction({
 })
 
 /**
+ * Refunds every paid payment on an invoice in full. API 2025-03-31.basil moved the payment off
+ * `invoice.payment_intent` and onto the invoice's InvoicePayments, so they are listed.
+ */
+async function refundInvoice(invoice: string | Stripe.Invoice | null): Promise<void> {
+  const invoiceId = typeof invoice === 'string' ? invoice : invoice?.id
+  if (!invoiceId) return
+  const { data } = await stripe().invoicePayments.list({ invoice: invoiceId, status: 'paid' })
+  for (const { id, amount_paid, payment } of data) {
+    const intent = payment.payment_intent
+    const charge = payment.charge
+    const target = intent
+      ? { payment_intent: typeof intent === 'string' ? intent : intent.id }
+      : charge
+        ? { charge: typeof charge === 'string' ? charge : charge.id }
+        : null
+    if (!amount_paid || !target) continue
+    // Keyed on the payment, so a retried call can never refund it twice.
+    await stripe().refunds.create(target, { idempotencyKey: `duplicate-refund-${id}` })
+  }
+}
+
+/**
  * Voids a subscription created while the member already had a live one (the two-tab race the
  * checkout guard cannot see). The NEWER subscription is the one cancelled, so the member keeps the
- * plan they already had. Never silent: it raises an in-app notice and sends an email.
+ * plan they already had, and whatever it charged is refunded. Never silent: it raises an in-app
+ * notice and sends an email.
  */
 export const cancelDuplicateSubscription = internalAction({
   args: { userId: v.id('users'), stripeSubscriptionId: v.string(), tier: v.string() },
   handler: async (ctx, { userId, stripeSubscriptionId, tier }) => {
+    let canceled: Stripe.Subscription
     try {
-      await stripe().subscriptions.cancel(stripeSubscriptionId, { prorate: false, invoice_now: false })
+      canceled = await stripe().subscriptions.cancel(stripeSubscriptionId, { prorate: false, invoice_now: false })
     } catch (err) {
-      // Already canceled (a Stripe webhook retry re-ran the guard) or a transient Stripe failure.
+      // Already canceled (by hand in the Dashboard, or a void scheduled twice) or a transient Stripe failure.
       // Either way this run must not notify: the first run did, or the duplicate is still live.
       console.error('[billing] could not void duplicate subscription', stripeSubscriptionId, scrubError(err))
       // Stripe refusing (a 4xx) is the first case; anything else leaves the member paying twice, so Sentry hears it.
@@ -229,6 +256,15 @@ export const cancelDuplicateSubscription = internalAction({
       return
     }
     console.error('[billing] voided duplicate subscription', scrubError({ stripeSubscriptionId }))
+    // A direct-checkout duplicate (no trial) paid its first invoice before it went live, and cancel()
+    // neither credits nor refunds it. A trial duplicate's first invoice is $0: nothing to refund.
+    try {
+      await refundInvoice(canceled.latest_invoice)
+    } catch (err) {
+      // ponytail: no retry; Sentry names the subscription and the refund is one click in the Dashboard.
+      console.error('[billing] could not refund voided duplicate', stripeSubscriptionId, scrubError(err))
+      await reportError(ctx, err, { upstream: 'stripe' })
+    }
     await ctx.runMutation(internal.users.setBillingNotice, { userId, notice: 'duplicate_canceled' })
     await ctx.scheduler.runAfter(0, internal.billingNotices.sendDuplicateCanceled, { userId, tier })
   }

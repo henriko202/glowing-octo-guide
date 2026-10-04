@@ -42,9 +42,10 @@ describe('CardGateDialog', () => {
   // R04: the line under the CTA says what it costs — a trial ask with no price line reads as a
   // hidden charge. The threshold comes from the same constant the backend milestone uses, never a
   // number typed into the copy.
-  it('links the CTA to the plan the visitor chose and says what the trial costs', () => {
-    renderDialog('?plan=pro')
-    expect(screen.getByRole('link', { name: /start free trial/i })).toHaveAttribute('href', '/billing?plan=pro')
+  // 2026-10-03 — only Pro has a trial, so the trial ask always lands on Pro, whatever plan was chosen.
+  it('links the CTA to the Pro trial and says what the trial costs', () => {
+    renderDialog('?plan=growth')
+    expect(screen.getByRole('link', { name: /try pro free/i })).toHaveAttribute('href', '/billing?plan=pro')
     expect(
       screen.getByText(new RegExp(`free for 7 days or your first ${TRIAL_INTERACTION_THRESHOLD} interactions`, 'i'))
     ).toBeInTheDocument()
@@ -63,7 +64,7 @@ describe('CardGateDialog', () => {
   it('names the invited 14-day trial when the member joined through an invite', () => {
     mockMe = { subscriptionStatus: 'none', trialDays: 14 }
     renderDialog('?plan=pro')
-    expect(screen.getByRole('link', { name: /start free trial/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /try pro free/i })).toBeInTheDocument()
     expect(
       screen.getByText(new RegExp(`free for 14 days or your first ${TRIAL_INTERACTION_THRESHOLD} interactions`, 'i'))
     ).toBeInTheDocument()

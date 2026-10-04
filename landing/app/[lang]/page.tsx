@@ -39,11 +39,7 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
         id="main-content"
         tabIndex={-1}
       >
-        <Hero
-          dict={dict.hero}
-          offer={dict.trialOffer}
-          lang={lang}
-        />
+        <Hero dict={dict.hero} />
         <HowItWorks dict={dict.howItWorks} />
         <Positioning dict={dict.positioning} />
         <Features
@@ -60,11 +56,7 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
           lang={lang}
         />
         <FAQ dict={dict.faq} />
-        <FinalCTA
-          dict={dict.finalCta}
-          offer={dict.trialOffer}
-          lang={lang}
-        />
+        <FinalCTA dict={dict.finalCta} />
       </main>
       <Footer
         dict={dict.footer}

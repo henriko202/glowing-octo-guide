@@ -6,7 +6,7 @@ export default function En({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Cookie &amp; Storage Policy</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Last updated:</strong> September 2026
+          <strong className="text-cream">Last updated:</strong> October 2026
         </p>
         <p>
           This page lists every cookie and browser storage item Link Into The SSI uses on linkintothessi.com and
@@ -55,10 +55,6 @@ export default function En({ lang }: { lang: Locale }) {
           <li>
             <strong className="text-cream">ref</strong> (website, session storage) &mdash; the invite code from a link
             you followed, passed to the app when you sign up.
-          </li>
-          <li>
-            <strong className="text-cream">trialStarted</strong> (website, local storage) &mdash; after you start a
-            trial, our buttons offer to log you in instead.
           </li>
           <li>
             <strong className="text-cream">cookieNoticeDismissed</strong> (website, local storage) &mdash; remembers

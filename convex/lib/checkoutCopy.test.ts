@@ -30,23 +30,33 @@ describe('stripeCheckoutLocale', () => {
 describe('checkoutSubmitMessage', () => {
   it('states the 50-or-7-days rule in every language on the trial path', () => {
     for (const l of LOCALES) {
-      const msg = checkoutSubmitMessage(l, { trial: true, days: 7 })
+      const msg = checkoutSubmitMessage(l, { trial: true, days: 7, trialUsed: false })
       expect(msg).toContain('50')
       expect(msg).toContain('7')
       expect(msg.length).toBeGreaterThan(40)
     }
   })
-  it('states that billing is today on the no-trial path', () => {
+  it('states that billing is today on both no-trial paths', () => {
     for (const l of LOCALES) {
-      const msg = checkoutSubmitMessage(l, { trial: false, days: 7 })
-      expect(msg).not.toContain('50')
-      expect(msg.length).toBeGreaterThan(20)
+      for (const trialUsed of [true, false]) {
+        const msg = checkoutSubmitMessage(l, { trial: false, days: 7, trialUsed })
+        expect(msg).not.toContain('50')
+        expect(msg.length).toBeGreaterThan(20)
+      }
+    }
+  })
+  // 2026-10-03 — Starter/Growth have no trial, so a first-time buyer must not read "you already used yours".
+  it('only says the trial was used up when it was', () => {
+    const used = { en: 'already used', pt: 'já usou', es: 'ya usaste' }
+    for (const l of LOCALES) {
+      expect(checkoutSubmitMessage(l, { trial: false, days: 7, trialUsed: true })).toContain(used[l])
+      expect(checkoutSubmitMessage(l, { trial: false, days: 7, trialUsed: false })).not.toContain(used[l])
     }
   })
   it('never hedges — the rule is deterministic, not "may"', () => {
     for (const l of LOCALES) {
       for (const trial of [true, false]) {
-        const msg = checkoutSubmitMessage(l, { trial, days: 7 }).toLowerCase()
+        const msg = checkoutSubmitMessage(l, { trial, days: 7, trialUsed: !trial }).toLowerCase()
         expect(msg).not.toContain('may end')
         expect(msg).not.toContain('pode terminar')
         expect(msg).not.toContain('puede terminar')
@@ -56,14 +66,14 @@ describe('checkoutSubmitMessage', () => {
   it('fits Stripe custom_text limit of 1200 characters', () => {
     for (const l of LOCALES) {
       for (const trial of [true, false]) {
-        expect(checkoutSubmitMessage(l, { trial, days: 7 }).length).toBeLessThanOrEqual(1200)
+        expect(checkoutSubmitMessage(l, { trial, days: 7, trialUsed: !trial }).length).toBeLessThanOrEqual(1200)
       }
     }
   })
   // backlog/R19 — an invited member's checkout states the 14-day trial they actually get.
   it('states the invited 14-day trial when asked', () => {
     for (const l of LOCALES) {
-      const msg = checkoutSubmitMessage(l, { trial: true, days: 14 })
+      const msg = checkoutSubmitMessage(l, { trial: true, days: 14, trialUsed: false })
       expect(msg).toContain('14')
       expect(msg).toContain('50')
       expect(msg).not.toMatch(/\b7\b/)

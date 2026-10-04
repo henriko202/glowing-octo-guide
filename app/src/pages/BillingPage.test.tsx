@@ -109,7 +109,7 @@ const PLAN_LABELS: Record<string, string> = {
 // so those two keys resolve to their actual copy here; everything else keeps echoing its key.
 const REAL_COPY: Record<string, string> = {
   'billing.successTitle': "You're all set.",
-  'billing.activating': 'Activating your trial…'
+  'billing.activatingPlan': 'Activating your plan…'
 }
 
 vi.mock('react-i18next', () => ({
@@ -188,7 +188,7 @@ beforeEach(() => {
 describe('plan click routing (R01)', () => {
   it('sends a pre-card member to checkout', async () => {
     renderPage()
-    fireEvent.click(screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.noTrialCta/ })[0])
     await waitFor(() =>
       expect(mockCheckout).toHaveBeenCalledWith({
         priceId: 'price_growth_year',
@@ -204,7 +204,7 @@ describe('plan click routing (R01)', () => {
   it('passes the DataFast cookies to checkout when they exist', async () => {
     vi.mocked(datafastAttribution).mockReturnValue({ datafastVisitorId: 'v1', datafastSessionId: 's1' })
     renderPage()
-    fireEvent.click(screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.noTrialCta/ })[0])
     await waitFor(() =>
       expect(mockCheckout).toHaveBeenCalledWith({
         priceId: 'price_growth_year',
@@ -269,7 +269,7 @@ describe('plan click routing (R01)', () => {
   it('opens the portal when the server refuses with ALREADY_SUBSCRIBED', async () => {
     mockCheckout.mockRejectedValueOnce(new Error('ALREADY_SUBSCRIBED: You already have a plan.'))
     renderPage()
-    fireEvent.click(screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.noTrialCta/ })[0])
     await waitFor(() => expect(mockPortal).toHaveBeenCalled())
   })
 
@@ -294,10 +294,12 @@ describe('chosen plan (R03)', () => {
     expect(screen.getByText('billing.selected')).toBeInTheDocument()
   })
 
+  // 2026-10-03 — Starter has no trial, so its lead says billing starts at subscribe, not "start its trial".
   it('follows the ?plan= query parameter', () => {
     mockSearchParams = new URLSearchParams('?plan=starter')
     renderPage()
-    expect(screen.getByText(/billing\.chosenPlanLead.*Starter/)).toBeInTheDocument()
+    expect(screen.getByText(/billing\.noTrialChosenPlanLead.*Starter/)).toBeInTheDocument()
+    expect(screen.queryByText(/billing\.chosenPlanLead/)).not.toBeInTheDocument()
   })
 
   it('falls back to growth with no stash and no query param', () => {
@@ -531,7 +533,7 @@ describe('checkout-return celebration (R07)', () => {
 
   it('shows the activating state while the webhook has not landed', () => {
     renderBilling({ search: '?success=true', me: { subscriptionStatus: 'none' } })
-    expect(screen.getByText(/activating your trial/i)).toBeInTheDocument()
+    expect(screen.getByText(/activating your plan/i)).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -570,7 +572,7 @@ describe('checkout-return celebration (R07)', () => {
       search: '?success=true',
       me: { subscriptionStatus: 'canceled', tier: 'starter' }
     })
-    expect(screen.getByText('billing.activatingPlan')).toBeInTheDocument()
+    expect(screen.getByText(/activating your plan/i)).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     setUser({ subscriptionStatus: 'active', tier: 'growth' })
@@ -627,7 +629,7 @@ describe('activation timeout (Item B)', () => {
   it('shows the timeout state once 20s pass with the webhook still not landed', () => {
     vi.useFakeTimers()
     renderBilling({ search: '?success=true', me: { subscriptionStatus: 'none' } })
-    expect(screen.getByText(/activating your trial/i)).toBeInTheDocument()
+    expect(screen.getByText(/activating your plan/i)).toBeInTheDocument()
     expect(screen.queryByText('billing.activatingTimeout')).not.toBeInTheDocument()
 
     act(() => {
@@ -695,7 +697,7 @@ describe('cancel + resume (R09)', () => {
 describe('checkout_started (R18)', () => {
   it('fires once with the plan and the interval before checkout', async () => {
     renderPage()
-    fireEvent.click(screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /billing\.noTrialCta/ })[0])
     await waitFor(() => expect(mockCheckout).toHaveBeenCalled())
     expect(captureEvent).toHaveBeenCalledWith('checkout_started', { plan: 'growth', interval: 'annual' })
     expect(captureEvent).toHaveBeenCalledTimes(1)
@@ -818,11 +820,10 @@ describe('cap email landing (R20)', () => {
 
 describe('BillingPage invited member (R19)', () => {
   it('renders the gift line and 14-day copy for a member who joined through an invite', () => {
-    setUser({ trialDays: 14, inviterName: 'Ana' })
-    renderPage()
+    renderBilling({ search: 'plan=pro', me: { trialDays: 14, inviterName: 'Ana' } })
     expect(screen.getByText(/billing\.giftFrom:.*"name":"Ana".*"days":14/)).toBeInTheDocument()
     expect(screen.getByText(/billing\.newUserTrialNote:\{"days":14,"threshold":50\}/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /billing\.startTrialCta:.*"plan"/ }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /billing\.startTrialCta:.*"plan":"Pro"/ })).toBeInTheDocument()
   })
 
   it('says 7 days and shows no gift line for a plain signup', () => {
@@ -876,6 +877,25 @@ describe('BillingPage member with no trial left', () => {
     renderPage()
     expect(screen.getByText(/billing\.newUserTrialNote:\{"days":7,"threshold":50\}/)).toBeInTheDocument()
     expect(screen.queryByText(/billing\.noTrialNote/)).not.toBeInTheDocument()
+  })
+})
+
+// 2026-10-03 launch promotion: only Pro has a trial (convex/lib/trialMilestone planHasTrial), so an
+// eligible member sees "Try Pro free" on Pro alone; Starter and Growth bill at checkout.
+describe('BillingPage Pro-only trial', () => {
+  it('labels only the Pro card as a free trial', () => {
+    setUser({ trialEligible: true })
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'billing.seeAllPlans' }))
+    expect(screen.getAllByRole('button', { name: /billing\.startTrialCta/ })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /billing\.startTrialCta:.*"plan":"Pro"/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /billing\.noTrialCta:.*"plan":"Starter"/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /billing\.noTrialCta:.*"plan":"Growth"/ })).toBeInTheDocument()
+  })
+
+  it('keeps the trial lead for a member who chose Pro on the site', () => {
+    renderBilling({ search: 'plan=pro', me: { trialEligible: true } })
+    expect(screen.getByText(/billing\.chosenPlanLead.*Pro/)).toBeInTheDocument()
   })
 })
 
@@ -1111,7 +1131,7 @@ describe('BillingPage status matrix', () => {
     setUser({ subscriptionStatus: 'none', trialEligible: true })
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'billing.seeAllPlans' }))
-    fireEvent.click(screen.getByRole('button', { name: /billing\.startTrialCta.*Starter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /billing\.noTrialCta.*Starter/ }))
     await waitFor(() =>
       expect(mockCheckout).toHaveBeenCalledWith({
         priceId: 'price_starter_year',
@@ -1136,7 +1156,7 @@ describe('busy state while leaving for Stripe', () => {
   it('marks the clicked checkout button busy and keeps it busy once the url is back', async () => {
     mockCheckout.mockResolvedValueOnce({ url: '#stripe' })
     renderPage()
-    const button = screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0]
+    const button = screen.getAllByRole('button', { name: /billing\.noTrialCta/ })[0]
     fireEvent.click(button)
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('aria-busy', 'true')
@@ -1148,7 +1168,7 @@ describe('busy state while leaving for Stripe', () => {
 
   it('frees the checkout button again when no redirect follows', async () => {
     renderPage()
-    const button = screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0]
+    const button = screen.getAllByRole('button', { name: /billing\.noTrialCta/ })[0]
     fireEvent.click(button)
     expect(button).toBeDisabled()
     await waitFor(() => expect(button).toBeEnabled())
@@ -1181,7 +1201,7 @@ describe('busy state while leaving for Stripe', () => {
   it('frees the button when the page is restored from the back/forward cache, not on a plain pageshow', async () => {
     mockCheckout.mockResolvedValueOnce({ url: '#stripe' })
     renderPage()
-    const button = screen.getAllByRole('button', { name: /billing\.startTrialCta/ })[0]
+    const button = screen.getAllByRole('button', { name: /billing\.noTrialCta/ })[0]
     fireEvent.click(button)
     await waitFor(() => expect(window.location.hash).toBe('#stripe'))
     act(() => void window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false })))

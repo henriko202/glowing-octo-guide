@@ -17,6 +17,13 @@ describe('pricingMarkdown', () => {
     expect(markdown).toContain(`$${planPrice('starter', 'monthly')}/month`)
     expect(markdown).toContain(`$${planPrice('starter', 'annual')}/year billed annually`)
     expect(markdown).toContain(dict.pricing.trialNote)
+    // 2026-10-03 — only Pro has a trial; an answer engine must not quote one for Starter or Growth.
+    expect(markdown).toContain('Free trial (Pro only)')
+    expect(markdown).not.toContain('all plans')
+    // The cards sell a promo-code free month on Starter and Growth; the agent files must say so too.
+    expect(markdown).toContain('Free month (Starter and Growth)')
+    expect(markdown).toContain(dict.pricing.freeMonthNote)
+    expect(llmsTxt(dict)).toContain(dict.pricing.freeMonthNote)
   })
 })
 

@@ -89,10 +89,14 @@ function pricingDetails(dict: Dictionary, headingLevel = 2) {
     )
     .join('\n')
 
-  return `${h} Free trial (all plans)
+  return `${h} Free trial (Pro only)
 
 - Price: $0.00
 - ${dict.pricing.trialNote}
+
+${h} Free month (Starter and Growth)
+
+- ${dict.pricing.freeMonthNote}
 
 ${plans}
 ${h} Contact / higher usage
@@ -111,7 +115,7 @@ ${h} Notes
 export function pricingMarkdown(dict: Dictionary) {
   return `# Pricing: Link Into The SSI
 
-Link Into The SSI is a LinkedIn growth tool. Prices are in US dollars (USD). Annual billing is ten times the monthly price, equivalent to two months free. Every paid plan starts with a card-on-file free trial.
+Link Into The SSI is a LinkedIn growth tool. Prices are in US dollars (USD). Annual billing is ten times the monthly price, equivalent to two months free. Pro starts with a card-on-file free trial. On Starter and Growth, a promo code makes the first month free on monthly billing; without one, they are billed when you subscribe.
 
 ${pricingDetails(dict)}
 `
@@ -161,7 +165,7 @@ ${ssiSection(dict)}
 
 ## Pricing
 
-See [pricing.md](${SITE_URL}/pricing.md) for structured plan and price data. ${planPrices}. Annual billing is ten times the monthly price, equivalent to two months free. ${dict.pricing.trialNote}
+See [pricing.md](${SITE_URL}/pricing.md) for structured plan and price data. ${planPrices}. Annual billing is ten times the monthly price, equivalent to two months free. Pro has a free trial: ${dict.pricing.trialNote} Starter and Growth: ${dict.pricing.freeMonthNote} Without a promo code, they are billed when you subscribe.
 
 ## Key pages
 

@@ -30,8 +30,8 @@ describe('landing translations', () => {
     ['pt', pt],
     ['es', es]
   ] as const)('%s keeps the same trial terms at every decision', (_locale, dictionary) => {
+    // hero.ctaDisclaimer is no longer on the landing; the promo video (video/src/copy.ts) still prints it.
     expect(dictionary.hero.ctaDisclaimer).toBe(dictionary.pricing.trialNote)
-    expect(dictionary.finalCta.subheadline).toBe(dictionary.pricing.trialNote)
   })
 
   it.each([
@@ -41,16 +41,6 @@ describe('landing translations', () => {
   ] as const)('%s keeps the same login label in every primary CTA slot', (_locale, dictionary) => {
     expect(dictionary.nav.loginCta).toBe(dictionary.hero.loginCta)
     expect(dictionary.finalCta.loginCta).toBe(dictionary.hero.loginCta)
-  })
-
-  it.each([
-    ['en', en],
-    ['pt', pt],
-    ['es', es]
-  ] as const)('%s keeps the generic trial offer plan-agnostic', (_locale, dictionary) => {
-    for (const value of Object.values(dictionary.trialOffer)) {
-      expect(value).not.toMatch(/\b(Starter|Growth|Pro)\b/)
-    }
   })
 
   it.each([

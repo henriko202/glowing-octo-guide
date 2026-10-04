@@ -5,11 +5,14 @@ import {
   findLiveSubscription,
   isNearThreshold,
   isStaleEvent,
+  isStatusRegression,
   isTrialConversion,
   pickTrialingSubscription,
+  planHasTrial,
   shouldEndTrialEarly,
   trialEligible,
   trialDaysFor,
+  wentLive,
   TRIAL_INTERACTION_THRESHOLD,
   TRIAL_PERIOD_DAYS,
   TRIAL_WARNING_THRESHOLD,
@@ -87,6 +90,15 @@ describe('trialEligible', () => {
   })
 })
 
+describe('planHasTrial', () => {
+  // 2026-10-03 launch promotion: Starter and Growth bill at checkout.
+  it('grants a trial on Pro only', () => {
+    expect(planHasTrial('pro')).toBe(true)
+    expect(planHasTrial('starter')).toBe(false)
+    expect(planHasTrial('growth')).toBe(false)
+  })
+})
+
 describe('findDuplicateSubscription', () => {
   it('needs two live rows', () => {
     expect(findDuplicateSubscription([])).toBeUndefined()
@@ -138,6 +150,35 @@ describe('isStaleEvent', () => {
     expect(isStaleEvent(undefined, 1000)).toBe(false)
     expect(isStaleEvent(1000, undefined)).toBe(false)
     expect(isStaleEvent(undefined, undefined)).toBe(false)
+  })
+})
+
+describe('wentLive', () => {
+  it('is true for the event that first makes a row live', () => {
+    expect(wentLive(undefined, 'trialing')).toBe(true) // a trial's created
+    expect(wentLive(undefined, 'active')).toBe(true) // a paid Checkout's created, or an updated landing first
+    expect(wentLive('incomplete', 'active')).toBe(true) // the first payment of one born incomplete
+  })
+  it('is false once the row is live, and for a non-live event', () => {
+    expect(wentLive('trialing', 'trialing')).toBe(false) // a retried created
+    expect(wentLive('trialing', 'active')).toBe(false)
+    expect(wentLive('past_due', 'active')).toBe(false)
+    expect(wentLive(undefined, 'incomplete')).toBe(false)
+    expect(wentLive('active', 'canceled')).toBe(false)
+  })
+})
+
+describe('isStatusRegression', () => {
+  it('rejects incomplete for a row already trialing or active', () => {
+    expect(isStatusRegression('active', 'incomplete')).toBe(true)
+    expect(isStatusRegression('trialing', 'incomplete')).toBe(true)
+    expect(isStatusRegression('active', 'incomplete_expired')).toBe(true)
+  })
+  it('lets incomplete through otherwise, past_due included so a failed first payment can still expire', () => {
+    expect(isStatusRegression(undefined, 'incomplete')).toBe(false)
+    expect(isStatusRegression('incomplete', 'incomplete_expired')).toBe(false)
+    expect(isStatusRegression('past_due', 'incomplete_expired')).toBe(false)
+    expect(isStatusRegression('active', 'past_due')).toBe(false)
   })
 })
 

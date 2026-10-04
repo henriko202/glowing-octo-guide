@@ -6,7 +6,7 @@ export default function En({ lang }: { lang: Locale }) {
       <h1 className="mb-8 font-display text-4xl font-semibold text-cream">Terms of Service</h1>
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong className="text-cream">Last updated:</strong> September 2026
+          <strong className="text-cream">Last updated:</strong> October 2026
         </p>
 
         {/* 1. Acceptance */}
@@ -105,14 +105,21 @@ export default function En({ lang }: { lang: Locale }) {
           that post has been featured.
         </p>
         <p>
-          <strong className="text-cream">Free trial.</strong> New accounts start with a{' '}
-          <strong className="text-cream">7-day free trial</strong> (14 days when you join through a member&apos;s invite
-          link) and a payment method is required to begin it. The trial ends — and billing starts — as soon as you reach{' '}
+          <strong className="text-cream">Free trial.</strong> The <strong className="text-cream">Pro</strong> plan
+          starts with a <strong className="text-cream">7-day free trial</strong> (14 days when you join through a
+          member&apos;s invite link) and a payment method is required to begin it. The Starter and Growth plans have no
+          free trial: billing starts when you subscribe. The trial ends — and billing starts — as soon as you reach{' '}
           <strong className="text-cream">50 interactions</strong> (made plus received) or when the trial period ends,
           whichever comes first. We notify you by email before the first charge. You may cancel at any time before the
           trial ends from the Subscription page in your account, and you will not be charged. One free trial is
           available per account; if you subscribe again after cancelling, billing starts immediately and this is stated
           at checkout.
+        </p>
+        <p>
+          <strong className="text-cream">Promotion codes.</strong> A promotion code entered at checkout can make the
+          first month of a monthly plan free. A payment method is still required, and after that month you are billed
+          the plan&apos;s monthly price unless you cancel before then. Promotion codes are not available on annual
+          billing.
         </p>
         <p>
           <strong className="text-cream">Cancellation.</strong> You may cancel your subscription at any time through

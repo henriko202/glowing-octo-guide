@@ -5,7 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { api } from '../convex'
 import { PageHeader } from '@/components/PageHeader'
-import { TRIAL_INTERACTION_THRESHOLD, TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
+import { planHasTrial, TRIAL_INTERACTION_THRESHOLD, TRIAL_PERIOD_DAYS } from '../../../convex/lib/trialMilestone'
 import TrialMeter from '@/components/TrialMeter'
 import { useOwnPostState } from '@/components/CardGateBanner'
 import CheckoutSuccessDialog from '@/components/CheckoutSuccessDialog'
@@ -136,13 +136,11 @@ export default function BillingPage() {
   // getMe is reactive, so this clears itself the moment the row updates — no polling. A `canceled`
   // member re-subscribing is activating too: their row reads `canceled` (not `none`) until the
   // webhook lands, and the repeat-trial guard in billingNode.ts sends them straight to `active`.
+  // "Activating your plan" for everyone: since only Pro has a trial (2026-10-03), a first Starter or
+  // Growth checkout is not activating a trial either, and a trial is a plan too.
   const isResubscribing = me?.subscriptionStatus === 'canceled'
   const isActivating = justSubscribed && (me?.subscriptionStatus === 'none' || isResubscribing)
-  const activatingKey = activationTimedOut
-    ? 'billing.activatingTimeout'
-    : isResubscribing
-      ? 'billing.activatingPlan'
-      : 'billing.activating'
+  const activatingKey = activationTimedOut ? 'billing.activatingTimeout' : 'billing.activatingPlan'
 
   useEffect(() => {
     if (!isActivating) return
@@ -241,6 +239,7 @@ export default function BillingPage() {
   // this page has to ask the server, not the status: getMe answers from the subscription-row count,
   // the same rule checkout enforces. Optimistic while `me` loads — the majority case is a new
   // visitor, and this whole block already renders on the same optimistic assumption.
+  // Member-level only: since 2026-10-03 only Pro has a trial, so a per-plan promise also asks planHasTrial.
   const canTrial = me?.trialEligible !== false
 
   // backlog/R17 — the featured-post add-on line under the plan grid: same eligibility as the
@@ -698,7 +697,7 @@ export default function BillingPage() {
           <p className="text-foreground text-base font-semibold">
             {!chosenPlan
               ? t('billing.newUserLead')
-              : canTrial
+              : canTrial && planHasTrial(targetPlan)
                 ? t('billing.chosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`) })
                 : t('billing.noTrialChosenPlanLead', { plan: t(`billing.plans.${targetPlan}.name`) })}
           </p>
@@ -828,7 +827,7 @@ export default function BillingPage() {
                     ? t('billing.trialNoSwitch')
                     : hasCard
                       ? t('billing.switchPlan', { plan: t(`billing.plans.${planId}.name`) })
-                      : canTrial
+                      : canTrial && planHasTrial(planId)
                         ? t('billing.startTrialCta', { plan: t(`billing.plans.${planId}.name`) })
                         : t('billing.noTrialCta', { plan: t(`billing.plans.${planId}.name`) })}
                 </Button>

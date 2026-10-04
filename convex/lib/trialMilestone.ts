@@ -63,6 +63,16 @@ export function trialEligible(subscriptionCount: number): boolean {
 }
 
 /**
+ * Only Pro has a free trial (launch promotion, 2026-10-03): Starter and Growth bill at checkout.
+ * Checkout grants a trial only when this AND trialEligible hold. The app imports it too, so every
+ * "Try … free" label asks the same rule.
+ */
+export const TRIAL_PLAN = 'pro'
+export function planHasTrial(plan: string): boolean {
+  return plan === TRIAL_PLAN
+}
+
+/**
  * With two or more live rows, the one to void: the NEWEST by Stripe's own `created`, never by
  * webhook arrival order (Stripe does not guarantee it). A row without the stamp counts as the
  * oldest, so a subscription that predates the stamp is never the one voided. Ties keep the
@@ -74,6 +84,25 @@ export function findDuplicateSubscription<T extends { status: string; stripeCrea
   const live = rows.filter(r => LIVE_SUBSCRIPTION_STATUSES.includes(r.status))
   if (live.length < 2) return undefined
   return live.reduce((a, b) => ((b.stripeCreated ?? 0) > (a.stripeCreated ?? 0) ? b : a))
+}
+
+/**
+ * The event that first makes a row live: a trial's `created`, a paid Checkout's `created` (Checkout creates the
+ * subscription once the payment succeeds), or the `updated` that follows the first payment of one born `incomplete`.
+ * Only this event may void a duplicate (convex/stripe.ts), so a retry or any later event finds the row live already
+ * and cannot void or notify twice.
+ */
+export function wentLive(prev: string | undefined, next: string): boolean {
+  return LIVE_SUBSCRIPTION_STATUSES.includes(next) && !(prev !== undefined && LIVE_SUBSCRIPTION_STATUSES.includes(prev))
+}
+
+/**
+ * Stripe never moves a subscription back to `incomplete`: an `incomplete` (or `incomplete_expired`) event for a row
+ * already `trialing` or `active` is that subscription's own `created`, landing after its `updated`. Both carry the same
+ * second, so isStaleEvent cannot order them, and applying it would lock the paying member out ('none').
+ */
+export function isStatusRegression(prev: string | undefined, next: string): boolean {
+  return (prev === 'trialing' || prev === 'active') && (next === 'incomplete' || next === 'incomplete_expired')
 }
 
 /** trialing → active on the same subscription row = the trial converted (backlog/R14 email). */
@@ -95,7 +124,7 @@ export function isStaleEvent(lastEventAt: number | undefined, eventCreated: numb
 
 /** Stripe trial_period_days for a plain signup — the 7-day side of "50 OR 7 days". */
 export const TRIAL_PERIOD_DAYS = 7
-/** backlog/R19 — a member who joined through another member's invite link starts with two weeks. */
+/** backlog/R19 — a member who joined through another member's invite link gets two weeks (Pro only, like any trial). */
 export const INVITED_TRIAL_PERIOD_DAYS = 14
 
 export function trialDaysFor(user: { referredByCode?: string }): number {

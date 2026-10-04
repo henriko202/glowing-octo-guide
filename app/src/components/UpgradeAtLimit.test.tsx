@@ -99,7 +99,7 @@ describe('UpgradeAtLimit', () => {
   it('asks a never-started member to start their trial instead of pitching an upgrade', () => {
     mockMe = { tier: 'starter', subscriptionStatus: 'none' }
     renderComponent('weeklyPosts')
-    expect(screen.getByRole('link', { name: /start free trial/i })).toHaveAttribute('href', '/billing?plan=growth')
+    expect(screen.getByRole('link', { name: /try pro free/i })).toHaveAttribute('href', '/billing?plan=pro')
     expect(screen.queryByText(/weekly post cap/i)).not.toBeInTheDocument()
   })
 
@@ -115,7 +115,8 @@ describe('UpgradeAtLimit', () => {
   })
 
   it('asks a past_due member to update payment instead of pitching an upgrade', () => {
-    mockMe = { tier: 'starter', subscriptionStatus: 'past_due' }
+    // A past_due member always holds a subscription row, so getMe says no trial left.
+    mockMe = { tier: 'starter', subscriptionStatus: 'past_due', trialEligible: false }
     renderComponent('featured')
     expect(screen.getByRole('link', { name: /update payment method/i })).toHaveAttribute('href', '/billing?plan=growth')
     expect(screen.queryByText(/used all your featured posts/i)).not.toBeInTheDocument()
