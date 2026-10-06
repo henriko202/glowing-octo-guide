@@ -6753,7 +6753,7 @@ consequences bind the page:
 1. The page explains the feed and comment workflow before pricing. The compact SSI explanation follows pricing,
    so a visitor can understand the product and its cost before learning LinkedIn's scoring terminology. Its intro
    lists the four scored areas without claiming that SSI controls search ranking or profile discovery.
-2. The hero **headline** stays outcome-focused ("Get noticed on LinkedIn by the people in your field"), because
+2. The hero **headline** stays outcome-focused ("Get more opportunities on LinkedIn." since 2026‑10‑06), because
    "raise your SSI" is solution-aware copy for an audience that isn't. Since 2026‑09‑25 the small eyebrow above the
    headline asks the pain as a question ("Good at your work, but few people see it?"), so a visitor who is only
    skimming recognizes themselves before reading on. The category term "LinkedIn SSI tool" left the visible hero; it
@@ -6999,7 +6999,7 @@ content** (encodes the business rules):
 - `Hero` retains the centered headline and CTA layout. It renders a `hero.eyebrow` label above the H1: the pain as a
   question ("Good at your work, but few people see it?" / localized) since 2026‑09‑25; before that it was the "LinkedIn
   SSI tool" keyword, which now lives only in the metadata. The H1 is the outcome (
-  "Get noticed on LinkedIn / by the people in your field."); `subLine1` says what the product does and `subLine2`
+  "Get more opportunities / on LinkedIn.", line 2 in gold); `subLine1` says what the product does and `subLine2`
   that the member acts on LinkedIn themselves.
   It names a plan-agnostic offer ("Pick any plan", the interval's Starter price as the from-floor) alongside the
   shared trial disclosure. It contains no sample post or simulated product interface.
@@ -7801,8 +7801,9 @@ the 4:5 images and the square have none, so they render as before.
 - **Copy.** Nothing re-renders on its own: after a change to landing `hero.*` or app `comment.*` / `feed.*`,
   re-render and look at the stills in every format and length before uploading, since a longer string can wrap onto
   one more line, and each format wraps differently. The tight fits today: the PT feed caption in the 16:9 (663 px in
-  680), the PT promise's first line in the 9:16 (802 in 820) and the EN fine print in the 9:16 (about 1,512 px, 32
-  more than two 740 px lines hold, so it takes 3; 2 or 3 both fit). The PT fine print's second line in the 16:9 ends at
+  680) and the EN fine print in the 9:16 (about 1,512 px, 32 more than two 740 px lines hold, so it takes 3; 2 or 3
+  both fit). Since 2026‑10‑06 the promise has room: three lines in the square, 4:5 and 9:16 (widest 544 px, in the
+  9:16's 820) and two in the 16:9 (PT line 1 at 1,162 px in 1,280). The PT fine print's second line in the 16:9 ends at
   x 1596 by frame 880, 4 px left of where the overlay stills draw Skip (x 1600–1920, y 800–900), and the check can't see
   it: the zone runs to x 1780 and y 860. The 4:5 wraps like the square, with the same sizes in the same 860 px column:
   on its stills every text takes the square's line count. The render throws `Expected two sentences in "…"` if
@@ -8845,6 +8846,18 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑10‑06 (hero headline). **The landing hero reads "Get more opportunities / on LinkedIn.", line
+2 in gold** (pt "Tenha mais oportunidades / no LinkedIn.", es "Consigue más oportunidades / en LinkedIn."; was "Get
+noticed on LinkedIn / by the people in your field."). Only `hero.headlineLine1` and `headlineLine2` changed, and the
+JSON-LD `Organization.slogan` follows them on its own; pt and es avoid the verbs that open `nav.banner` right above
+(Ganhe, Obtén). The search surfaces keep "get noticed" on purpose: the meta description and `ogTitle`,
+`meta.keywords`, the positioning card, the FAQ question and `/llms.txt`; so does the app's `feed.cardGateTitle`, and
+`og.png` keeps its own tagline. At 1280 px the H1 takes 2 lines in en and pt and 3 in es (as the old es did); at 375 px,
+3 in all three. The promo video reads its promise from these keys: on stills of all 12 cuts it wraps to 3 lines in the
+square, 4:5 and 9:16 and stays 2 in the 16:9, with room in every format. The 12 MP4s and the six image ads need a
+re-render and re-upload, and the Meta Ads Manager text that quotes the hero needs editing there. Gates: landing tests
+(79) and build. Sections updated: §15, §15A._
 
 _Last updated: 2026‑10‑03 (free month on Starter and Growth). **The landing's Starter and Growth cards now sell the
 1-month promo code: a gold "1 month free" pill beside the plan name and a "Try Starter free" / "Try Growth free"
