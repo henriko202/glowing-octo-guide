@@ -30,6 +30,7 @@ export default function LanguageSelector({ dict, lang }: { dict: Dictionary['lan
           <option
             key={l}
             value={l}
+            className="bg-ink-600 text-cream" // the open list's colors; unset, Chrome showed cream on white in dark mode
           >
             {l.toUpperCase()}
           </option>

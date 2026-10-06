@@ -7,7 +7,7 @@
 // emit a hash the browser never computes.
 // Third parties the app loads are allowlisted by vendor domain: Cloudflare Web Analytics
 // injects its beacon into HTML responses; PostHog loads asset/config scripts and posts
-// events; Sentry posts errors, traces, and replay chunks (Session Replay compresses in a
+// events through its managed reverse proxy t.linkintothessi.com (VITE_POSTHOG_HOST); Sentry posts errors, traces, and replay chunks (Session Replay compresses in a
 // blob WebWorker). The beacon posts to same-origin /cdn-cgi/rum, covered by connect-src 'self'.
 // DataFast posts pageviews to datafa.st; its SDK is bundled, so it needs no script-src entry.
 import { createHash } from 'node:crypto'
@@ -37,7 +37,8 @@ export function buildHeadersContent(scriptHashes) {
     'https://static.cloudflareinsights.com/beacon.min.js',
     // Cloudflare now serves a versioned `beacon.min.js/v…` path; a trailing slash makes it a prefix match.
     'https://static.cloudflareinsights.com/beacon.min.js/',
-    'https://*.posthog.com'
+    'https://*.posthog.com',
+    'https://t.linkintothessi.com'
   ].join(' ')
   const csp = [
     `default-src 'self'`,
@@ -45,7 +46,7 @@ export function buildHeadersContent(scriptHashes) {
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' https: data:`,
     `frame-src https://www.linkedin.com`,
-    `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://*.sentry.io https://datafa.st`,
+    `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://t.linkintothessi.com https://*.sentry.io https://datafa.st`,
     `worker-src 'self' blob:`,
     `child-src 'self' blob:`,
     `object-src 'none'`,

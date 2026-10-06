@@ -6841,7 +6841,8 @@ Server components (`app/[lang]/page.tsx`, legal pages) call
 Client components receive their dict slice (and `lang`) as props; they do not call
 `getDictionary` directly (server-only utility).
 
-`LanguageSelector` (`landing/components/LanguageSelector.tsx`) is mounted in `Nav`. When the user picks a locale it:
+`LanguageSelector` (`landing/components/LanguageSelector.tsx`) is mounted in `Nav` and `Footer`. When the user picks
+a locale it:
 
 1. Writes the **shared `lang` cookie** (same cookie name, domain, and SameSite attributes as the app's i18n cookie
    detector — see §14B) via `landing/lib/cookies.ts`.
@@ -6851,6 +6852,10 @@ Client components receive their dict slice (and `lang`) as props; they do not ca
 Because the cookie domain is `.linkintothessi.com` in production, the chosen language immediately carries over to the
 authenticated app on next load (the app reads the `lang` cookie via its i18next cookie detector — §14B). In dev the
 cookie is host-only so sync is prod-only.
+
+It is a native `<select>` over a transparent background, so each `<option>` sets its own colors (`bg-ink-600
+text-cream`): Chrome on Windows paints the open list with the options' colors and, when they are unset, on white,
+which in dark mode left the cream labels almost invisible (1.1:1 contrast, fixed 2026‑10‑06).
 
 #### SEO & AI discoverability
 
@@ -7967,7 +7972,7 @@ constant that must equal `VITE_CONVEX_SITE` ([§7](#the-callback-hop-production-
 | `VITE_STRIPE_PRO_ANNUAL_PRICE_ID`     |                 ✓ (billing UI)                 | `BillingPage.tsx`                     | Annual price id for Pro ($300/yr). Must match `STRIPE_PRO_ANNUAL_PRICE_ID` in Convex.                                                                                                                  |
 | `VITE_SENTRY_DSN`                     |        – (prod only; unset ⇒ Sentry off)        | `observability/sentry.ts`             | Sentry DSN for frontend error monitoring. Unset ⇒ `initSentry()` no‑ops (dev + any build without it). Necessary/security purpose — not consent‑gated; PII scrubbed in `beforeSend`.                    |
 | `VITE_POSTHOG_KEY`                    |      – (prod only; unset ⇒ analytics off)       | `observability/analytics.ts`          | PostHog project key for product analytics. Unset ⇒ `initPostHog()` no‑ops. Capture is **also** gated on the user's `analytics` consent (opt‑out by default).                                           |
-| `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts`          | PostHog ingestion host. Defaults to EU Cloud; set `https://us.i.posthog.com` for US Cloud.                                                                                                             |
+| `VITE_POSTHOG_HOST`                   |     – (default `https://eu.i.posthog.com`)      | `observability/analytics.ts`          | PostHog ingestion host. Defaults to EU Cloud; prod uses the managed reverse proxy `https://t.linkintothessi.com` (also allowlisted in the app CSP).                                                    |
 | `VITE_DATAFAST_WEBSITE_ID`            |       – (prod only; unset ⇒ DataFast off)       | `observability/datafast.ts`           | Public DataFast website id, shared with the landing. Starts only once the member grants `analytics` consent (cookie mode); withdrawal or sign-out stops it and deletes its cookies.                    |
 
 ### Landing (`landing/`) — Next.js, `NEXT_PUBLIC_` prefix
@@ -8100,8 +8105,8 @@ The codebase follows a consistent, defensible security model:
   at build (`app/scripts/gen-headers.mjs`): `script-src` is locked to the quoted **SHA-256 hashes** of the two pre-paint
   inline scripts — the OAuth `#code=…` capture and the theme guard (no `'unsafe-inline'`) — plus the third-party
   scripts it loads (Cloudflare's beacon and
-  `https://*.posthog.com`); `connect-src` allows Convex `.cloud`/`.site`, Stripe, `https://*.posthog.com`,
-  `https://*.sentry.io`, and `https://datafa.st` (DataFast pageviews; the SDK is bundled, so no `script-src` entry);
+  PostHog: `https://*.posthog.com` plus its managed reverse proxy `https://t.linkintothessi.com`); `connect-src` allows
+  Convex `.cloud`/`.site`, Stripe, both PostHog origins, `https://*.sentry.io`, and `https://datafa.st` (DataFast pageviews; the SDK is bundled, so no `script-src` entry);
   `worker-src`/`child-src` allow `blob:` workers (Sentry Replay compresses off the main thread);
   `frame-src` allows `https://www.linkedin.com`. The **landing** sets its CSP via
   `next.config.js` `headers()` with `script-src 'self' 'unsafe-inline'` (it renders only static copy, so the pages stay
@@ -8189,7 +8194,8 @@ the Sentry + PostHog SDKs directly, wired to respect the existing consent model.
   opts **out + `reset()`** on withdrawal. The gate unmounts on sign‑out before it could react, so `signOut()`
   (`app/src/lib/session.ts`) calls `syncAnalyticsConsent(undefined, null)` itself before redirecting; that is what
   clears the opt‑in and the `ph_*` cookie. Users are identified by their **opaque Convex `_id` only** — no name/email.
-  EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`).
+  EU ingestion host by default (`VITE_POSTHOG_HOST` = `eu.i.posthog.com`); prod sends through the managed reverse
+  proxy `t.linkintothessi.com` to the US Cloud project, and `ui_host` (`us.posthog.com`) keeps toolbar links on PostHog.
 - **The complete event list.** Every product event goes through the one `captureEvent(name, props)` helper, so all of
   them inherit the consent gate above and every one is a **no‑op until `initPostHog` has run** (i.e. silent in dev and
   in prod without a key). Props are ids and enum‑ish strings only — never a name, email or post body. As of
@@ -8846,6 +8852,11 @@ When you add a **new subsystem**, add a new numbered section and a Table‑of‑
 (Mermaid) if it introduces a multi‑step flow.
 
 ---
+
+_Last updated: 2026‑10‑06 (language picker in dark mode). **The landing's language picker (header and footer) now
+lists PT and ES legibly in dark mode.** Its options had no colors of their own, so Chrome on Windows drew the dark
+theme's cream text on a white list (1.1:1); each `<option>` now sets `bg-ink-600 text-cream` (13.7:1 dark, 17.7:1
+light). Sections updated: §15._
 
 _Last updated: 2026‑10‑06 (hero headline). **The landing hero reads "Get more opportunities / on LinkedIn.", line
 2 in gold** (pt "Tenha mais oportunidades / no LinkedIn.", es "Consigue más oportunidades / en LinkedIn."; was "Get

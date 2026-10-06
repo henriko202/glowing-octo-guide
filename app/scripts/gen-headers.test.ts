@@ -27,10 +27,10 @@ describe('buildHeadersContent', () => {
   it('quotes hashes, allows the vendor origins, and includes the hardening headers', () => {
     const out = buildHeadersContent(['sha256-abc'])
     expect(out).toContain(
-      "script-src 'self' 'sha256-abc' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/ https://*.posthog.com"
+      "script-src 'self' 'sha256-abc' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/ https://*.posthog.com https://t.linkintothessi.com"
     )
     expect(out).toContain(
-      "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://*.sentry.io https://datafa.st"
+      "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.stripe.com https://*.posthog.com https://t.linkintothessi.com https://*.sentry.io https://datafa.st"
     )
     expect(out).toContain("worker-src 'self' blob:")
     expect(out).toContain("child-src 'self' blob:")

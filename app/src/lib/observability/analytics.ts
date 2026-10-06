@@ -26,6 +26,9 @@ export function initPostHog(): void {
   if (!import.meta.env.PROD || !key || initialized) return
   posthog.init(key, {
     api_host: (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ?? 'https://eu.i.posthog.com',
+    // api_host is our reverse proxy in prod; toolbar and dashboard links must still point at the project's
+    // PostHog region (US Cloud). Only used for those links, never for capture.
+    ui_host: 'https://us.posthog.com',
     opt_out_capturing_by_default: true, // no capture until analytics consent is granted
     opt_out_persistence_by_default: true, // and no ph_* cookie/localStorage while opted out (persists otherwise)
     // Session replay rides the same consent: the recorder only runs while opted in. Every text node and input
